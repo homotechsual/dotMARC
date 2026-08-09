@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Graph;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,18 @@ builder.Services.AddMudServices();
 builder.Services.AddDbContext<DotMarcDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DotMarc")
         ?? "Data Source=dotmarc.db"));
+
+builder.Services.AddOptions<GraphOptions>()
+    .Bind(builder.Configuration.GetSection(GraphOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddSingleton<IGraphTokenProvider, ConfidentialClientGraphTokenProvider>();
+
+builder.Services.AddHttpClient<IGraphMailboxClient, GraphMailboxClient>(client =>
+{
+    client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
+});
 
 var app = builder.Build();
 
