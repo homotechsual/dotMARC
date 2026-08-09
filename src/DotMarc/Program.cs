@@ -1,5 +1,6 @@
 using DotMarc.Data;
 using DotMarc.Graph;
+using DotMarc.Ingestion;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,8 @@ builder.Services.AddHttpClient<IGraphMailboxClient, GraphMailboxClient>(client =
 {
     client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
 });
+
+builder.Services.AddHostedService<PollingService>();
 
 var app = builder.Build();
 
