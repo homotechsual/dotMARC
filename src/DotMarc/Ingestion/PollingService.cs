@@ -26,7 +26,13 @@ public sealed class PollingService : BackgroundService
     }
 
     /// <summary>Constructor used by the host: creates a fresh DI scope per poll, since
-    /// DotMarcDbContext is registered scoped and this service itself is a singleton.</summary>
+    /// DotMarcDbContext is registered scoped and this service itself is a singleton.
+    /// <see cref="ActivatorUtilitiesConstructorAttribute"/> disambiguates constructor selection
+    /// for the DI container: both IGraphMailboxClient and DotMarcDbContext are also registered
+    /// in DI (Tasks 5 and 2 respectively), so without this attribute the other constructor's
+    /// parameters would all be resolvable too, and the container would throw on activation
+    /// rather than pick one.</summary>
+    [ActivatorUtilitiesConstructor]
     public PollingService(IServiceScopeFactory scopeFactory, IOptions<GraphOptions> options, ILogger<PollingService> logger)
     {
         _scopeFactory = scopeFactory;
