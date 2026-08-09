@@ -1,0 +1,11 @@
+.superpowers/
+bin/
+obj/
+artifacts/
+*.user
+.vs/
+.env
+*.log
+*.db
+*.db-shm
+*.db-wal
