@@ -18,4 +18,8 @@
     <ProjectReference Include="..\..\src\DotMarc\DotMarc.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures\*.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
