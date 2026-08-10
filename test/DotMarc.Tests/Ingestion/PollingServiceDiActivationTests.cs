@@ -1,6 +1,7 @@
 using DotMarc.Data;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
+using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -33,17 +34,37 @@ namespace DotMarc.Tests.Ingestion;
 /// IGraphMailboxClient and DotMarcDbContext registered) and calls
 /// `ActivatorUtilities.CreateInstance&lt;PollingService&gt;(provider)` the same way Program.cs's
 /// `AddHostedService` factory does, confirming activation succeeds without ambiguity.</summary>
-public sealed class PollingServiceDiActivationTests : IDisposable
+[Collection("Postgres")]
+public sealed class PollingServiceDiActivationTests : IAsyncLifetime
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"dotmarc-di-test-{Guid.NewGuid()}.db");
+    private readonly PostgresContainerFixture _fixture;
+    private string _connectionString = "";
+    private IAsyncDisposable? _cleanup;
+
+    public PollingServiceDiActivationTests(PostgresContainerFixture fixture) => _fixture = fixture;
+
+    public async Task InitializeAsync()
+    {
+        (_connectionString, _cleanup) = await _fixture.CreateDatabaseAsync();
+        var options = new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options;
+        await using var context = new DotMarcDbContext(options);
+        await context.Database.MigrateAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_cleanup is not null)
+        {
+            await _cleanup.DisposeAsync();
+        }
+    }
 
     [Fact]
     public void ActivatorUtilities_CanActivate_PollingService_WithoutAmbiguousConstructorError()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddDbContext<DotMarcDbContext>(options =>
-            options.UseSqlite($"Data Source={_dbPath};Pooling=False"));
+        services.AddDbContext<DotMarcDbContext>(options => options.UseNpgsql(_connectionString));
         services.AddSingleton<IGraphMailboxClient>(new NoOpGraphMailboxClient());
         services.Configure<GraphOptions>(o =>
         {
@@ -62,27 +83,6 @@ public sealed class PollingServiceDiActivationTests : IDisposable
         var exception = Record.Exception(() => ActivatorUtilities.CreateInstance<PollingService>(provider));
 
         Assert.Null(exception);
-    }
-
-    public void Dispose()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        foreach (var path in new[] { _dbPath, _dbPath + "-shm", _dbPath + "-wal" })
-        {
-            if (File.Exists(path))
-            {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch (IOException)
-                {
-                    // Ignore if still locked - will be cleaned up by OS
-                }
-            }
-        }
     }
 
     private sealed class NoOpGraphMailboxClient : IGraphMailboxClient

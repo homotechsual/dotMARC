@@ -1,21 +1,40 @@
 using DotMarc.Data;
+using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace DotMarc.Tests.Data;
 
-public sealed class DotMarcDbContextTests : IDisposable
+[Collection("Postgres")]
+public sealed class DotMarcDbContextTests : IAsyncLifetime
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"dotmarc-test-{Guid.NewGuid()}.db");
+    private readonly PostgresContainerFixture _fixture;
+    private string _connectionString = "";
+    private IAsyncDisposable? _cleanup;
+
+    public DotMarcDbContextTests(PostgresContainerFixture fixture) => _fixture = fixture;
+
+    public async Task InitializeAsync()
+    {
+        (_connectionString, _cleanup) = await _fixture.CreateDatabaseAsync();
+        await using var context = CreateContext();
+        await context.Database.MigrateAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_cleanup is not null)
+        {
+            await _cleanup.DisposeAsync();
+        }
+    }
 
     private DotMarcDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DotMarcDbContext>()
-            .UseSqlite($"Data Source={_dbPath};Pooling=False")
+            .UseNpgsql(_connectionString)
             .Options;
-        var context = new DotMarcDbContext(options);
-        context.Database.EnsureCreated();
-        return context;
+        return new DotMarcDbContext(options);
     }
 
     [Fact]
@@ -155,28 +174,5 @@ public sealed class DotMarcDbContextTests : IDisposable
 
         Assert.Equal(0, context.ParseFailures.Count(f => f.GraphMessageId == "dangling"));
         Assert.Equal(1, context.ParseFailures.Count(f => f.GraphMessageId == "unrelated"));
-    }
-
-    public void Dispose()
-    {
-        // Ensure all connections are closed
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        // Delete main database file and SQLite WAL files
-        foreach (var path in new[] { _dbPath, _dbPath + "-shm", _dbPath + "-wal" })
-        {
-            if (File.Exists(path))
-            {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch (IOException)
-                {
-                    // Ignore if still locked - will be cleaned up by OS
-                }
-            }
-        }
     }
 }

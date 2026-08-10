@@ -1,6 +1,7 @@
 using DotMarc.Data;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
+using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net.Http;
@@ -8,18 +9,36 @@ using Xunit;
 
 namespace DotMarc.Tests.Ingestion;
 
-public class PollingServiceTests : IDisposable
+[Collection("Postgres")]
+public class PollingServiceTests : IAsyncLifetime
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"dotmarc-polling-test-{Guid.NewGuid()}.db");
+    private readonly PostgresContainerFixture _fixture;
+    private string _connectionString = "";
+    private IAsyncDisposable? _cleanup;
+
+    public PollingServiceTests(PostgresContainerFixture fixture) => _fixture = fixture;
+
+    public async Task InitializeAsync()
+    {
+        (_connectionString, _cleanup) = await _fixture.CreateDatabaseAsync();
+        await using var context = CreateContext();
+        await context.Database.MigrateAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_cleanup is not null)
+        {
+            await _cleanup.DisposeAsync();
+        }
+    }
 
     private DotMarcDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DotMarcDbContext>()
-            .UseSqlite($"Data Source={_dbPath};Pooling=False")
+            .UseNpgsql(_connectionString)
             .Options;
-        var context = new DotMarcDbContext(options);
-        context.Database.EnsureCreated();
-        return context;
+        return new DotMarcDbContext(options);
     }
 
     private static byte[] GzipOf(string content)
@@ -177,29 +196,6 @@ public class PollingServiceTests : IDisposable
         var failure = verify.ParseFailures.Single();
         Assert.Equal("msg-2", failure.GraphMessageId);
         Assert.Equal(3, failure.AttemptCount);
-    }
-
-    public void Dispose()
-    {
-        // Ensure all connections are closed
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        // Delete main database file and SQLite WAL files
-        foreach (var path in new[] { _dbPath, _dbPath + "-shm", _dbPath + "-wal" })
-        {
-            if (File.Exists(path))
-            {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch (IOException)
-                {
-                    // Ignore if still locked - will be cleaned up by OS
-                }
-            }
-        }
     }
 
     private sealed class FakeGraphMailboxClient : IGraphMailboxClient

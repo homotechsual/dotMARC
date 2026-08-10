@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -26,9 +27,30 @@ namespace DotMarc.Tests;
 ///    IServiceScopeFactory-based resolution) — this is exactly what the fix must not break, since
 ///    AddDbContextFactory registers DotMarcDbContext itself as scoped too, without needing a
 ///    separate AddDbContext call.</summary>
-public sealed class ProgramDiValidationTests : IDisposable
+[Collection("Postgres")]
+public sealed class ProgramDiValidationTests : IAsyncLifetime
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"dotmarc-di-validate-{Guid.NewGuid()}.db");
+    private readonly PostgresContainerFixture _fixture;
+    private string _connectionString = "";
+    private IAsyncDisposable? _cleanup;
+
+    public ProgramDiValidationTests(PostgresContainerFixture fixture) => _fixture = fixture;
+
+    public async Task InitializeAsync()
+    {
+        (_connectionString, _cleanup) = await _fixture.CreateDatabaseAsync();
+        var options = new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options;
+        await using var context = new DotMarcDbContext(options);
+        await context.Database.MigrateAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_cleanup is not null)
+        {
+            await _cleanup.DisposeAsync();
+        }
+    }
 
     [Fact]
     public void ServiceProvider_BuildsCleanly_WithScopeValidationEnabled_UsingOnlyAddDbContextFactory()
@@ -36,11 +58,9 @@ public sealed class ProgramDiValidationTests : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
 
-        var connectionString = $"Data Source={_dbPath};Pooling=False";
-
         // Exactly Program.cs's registration shape: AddDbContextFactory only, no AddDbContext
         // registered alongside it.
-        services.AddDbContextFactory<DotMarcDbContext>(options => options.UseSqlite(connectionString));
+        services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(_connectionString));
 
         // ValidateScopes + ValidateOnBuild is what WebApplication.CreateBuilder turns on in the
         // Development environment. This call is the actual assertion: before the fix (AddDbContext
@@ -61,26 +81,5 @@ public sealed class ProgramDiValidationTests : IDisposable
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
         Assert.NotNull(context);
-    }
-
-    public void Dispose()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        foreach (var path in new[] { _dbPath, _dbPath + "-shm", _dbPath + "-wal" })
-        {
-            if (File.Exists(path))
-            {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch (IOException)
-                {
-                    // Ignore if still locked - will be cleaned up by OS
-                }
-            }
-        }
     }
 }
