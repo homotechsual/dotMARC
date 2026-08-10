@@ -45,7 +45,7 @@ Set via environment variables (double-underscore nesting):
 | `EntraId__TenantId` | Your tenant ID |
 | `EntraId__ClientId` | Dashboard app registration's client ID |
 | `EntraId__ClientSecret` | Dashboard app registration's client secret |
-| `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to host=localhost;database=dotmarc;username=dotmarc;password=dotmarc |
+| `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to `Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc` |
 
 ## Run
 
@@ -56,8 +56,8 @@ docker compose up
 ```
 
 This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
-Docker volume (`dotmarc-postgres-data`). Set the six required environment variables from the setup
-steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
+Docker volume (`dotmarc-postgres-data`). Set the seven required environment variables from the
+setup steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
 automatically).
 
 ### Reverse proxy / TLS termination
@@ -69,11 +69,13 @@ is built as `https://...` instead of `http://...` (without this, sign-in fails w
 because the redirect URI sent to Entra doesn't match the `https://` one registered on the
 dashboard app registration).
 
-`ForwardedHeadersOptions`'s default `KnownProxies`/`KnownNetworks` only trust a proxy running on
-loopback (i.e. the proxy and dotMARC on the same host). If your reverse proxy runs on a different
-host or in a different container, add its address to `KnownProxies` (or its subnet to
-`KnownNetworks`) in that configuration block — otherwise ASP.NET Core ignores the forwarded headers
-as untrusted and the redirect URI problem above will resurface.
+`ForwardedHeadersOptions`'s default `KnownProxies`/`KnownIPNetworks` only trust a proxy running on
+loopback (i.e. the proxy and dotMARC on the same host), which wouldn't hold for a reverse proxy on
+a different host/container, or for Azure App Service's front-end load balancer (see
+[Deploy to Azure](#deploy-to-azure)). `Program.cs` clears both restrictions unconditionally, since
+the container has no other ingress path in either supported deployment model — it's never directly
+reachable except through that trusted front-end — so any upstream proxy is trusted without needing
+per-deployment configuration.
 
 ## Deploy to Azure
 
@@ -113,7 +115,22 @@ az deployment group create \
   --parameters infra/main.parameters.json
 ```
 
-### 3. Populate the Key Vault secrets
+### 3. Register the deployed hostname as an OIDC redirect URI
+
+The Web App's hostname isn't known until after deployment (it's derived from
+`uniqueString(resourceGroup().id)`), so the redirect URI registered in the
+[dashboard sign-in app registration](#2-dashboard-sign-in-delegated) during one-time setup can't
+be filled in ahead of time. Read the deployed URL from the template's `webAppUrl` output:
+
+```bash
+az deployment group show --resource-group $RG --name main --query properties.outputs.webAppUrl.value -o tsv
+```
+
+Then, in the `dotmarc-dashboard` app registration's **Authentication** blade, add a **Web**
+platform redirect URI of `<that URL>/signin-oidc` (alongside or replacing the placeholder one
+added during one-time setup). Sign-in will fail with AADSTS50011 until this is done.
+
+### 4. Populate the Key Vault secrets
 
 The template deliberately provisions three Key Vault secrets — `Graph-ClientSecret`,
 `EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` — empty, rather than accepting secret
@@ -145,6 +162,14 @@ refresh cycle.
 dotnet build dotMARC.sln
 dotnet test dotMARC.sln
 ```
+
+`dotnet test` uses Testcontainers.PostgreSql, so Docker must be running to execute the suite; the
+first run pulls the `postgres:18` image.
+
+Running `dotnet run` directly on the host (rather than via `docker compose up`) needs a PostgreSQL
+instance reachable at `localhost:5432` matching the credentials in `appsettings.json`
+(`dotmarc`/`dotmarc`/`dotmarc`) — `docker compose up postgres` starts just the database, published
+on that port, without also building and running the app container.
 
 Point each monitored domain's DMARC record's `rua=` tag at the same mailbox this app polls, e.g.:
 

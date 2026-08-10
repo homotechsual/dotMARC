@@ -9,13 +9,22 @@ using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// The container listens on plain HTTP behind a TLS-terminating reverse proxy (see README). ASP.NET
-// Core otherwise builds the OIDC redirect_uri from the request's own scheme, which is http unless
-// forwarded headers are processed — sending http://host/signin-oidc to Entra when
-// https://host/signin-oidc is what's registered, breaking sign-in with AADSTS50011.
+// The container listens on plain HTTP behind a TLS-terminating reverse proxy (see README) or,
+// when deployed to Azure, behind App Service's front-end load balancer. ASP.NET Core otherwise
+// builds the OIDC redirect_uri from the request's own scheme, which is http unless forwarded
+// headers are processed — sending http://host/signin-oidc to Entra when https://host/signin-oidc
+// is what's registered, breaking sign-in with AADSTS50011.
+//
+// KnownProxies/KnownIPNetworks default to trusting only loopback, which Azure App Service's
+// front-end never is (it's never on loopback from the container's perspective, and a
+// self-hosted reverse proxy may not be either). The container has no other ingress path in
+// either supported deployment model — it is never directly reachable except through that
+// trusted front-end — so clearing both restrictions to trust any upstream proxy is safe here.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 builder.Services.AddRazorComponents()

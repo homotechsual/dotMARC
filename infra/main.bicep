@@ -85,12 +85,14 @@ resource webApp 'Microsoft.Web/sites@2024-04-01' = {
   }
   properties: {
     serverFarmId: appServicePlan.id
+    httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'DOCKER|${containerImage}'
       alwaysOn: true
       webSocketsEnabled: true
       appSettings: [
         { name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE', value: 'false' }
+        { name: 'WEBSITES_PORT', value: '8080' }
         { name: 'Graph__ClientId', value: graphClientId }
         { name: 'Graph__TenantId', value: graphTenantId }
         { name: 'Graph__MailboxAddress', value: graphMailboxAddress }
