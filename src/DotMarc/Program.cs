@@ -24,12 +24,18 @@ builder.Services.AddMudServices();
 
 var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "Data Source=dotmarc.db";
 
-// Both registrations point at the same connection string: AddDbContext (scoped) is still needed
-// for PollingService's existing DI-scope-based resolution (see the [ActivatorUtilitiesConstructor]
-// host constructor below), while AddDbContextFactory backs the Blazor Server pages, which create a
-// short-lived context per render instead of holding one scoped/tracked context for the whole
-// circuit (see Dashboard.razor / DomainDetail.razor).
-builder.Services.AddDbContext<DotMarcDbContext>(options => options.UseSqlite(connectionString));
+// AddDbContextFactory registers DotMarcDbContext itself as a scoped service too (in addition to
+// the singleton IDbContextFactory<DotMarcDbContext>), so this one call covers both consumers:
+// PollingService's existing IServiceScopeFactory-based scoped resolution (see the
+// [ActivatorUtilitiesConstructor] host constructor below), and Dashboard.razor/DomainDetail.razor,
+// which use the factory directly to create a short-lived context per render instead of holding one
+// scoped/tracked context for the whole Blazor Server circuit. Do NOT also call AddDbContext here —
+// combined with AddDbContextFactory it creates a scoped/singleton DbContextOptions<T> conflict that
+// only surfaces when ASP.NET Core's DI container validates scopes, i.e. in Development
+// (WebApplication.CreateBuilder enables ValidateScopes/ValidateOnBuild there): builder.Build()
+// throws "Cannot consume scoped service 'DbContextOptions<DotMarcDbContext>' from singleton
+// 'IDbContextFactory<DotMarcDbContext>'". Production skips that validation, which is why this
+// wasn't caught by a Docker smoke test alone.
 builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseSqlite(connectionString));
 
 builder.Services.AddOptions<GraphOptions>()
