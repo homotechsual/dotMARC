@@ -1,0 +1,97 @@
+@page "/dashboard"
+@using DotMarc.Data
+@using Microsoft.EntityFrameworkCore
+@inject DotMarcDbContext Db
+@inject NavigationManager Navigation
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+@if (_summary is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h5">@_summary.DomainCount</MudText>
+                <MudText Typo="Typo.caption">domains monitored</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h5" Color="Color.Success">@_summary.OverallPassRate.ToString("P1")</MudText>
+                <MudText Typo="Typo.caption">overall pass rate (30d)</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h5" Color="Color.Warning">@_summary.WarningCount</MudText>
+                <MudText Typo="Typo.caption">domains with warnings</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h5" Color="Color.Error">@_summary.MissingCount</MudText>
+                <MudText Typo="Typo.caption">missing expected report</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudTable Items="_rows" Hover="true" OnRowClick="RowClicked" T="DomainRow">
+        <HeaderContent>
+            <MudTh>Domain</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Pass rate (30d)</MudTh>
+            <MudTh>Last report</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
+            <MudTd>@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
+            <MudTd>@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private DashboardSummary? _summary;
+    private List<DomainRow> _rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-30);
+        var domains = await Db.Domains
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Records)
+            .ToListAsync();
+
+        _rows = domains.Select(d =>
+        {
+            var records = d.Reports.SelectMany(r => r.Records).ToList();
+            var totalMessages = records.Sum(r => r.MessageCount);
+            var passingMessages = records.Where(r => r.SpfResult == AuthResult.Pass || r.DkimResult == AuthResult.Pass).Sum(r => r.MessageCount);
+            double? passRate = totalMessages > 0 ? (double)passingMessages / totalMessages : null;
+
+            var missingReport = d.IsPinned && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
+            var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
+            var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
+
+            return new DomainRow(d.Name, status, color, passRate, d.LastReportReceivedUtc);
+        }).OrderBy(r => r.Name).ToList();
+
+        var totalAll = _rows.Where(r => r.PassRate is not null).ToList();
+        _summary = new DashboardSummary(
+            _rows.Count,
+            totalAll.Count > 0 ? totalAll.Average(r => r.PassRate!.Value) : 0,
+            _rows.Count(r => r.Status == "Warning"),
+            _rows.Count(r => r.Status == "Missing"));
+    }
+
+    private void RowClicked(TableRowClickEventArgs<DomainRow> args) =>
+        Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(args.Item!.Name)}");
+
+    private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount);
+    private sealed record DomainRow(string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc);
+}

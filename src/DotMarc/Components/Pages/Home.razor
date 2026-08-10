@@ -1,4 +1,10 @@
 @page "/"
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager Navigation
 
-<MudText Typo="Typo.h4">dotMARC</MudText>
-<MudText>Dashboard coming in a later task.</MudText>
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo("/dashboard", replace: true);
+    }
+}
