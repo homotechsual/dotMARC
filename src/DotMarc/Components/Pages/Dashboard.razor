@@ -1,7 +1,8 @@
 @page "/dashboard"
 @using DotMarc.Data
+@using DotMarc.Reporting
 @using Microsoft.EntityFrameworkCore
-@inject DotMarcDbContext Db
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject NavigationManager Navigation
 
 <MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
@@ -61,18 +62,22 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-30);
-        var domains = await Db.Domains
+        // A fresh, untracked context per render: the page is read-only and Blazor Server's DI
+        // scope lives for the whole circuit, so injecting DotMarcDbContext directly would keep one
+        // context (and its tracked entities) alive for as long as the tab stays open, showing
+        // stale data as PollingService writes new reports behind it.
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var cutoff = DomainStatistics.GetWindowCutoffUtc();
+        var domains = await db.Domains
+            .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
             .ToListAsync();
 
         _rows = domains.Select(d =>
         {
-            var records = d.Reports.SelectMany(r => r.Records).ToList();
-            var totalMessages = records.Sum(r => r.MessageCount);
-            var passingMessages = records.Where(r => r.SpfResult == AuthResult.Pass || r.DkimResult == AuthResult.Pass).Sum(r => r.MessageCount);
-            double? passRate = totalMessages > 0 ? (double)passingMessages / totalMessages : null;
+            var passRate = DomainStatistics.GetPassRate(d.Reports);
 
             var missingReport = d.IsPinned && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
             var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
@@ -81,10 +86,9 @@ else
             return new DomainRow(d.Name, status, color, passRate, d.LastReportReceivedUtc);
         }).OrderBy(r => r.Name).ToList();
 
-        var totalAll = _rows.Where(r => r.PassRate is not null).ToList();
         _summary = new DashboardSummary(
             _rows.Count,
-            totalAll.Count > 0 ? totalAll.Average(r => r.PassRate!.Value) : 0,
+            DomainStatistics.GetOverallPassRate(domains.Select(d => (IEnumerable<Report>)d.Reports)),
             _rows.Count(r => r.Status == "Warning"),
             _rows.Count(r => r.Status == "Missing"));
     }

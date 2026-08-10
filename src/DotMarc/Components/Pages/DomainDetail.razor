@@ -1,7 +1,8 @@
 @page "/domains/{DomainName}"
 @using DotMarc.Data
+@using DotMarc.Reporting
 @using Microsoft.EntityFrameworkCore
-@inject DotMarcDbContext Db
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
 
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
@@ -70,8 +71,13 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-30);
-        _domain = await Db.Domains
+        // See Dashboard.razor's OnInitializedAsync for why this is a fresh, untracked,
+        // factory-created context rather than an injected DotMarcDbContext.
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var cutoff = DomainStatistics.GetWindowCutoffUtc();
+        _domain = await db.Domains
+            .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
             .SingleOrDefaultAsync(d => d.Name == DomainName);
@@ -83,21 +89,12 @@ else
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
 
-        var allRecords = _domain.Reports.SelectMany(r => r.Records).ToList();
-        _totalVolume = allRecords.Sum(r => r.MessageCount);
-        _sourceCount = allRecords.Select(r => r.SourceIp).Distinct().Count();
+        _totalVolume = DomainStatistics.GetTotalVolume(_domain.Reports);
+        _sourceCount = _domain.Reports.SelectMany(r => r.Records).Select(r => r.SourceIp).Distinct().Count();
+        _passRate = DomainStatistics.GetPassRate(_domain.Reports);
 
-        var passing = allRecords.Where(r => r.SpfResult == AuthResult.Pass || r.DkimResult == AuthResult.Pass).Sum(r => r.MessageCount);
-        _passRate = _totalVolume > 0 ? (double)passing / _totalVolume : null;
-
-        _sources = allRecords
-            .GroupBy(r => r.SourceIp)
-            .Select(g => new SourceRow(
-                g.Key,
-                g.Sum(r => r.MessageCount),
-                g.First().SpfResult.ToString(),
-                g.First().DkimResult.ToString(),
-                g.First().Disposition.ToString()))
+        _sources = DomainStatistics.GetSourceAggregates(_domain.Reports)
+            .Select(a => new SourceRow(a.SourceIp, a.Volume, a.SpfResult.ToString(), a.DkimResult.ToString(), a.Disposition.ToString()))
             .OrderByDescending(s => s.Volume)
             .ToList();
 

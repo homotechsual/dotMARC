@@ -4,16 +4,33 @@ using DotMarc.Ingestion;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The container listens on plain HTTP behind a TLS-terminating reverse proxy (see README). ASP.NET
+// Core otherwise builds the OIDC redirect_uri from the request's own scheme, which is http unless
+// forwarded headers are processed — sending http://host/signin-oidc to Entra when
+// https://host/signin-oidc is what's registered, breaking sign-in with AADSTS50011.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
-builder.Services.AddDbContext<DotMarcDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DotMarc")
-        ?? "Data Source=dotmarc.db"));
+
+var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "Data Source=dotmarc.db";
+
+// Both registrations point at the same connection string: AddDbContext (scoped) is still needed
+// for PollingService's existing DI-scope-based resolution (see the [ActivatorUtilitiesConstructor]
+// host constructor below), while AddDbContextFactory backs the Blazor Server pages, which create a
+// short-lived context per render instead of holding one scoped/tracked context for the whole
+// circuit (see Dashboard.razor / DomainDetail.razor).
+builder.Services.AddDbContext<DotMarcDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseSqlite(connectionString));
 
 builder.Services.AddOptions<GraphOptions>()
     .Bind(builder.Configuration.GetSection(GraphOptions.SectionName))
@@ -54,6 +71,11 @@ using (var scope = app.Services.CreateScope())
 {
     scope.ServiceProvider.GetRequiredService<DotMarcDbContext>().Database.EnsureCreated();
 }
+
+// Must run first, before any other middleware that reads the request's scheme/host (redirects,
+// authentication challenges, static files) — otherwise those still see the proxy's original
+// (unforwarded) http request.
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

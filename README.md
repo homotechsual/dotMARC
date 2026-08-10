@@ -57,6 +57,21 @@ docker run -d -p 8080:8080 -v dotmarc-data:/app/data \
   dotmarc:local
 ```
 
+### Reverse proxy / TLS termination
+
+The container listens on plain HTTP on port 8080; it expects a TLS-terminating reverse proxy
+(nginx, Traefik, an Azure/AWS load balancer, etc.) in front of it, forwarding `X-Forwarded-For` and
+`X-Forwarded-Proto`. `Program.cs` is configured to honor those headers so the OIDC sign-in redirect
+is built as `https://...` instead of `http://...` (without this, sign-in fails with AADSTS50011
+because the redirect URI sent to Entra doesn't match the `https://` one registered on the
+dashboard app registration).
+
+`ForwardedHeadersOptions`'s default `KnownProxies`/`KnownNetworks` only trust a proxy running on
+loopback (i.e. the proxy and dotMARC on the same host). If your reverse proxy runs on a different
+host or in a different container, add its address to `KnownProxies` (or its subnet to
+`KnownNetworks`) in that configuration block — otherwise ASP.NET Core ignores the forwarded headers
+as untrusted and the redirect URI problem above will resurface.
+
 ## Development
 
 ```bash
