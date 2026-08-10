@@ -1,0 +1,129 @@
+@page "/domains/{DomainName}"
+@using DotMarc.Data
+@using Microsoft.EntityFrameworkCore
+@inject DotMarcDbContext Db
+
+<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
+
+@if (_domain is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTabs>
+        <MudTabPanel Text="Overview">
+            <MudGrid Class="my-2">
+                <MudItem xs="4"><MudText>Pass rate (30d): <b>@(_passRate is { } r ? r.ToString("P1") : "—")</b></MudText></MudItem>
+                <MudItem xs="4"><MudText>Volume (30d): <b>@_totalVolume</b></MudText></MudItem>
+                <MudItem xs="4"><MudText>Sources: <b>@_sourceCount</b></MudText></MudItem>
+            </MudGrid>
+            <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Sources">
+            <MudTable Items="_sources" Hover="true" T="SourceRow">
+                <HeaderContent>
+                    <MudTh>Source IP</MudTh>
+                    <MudTh>Volume</MudTh>
+                    <MudTh>SPF</MudTh>
+                    <MudTh>DKIM</MudTh>
+                    <MudTh>Disposition</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.SourceIp</MudTd>
+                    <MudTd>@context.Volume</MudTd>
+                    <MudTd>@context.SpfResult</MudTd>
+                    <MudTd>@context.DkimResult</MudTd>
+                    <MudTd>@context.Disposition</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Raw reports">
+            <MudTable Items="_reports" Hover="true" T="Report">
+                <HeaderContent>
+                    <MudTh>From</MudTh>
+                    <MudTh>Date range</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.ReportingOrg</MudTd>
+                    <MudTd>@context.DateRangeBeginUtc.ToString("d") – @context.DateRangeEndUtc.ToString("d")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public string DomainName { get; set; } = "";
+
+    private Domain? _domain;
+    private List<Report> _reports = [];
+    private List<SourceRow> _sources = [];
+    private double? _passRate;
+    private int _totalVolume;
+    private int _sourceCount;
+    private List<ChartSeries<double>> _series = [];
+    private string[] _xAxisLabels = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-30);
+        _domain = await Db.Domains
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Records)
+            .SingleOrDefaultAsync(d => d.Name == DomainName);
+
+        if (_domain is null)
+        {
+            return;
+        }
+
+        _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
+
+        var allRecords = _domain.Reports.SelectMany(r => r.Records).ToList();
+        _totalVolume = allRecords.Sum(r => r.MessageCount);
+        _sourceCount = allRecords.Select(r => r.SourceIp).Distinct().Count();
+
+        var passing = allRecords.Where(r => r.SpfResult == AuthResult.Pass || r.DkimResult == AuthResult.Pass).Sum(r => r.MessageCount);
+        _passRate = _totalVolume > 0 ? (double)passing / _totalVolume : null;
+
+        _sources = allRecords
+            .GroupBy(r => r.SourceIp)
+            .Select(g => new SourceRow(
+                g.Key,
+                g.Sum(r => r.MessageCount),
+                g.First().SpfResult.ToString(),
+                g.First().DkimResult.ToString(),
+                g.First().Disposition.ToString()))
+            .OrderByDescending(s => s.Volume)
+            .ToList();
+
+        // Bucket by day-received (of the report, not the record) rather than the record itself,
+        // since ReportRecord has no timestamp of its own — Report.ReceivedUtc is what's available.
+        var dailyBuckets = _domain.Reports
+            .SelectMany(r => r.Records.Select(rec => new { Date = DateOnly.FromDateTime(r.ReceivedUtc.UtcDateTime), rec.Disposition, rec.MessageCount }))
+            .GroupBy(x => x.Date)
+            .ToDictionary(g => g.Key, g => new
+            {
+                None = g.Where(x => x.Disposition == DispositionResult.None).Sum(x => x.MessageCount),
+                Quarantine = g.Where(x => x.Disposition == DispositionResult.Quarantine).Sum(x => x.MessageCount),
+                Reject = g.Where(x => x.Disposition == DispositionResult.Reject).Sum(x => x.MessageCount)
+            });
+
+        var days = Enumerable.Range(0, 30)
+            .Select(i => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-29 + i)))
+            .ToList();
+        _xAxisLabels = days.Select(d => d.ToString("MM/dd")).ToArray();
+        _series =
+        [
+            new ChartSeries<double> { Name = "Passed (none)", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.None : 0)).ToArray() },
+            new ChartSeries<double> { Name = "Quarantined", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.Quarantine : 0)).ToArray() },
+            new ChartSeries<double> { Name = "Rejected", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.Reject : 0)).ToArray() }
+        ];
+    }
+
+    private sealed record SourceRow(string SourceIp, int Volume, string SpfResult, string DkimResult, string Disposition);
+}
