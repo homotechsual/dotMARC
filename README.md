@@ -45,17 +45,20 @@ Set via environment variables (double-underscore nesting):
 | `EntraId__TenantId` | Your tenant ID |
 | `EntraId__ClientId` | Dashboard app registration's client ID |
 | `EntraId__ClientSecret` | Dashboard app registration's client secret |
-| `ConnectionStrings__DotMarc` | Defaults to `/app/data/dotmarc.db` inside the container |
+| `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to host=localhost;database=dotmarc;username=dotmarc;password=dotmarc |
 
 ## Run
 
 ```bash
-docker build -f src/DotMarc/Dockerfile -t dotmarc:local .
-docker run -d -p 8080:8080 -v dotmarc-data:/app/data \
-  -e Graph__ClientId=... -e Graph__TenantId=... -e Graph__ClientSecret=... -e Graph__MailboxAddress=... \
-  -e EntraId__TenantId=... -e EntraId__ClientId=... -e EntraId__ClientSecret=... \
-  dotmarc:local
+GRAPH_CLIENT_ID=... GRAPH_TENANT_ID=... GRAPH_CLIENT_SECRET=... GRAPH_MAILBOX_ADDRESS=... \
+ENTRAID_TENANT_ID=... ENTRAID_CLIENT_ID=... ENTRAID_CLIENT_SECRET=... \
+docker compose up
 ```
+
+This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
+Docker volume (`dotmarc-postgres-data`). Set the six required environment variables from the setup
+steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
+automatically).
 
 ### Reverse proxy / TLS termination
 

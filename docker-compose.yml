@@ -1,0 +1,36 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: src/DotMarc/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__DotMarc: "Host=postgres;Database=dotmarc;Username=dotmarc;Password=${POSTGRES_PASSWORD:-dotmarc}"
+      Graph__ClientId: ${GRAPH_CLIENT_ID:?Set GRAPH_CLIENT_ID}
+      Graph__TenantId: ${GRAPH_TENANT_ID:?Set GRAPH_TENANT_ID}
+      Graph__ClientSecret: ${GRAPH_CLIENT_SECRET:?Set GRAPH_CLIENT_SECRET}
+      Graph__MailboxAddress: ${GRAPH_MAILBOX_ADDRESS:?Set GRAPH_MAILBOX_ADDRESS}
+      EntraId__TenantId: ${ENTRAID_TENANT_ID:?Set ENTRAID_TENANT_ID}
+      EntraId__ClientId: ${ENTRAID_CLIENT_ID:?Set ENTRAID_CLIENT_ID}
+      EntraId__ClientSecret: ${ENTRAID_CLIENT_SECRET:?Set ENTRAID_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: dotmarc
+      POSTGRES_USER: dotmarc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dotmarc}
+    volumes:
+      - dotmarc-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dotmarc -d dotmarc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dotmarc-postgres-data:
