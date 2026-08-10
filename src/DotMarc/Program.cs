@@ -22,7 +22,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 
-var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "Data Source=dotmarc.db";
+var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc";
 
 // AddDbContextFactory registers DotMarcDbContext itself as a scoped service too (in addition to
 // the singleton IDbContextFactory<DotMarcDbContext>), so this one call covers both consumers:
@@ -36,7 +36,7 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // throws "Cannot consume scoped service 'DbContextOptions<DotMarcDbContext>' from singleton
 // 'IDbContextFactory<DotMarcDbContext>'". Production skips that validation, which is why this
 // wasn't caught by a Docker smoke test alone.
-builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddOptions<GraphOptions>()
     .Bind(builder.Configuration.GetSection(GraphOptions.SectionName))
@@ -75,7 +75,7 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    scope.ServiceProvider.GetRequiredService<DotMarcDbContext>().Database.EnsureCreated();
+    await scope.ServiceProvider.GetRequiredService<DotMarcDbContext>().Database.MigrateAsync();
 }
 
 // Must run first, before any other middleware that reads the request's scheme/host (redirects,

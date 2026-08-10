@@ -10,11 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="MudBlazor" Version="9.8.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
-    <!-- Overrides the transitive SQLitePCLRaw.lib.e_sqlite3 2.1.11 pulled in by
-         Microsoft.EntityFrameworkCore.Sqlite, which carries a known high-severity advisory
-         (GHSA-2m69-gcr7-jv3q / CVE-2025-6965) with no patched 2.x release available. -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
