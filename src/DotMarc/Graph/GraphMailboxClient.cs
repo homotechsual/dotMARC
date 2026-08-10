@@ -21,11 +21,23 @@ public sealed class GraphMailboxClient : IGraphMailboxClient
 
     public async Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken)
     {
-        var path = $"users/{_options.MailboxAddress}/messages?$filter=isRead eq false&$select=id,subject,hasAttachments";
-        var response = await SendAsync(HttpMethod.Get, path, content: null, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var parsed = JsonSerializer.Deserialize<MessageListResponse>(body, JsonOptions)!;
-        return parsed.Value.Select(m => new MailboxMessage(m.Id, m.Subject, m.HasAttachments)).ToList();
+        var messages = new List<MailboxMessage>();
+        string? path = $"users/{_options.MailboxAddress}/messages?$filter=isRead eq false&$select=id,subject,hasAttachments&$top=50";
+
+        // Graph defaults to a page size of 10 for this endpoint; without following
+        // @odata.nextLink, anything past the first page is silently dropped. $top=50 shrinks the
+        // number of round trips for the common case, but an inbox can still exceed that in one
+        // poll cycle, so every page is followed until the server stops returning a nextLink.
+        while (path is not null)
+        {
+            var response = await SendAsync(HttpMethod.Get, path, content: null, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var parsed = JsonSerializer.Deserialize<MessageListResponse>(body, JsonOptions)!;
+            messages.AddRange(parsed.Value.Select(m => new MailboxMessage(m.Id, m.Subject, m.HasAttachments)));
+            path = parsed.NextLink;
+        }
+
+        return messages;
     }
 
     public async Task<IReadOnlyList<MailboxAttachment>> GetAttachmentsAsync(string messageId, CancellationToken cancellationToken)
@@ -55,7 +67,9 @@ public sealed class GraphMailboxClient : IGraphMailboxClient
         return response;
     }
 
-    private sealed record MessageListResponse([property: JsonPropertyName("value")] List<MessageDto> Value);
+    private sealed record MessageListResponse(
+        [property: JsonPropertyName("value")] List<MessageDto> Value,
+        [property: JsonPropertyName("@odata.nextLink")] string? NextLink = null);
     private sealed record MessageDto(string Id, string Subject, bool HasAttachments);
 
     private sealed record AttachmentListResponse([property: JsonPropertyName("value")] List<AttachmentDto> Value);

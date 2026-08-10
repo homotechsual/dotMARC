@@ -11,12 +11,18 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
     public string ResponseBody { get; set; } = "{}";
     public HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
 
+    /// <summary>When non-empty, each call dequeues the next body in order — for testing
+    /// multi-page (@odata.nextLink) responses. Once drained, falls back to
+    /// <see cref="ResponseBody"/> for any further calls.</summary>
+    public Queue<string> ResponseBodies { get; } = new();
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Requests.Add(request);
+        var body = ResponseBodies.Count > 0 ? ResponseBodies.Dequeue() : ResponseBody;
         var response = new HttpResponseMessage(StatusCode)
         {
-            Content = new StringContent(ResponseBody, Encoding.UTF8, "application/json")
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
         return Task.FromResult(response);
     }

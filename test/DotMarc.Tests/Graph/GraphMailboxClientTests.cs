@@ -41,6 +41,29 @@ public class GraphMailboxClientTests
         Assert.True(result[0].HasAttachments);
         Assert.Contains("users/dmarc-reports@example.com/messages", handler.Requests[0].RequestUri!.ToString());
         Assert.Contains("isRead eq false", Uri.UnescapeDataString(handler.Requests[0].RequestUri!.ToString()));
+        Assert.Contains("$top=50", Uri.UnescapeDataString(handler.Requests[0].RequestUri!.ToString()));
+    }
+
+    [Fact]
+    public async Task GetUnreadMessagesAsync_FollowsODataNextLink_AcrossMultiplePages()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""
+            {"value":[{"id":"msg-1","subject":"Page 1","hasAttachments":true}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/users/dmarc-reports@example.com/messages?$skiptoken=abc"}
+            """);
+        handler.ResponseBodies.Enqueue("""
+            {"value":[{"id":"msg-2","subject":"Page 2","hasAttachments":false},{"id":"msg-3","subject":"Page 2b","hasAttachments":true}]}
+            """);
+
+        var result = await client.GetUnreadMessagesAsync(CancellationToken.None);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(["msg-1", "msg-2", "msg-3"], result.Select(m => m.Id));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("$top=50", Uri.UnescapeDataString(handler.Requests[0].RequestUri!.ToString()));
+        Assert.Equal(
+            "https://graph.microsoft.com/v1.0/users/dmarc-reports@example.com/messages?$skiptoken=abc",
+            handler.Requests[1].RequestUri!.ToString());
     }
 
     [Fact]
