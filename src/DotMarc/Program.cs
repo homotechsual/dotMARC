@@ -3,6 +3,8 @@ using DotMarc.Graph;
 using DotMarc.Ingestion;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +36,18 @@ builder.Services.AddHttpClient<IGraphMailboxClient, GraphMailboxClient>(client =
 // does honor that attribute, so it deterministically selects the host constructor.
 builder.Services.AddHostedService<PollingService>(sp => ActivatorUtilities.CreateInstance<PollingService>(sp));
 
+builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
+
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
+
+builder.Services.AddCascadingAuthenticationState();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -48,6 +62,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 app.UseAntiforgery();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();
