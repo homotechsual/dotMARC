@@ -75,6 +75,70 @@ host or in a different container, add its address to `KnownProxies` (or its subn
 `KnownNetworks`) in that configuration block — otherwise ASP.NET Core ignores the forwarded headers
 as untrusted and the redirect URI problem above will resurface.
 
+## Deploy to Azure
+
+`infra/main.bicep` provisions everything needed to run dotMARC on Azure:
+
+- An **App Service Plan** (Linux, `B1`) and a **Linux Web App for Containers** running the
+  published dotMARC image, with a system-assigned managed identity.
+- An **Azure Database for PostgreSQL Flexible Server** (`Standard_B1ms`, PostgreSQL 18) with a
+  `dotmarc` database and a firewall rule allowing Azure services.
+- A **Key Vault** (RBAC-authorized), with the Web App's managed identity granted the
+  `Key Vault Secrets User` role.
+
+Before deploying, complete the **two Entra app registrations** described in
+[One-time setup: two Entra app registrations](#one-time-setup-two-entra-app-registrations) above —
+the Bicep template takes the same non-secret client IDs/tenant IDs as deployment parameters, and
+the client secrets are set into Key Vault after deployment (see below).
+
+### 1. Fill in the parameters
+
+Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders — as checked in, the
+file contains placeholder values only and is **not meant to be deployed as-is**. At minimum, set
+`postgresAdminPassword`, `graphClientId`, `graphTenantId`, `graphMailboxAddress`,
+`entraIdTenantId`, and `entraIdClientId`. For `containerImage`, use the GHCR image published by
+CI/CD — `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release — rather
+than building your own.
+
+Alternatively, leave the file untouched and pass overrides inline with `--parameters key=value` on
+the command below.
+
+### 2. Deploy
+
+```bash
+az group create --name dotmarc-rg --location uksouth
+az deployment group create \
+  --resource-group dotmarc-rg \
+  --template-file infra/main.bicep \
+  --parameters infra/main.parameters.json
+```
+
+### 3. Populate the Key Vault secrets
+
+The template deliberately provisions three Key Vault secrets — `Graph-ClientSecret`,
+`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` — empty, rather than accepting secret
+material as deployment parameters (which would put it on the command line or in a parameters
+file). Until these are set, the app can't sign in or reach Postgres. Populate them directly:
+
+```bash
+RG=dotmarc-rg
+KV=$(az deployment group show --resource-group $RG --name main --query properties.outputs.keyVaultName.value -o tsv)
+PG_FQDN=$(az deployment group show --resource-group $RG --name main --query properties.outputs.postgresServerFqdn.value -o tsv)
+
+az keyvault secret set --vault-name $KV --name Graph-ClientSecret --value "<graph app client secret>"
+az keyvault secret set --vault-name $KV --name EntraId-ClientSecret --value "<entra id app client secret>"
+az keyvault secret set --vault-name $KV --name ConnectionStrings-DotMarc \
+  --value "Host=$PG_FQDN;Database=dotmarc;Username=<postgresAdminUsername>;Password=<postgresAdminPassword>;Ssl Mode=Require"
+
+az webapp restart --resource-group $RG --name $(az deployment group show --resource-group $RG --name main --query properties.outputs.webAppName.value -o tsv)
+```
+
+Substitute the two Entra app registration client secrets created in the one-time setup steps
+above, and the `postgresAdminUsername`/`postgresAdminPassword` values used in step 1. The Web
+App's `appSettings` reference these secrets by name (not by version), so `az webapp restart`
+forces it to re-fetch the Key Vault references immediately rather than waiting for their normal
+refresh cycle.
+
 ## Development
 
 ```bash

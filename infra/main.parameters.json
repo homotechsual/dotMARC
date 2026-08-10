@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "baseName": { "value": "dotmarc" },
+    "containerImage": { "value": "ghcr.io/homotechsual/dotmarc:latest" },
+    "postgresAdminUsername": { "value": "dotmarc" },
+    "postgresAdminPassword": { "value": "REPLACE_ME" },
+    "graphClientId": { "value": "REPLACE_ME" },
+    "graphTenantId": { "value": "REPLACE_ME" },
+    "graphMailboxAddress": { "value": "REPLACE_ME" },
+    "entraIdTenantId": { "value": "REPLACE_ME" },
+    "entraIdClientId": { "value": "REPLACE_ME" }
+  }
+}
