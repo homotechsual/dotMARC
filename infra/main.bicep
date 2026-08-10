@@ -24,7 +24,7 @@ param entraIdTenantId string
 param entraIdClientId string
 
 var postgresServerName = '${baseName}-pg-${uniqueString(resourceGroup().id)}'
-var keyVaultName = '${baseName}-kv-${uniqueString(resourceGroup().id)}'
+var keyVaultName = '${take(baseName, 7)}-kv-${uniqueString(resourceGroup().id)}'
 var appServicePlanName = '${baseName}-plan'
 var webAppName = '${baseName}-${uniqueString(resourceGroup().id)}'
 var postgresDatabaseName = 'dotmarc'
