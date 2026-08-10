@@ -14,44 +14,54 @@
 else
 {
     <MudGrid Class="mb-4">
-        <MudItem xs="3">
+        <MudItem xs="12" sm="6" md="2">
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5">@_summary.DomainCount</MudText>
                 <MudText Typo="Typo.caption">domains monitored</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="3">
+        <MudItem xs="12" sm="6" md="2">
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5" Color="Color.Success">@_summary.OverallPassRate.ToString("P1")</MudText>
                 <MudText Typo="Typo.caption">overall pass rate (30d)</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="3">
+        <MudItem xs="12" sm="6" md="2">
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5" Color="Color.Warning">@_summary.WarningCount</MudText>
                 <MudText Typo="Typo.caption">domains with warnings</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="3">
+        <MudItem xs="12" sm="6" md="2">
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5" Color="Color.Error">@_summary.MissingCount</MudText>
                 <MudText Typo="Typo.caption">missing expected report</MudText>
             </MudPaper>
         </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
+                <MudText Typo="Typo.h5" Color="@(_summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
+                <MudText Typo="Typo.caption">unparseable messages</MudText>
+            </MudPaper>
+        </MudItem>
     </MudGrid>
 
-    <MudTable Items="_rows" Hover="true" OnRowClick="RowClicked" T="DomainRow">
+    <MudTable Items="_rows" Hover="true" T="DomainRow">
         <HeaderContent>
             <MudTh>Domain</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Pass rate (30d)</MudTh>
             <MudTh>Last report</MudTh>
+            <MudTh>Pinned</MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.Name</MudTd>
-            <MudTd><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
-            <MudTd>@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
-            <MudTd>@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@context.Name</MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer"><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
+            <MudTd>
+                <MudSwitch T="bool" Value="context.IsPinned" ValueChanged="@(_ => TogglePinnedAsync(context.Name))" Color="Color.Primary" />
+            </MudTd>
         </RowTemplate>
     </MudTable>
 }
@@ -60,7 +70,9 @@ else
     private DashboardSummary? _summary;
     private List<DomainRow> _rows = [];
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
         // A fresh, untracked context per render: the page is read-only and Blazor Server's DI
         // scope lives for the whole circuit, so injecting DotMarcDbContext directly would keep one
@@ -83,19 +95,28 @@ else
             var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
             var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
 
-            return new DomainRow(d.Name, status, color, passRate, d.LastReportReceivedUtc);
+            return new DomainRow(d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsPinned);
         }).OrderBy(r => r.Name).ToList();
+
+        var parseFailureCount = await db.ParseFailures.CountAsync();
 
         _summary = new DashboardSummary(
             _rows.Count,
             DomainStatistics.GetOverallPassRate(domains.Select(d => (IEnumerable<Report>)d.Reports)),
             _rows.Count(r => r.Status == "Warning"),
-            _rows.Count(r => r.Status == "Missing"));
+            _rows.Count(r => r.Status == "Missing"),
+            parseFailureCount);
     }
 
-    private void RowClicked(TableRowClickEventArgs<DomainRow> args) =>
-        Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(args.Item!.Name)}");
+    private async Task TogglePinnedAsync(string domainName)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var domain = await db.Domains.SingleAsync(d => d.Name == domainName);
+        domain.IsPinned = !domain.IsPinned;
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
 
-    private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount);
-    private sealed record DomainRow(string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc);
+    private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount);
+    private sealed record DomainRow(string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsPinned);
 }

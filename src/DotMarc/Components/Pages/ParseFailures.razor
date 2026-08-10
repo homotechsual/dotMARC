@@ -1,0 +1,46 @@
+@page "/parse-failures"
+@using DotMarc.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+
+<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudText Typo="Typo.h4" Class="mb-4">Unparseable messages</MudText>
+
+@if (_failures is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_failures.Count == 0)
+{
+    <MudText>No unparseable messages — every mailbox message has been parsed successfully.</MudText>
+}
+else
+{
+    <MudTable Items="_failures" Hover="true" T="ParseFailure">
+        <HeaderContent>
+            <MudTh>Message ID</MudTh>
+            <MudTh>Reason</MudTh>
+            <MudTh>Attempts</MudTh>
+            <MudTh>Last attempted</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.GraphMessageId</MudTd>
+            <MudTd>@context.Reason</MudTd>
+            <MudTd>@context.AttemptCount</MudTd>
+            <MudTd>@context.LastAttemptedUtc.ToString("g")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<ParseFailure>? _failures;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _failures = await db.ParseFailures
+            .AsNoTracking()
+            .OrderByDescending(f => f.LastAttemptedUtc)
+            .ToListAsync();
+    }
+}
