@@ -87,13 +87,14 @@ public sealed class PollingService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to parse message {MessageId}; leaving unread for retry.", message.Id);
-                context.ParseFailures.Add(new ParseFailure
-                {
-                    GraphMessageId = message.Id,
-                    Reason = ex.Message,
-                    OccurredUtc = DateTimeOffset.UtcNow
-                });
-                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+                // A prior SaveChangesAsync failure earlier in this method (e.g. inside
+                // StoreReportAsync) can leave half-built Domain/Report/ReportRecord entities
+                // tracked as Added on this shared context. Without clearing the tracker first, the
+                // save below would re-attempt those leftover entities alongside the ParseFailure
+                // and could throw again here, uncaught, aborting the rest of the poll cycle.
+                context.ChangeTracker.Clear();
+                await RecordParseFailureAsync(context, message.Id, ex.Message, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -118,7 +119,24 @@ public sealed class PollingService : BackgroundService
                 var decompressed = ReportDecompressor.Decompress(attachment.ContentBytes);
                 var parsed = DmarcReportParser.Parse(decompressed);
                 await StoreReportAsync(context, parsed, System.Text.Encoding.UTF8.GetString(decompressed), cancellationToken).ConfigureAwait(false);
-                await graphClient.MarkAsReadAsync(message.Id, cancellationToken).ConfigureAwait(false);
+
+                // The report is safely committed at this point (StoreReportAsync's own
+                // duplicate check makes a re-attempt of this same message harmless). Marking the
+                // message read is a separate, transient Graph call — a failure here is NOT an
+                // unparseable message, so it must not fall into the ParseFailure path below. Log
+                // it distinctly and let the message get picked up again next poll.
+                try
+                {
+                    await graphClient.MarkAsReadAsync(message.Id, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception markReadEx)
+                {
+                    _logger.LogWarning(markReadEx,
+                        "Report for message {MessageId} was stored successfully, but marking it read failed. " +
+                        "It will be reprocessed next poll; the duplicate-report check makes that safe.",
+                        message.Id);
+                }
+
                 return;
             }
             catch (Exception ex)
@@ -138,6 +156,22 @@ public sealed class PollingService : BackgroundService
             domain = new Domain { Name = parsed.Domain, FirstSeenUtc = DateTimeOffset.UtcNow };
             context.Domains.Add(domain);
         }
+
+        // domain.Id is only non-zero for an already-persisted domain (EF Core leaves the CLR
+        // property at its default until SaveChanges assigns the real value), so a brand-new
+        // domain can never already have a report — skip the lookup for that case.
+        var isDuplicate = domain.Id != 0 && await context.Reports.AnyAsync(
+            r => r.DomainId == domain.Id && r.ReportingOrg == parsed.ReportingOrg && r.ReportId == parsed.ReportId,
+            cancellationToken).ConfigureAwait(false);
+
+        if (isDuplicate)
+        {
+            // Same report already stored from an earlier attempt at this message (see the
+            // MarkAsReadAsync-failure handling in ProcessMessageAsync). Nothing to insert — the
+            // caller still retries marking the message read.
+            return;
+        }
+
         domain.LastReportReceivedUtc = DateTimeOffset.UtcNow;
 
         var report = new Report
@@ -165,6 +199,37 @@ public sealed class PollingService : BackgroundService
         }
 
         context.Reports.Add(report);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Inserts a new ParseFailure row for a never-before-failed message, or updates the
+    /// existing row's attempt count/reason/timestamp for a repeat failure — keeps a permanently
+    /// unparseable message from growing a new row every poll cycle forever (see
+    /// <see cref="ParseFailure"/>). No auto-give-up policy here: the message is retried
+    /// indefinitely, only the bookkeeping row is deduplicated.</summary>
+    private static async Task RecordParseFailureAsync(DotMarcDbContext context, string graphMessageId, string reason, CancellationToken cancellationToken)
+    {
+        var existing = await context.ParseFailures
+            .SingleOrDefaultAsync(f => f.GraphMessageId == graphMessageId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (existing is null)
+        {
+            context.ParseFailures.Add(new ParseFailure
+            {
+                GraphMessageId = graphMessageId,
+                Reason = reason,
+                AttemptCount = 1,
+                LastAttemptedUtc = DateTimeOffset.UtcNow
+            });
+        }
+        else
+        {
+            existing.AttemptCount++;
+            existing.Reason = reason;
+            existing.LastAttemptedUtc = DateTimeOffset.UtcNow;
+        }
+
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -3,6 +3,7 @@ using DotMarc.Graph;
 using DotMarc.Ingestion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net.Http;
 using Xunit;
 
 namespace DotMarc.Tests.Ingestion;
@@ -113,6 +114,71 @@ public class PollingServiceTests : IDisposable
         Assert.DoesNotContain("msg-3", graphClient.MarkedAsRead);
     }
 
+    [Fact]
+    public async Task PollOnceAsync_DoesNotDuplicateReport_WhenMarkAsReadFailsAfterStoreSucceeds_AndMessageIsReprocessed()
+    {
+        // Regression coverage for the review finding: the report is stored, but MarkAsReadAsync
+        // (a separate, transient Graph call) fails, so the message stays unread and gets
+        // reprocessed on the next poll. That second attempt must not create a second Report row
+        // for the same (domain, reporting org, report id).
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+        graphClient.FailMarkAsReadFor.Add("msg-1");
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        // First attempt: report stored, but marking read failed — so it's NOT a ParseFailure, and
+        // the message is still considered unread for the next poll.
+        using (var verify = CreateContext())
+        {
+            Assert.Single(verify.Reports);
+            Assert.Empty(verify.ParseFailures);
+        }
+        Assert.DoesNotContain("msg-1", graphClient.MarkedAsRead);
+
+        // Second poll: Graph now succeeds at marking read. The same message (still unread, still
+        // carrying the same report) is reprocessed.
+        graphClient.FailMarkAsReadFor.Clear();
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using (var verify = CreateContext())
+        {
+            Assert.Single(verify.Reports); // still exactly one — no duplicate.
+            Assert.Empty(verify.ParseFailures);
+        }
+        Assert.Contains("msg-1", graphClient.MarkedAsRead);
+    }
+
+    [Fact]
+    public async Task PollOnceAsync_UpdatesExistingParseFailureRow_InsteadOfGrowingUnboundedly_OnRepeatedFailure()
+    {
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-2", "Not a report", true));
+        graphClient.Attachments["msg-2"] = [new MailboxAttachment("garbage.xml", "text/xml", "not xml"u8.ToArray())];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+            await service.PollOnceAsync(CancellationToken.None);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        var failure = verify.ParseFailures.Single();
+        Assert.Equal("msg-2", failure.GraphMessageId);
+        Assert.Equal(3, failure.AttemptCount);
+    }
+
     public void Dispose()
     {
         // Ensure all connections are closed
@@ -141,6 +207,7 @@ public class PollingServiceTests : IDisposable
         public List<MailboxMessage> UnreadMessages { get; } = [];
         public Dictionary<string, List<MailboxAttachment>> Attachments { get; } = [];
         public List<string> MarkedAsRead { get; } = [];
+        public HashSet<string> FailMarkAsReadFor { get; } = [];
 
         public Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MailboxMessage>>(UnreadMessages);
@@ -150,6 +217,11 @@ public class PollingServiceTests : IDisposable
 
         public Task MarkAsReadAsync(string messageId, CancellationToken cancellationToken)
         {
+            if (FailMarkAsReadFor.Contains(messageId))
+            {
+                throw new HttpRequestException("Simulated transient Graph failure marking message read.");
+            }
+
             MarkedAsRead.Add(messageId);
             return Task.CompletedTask;
         }

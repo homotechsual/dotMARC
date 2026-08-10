@@ -26,6 +26,13 @@ public sealed class DotMarcDbContext : DbContext
                 .WithMany(d => d.Reports)
                 .HasForeignKey(r => r.DomainId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // One row per (domain, reporting org, report id): a report is re-ingested if the
+            // mailbox message that produced it gets re-processed (e.g. it was stored successfully
+            // but MarkAsReadAsync failed before the message could be marked read) — this index,
+            // paired with PollingService's own pre-insert duplicate check, keeps that safe rather
+            // than silently double-counting volume.
+            entity.HasIndex(r => new { r.DomainId, r.ReportingOrg, r.ReportId }).IsUnique();
         });
 
         modelBuilder.Entity<ReportRecord>(entity =>
@@ -38,6 +45,11 @@ public sealed class DotMarcDbContext : DbContext
             entity.Property(r => r.Disposition).HasConversion<string>();
             entity.Property(r => r.SpfResult).HasConversion<string>();
             entity.Property(r => r.DkimResult).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<ParseFailure>(entity =>
+        {
+            entity.HasIndex(f => f.GraphMessageId).IsUnique();
         });
     }
 }

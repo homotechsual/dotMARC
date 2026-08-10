@@ -82,6 +82,81 @@ public sealed class DotMarcDbContextTests : IDisposable
         Assert.Throws<DbUpdateException>(() => context.SaveChanges());
     }
 
+    [Fact]
+    public void Report_DomainReportingOrgReportId_MustBeUnique()
+    {
+        // Backs PollingService's idempotency fix: without this constraint, reprocessing a message
+        // whose report was already stored (e.g. because MarkAsReadAsync failed after the report
+        // was saved) would silently double-count volume instead of being caught.
+        using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
+        context.Domains.Add(domain);
+        context.Reports.Add(new Report
+        {
+            Domain = domain,
+            ReportingOrg = "google.com",
+            ReportId = "dup-1",
+            DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            DateRangeEndUtc = DateTimeOffset.UtcNow,
+            RawXml = "<feedback/>",
+            ReceivedUtc = DateTimeOffset.UtcNow
+        });
+        context.SaveChanges();
+
+        context.Reports.Add(new Report
+        {
+            Domain = domain,
+            ReportingOrg = "google.com",
+            ReportId = "dup-1",
+            DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            DateRangeEndUtc = DateTimeOffset.UtcNow,
+            RawXml = "<feedback/>",
+            ReceivedUtc = DateTimeOffset.UtcNow
+        });
+
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void ParseFailure_GraphMessageId_MustBeUnique()
+    {
+        using var context = CreateContext();
+        context.ParseFailures.Add(new ParseFailure { GraphMessageId = "msg-1", Reason = "bad xml", AttemptCount = 1, LastAttemptedUtc = DateTimeOffset.UtcNow });
+        context.SaveChanges();
+
+        context.ParseFailures.Add(new ParseFailure { GraphMessageId = "msg-1", Reason = "bad xml again", AttemptCount = 1, LastAttemptedUtc = DateTimeOffset.UtcNow });
+
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void ChangeTrackerClear_RemovesEntitiesLeftDanglingByAFailedSaveChanges()
+    {
+        // Regression coverage for the review finding: PollingService shares one DbContext across
+        // a whole poll cycle. If a mid-cycle SaveChangesAsync throws (e.g. a constraint
+        // violation), the half-built entities from that failed call stay tracked as Added unless
+        // the tracker is explicitly cleared — otherwise the *next* SaveChanges call (recording a
+        // ParseFailure) re-attempts them too and can throw again, uncaught. This confirms the
+        // assumption PollingService's fix relies on: ChangeTracker.Clear() actually drops the
+        // dangling entities, and a subsequent unrelated save then succeeds.
+        using var context = CreateContext();
+        context.ParseFailures.Add(new ParseFailure { GraphMessageId = "dangling", Reason = "first", AttemptCount = 1, LastAttemptedUtc = DateTimeOffset.UtcNow });
+        context.ParseFailures.Add(new ParseFailure { GraphMessageId = "dangling", Reason = "second", AttemptCount = 1, LastAttemptedUtc = DateTimeOffset.UtcNow });
+
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+        Assert.NotEmpty(context.ChangeTracker.Entries());
+
+        context.ChangeTracker.Clear();
+        Assert.Empty(context.ChangeTracker.Entries());
+
+        // A subsequent, unrelated save now succeeds instead of re-attempting the dangling inserts.
+        context.ParseFailures.Add(new ParseFailure { GraphMessageId = "unrelated", Reason = "ok", AttemptCount = 1, LastAttemptedUtc = DateTimeOffset.UtcNow });
+        context.SaveChanges();
+
+        Assert.Equal(0, context.ParseFailures.Count(f => f.GraphMessageId == "dangling"));
+        Assert.Equal(1, context.ParseFailures.Count(f => f.GraphMessageId == "unrelated"));
+    }
+
     public void Dispose()
     {
         // Ensure all connections are closed

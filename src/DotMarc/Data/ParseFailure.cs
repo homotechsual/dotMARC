@@ -2,11 +2,16 @@ namespace DotMarc.Data;
 
 /// <summary>Recorded whenever an inbox message could not be turned into a Report — corrupt
 /// attachment, unexpected format, or not a DMARC report at all. The corresponding mailbox message
-/// is deliberately left unread (see PollingService) so a fixed parser retries it automatically.</summary>
+/// is deliberately left unread (see PollingService) so a fixed parser retries it automatically.
+/// One row per <see cref="GraphMessageId"/> (enforced by a unique index) — a permanently
+/// unparseable message would otherwise grow a new row every poll cycle forever; repeat failures
+/// update the existing row's <see cref="AttemptCount"/>/<see cref="Reason"/>/<see cref="LastAttemptedUtc"/>
+/// instead.</summary>
 public sealed class ParseFailure
 {
     public int Id { get; set; }
     public required string GraphMessageId { get; set; }
     public required string Reason { get; set; }
-    public DateTimeOffset OccurredUtc { get; set; }
+    public int AttemptCount { get; set; } = 1;
+    public DateTimeOffset LastAttemptedUtc { get; set; }
 }
