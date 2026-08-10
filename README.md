@@ -26,7 +26,10 @@ dotMARC needs **two separate** Entra app registrations — do not reuse one for 
 1. **App registrations** → **New registration**, name it e.g. `dotmarc-dashboard`.
 2. **Authentication** → add a **Web** platform redirect URI:
    `https://<your-deployment-host>/signin-oidc`.
-3. No API permissions needed beyond the default `User.Read`.
+3. **Certificates & secrets** → create a client secret. Microsoft.Identity.Web wires this app up
+   via the standard confidential-client authorization-code flow, so the token exchange after
+   sign-in needs this secret even though the app itself is only used for interactive sign-in.
+4. No API permissions needed beyond the default `User.Read`.
 
 ## Configure
 
@@ -41,6 +44,7 @@ Set via environment variables (double-underscore nesting):
 | `Graph__PollIntervalSeconds` | Default `300` |
 | `EntraId__TenantId` | Your tenant ID |
 | `EntraId__ClientId` | Dashboard app registration's client ID |
+| `EntraId__ClientSecret` | Dashboard app registration's client secret |
 | `ConnectionStrings__DotMarc` | Defaults to `/app/data/dotmarc.db` inside the container |
 
 ## Run
@@ -49,7 +53,7 @@ Set via environment variables (double-underscore nesting):
 docker build -f src/DotMarc/Dockerfile -t dotmarc:local .
 docker run -d -p 8080:8080 -v dotmarc-data:/app/data \
   -e Graph__ClientId=... -e Graph__TenantId=... -e Graph__ClientSecret=... -e Graph__MailboxAddress=... \
-  -e EntraId__TenantId=... -e EntraId__ClientId=... \
+  -e EntraId__TenantId=... -e EntraId__ClientId=... -e EntraId__ClientSecret=... \
   dotmarc:local
 ```
 
