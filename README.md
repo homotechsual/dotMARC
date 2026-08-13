@@ -168,18 +168,49 @@ refresh cycle.
 
 ## Development
 
+The repo is designed to work in two common local modes:
+
+1. Run the full stack with Docker Compose.
+2. Run the app locally while connecting to a PostgreSQL instance on `localhost:5432`.
+
+### Build and test
+
 ```bash
+dotnet restore dotMARC.sln
 dotnet build dotMARC.sln
 dotnet test dotMARC.sln
 ```
 
-`dotnet test` uses Testcontainers.PostgreSql, so Docker must be running to execute the suite; the
-first run pulls the `postgres:18` image.
+`dotnet test` uses Testcontainers.PostgreSql, so Docker must be running; the first run pulls the
+`postgres:18` image automatically.
 
-Running `dotnet run` directly on the host (rather than via `docker compose up`) needs a PostgreSQL
-instance reachable at `localhost:5432` matching the credentials in `appsettings.json`
-(`dotmarc`/`dotmarc`/`dotmarc`) — `docker compose up postgres` starts just the database, published
-on that port, without also building and running the app container.
+### Local database-first flow
+
+To start just the database for local debugging:
+
+```bash
+docker compose up postgres
+```
+
+This publishes PostgreSQL on `localhost:5432` using the default development connection values from
+`src/DotMarc/appsettings.json`: database `dotmarc`, username `dotmarc`, and password `dotmarc`.
+
+If you want to run the app directly on the host instead of using the container stack, use:
+
+```bash
+dotnet run --project src/DotMarc/DotMarc.csproj
+```
+
+The app expects the same PostgreSQL connection settings as the Docker Compose setup.
+
+### Full stack with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+This starts dotMARC together with PostgreSQL in one command, using the repo's `docker-compose.yml`
+configuration and the same environment variables described in the setup section above.
 
 Point each monitored domain's DMARC record's `rua=` tag at the same mailbox this app polls, e.g.:
 
