@@ -183,7 +183,7 @@ on that port, without also building and running the app container.
 
 Point each monitored domain's DMARC record's `rua=` tag at the same mailbox this app polls, e.g.:
 
-```
+```txt
 v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@yourtenant.com
 ```
 
