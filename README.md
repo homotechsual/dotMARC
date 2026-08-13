@@ -14,12 +14,22 @@ dotMARC needs **two separate** Entra app registrations — do not reuse one for 
 2. **API permissions** → add Microsoft Graph **Application** permission `Mail.Read`, then grant
    admin consent.
 3. **Certificates & secrets** → create a client secret.
-4. Restrict this app's mailbox access via an Exchange **Application Access Policy**, scoped to
-   just the DMARC reports mailbox — `Mail.Read` is tenant-wide by default otherwise:
+4. Restrict this app's mailbox access via an Exchange **Application Access Policy**. Exchange
+   requires the policy scope to be a **security principal** (for example a mail-enabled security
+   group), not the mailbox itself. Create a dedicated group for the DMARC reports mailbox, add
+   that mailbox to the group, and then scope the policy to the group:
 
    ```powershell
-   New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId <mailbox-address> -AccessRight RestrictAccess -Description "dotMARC: restrict to DMARC reports mailbox only"
+   Connect-ExchangeOnline -Organization <your-tenant>
+
+   $group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
+   Add-DistributionGroupMember -Identity $group.Identity -Member "dmarc-reports@contoso.com"
+
+   New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId $group.ObjectId -AccessRight RestrictAccess -Description "dotMARC: restrict to DMARC reports mailbox only"
    ```
+
+   If you already have the mail-enabled security group, use its `ObjectId` instead of the mailbox
+   address. Do not pass the mailbox address directly to `-PolicyScopeGroupId`.
 
 ### 2. Dashboard sign-in (delegated)
 
@@ -81,11 +91,11 @@ per-deployment configuration.
 
 `infra/main.bicep` provisions everything needed to run dotMARC on Azure:
 
-- An **App Service Plan** (Linux, `B1`) and a **Linux Web App for Containers** running the
+* An **App Service Plan** (Linux, `B1`) and a **Linux Web App for Containers** running the
   published dotMARC image, with a system-assigned managed identity.
-- An **Azure Database for PostgreSQL Flexible Server** (`Standard_B1ms`, PostgreSQL 18) with a
+* An **Azure Database for PostgreSQL Flexible Server** (`Standard_B1ms`, PostgreSQL 18) with a
   `dotmarc` database and a firewall rule allowing Azure services.
-- A **Key Vault** (RBAC-authorized), with the Web App's managed identity granted the
+* A **Key Vault** (RBAC-authorized), with the Web App's managed identity granted the
   `Key Vault Secrets User` role.
 
 Before deploying, complete the **two Entra app registrations** described in
