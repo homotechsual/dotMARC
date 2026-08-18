@@ -81,7 +81,7 @@ dashboard app registration).
 
 `ForwardedHeadersOptions`'s default `KnownProxies`/`KnownIPNetworks` only trust a proxy running on
 loopback (i.e. the proxy and dotMARC on the same host), which wouldn't hold for a reverse proxy on
-a different host/container, or for Azure App Service's front-end load balancer (see
+a different host/container, or for Azure Container Apps' ingress proxy (see
 [Deploy to Azure](#deploy-to-azure)). `Program.cs` clears both restrictions unconditionally, since
 the container has no other ingress path in either supported deployment model — it's never directly
 reachable except through that trusted front-end — so any upstream proxy is trusted without needing
@@ -91,11 +91,12 @@ per-deployment configuration.
 
 `infra/main.bicep` provisions everything needed to run dotMARC on Azure:
 
-* An **App Service Plan** (Linux, `B1`) and a **Linux Web App for Containers** running the
-  published dotMARC image, with a system-assigned managed identity.
+* A **Container Apps environment** (backed by a Log Analytics workspace) and a **Container App**
+  running the published dotMARC image, with a system-assigned managed identity, sticky sessions
+  (required for Blazor Server), and a single replica.
 * An **Azure Database for PostgreSQL Flexible Server** (`Standard_B1ms`, PostgreSQL 18) with a
   `dotmarc` database and a firewall rule allowing Azure services.
-* A **Key Vault** (RBAC-authorized), with the Web App's managed identity granted the
+* A **Key Vault** (RBAC-authorized), with the Container App's managed identity granted the
   `Key Vault Secrets User` role.
 
 Before deploying, complete the **two Entra app registrations** described in
@@ -127,13 +128,13 @@ az deployment group create \
 
 ### 3. Register the deployed hostname as an OIDC redirect URI
 
-The Web App's hostname isn't known until after deployment (it's derived from
-`uniqueString(resourceGroup().id)`), so the redirect URI registered in the
+The Container App's hostname isn't known until after deployment (Container Apps assigns its FQDN
+from the environment's own DNS suffix), so the redirect URI registered in the
 [dashboard sign-in app registration](#2-dashboard-sign-in-delegated) during one-time setup can't
-be filled in ahead of time. Read the deployed URL from the template's `webAppUrl` output:
+be filled in ahead of time. Read the deployed URL from the template's `containerAppUrl` output:
 
 ```bash
-az deployment group show --resource-group $RG --name main --query properties.outputs.webAppUrl.value -o tsv
+az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppUrl.value -o tsv
 ```
 
 Then, in the `dotmarc-dashboard` app registration's **Authentication** blade, add a **Web**
@@ -157,14 +158,16 @@ az keyvault secret set --vault-name $KV --name EntraId-ClientSecret --value "<en
 az keyvault secret set --vault-name $KV --name ConnectionStrings-DotMarc \
   --value "Host=$PG_FQDN;Database=dotmarc;Username=<postgresAdminUsername>;Password=<postgresAdminPassword>;Ssl Mode=Require"
 
-az webapp restart --resource-group $RG --name $(az deployment group show --resource-group $RG --name main --query properties.outputs.webAppName.value -o tsv)
+APP=$(az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppName.value -o tsv)
+REVISION=$(az containerapp show --resource-group $RG --name $APP --query properties.latestRevisionName -o tsv)
+az containerapp revision restart --resource-group $RG --name $APP --revision $REVISION
 ```
 
 Substitute the two Entra app registration client secrets created in the one-time setup steps
-above, and the `postgresAdminUsername`/`postgresAdminPassword` values used in step 1. The Web
-App's `appSettings` reference these secrets by name (not by version), so `az webapp restart`
-forces it to re-fetch the Key Vault references immediately rather than waiting for their normal
-refresh cycle.
+above, and the `postgresAdminUsername`/`postgresAdminPassword` values used in step 1. The
+container app's secrets reference these by versionless Key Vault URL, so
+`az containerapp revision restart` forces it to re-fetch them immediately rather than waiting for
+their normal refresh cycle.
 
 ## Development
 

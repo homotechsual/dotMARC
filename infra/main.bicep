@@ -25,8 +25,9 @@ param entraIdClientId string
 
 var postgresServerName = '${baseName}-pg-${uniqueString(resourceGroup().id)}'
 var keyVaultName = '${take(baseName, 7)}-kv-${uniqueString(resourceGroup().id)}'
-var appServicePlanName = '${baseName}-plan'
-var webAppName = '${baseName}-${uniqueString(resourceGroup().id)}'
+var logAnalyticsName = '${baseName}-logs'
+var containerAppEnvName = '${baseName}-env'
+var containerAppName = baseName
 var postgresDatabaseName = 'dotmarc'
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
@@ -63,51 +64,100 @@ resource postgresFirewallAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/f
   }
 }
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2024-04-01' = {
-  name: appServicePlanName
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: logAnalyticsName
   location: location
-  kind: 'linux'
-  sku: {
-    name: 'B1'
-    tier: 'Basic'
-  }
   properties: {
-    reserved: true
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
   }
 }
 
-resource webApp 'Microsoft.Web/sites@2024-04-01' = {
-  name: webAppName
+resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
+  name: containerAppEnvName
   location: location
-  kind: 'app,linux,container'
+  properties: {
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logAnalytics.properties.customerId
+        sharedKey: logAnalytics.listKeys().primarySharedKey
+      }
+    }
+  }
+}
+
+resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: containerAppName
+  location: location
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
-    serverFarmId: appServicePlan.id
-    httpsOnly: true
-    // Blazor Server keeps each user's component state in the memory of whichever instance holds
-    // their SignalR circuit — there's no shared backing store a request can fall back to. Once
-    // this plan scales beyond one instance, a user's requests must keep landing on that same
-    // instance or their circuit breaks. Explicit here rather than relying on the ARM default so
-    // it survives a redeploy even if that default ever changes.
-    clientAffinityEnabled: true
-    siteConfig: {
-      linuxFxVersion: 'DOCKER|${containerImage}'
-      alwaysOn: true
-      webSocketsEnabled: true
-      appSettings: [
-        { name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE', value: 'false' }
-        { name: 'WEBSITES_PORT', value: '8080' }
-        { name: 'Graph__ClientId', value: graphClientId }
-        { name: 'Graph__TenantId', value: graphTenantId }
-        { name: 'Graph__MailboxAddress', value: graphMailboxAddress }
-        { name: 'EntraId__TenantId', value: entraIdTenantId }
-        { name: 'EntraId__ClientId', value: entraIdClientId }
-        { name: 'Graph__ClientSecret', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=Graph-ClientSecret)' }
-        { name: 'EntraId__ClientSecret', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=EntraId-ClientSecret)' }
-        { name: 'ConnectionStrings__DotMarc', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ConnectionStrings-DotMarc)' }
+    environmentId: containerAppEnv.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 8080
+        transport: 'auto'
+        // Blazor Server keeps each user's component state in the memory of whichever replica
+        // holds their SignalR circuit — there's no shared backing store a request can fall back
+        // to. Sticky sessions keep a client's requests on that same replica; only supported in
+        // single revision mode, which is why activeRevisionsMode is pinned to 'Single' above.
+        stickySessions: {
+          affinity: 'sticky'
+        }
+      }
+      secrets: [
+        {
+          name: 'graph-client-secret'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/Graph-ClientSecret'
+          identity: 'System'
+        }
+        {
+          name: 'entraid-client-secret'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/EntraId-ClientSecret'
+          identity: 'System'
+        }
+        {
+          name: 'connectionstrings-dotmarc'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/ConnectionStrings-DotMarc'
+          identity: 'System'
+        }
       ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'dotmarc'
+          image: containerImage
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          env: [
+            { name: 'Graph__ClientId', value: graphClientId }
+            { name: 'Graph__TenantId', value: graphTenantId }
+            { name: 'Graph__MailboxAddress', value: graphMailboxAddress }
+            { name: 'EntraId__TenantId', value: entraIdTenantId }
+            { name: 'EntraId__ClientId', value: entraIdClientId }
+            { name: 'Graph__ClientSecret', secretRef: 'graph-client-secret' }
+            { name: 'EntraId__ClientSecret', secretRef: 'entraid-client-secret' }
+            { name: 'ConnectionStrings__DotMarc', secretRef: 'connectionstrings-dotmarc' }
+          ]
+        }
+      ]
+      // PollingService and startup migrations are now guarded by Postgres advisory locks, and
+      // ingress has sticky sessions — both prerequisites for running more than one replica. Left
+      // at 1/1 here to match current capacity; raise maxReplicas whenever scaling out is actually
+      // needed, no further app changes required.
+      scale: {
+        minReplicas: 1
+        maxReplicas: 1
+      }
     }
   }
 }
@@ -126,19 +176,19 @@ resource keyVault 'Microsoft.KeyVault/vaults@2024-04-01-preview' = {
 }
 
 resource keyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, webApp.id, 'Key Vault Secrets User')
+  name: guid(keyVault.id, containerApp.id, 'Key Vault Secrets User')
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: webApp.identity.principalId
+    principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
 // These three secrets are provisioned empty. The app cannot function until they're set — see the
 // README's "Deploy to Azure" section for the az keyvault secret set commands run after deployment.
-// Web App settings above reference them by name (not by version), so setting a new value takes
-// effect without redeploying the template.
+// The container app's secrets above reference them by versionless URL, so setting a new value
+// takes effect without redeploying the template.
 resource graphClientSecretRef 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
   parent: keyVault
   name: 'Graph-ClientSecret'
@@ -163,7 +213,7 @@ resource connectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-04-01-pr
   }
 }
 
-output webAppUrl string = 'https://${webApp.properties.defaultHostName}'
-output webAppName string = webApp.name
+output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
+output containerAppName string = containerApp.name
 output postgresServerFqdn string = postgresServer.properties.fullyQualifiedDomainName
 output keyVaultName string = keyVault.name
