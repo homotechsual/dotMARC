@@ -86,6 +86,12 @@ resource webApp 'Microsoft.Web/sites@2024-04-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
+    // Blazor Server keeps each user's component state in the memory of whichever instance holds
+    // their SignalR circuit — there's no shared backing store a request can fall back to. Once
+    // this plan scales beyond one instance, a user's requests must keep landing on that same
+    // instance or their circuit breaks. Explicit here rather than relying on the ARM default so
+    // it survives a redeploy even if that default ever changes.
+    clientAffinityEnabled: true
     siteConfig: {
       linuxFxVersion: 'DOCKER|${containerImage}'
       alwaysOn: true

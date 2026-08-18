@@ -84,7 +84,7 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    await scope.ServiceProvider.GetRequiredService<DotMarcDbContext>().Database.MigrateAsync();
+    await DatabaseMigrator.MigrateWithLeaderLockAsync(scope.ServiceProvider.GetRequiredService<DotMarcDbContext>());
 }
 
 // Must run first, before any other middleware that reads the request's scheme/host (redirects,

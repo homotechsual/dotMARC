@@ -5,11 +5,19 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace DotMarc.Ingestion;
 
 public sealed class PollingService : BackgroundService
 {
+    /// <summary>Arbitrary fixed key for this service's Postgres advisory lock. Multiple replicas
+    /// may run this service concurrently; only the one that acquires this transaction-scoped lock
+    /// for a given cycle actually polls the mailbox — others skip that cycle and try again next
+    /// interval. Prevents duplicate Graph calls and duplicate-report races when scaled beyond one
+    /// replica.</summary>
+    internal const long PollingLeaderLockKey = 84_200_001;
+
     private readonly IGraphMailboxClient? _graphClient;
     private readonly DotMarcDbContext? _context;
     private readonly ILogger<PollingService> _logger;
@@ -52,7 +60,7 @@ public sealed class PollingService : BackgroundService
                     using var scope = _scopeFactory.CreateScope();
                     var graphClient = scope.ServiceProvider.GetRequiredService<IGraphMailboxClient>();
                     var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
-                    await PollOnceAsync(graphClient, context, stoppingToken).ConfigureAwait(false);
+                    await RunPollCycleAsync(graphClient, context, stoppingToken).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
@@ -68,6 +76,45 @@ public sealed class PollingService : BackgroundService
     /// entry point).</summary>
     public Task PollOnceAsync(CancellationToken cancellationToken) =>
         PollOnceAsync(_graphClient!, _context!, cancellationToken);
+
+    /// <summary>Wraps <see cref="PollOnceAsync(IGraphMailboxClient, DotMarcDbContext,
+    /// CancellationToken)"/> in the leader-election lock: tries to acquire
+    /// <see cref="PollingLeaderLockKey"/> as a transaction-scoped advisory lock on a dedicated
+    /// connection, skips the cycle entirely if another replica already holds it, and otherwise
+    /// polls and then releases the lock by committing that transaction. The lock is
+    /// transaction-scoped rather than session-scoped specifically so it can never outlive a
+    /// pooled connection being returned to the pool without an explicit unlock.</summary>
+    internal async Task RunPollCycleAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", PollingLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the polling lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            await PollOnceAsync(graphClient, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     private async Task PollOnceAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, CancellationToken cancellationToken)
     {

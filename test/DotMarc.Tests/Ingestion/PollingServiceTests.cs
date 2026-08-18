@@ -4,7 +4,6 @@ using DotMarc.Ingestion;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Net.Http;
 using Xunit;
 
 namespace DotMarc.Tests.Ingestion;
@@ -196,30 +195,5 @@ public class PollingServiceTests : IAsyncLifetime
         var failure = verify.ParseFailures.Single();
         Assert.Equal("msg-2", failure.GraphMessageId);
         Assert.Equal(3, failure.AttemptCount);
-    }
-
-    private sealed class FakeGraphMailboxClient : IGraphMailboxClient
-    {
-        public List<MailboxMessage> UnreadMessages { get; } = [];
-        public Dictionary<string, List<MailboxAttachment>> Attachments { get; } = [];
-        public List<string> MarkedAsRead { get; } = [];
-        public HashSet<string> FailMarkAsReadFor { get; } = [];
-
-        public Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<MailboxMessage>>(UnreadMessages);
-
-        public Task<IReadOnlyList<MailboxAttachment>> GetAttachmentsAsync(string messageId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<MailboxAttachment>>(Attachments.GetValueOrDefault(messageId, []));
-
-        public Task MarkAsReadAsync(string messageId, CancellationToken cancellationToken)
-        {
-            if (FailMarkAsReadFor.Contains(messageId))
-            {
-                throw new HttpRequestException("Simulated transient Graph failure marking message read.");
-            }
-
-            MarkedAsRead.Add(messageId);
-            return Task.CompletedTask;
-        }
     }
 }
