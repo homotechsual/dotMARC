@@ -77,7 +77,7 @@ else
             <MudGrid>
                 <MudItem xs="12" sm="3">
                     <MudText Typo="Typo.caption">Last polled</MudText>
-                    <MudText>@_lastPoll.PolledUtc.ToString("O")</MudText>
+                    <MudText>@_lastPoll.PolledUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
                 </MudItem>
                 <MudItem xs="12" sm="3">
                     <MudText Typo="Typo.caption">Messages checked</MudText>
@@ -96,7 +96,7 @@ else
         else
         {
             <MudText Color="Color.Error" Style="overflow-wrap:anywhere">
-                Last poll (@_lastPoll.PolledUtc.ToString("O")) failed:
+                Last poll (@_lastPoll.PolledUtc.ToString("yyyy-MM-dd HH:mm:ss")) failed:
                 @(string.IsNullOrWhiteSpace(_lastPoll.ErrorMessage) ? "no error message was recorded." : _lastPoll.ErrorMessage)
             </MudText>
         }
