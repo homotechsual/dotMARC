@@ -1,14 +1,21 @@
 @inherits LayoutComponentBase
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
 
-<MudThemeProvider />
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
     <MudAppBar Elevation="1">
-        <MudText Typo="Typo.h6">dotMARC</MudText>
+        <div class="d-flex align-center" style="gap: 0.6rem;">
+            <img src="favicon.svg" alt="" width="28" height="28" />
+            <MudText Typo="Typo.h6">dotMARC</MudText>
+        </div>
         <MudSpacer />
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="Toggle dark mode" />
         <MudButton Href="/domains" Color="Color.Inherit">Manage domains</MudButton>
     </MudAppBar>
     <MudMainContent>
@@ -17,3 +24,73 @@
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+
+@code {
+    // Homotechsual brand palette — matches GCT's MainLayout.razor exactly, so the two
+    // products read as one family rather than each inventing its own look.
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#e3594f",
+            PrimaryLighten = "#efaaa5",
+            PrimaryDarken = "#c9443a",
+            PrimaryContrastText = "#fcfcfc",
+            Secondary = "#263141",
+            SecondaryLighten = "#3d4f63",
+            SecondaryDarken = "#1a2230",
+            SecondaryContrastText = "#fcfcfc",
+            Info = "#263141",
+            TextSecondary = "#616161",
+            SuccessContrastText = "rgba(0,0,0,0.87)",
+            ErrorContrastText = "rgba(0,0,0,0.87)",
+            AppbarBackground = "#263141",
+            AppbarText = "#fcfcfc",
+            DrawerBackground = "#263141",
+            DrawerText = "#fcfcfc",
+            DrawerIcon = "#fcfcfc",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Background = "#111827",
+            Surface = "#1e2a3a",
+            AppbarBackground = "#0f1724",
+            DrawerBackground = "#0f1724",
+            Primary = "#ef8b86",
+            PrimaryLighten = "#fad0cc",
+            PrimaryDarken = "#e3594f",
+            PrimaryContrastText = "rgba(0,0,0,0.87)",
+            Secondary = "#3d4f63",
+            SecondaryContrastText = "#fcfcfc",
+            AppbarText = "#fcfcfc",
+            DrawerText = "#fcfcfc",
+            DrawerIcon = "#fcfcfc",
+            TextPrimary = "#e8eaf0",
+            TextSecondary = "#adb5c7",
+            LinesDefault = "rgba(255,255,255,0.08)",
+            SuccessContrastText = "rgba(0,0,0,0.87)",
+            ErrorContrastText = "rgba(0,0,0,0.87)",
+            WarningContrastText = "rgba(0,0,0,0.87)",
+        }
+    };
+
+    private bool _isDarkMode;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Read after the first render, not in OnInitializedAsync: JS interop isn't available
+            // until the circuit's first render completes.
+            var stored = await Js.InvokeAsync<string?>("localStorage.getItem", "dotmarc-dark-mode");
+            _isDarkMode = stored == "true";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleDarkModeAsync()
+    {
+        _isDarkMode = !_isDarkMode;
+        await Js.InvokeVoidAsync("localStorage.setItem", "dotmarc-dark-mode", _isDarkMode ? "true" : "false");
+    }
+}
