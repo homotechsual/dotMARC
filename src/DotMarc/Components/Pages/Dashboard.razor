@@ -65,11 +65,45 @@ else
             </MudTd>
         </RowTemplate>
     </MudTable>
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Polling status</MudText>
+        @if (_lastPoll is null)
+        {
+            <MudText Typo="Typo.body2">Not polled yet.</MudText>
+        }
+        else if (_lastPoll.Succeeded)
+        {
+            <MudGrid>
+                <MudItem xs="12" sm="3">
+                    <MudText Typo="Typo.caption">Last polled</MudText>
+                    <MudText>@_lastPoll.PolledUtc.ToString("O")</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudText Typo="Typo.caption">Messages checked</MudText>
+                    <MudText>@_lastPoll.MessagesChecked</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudText Typo="Typo.caption">Reports parsed</MudText>
+                    <MudText>@_lastPoll.ReportsParsed</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudText Typo="Typo.caption">Parse failures</MudText>
+                    <MudText>@_lastPoll.ParseFailures</MudText>
+                </MudItem>
+            </MudGrid>
+        }
+        else
+        {
+            <MudText Color="Color.Error">Last poll (@_lastPoll.PolledUtc.ToString("O")) failed: @_lastPoll.ErrorMessage</MudText>
+        }
+    </MudPaper>
 }
 
 @code {
     private DashboardSummary? _summary;
     private List<DomainRow> _rows = [];
+    private PollStatusRow? _lastPoll;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -101,6 +135,12 @@ else
 
         var parseFailureCount = await db.ParseFailures.CountAsync();
 
+        _lastPoll = await db.PollCycles
+            .AsNoTracking()
+            .OrderByDescending(p => p.PolledUtc)
+            .Select(p => new PollStatusRow(p.PolledUtc, p.MessagesChecked, p.ReportsParsed, p.ParseFailures, p.Succeeded, p.ErrorMessage))
+            .FirstOrDefaultAsync();
+
         _summary = new DashboardSummary(
             _rows.Count,
             DomainStatistics.GetOverallPassRate(domains.Select(d => (IEnumerable<Report>)d.Reports)),
@@ -125,4 +165,5 @@ else
 
     private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount);
     private sealed record DomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsPinned);
+    private sealed record PollStatusRow(DateTimeOffset PolledUtc, int MessagesChecked, int ReportsParsed, int ParseFailures, bool Succeeded, string? ErrorMessage);
 }
