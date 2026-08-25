@@ -59,9 +59,14 @@ Set via environment variables (double-underscore nesting):
 
 ## Run
 
-```bash
-GRAPH_CLIENT_ID=... GRAPH_TENANT_ID=... GRAPH_CLIENT_SECRET=... GRAPH_MAILBOX_ADDRESS=... \
-ENTRAID_TENANT_ID=... ENTRAID_CLIENT_ID=... ENTRAID_CLIENT_SECRET=... \
+```powershell
+$env:GRAPH_CLIENT_ID = '...'
+$env:GRAPH_TENANT_ID = '...'
+$env:GRAPH_CLIENT_SECRET = '...'
+$env:GRAPH_MAILBOX_ADDRESS = '...'
+$env:ENTRAID_TENANT_ID = '...'
+$env:ENTRAID_CLIENT_ID = '...'
+$env:ENTRAID_CLIENT_SECRET = '...'
 docker compose up
 ```
 
@@ -118,11 +123,12 @@ the command below.
 
 ### 2. Deploy
 
-```bash
-az group create --name dotmarc-rg --location uksouth
-az deployment group create \
-  --resource-group dotmarc-rg \
-  --template-file infra/main.bicep \
+```powershell
+$RG = 'your-dotmarc-resourcegroup'
+az group create --name $RG --location uksouth
+az deployment group create `
+  --resource-group $RG `
+  --template-file infra/main.bicep `
   --parameters infra/main.parameters.json
 ```
 
@@ -133,7 +139,7 @@ from the environment's own DNS suffix), so the redirect URI registered in the
 [dashboard sign-in app registration](#2-dashboard-sign-in-delegated) during one-time setup can't
 be filled in ahead of time. Read the deployed URL from the template's `containerAppUrl` output:
 
-```bash
+```powershell
 az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppUrl.value -o tsv
 ```
 
@@ -148,18 +154,18 @@ The template deliberately provisions three Key Vault secrets — `Graph-ClientSe
 material as deployment parameters (which would put it on the command line or in a parameters
 file). Until these are set, the app can't sign in or reach Postgres. Populate them directly:
 
-```bash
-RG=dotmarc-rg
-KV=$(az deployment group show --resource-group $RG --name main --query properties.outputs.keyVaultName.value -o tsv)
-PG_FQDN=$(az deployment group show --resource-group $RG --name main --query properties.outputs.postgresServerFqdn.value -o tsv)
+```powershell
+$RG = 'dotmarc-rg'
+$KV = az deployment group show --resource-group $RG --name main --query properties.outputs.keyVaultName.value -o tsv
+$PG_FQDN = az deployment group show --resource-group $RG --name main --query properties.outputs.postgresServerFqdn.value -o tsv
 
 az keyvault secret set --vault-name $KV --name Graph-ClientSecret --value "<graph app client secret>"
 az keyvault secret set --vault-name $KV --name EntraId-ClientSecret --value "<entra id app client secret>"
-az keyvault secret set --vault-name $KV --name ConnectionStrings-DotMarc \
+az keyvault secret set --vault-name $KV --name ConnectionStrings-DotMarc `
   --value "Host=$PG_FQDN;Database=dotmarc;Username=<postgresAdminUsername>;Password=<postgresAdminPassword>;Ssl Mode=Require"
 
-APP=$(az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppName.value -o tsv)
-REVISION=$(az containerapp show --resource-group $RG --name $APP --query properties.latestRevisionName -o tsv)
+$APP = az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppName.value -o tsv
+$REVISION = az containerapp show --resource-group $RG --name $APP --query properties.latestRevisionName -o tsv
 az containerapp revision restart --resource-group $RG --name $APP --revision $REVISION
 ```
 
@@ -178,7 +184,7 @@ The repo is designed to work in two common local modes:
 
 ### Build and test
 
-```bash
+```powershell
 dotnet restore dotMARC.sln
 dotnet build dotMARC.sln
 dotnet test dotMARC.sln
@@ -191,7 +197,7 @@ dotnet test dotMARC.sln
 
 To start just the database for local debugging:
 
-```bash
+```powershell
 docker compose up postgres
 ```
 
@@ -200,7 +206,7 @@ This publishes PostgreSQL on `localhost:5432` using the default development conn
 
 If you want to run the app directly on the host instead of using the container stack, use:
 
-```bash
+```powershell
 dotnet run --project src/DotMarc/DotMarc.csproj
 ```
 
@@ -208,7 +214,7 @@ The app expects the same PostgreSQL connection settings as the Docker Compose se
 
 ### Full stack with Docker Compose
 
-```bash
+```powershell
 docker compose up --build
 ```
 

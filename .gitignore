@@ -2,6 +2,7 @@
 bin/
 obj/
 artifacts/
+local/
 *.user
 .vs/
 .env
