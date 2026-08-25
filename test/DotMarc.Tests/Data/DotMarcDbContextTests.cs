@@ -175,4 +175,43 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         Assert.Equal(0, context.ParseFailures.Count(f => f.GraphMessageId == "dangling"));
         Assert.Equal(1, context.ParseFailures.Count(f => f.GraphMessageId == "unrelated"));
     }
+
+    [Fact]
+    public void CanInsertAndQuery_PollCycle()
+    {
+        using (var context = CreateContext())
+        {
+            context.PollCycles.Add(new PollCycle
+            {
+                PolledUtc = DateTimeOffset.UtcNow,
+                MessagesChecked = 4,
+                ReportsParsed = 3,
+                ParseFailures = 1,
+                Succeeded = true
+            });
+            context.SaveChanges();
+        }
+
+        using (var verify = CreateContext())
+        {
+            var pollCycle = verify.PollCycles.Single();
+            Assert.Equal(4, pollCycle.MessagesChecked);
+            Assert.Equal(3, pollCycle.ReportsParsed);
+            Assert.Equal(1, pollCycle.ParseFailures);
+            Assert.True(pollCycle.Succeeded);
+            Assert.Null(pollCycle.ErrorMessage);
+        }
+    }
+
+    [Fact]
+    public void PollCycleDailySummary_DateMustBeUnique()
+    {
+        using var context = CreateContext();
+        context.PollCycleDailySummaries.Add(new PollCycleDailySummary { Date = new DateOnly(2026, 8, 1) });
+        context.SaveChanges();
+
+        context.PollCycleDailySummaries.Add(new PollCycleDailySummary { Date = new DateOnly(2026, 8, 1) });
+
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
 }

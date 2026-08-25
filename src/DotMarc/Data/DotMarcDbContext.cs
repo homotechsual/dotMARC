@@ -12,6 +12,8 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportRecord> ReportRecords => Set<ReportRecord>();
     public DbSet<ParseFailure> ParseFailures => Set<ParseFailure>();
+    public DbSet<PollCycle> PollCycles => Set<PollCycle>();
+    public DbSet<PollCycleDailySummary> PollCycleDailySummaries => Set<PollCycleDailySummary>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +52,16 @@ public sealed class DotMarcDbContext : DbContext
         modelBuilder.Entity<ParseFailure>(entity =>
         {
             entity.HasIndex(f => f.GraphMessageId).IsUnique();
+        });
+
+        modelBuilder.Entity<PollCycle>(entity =>
+        {
+            entity.HasIndex(p => p.PolledUtc);
+        });
+
+        modelBuilder.Entity<PollCycleDailySummary>(entity =>
+        {
+            entity.HasIndex(d => d.Date).IsUnique();
         });
     }
 }
