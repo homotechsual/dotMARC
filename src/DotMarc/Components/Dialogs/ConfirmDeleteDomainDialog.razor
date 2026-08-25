@@ -1,0 +1,28 @@
+<MudDialog>
+    <TitleContent>Remove domain</TitleContent>
+    <DialogContent>
+        @if (ReportCount > 0)
+        {
+            <MudText Color="Color.Error">
+                This will permanently delete <b>@DomainName</b> and all @ReportCount report(s) received for it. This cannot be undone.
+            </MudText>
+        }
+        else
+        {
+            <MudText>Remove <b>@DomainName</b> from monitoring? It has no report history.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Confirm">Remove</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string DomainName { get; set; } = "";
+    [Parameter] public int ReportCount { get; set; }
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+}

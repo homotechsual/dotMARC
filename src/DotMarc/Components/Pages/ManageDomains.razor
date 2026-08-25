@@ -1,0 +1,125 @@
+@page "/domains"
+@using DotMarc.Data
+@using DotMarc.Components.Dialogs
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudText Typo="Typo.h4" Class="mb-4">Manage domains</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudGrid>
+        <MudItem xs="9">
+            <MudTextField @bind-Value="_newDomainName" Label="Domain name" Placeholder="contoso.com"
+                          Error="@(_addError is not null)" ErrorText="@_addError" Immediate="true" />
+        </MudItem>
+        <MudItem xs="3" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddDomainAsync">Add domain</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_domains is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTable Items="_domains" Hover="true" T="DomainRow">
+        <HeaderContent>
+            <MudTh>Domain</MudTh>
+            <MudTh>Pinned</MudTh>
+            <MudTh>Reports</MudTh>
+            <MudTh>Last report</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>
+                <MudSwitch T="bool" Value="context.IsPinned" ValueChanged="@(v => SetPinnedAsync(context, v))" Color="Color.Primary" />
+            </MudTd>
+            <MudTd>@context.ReportCount</MudTd>
+            <MudTd>@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteDomainAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<DomainRow>? _domains;
+    private string _newDomainName = "";
+    private string? _addError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _domains = await db.Domains
+            .AsNoTracking()
+            .OrderBy(d => d.Name)
+            .Select(d => new DomainRow(d.Id, d.Name, d.IsPinned, d.Reports.Count, d.LastReportReceivedUtc))
+            .ToListAsync();
+    }
+
+    private async Task AddDomainAsync()
+    {
+        _addError = null;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var result = await DomainManagementService.AddDomainAsync(db, _newDomainName, CancellationToken.None);
+
+        _addError = result switch
+        {
+            DomainManagementService.AddDomainResult.InvalidName => "Enter a valid domain name (e.g. contoso.com).",
+            DomainManagementService.AddDomainResult.AlreadyMonitored => "That domain is already monitored.",
+            _ => null
+        };
+
+        if (result == DomainManagementService.AddDomainResult.Added)
+        {
+            _newDomainName = "";
+            await LoadAsync();
+        }
+    }
+
+    private async Task SetPinnedAsync(DomainRow row, bool isPinned)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await DomainManagementService.SetPinnedAsync(db, row.Id, isPinned, CancellationToken.None);
+        await LoadAsync();
+    }
+
+    private async Task DeleteDomainAsync(DomainRow row)
+    {
+        var parameters = new DialogParameters<ConfirmDeleteDomainDialog>
+        {
+            { x => x.DomainName, row.Name },
+            { x => x.ReportCount, row.ReportCount }
+        };
+        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteDomainDialog>("Remove domain", parameters);
+        var result = await dialogRef.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                await using var db = await DbFactory.CreateDbContextAsync();
+                await DomainManagementService.RemoveDomainAsync(db, row.Id, CancellationToken.None);
+                await LoadAsync();
+            }
+            catch (Exception)
+            {
+                // Leave the row in place — don't optimistically remove it from _domains before
+                // the delete has actually succeeded.
+                Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
+            }
+        }
+    }
+
+    private sealed record DomainRow(int Id, string Name, bool IsPinned, int ReportCount, DateTimeOffset? LastReportReceivedUtc);
+}
