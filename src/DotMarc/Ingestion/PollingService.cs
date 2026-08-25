@@ -118,7 +118,14 @@ public sealed class PollingService : BackgroundService
             catch (Exception ex)
             {
                 context.ChangeTracker.Clear();
-                await RecordPollCycleAsync(context, new PollCycleCounts(0, 0, 0), succeeded: false, ex.Message, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await RecordPollCycleAsync(context, new PollCycleCounts(0, 0, 0), succeeded: false, ex.Message, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception recordEx)
+                {
+                    _logger.LogWarning(recordEx, "Could not record the failed poll cycle; the original failure follows.");
+                }
                 throw;
             }
 

@@ -95,7 +95,10 @@ else
         }
         else
         {
-            <MudText Color="Color.Error">Last poll (@_lastPoll.PolledUtc.ToString("O")) failed: @_lastPoll.ErrorMessage</MudText>
+            <MudText Color="Color.Error" Style="overflow-wrap:anywhere">
+                Last poll (@_lastPoll.PolledUtc.ToString("O")) failed:
+                @(string.IsNullOrWhiteSpace(_lastPoll.ErrorMessage) ? "no error message was recorded." : _lastPoll.ErrorMessage)
+            </MudText>
         }
     </MudPaper>
 }

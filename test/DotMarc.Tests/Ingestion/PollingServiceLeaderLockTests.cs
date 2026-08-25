@@ -171,4 +171,32 @@ public sealed class PollingServiceLeaderLockTests : IAsyncLifetime
             Assert.Equal(0, pollCycle.ParseFailures);
         }
     }
+
+    [Fact]
+    public async Task RunPollCycleAsync_RollsUpStaleRows_AsPartOfRecordingTheCycle()
+    {
+        var graphClient = GraphClientWithOneValidReport();
+
+        using (var seed = CreateContext())
+        {
+            seed.PollCycles.Add(new PollCycle
+            {
+                PolledUtc = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero).AddDays(-10),
+                MessagesChecked = 1,
+                ReportsParsed = 1,
+                Succeeded = true
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.RunPollCycleAsync(graphClient, context, CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        Assert.Single(verify.PollCycles); // only the cycle this test just ran — the seeded stale row was rolled up and deleted
+        Assert.Single(verify.PollCycleDailySummaries);
+    }
 }
