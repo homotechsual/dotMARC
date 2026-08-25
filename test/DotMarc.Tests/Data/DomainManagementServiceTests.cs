@@ -73,4 +73,65 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         Assert.Equal(DomainManagementService.AddDomainResult.AlreadyMonitored, result);
         Assert.Single(context.Domains);
     }
+
+    [Fact]
+    public async Task RemoveDomainAsync_DeletesDomainWithNoReports()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+
+        await DomainManagementService.RemoveDomainAsync(context, domainId, CancellationToken.None);
+
+        Assert.Empty(context.Domains);
+    }
+
+    [Fact]
+    public async Task RemoveDomainAsync_CascadesReportsAndRecords()
+    {
+        using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
+        var report = new Report
+        {
+            Domain = domain,
+            ReportingOrg = "google.com",
+            ReportId = "1",
+            DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            DateRangeEndUtc = DateTimeOffset.UtcNow,
+            RawXml = "<feedback/>",
+            ReceivedUtc = DateTimeOffset.UtcNow
+        };
+        report.Records.Add(new ReportRecord
+        {
+            SourceIp = "198.51.100.7",
+            MessageCount = 5,
+            Disposition = DispositionResult.None,
+            SpfResult = AuthResult.Pass,
+            DkimResult = AuthResult.Pass,
+            HeaderFrom = "contoso.io"
+        });
+        context.Domains.Add(domain);
+        context.Reports.Add(report);
+        await context.SaveChangesAsync();
+
+        await DomainManagementService.RemoveDomainAsync(context, domain.Id, CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Empty(verify.Domains);
+        Assert.Empty(verify.Reports);
+        Assert.Empty(verify.ReportRecords);
+    }
+
+    [Fact]
+    public async Task SetPinnedAsync_TogglesIsPinned()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+
+        await DomainManagementService.SetPinnedAsync(context, domainId, false, CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.False(verify.Domains.Single().IsPinned);
+    }
 }

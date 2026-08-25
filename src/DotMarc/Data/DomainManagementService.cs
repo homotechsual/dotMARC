@@ -42,4 +42,22 @@ public static class DomainManagementService
 
         return AddDomainResult.Added;
     }
+
+    /// <summary>Permanently deletes a Domain row. DotMarcDbContext.cs configures cascade delete
+    /// from Domain to Report and Report to ReportRecord, so this also removes all report history
+    /// for the domain — callers (ManageDomains.razor) confirm that with the user first when the
+    /// domain has any reports.</summary>
+    public static async Task RemoveDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        context.Domains.Remove(domain);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task SetPinnedAsync(DotMarcDbContext context, int domainId, bool isPinned, CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        domain.IsPinned = isPinned;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
 }
