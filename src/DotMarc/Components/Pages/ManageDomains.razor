@@ -70,8 +70,17 @@ else
     private async Task AddDomainAsync()
     {
         _addError = null;
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var result = await DomainManagementService.AddDomainAsync(db, _newDomainName, CancellationToken.None);
+        DomainManagementService.AddDomainResult result;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            result = await DomainManagementService.AddDomainAsync(db, _newDomainName, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _addError = "Something went wrong adding the domain. Try again.";
+            return;
+        }
 
         _addError = result switch
         {
@@ -89,8 +98,15 @@ else
 
     private async Task SetPinnedAsync(DomainRow row, bool isPinned)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        await DomainManagementService.SetPinnedAsync(db, row.Id, isPinned, CancellationToken.None);
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.SetPinnedAsync(db, row.Id, isPinned, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}. Try again.", Severity.Error);
+        }
         await LoadAsync();
     }
 

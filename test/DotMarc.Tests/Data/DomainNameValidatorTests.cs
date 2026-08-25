@@ -29,4 +29,13 @@ public sealed class DomainNameValidatorTests
 
         Assert.False(result);
     }
+
+    [Fact]
+    public void TryNormalize_RejectsNull()
+    {
+        var result = DomainNameValidator.TryNormalize(null, out var normalized);
+
+        Assert.False(result);
+        Assert.Equal("", normalized);
+    }
 }

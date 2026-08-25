@@ -134,4 +134,18 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         using var verify = CreateContext();
         Assert.False(verify.Domains.Single().IsPinned);
     }
+
+    [Fact]
+    public async Task DbUpdateException_FromAUniqueViolation_WrapsAPostgresExceptionWithSqlState23505()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.com", FirstSeenUtc = DateTimeOffset.UtcNow });
+        await context.SaveChangesAsync();
+
+        context.Domains.Add(new Domain { Name = "contoso.com", FirstSeenUtc = DateTimeOffset.UtcNow });
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+
+        var pgEx = Assert.IsType<Npgsql.PostgresException>(ex.InnerException);
+        Assert.Equal("23505", pgEx.SqlState);
+    }
 }

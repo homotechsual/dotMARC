@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace DotMarc.Data;
 
@@ -32,11 +33,14 @@ public static class DomainManagementService
         {
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
             // The unique index on Domain.Name (DotMarcDbContext.cs) caught a race: another request
             // inserted the same domain between our AnyAsync check and this save. Same outcome as
-            // the pre-check catching it, just reported the same way to the caller.
+            // the pre-check catching it, just reported the same way to the caller. Only the
+            // unique-violation SQL state ("23505") is treated this way — any other DbUpdateException
+            // (connection drop, disk full, permission failure) propagates instead of being
+            // misreported as "already monitored", which would point the caller at the wrong problem.
             return AddDomainResult.AlreadyMonitored;
         }
 

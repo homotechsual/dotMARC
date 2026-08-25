@@ -8,8 +8,14 @@ namespace DotMarc.Data;
 /// silently fail to match its first real report and produce a duplicate row instead.</summary>
 public static class DomainNameValidator
 {
-    public static bool TryNormalize(string input, out string normalized)
+    public static bool TryNormalize(string? input, out string normalized)
     {
+        if (input is null)
+        {
+            normalized = "";
+            return false;
+        }
+
         normalized = input.Trim().ToLowerInvariant();
         return normalized.Length > 0 && normalized.Contains('.') && !normalized.Any(char.IsWhiteSpace);
     }
