@@ -196,4 +196,32 @@ public class PollingServiceTests : IAsyncLifetime
         Assert.Equal("msg-2", failure.GraphMessageId);
         Assert.Equal(3, failure.AttemptCount);
     }
+
+    [Fact]
+    public async Task PollOnceAsync_MatchesAManuallyAddedDomain_InsteadOfCreatingADuplicate()
+    {
+        // Regression coverage for the "manage domains" feature: a domain added up front (before
+        // any report has arrived for it) must be picked up by its Name when the first real report
+        // lands, not treated as unseen and duplicated.
+        using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, "contoso.io", CancellationToken.None);
+        }
+
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        var domain = verify.Domains.Include(d => d.Reports).Single();
+        Assert.Equal("contoso.io", domain.Name);
+        Assert.True(domain.IsPinned);
+        Assert.Single(domain.Reports);
+    }
 }
