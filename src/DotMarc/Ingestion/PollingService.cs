@@ -18,6 +18,8 @@ public sealed class PollingService : BackgroundService
     /// replica.</summary>
     internal const long PollingLeaderLockKey = 84_200_001;
 
+    private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
+
     private readonly IGraphMailboxClient? _graphClient;
     private readonly DotMarcDbContext? _context;
     private readonly ILogger<PollingService> _logger;
@@ -108,7 +110,19 @@ public sealed class PollingService : BackgroundService
 
         try
         {
-            await PollOnceAsync(graphClient, context, cancellationToken).ConfigureAwait(false);
+            PollCycleCounts counts;
+            try
+            {
+                counts = await PollOnceAsync(graphClient, context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                context.ChangeTracker.Clear();
+                await RecordPollCycleAsync(context, new PollCycleCounts(0, 0, 0), succeeded: false, ex.Message, cancellationToken).ConfigureAwait(false);
+                throw;
+            }
+
+            await RecordPollCycleAsync(context, counts, succeeded: true, errorMessage: null, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -116,9 +130,29 @@ public sealed class PollingService : BackgroundService
         }
     }
 
-    private async Task PollOnceAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, CancellationToken cancellationToken)
+    /// <summary>Writes one PollCycle row for a cycle that actually ran (never for one skipped due
+    /// to the leader lock — see RunPollCycleAsync). Rollup of stale rows happens here too, inline,
+    /// rather than as a separate scheduled job — see RollUpStalePollCyclesAsync.</summary>
+    private static async Task RecordPollCycleAsync(DotMarcDbContext context, PollCycleCounts counts, bool succeeded, string? errorMessage, CancellationToken cancellationToken)
+    {
+        context.PollCycles.Add(new PollCycle
+        {
+            PolledUtc = DateTimeOffset.UtcNow,
+            MessagesChecked = counts.MessagesChecked,
+            ReportsParsed = counts.ReportsParsed,
+            ParseFailures = counts.ParseFailures,
+            Succeeded = succeeded,
+            ErrorMessage = errorMessage
+        });
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<PollCycleCounts> PollOnceAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, CancellationToken cancellationToken)
     {
         var messages = await graphClient.GetUnreadMessagesAsync(cancellationToken).ConfigureAwait(false);
+
+        var reportsParsed = 0;
+        var parseFailures = 0;
 
         foreach (var message in messages)
         {
@@ -130,6 +164,7 @@ public sealed class PollingService : BackgroundService
             try
             {
                 await ProcessMessageAsync(graphClient, context, message, cancellationToken).ConfigureAwait(false);
+                reportsParsed++;
             }
             catch (Exception ex)
             {
@@ -142,8 +177,11 @@ public sealed class PollingService : BackgroundService
                 // and could throw again here, uncaught, aborting the rest of the poll cycle.
                 context.ChangeTracker.Clear();
                 await RecordParseFailureAsync(context, message.Id, ex.Message, cancellationToken).ConfigureAwait(false);
+                parseFailures++;
             }
         }
+
+        return new PollCycleCounts(messages.Count, reportsParsed, parseFailures);
     }
 
     private async Task ProcessMessageAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, MailboxMessage message, CancellationToken cancellationToken)

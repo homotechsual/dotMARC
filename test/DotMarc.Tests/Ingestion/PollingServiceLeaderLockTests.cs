@@ -98,6 +98,7 @@ public sealed class PollingServiceLeaderLockTests : IAsyncLifetime
         using (var verify = CreateContext())
         {
             Assert.Empty(verify.Reports);
+            Assert.Empty(verify.PollCycles);
         }
         Assert.DoesNotContain("msg-1", graphClient.MarkedAsRead);
 
@@ -118,7 +119,56 @@ public sealed class PollingServiceLeaderLockTests : IAsyncLifetime
         using (var verify = CreateContext())
         {
             Assert.Single(verify.Reports);
+            var pollCycle = verify.PollCycles.Single();
+            Assert.True(pollCycle.Succeeded);
+            Assert.Equal(1, pollCycle.MessagesChecked);
+            Assert.Equal(1, pollCycle.ReportsParsed);
+            Assert.Equal(0, pollCycle.ParseFailures);
+            Assert.Null(pollCycle.ErrorMessage);
         }
         Assert.Contains("msg-1", graphClient.MarkedAsRead);
+    }
+
+    [Fact]
+    public async Task RunPollCycleAsync_CountsReportsParsedAndParseFailuresSeparately()
+    {
+        var graphClient = GraphClientWithOneValidReport();
+        graphClient.UnreadMessages.Add(new DotMarc.Graph.MailboxMessage("msg-bad", "Not a report", true));
+        graphClient.Attachments["msg-bad"] = [new DotMarc.Graph.MailboxAttachment("garbage.xml", "text/xml", "not xml"u8.ToArray())];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.RunPollCycleAsync(graphClient, context, CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        var pollCycle = verify.PollCycles.Single();
+        Assert.Equal(2, pollCycle.MessagesChecked);
+        Assert.Equal(1, pollCycle.ReportsParsed);
+        Assert.Equal(1, pollCycle.ParseFailures);
+        Assert.True(pollCycle.Succeeded);
+    }
+
+    [Fact]
+    public async Task RunPollCycleAsync_RecordsAFailedCycle_WhenTheMailboxFetchThrows()
+    {
+        var graphClient = new FakeGraphMailboxClient { FailGetUnreadMessages = true };
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await Assert.ThrowsAsync<HttpRequestException>(() => service.RunPollCycleAsync(graphClient, context, CancellationToken.None));
+        }
+
+        using (var verify = CreateContext())
+        {
+            var pollCycle = verify.PollCycles.Single();
+            Assert.False(pollCycle.Succeeded);
+            Assert.Contains("Simulated Graph failure", pollCycle.ErrorMessage);
+            Assert.Equal(0, pollCycle.MessagesChecked);
+            Assert.Equal(0, pollCycle.ReportsParsed);
+            Assert.Equal(0, pollCycle.ParseFailures);
+        }
     }
 }

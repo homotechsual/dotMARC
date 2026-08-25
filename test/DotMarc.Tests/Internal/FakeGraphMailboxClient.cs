@@ -9,8 +9,17 @@ internal sealed class FakeGraphMailboxClient : IGraphMailboxClient
     public List<string> MarkedAsRead { get; } = [];
     public HashSet<string> FailMarkAsReadFor { get; } = [];
 
-    public Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<MailboxMessage>>(UnreadMessages);
+    public bool FailGetUnreadMessages { get; set; }
+
+    public Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken)
+    {
+        if (FailGetUnreadMessages)
+        {
+            throw new HttpRequestException("Simulated Graph failure fetching unread messages.");
+        }
+
+        return Task.FromResult<IReadOnlyList<MailboxMessage>>(UnreadMessages);
+    }
 
     public Task<IReadOnlyList<MailboxAttachment>> GetAttachmentsAsync(string messageId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<MailboxAttachment>>(Attachments.GetValueOrDefault(messageId, []));
