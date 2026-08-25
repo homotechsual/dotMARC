@@ -145,6 +145,53 @@ public sealed class PollingService : BackgroundService
             ErrorMessage = errorMessage
         });
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await RollUpStalePollCyclesAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Folds any PollCycle row belonging to a UTC calendar day more than 7 days in the
+    /// past into that day's PollCycleDailySummary, then deletes the raw rows. internal (not
+    /// private) so tests can call it directly against hand-seeded, backdated rows — the only
+    /// production caller, RecordPollCycleAsync, always writes PolledUtc as "now," so there's no
+    /// other way to exercise the &gt;7-day-old path deterministically. Anchored to a calendar-day
+    /// boundary rather than a rolling timestamp: a day is only eligible once every one of its rows
+    /// is already more than 7 days old, so it's only ever rolled up once, with nothing to merge
+    /// across passes.</summary>
+    internal static async Task RollUpStalePollCyclesAsync(DotMarcDbContext context, CancellationToken cancellationToken = default)
+    {
+        var cutoffUtc = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero).AddDays(-7);
+
+        var staleRows = await context.PollCycles
+            .Where(p => p.PolledUtc < cutoffUtc)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (staleRows.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var group in staleRows.GroupBy(p => DateOnly.FromDateTime(p.PolledUtc.UtcDateTime)))
+        {
+            var summary = await context.PollCycleDailySummaries
+                .SingleOrDefaultAsync(s => s.Date == group.Key, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (summary is null)
+            {
+                summary = new PollCycleDailySummary { Date = group.Key };
+                context.PollCycleDailySummaries.Add(summary);
+            }
+
+            summary.TotalCycles += group.Count();
+            summary.SuccessfulCycles += group.Count(p => p.Succeeded);
+            summary.FailedCycles += group.Count(p => !p.Succeeded);
+            summary.TotalMessagesChecked += group.Sum(p => p.MessagesChecked);
+            summary.TotalReportsParsed += group.Sum(p => p.ReportsParsed);
+            summary.TotalParseFailures += group.Sum(p => p.ParseFailures);
+        }
+
+        context.PollCycles.RemoveRange(staleRows);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<PollCycleCounts> PollOnceAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, CancellationToken cancellationToken)
