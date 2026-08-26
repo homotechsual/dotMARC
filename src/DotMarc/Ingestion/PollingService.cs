@@ -459,10 +459,21 @@ public sealed class PollingService : BackgroundService
 
     /// <summary>Records that a mailbox message has been successfully turned into a stored Report,
     /// so PollOnceAsync can skip re-fetching and re-parsing it on a later poll if Graph's isRead
-    /// flag never got set (see <see cref="ProcessedMessage"/>).</summary>
+    /// flag never got set (see <see cref="ProcessedMessage"/>). Also clears any ParseFailure row
+    /// left over from an earlier failed attempt at this same message — otherwise a message that
+    /// failed once and later succeeded would keep showing as "unparseable" on the Parse Failures
+    /// page forever, even though it's since been stored correctly.</summary>
     private static async Task RecordProcessedMessageAsync(DotMarcDbContext context, string graphMessageId, CancellationToken cancellationToken)
     {
         context.ProcessedMessages.Add(new ProcessedMessage { GraphMessageId = graphMessageId, ProcessedUtc = DateTimeOffset.UtcNow });
+
+        var staleFailure = await context.ParseFailures
+            .SingleOrDefaultAsync(f => f.GraphMessageId == graphMessageId, cancellationToken)
+            .ConfigureAwait(false);
+        if (staleFailure is not null)
+        {
+            context.ParseFailures.Remove(staleFailure);
+        }
 
         try
         {

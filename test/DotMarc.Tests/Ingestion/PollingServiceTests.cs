@@ -234,6 +234,39 @@ public class PollingServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PollOnceAsync_ClearsStaleParseFailure_WhenAPreviouslyFailingMessageLaterSucceeds()
+    {
+        // Regression coverage: a message that failed once (e.g. transiently, or during a schema
+        // migration race) and later succeeds must not keep showing as "unparseable" forever.
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-2", "Not a report", true));
+        graphClient.Attachments["msg-2"] = [new MailboxAttachment("garbage.xml", "text/xml", "not xml"u8.ToArray())];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using (var verify = CreateContext())
+        {
+            Assert.Single(verify.ParseFailures);
+        }
+
+        graphClient.Attachments["msg-2"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using var verify2 = CreateContext();
+        Assert.Empty(verify2.ParseFailures);
+        Assert.Single(verify2.Reports);
+    }
+
+    [Fact]
     public async Task PollOnceAsync_UpdatesExistingParseFailureRow_InsteadOfGrowingUnboundedly_OnRepeatedFailure()
     {
         var graphClient = new FakeGraphMailboxClient();

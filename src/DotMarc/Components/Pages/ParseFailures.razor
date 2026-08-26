@@ -25,7 +25,7 @@ else
             <MudTh>Last attempted</MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.GraphMessageId</MudTd>
+            <MudTd Style="overflow-wrap:anywhere">@context.GraphMessageId</MudTd>
             <MudTd>@context.Reason</MudTd>
             <MudTd>@context.AttemptCount</MudTd>
             <MudTd>@context.LastAttemptedUtc.ToString("g")</MudTd>
