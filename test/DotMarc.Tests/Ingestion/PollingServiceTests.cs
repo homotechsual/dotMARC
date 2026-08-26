@@ -224,4 +224,30 @@ public class PollingServiceTests : IAsyncLifetime
         Assert.True(domain.IsPinned);
         Assert.Single(domain.Reports);
     }
+
+    [Fact]
+    public async Task PollOnceAsync_AppendsNewlyDiscoveredDomain_AfterExistingCustomOrder()
+    {
+        using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, "existing-a.com", CancellationToken.None);
+            await DomainManagementService.AddDomainAsync(context, "existing-b.com", CancellationToken.None);
+            var existing = context.Domains.OrderBy(d => d.Name).ToList();
+            await DomainManagementService.ReorderAsync(context, [existing[1].Id, existing[0].Id], CancellationToken.None);
+        }
+
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        var newDomain = verify.Domains.Single(d => d.Name == "contoso.io");
+        Assert.Equal(2, newDomain.SortOrder);
+    }
 }

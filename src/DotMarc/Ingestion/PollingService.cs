@@ -292,7 +292,8 @@ public sealed class PollingService : BackgroundService
         var domain = await context.Domains.SingleOrDefaultAsync(d => d.Name == parsed.Domain, cancellationToken).ConfigureAwait(false);
         if (domain is null)
         {
-            domain = new Domain { Name = parsed.Domain, FirstSeenUtc = DateTimeOffset.UtcNow };
+            var nextSortOrder = (await context.Domains.MaxAsync(d => (int?)d.SortOrder, cancellationToken).ConfigureAwait(false) ?? -1) + 1;
+            domain = new Domain { Name = parsed.Domain, FirstSeenUtc = DateTimeOffset.UtcNow, SortOrder = nextSortOrder };
             context.Domains.Add(domain);
         }
 
