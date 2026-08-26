@@ -17,4 +17,6 @@ public sealed class Domain
     public string? DmarcCheckDetail { get; set; }
 
     public List<Report> Reports { get; set; } = [];
+    public List<Group> Groups { get; set; } = [];
+    public List<Tag> Tags { get; set; } = [];
 }

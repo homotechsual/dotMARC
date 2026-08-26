@@ -1,6 +1,7 @@
 using DotMarc.Data;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
+using MudBlazor;
 using Xunit;
 
 namespace DotMarc.Tests.Data;
@@ -277,5 +278,84 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
 
         context.ProcessedMessages.Add(new ProcessedMessage { GraphMessageId = "msg-1", ProcessedUtc = DateTimeOffset.UtcNow });
         Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void CanInsertAndQuery_GroupWithMemberDomain()
+    {
+        using (var context = CreateContext())
+        {
+            var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
+            var group = new Group { Name = "Client A" };
+            group.Domains.Add(domain);
+            context.Groups.Add(group);
+            context.SaveChanges();
+        }
+
+        using var verify = CreateContext();
+        var savedGroup = verify.Groups.Include(g => g.Domains).Single();
+        Assert.Equal("Client A", savedGroup.Name);
+        Assert.Single(savedGroup.Domains);
+        Assert.Equal("contoso.io", savedGroup.Domains[0].Name);
+    }
+
+    [Fact]
+    public void Group_Name_MustBeUnique()
+    {
+        using var context = CreateContext();
+        context.Groups.Add(new Group { Name = "Client A" });
+        context.SaveChanges();
+
+        context.Groups.Add(new Group { Name = "Client A" });
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void CanInsertAndQuery_TagWithColorAndMemberDomain()
+    {
+        using (var context = CreateContext())
+        {
+            var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
+            var tag = new Tag { Name = "primary", Color = Color.Info };
+            tag.Domains.Add(domain);
+            context.Tags.Add(tag);
+            context.SaveChanges();
+        }
+
+        using var verify = CreateContext();
+        var savedTag = verify.Tags.Include(t => t.Domains).Single();
+        Assert.Equal("primary", savedTag.Name);
+        Assert.Equal(Color.Info, savedTag.Color);
+        Assert.Single(savedTag.Domains);
+    }
+
+    [Fact]
+    public void Tag_Name_MustBeUnique()
+    {
+        using var context = CreateContext();
+        context.Tags.Add(new Tag { Name = "primary", Color = Color.Primary });
+        context.SaveChanges();
+
+        context.Tags.Add(new Tag { Name = "primary", Color = Color.Secondary });
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void Domain_CanBelongToMultipleGroupsAndTags()
+    {
+        using (var context = CreateContext())
+        {
+            var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
+            domain.Groups.Add(new Group { Name = "Client A" });
+            domain.Groups.Add(new Group { Name = "Project X" });
+            domain.Tags.Add(new Tag { Name = "primary", Color = Color.Primary });
+            context.Domains.Add(domain);
+            context.SaveChanges();
+        }
+
+        using var verify = CreateContext();
+        var savedDomain = verify.Domains.Include(d => d.Groups).Include(d => d.Tags).Single();
+        Assert.Equal(2, savedDomain.Groups.Count);
+        Assert.Single(savedDomain.Tags);
     }
 }

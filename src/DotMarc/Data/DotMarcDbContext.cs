@@ -15,6 +15,8 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     public DbSet<PollCycle> PollCycles => Set<PollCycle>();
     public DbSet<PollCycleDailySummary> PollCycleDailySummaries => Set<PollCycleDailySummary>();
+    public DbSet<Group> Groups => Set<Group>();
+    public DbSet<Tag> Tags => Set<Tag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +71,17 @@ public sealed class DotMarcDbContext : DbContext
         modelBuilder.Entity<PollCycleDailySummary>(entity =>
         {
             entity.HasIndex(d => d.Date).IsUnique();
+        });
+
+        modelBuilder.Entity<Group>(entity =>
+        {
+            entity.HasIndex(g => g.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.HasIndex(t => t.Name).IsUnique();
+            entity.Property(t => t.Color).HasConversion<string>();
         });
     }
 }
