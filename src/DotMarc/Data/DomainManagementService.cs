@@ -68,7 +68,11 @@ public static class DomainManagementService
 
     /// <summary>Persists a full custom display order: SortOrder is set to each domain's index in
     /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme — simple, and
-    /// correct at the scale (a handful to a few dozen domains) this app is designed for.</summary>
+    /// correct at the scale (a handful to a few dozen domains) this app is designed for. Two
+    /// domains can end up with the same SortOrder if a manual add (AddDomainAsync) races a
+    /// report-driven one (PollingService.StoreReportAsync) — there's no uniqueness constraint on
+    /// the column, and every ordering query breaks such ties with .ThenBy(d => d.Name), so this is
+    /// tolerated by design rather than guarded against.</summary>
     public static async Task ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default)
     {
         var domains = await context.Domains
@@ -78,7 +82,13 @@ public static class DomainManagementService
 
         for (var index = 0; index < orderedDomainIds.Count; index++)
         {
-            domains[orderedDomainIds[index]].SortOrder = index;
+            // A domain deleted concurrently (between the caller building this list and this call)
+            // is simply skipped rather than throwing — the caller's next reload drops it from the
+            // displayed list anyway, so there's nothing left to assign an order to.
+            if (domains.TryGetValue(orderedDomainIds[index], out var domain))
+            {
+                domain.SortOrder = index;
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
