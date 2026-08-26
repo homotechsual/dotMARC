@@ -61,8 +61,8 @@ else
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
             <MudPaper Height="100%" Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
-                <MudText Typo="Typo.h5" Color="@(_summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
-                <MudText Typo="Typo.caption">unparseable messages</MudText>
+                <MudText Typo="Typo.h5" Color="@(!IsFilterActive && _summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
+                <MudText Typo="Typo.caption">unparseable messages@(IsFilterActive ? " (all domains)" : "")</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
@@ -142,6 +142,8 @@ else
     private int? _selectedGroupId;
     private int? _selectedTagId;
 
+    private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
+
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
@@ -156,22 +158,22 @@ else
         _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
 
         var cutoff = DomainStatistics.GetWindowCutoffUtc();
-        var domains = await db.Domains
+        var query = db.Domains
             .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
-            .Include(d => d.Groups)
-            .Include(d => d.Tags)
-            .ToListAsync();
+            .AsQueryable();
 
         if (_selectedGroupId is { } groupId)
         {
-            domains = domains.Where(d => d.Groups.Any(g => g.Id == groupId)).ToList();
+            query = query.Where(d => d.Groups.Any(g => g.Id == groupId));
         }
         if (_selectedTagId is { } tagId)
         {
-            domains = domains.Where(d => d.Tags.Any(t => t.Id == tagId)).ToList();
+            query = query.Where(d => d.Tags.Any(t => t.Id == tagId));
         }
+
+        var domains = await query.ToListAsync();
 
         var parseFailureCount = await db.ParseFailures.CountAsync();
 

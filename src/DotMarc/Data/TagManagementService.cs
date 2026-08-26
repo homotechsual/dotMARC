@@ -10,7 +10,14 @@ namespace DotMarc.Data;
 /// caller-supplied DotMarcDbContext.</summary>
 public static class TagManagementService
 {
-    public enum AddTagResult { Added, InvalidName, AlreadyExists }
+    public enum AddTagResult { Added, InvalidName, AlreadyExists, InvalidColor }
+
+    /// <summary>The only tag colors this project's design allows. Success/Warning/Error are
+    /// deliberately excluded — they already carry pass/fail/status meaning on the Dashboard's
+    /// Report Status and DNS Status chips, so a tag using one of them would visually read as a
+    /// status indicator. This is the single canonical source of truth; ManageGroups.razor's
+    /// color picker reads from here rather than duplicating the list.</summary>
+    public static readonly IReadOnlyList<Color> AllowedColors = [Color.Primary, Color.Secondary, Color.Tertiary, Color.Info, Color.Dark];
 
     public static async Task<AddTagResult> AddTagAsync(DotMarcDbContext context, string rawName, Color color, CancellationToken cancellationToken = default)
     {
@@ -18,6 +25,11 @@ public static class TagManagementService
         if (string.IsNullOrEmpty(name))
         {
             return AddTagResult.InvalidName;
+        }
+
+        if (!AllowedColors.Contains(color))
+        {
+            return AddTagResult.InvalidColor;
         }
 
         var exists = await context.Tags.AnyAsync(t => t.Name.ToLower() == name.ToLower(), cancellationToken).ConfigureAwait(false);
@@ -46,6 +58,11 @@ public static class TagManagementService
         if (string.IsNullOrEmpty(name))
         {
             return AddTagResult.InvalidName;
+        }
+
+        if (!AllowedColors.Contains(color))
+        {
+            return AddTagResult.InvalidColor;
         }
 
         var exists = await context.Tags.AnyAsync(t => t.Id != tagId && t.Name.ToLower() == name.ToLower(), cancellationToken).ConfigureAwait(false);

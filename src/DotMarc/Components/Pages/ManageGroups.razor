@@ -53,7 +53,7 @@
         </MudItem>
         <MudItem xs="3">
             <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color">
-                @foreach (var color in TagColors)
+                @foreach (var color in TagManagementService.AllowedColors)
                 {
                     <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
                 }
@@ -82,7 +82,7 @@
                 </MudTd>
                 <MudTd>
                     <MudSelect T="Color" Value="context.Color" ValueChanged="@(v => UpdateTagAsync(context, context.Name, v))">
-                        @foreach (var color in TagColors)
+                        @foreach (var color in TagManagementService.AllowedColors)
                         {
                             <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
                         }
@@ -98,8 +98,6 @@
 </MudPaper>
 
 @code {
-    private static readonly Color[] TagColors = [Color.Primary, Color.Secondary, Color.Tertiary, Color.Info, Color.Dark];
-
     private List<GroupRow>? _groups;
     private List<TagRow>? _tags;
     private string _newGroupName = "";
@@ -217,6 +215,7 @@
         {
             TagManagementService.AddTagResult.InvalidName => "Enter a tag name.",
             TagManagementService.AddTagResult.AlreadyExists => "A tag with that name already exists.",
+            TagManagementService.AddTagResult.InvalidColor => "Choose one of the available colors.",
             _ => null
         };
 

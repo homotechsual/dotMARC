@@ -70,6 +70,49 @@ public sealed class TagManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AddTagAsync_RejectsColorOutsideTheAllowedPalette()
+    {
+        using var context = CreateContext();
+
+        var result = await TagManagementService.AddTagAsync(context, "primary", Color.Success, CancellationToken.None);
+
+        Assert.Equal(TagManagementService.AddTagResult.InvalidColor, result);
+        Assert.Empty(context.Tags);
+    }
+
+    [Theory]
+    [InlineData(Color.Primary)]
+    [InlineData(Color.Secondary)]
+    [InlineData(Color.Tertiary)]
+    [InlineData(Color.Info)]
+    [InlineData(Color.Dark)]
+    public async Task AddTagAsync_AcceptsEveryAllowedColor(Color color)
+    {
+        using var context = CreateContext();
+
+        var result = await TagManagementService.AddTagAsync(context, $"tag-{color}", color, CancellationToken.None);
+
+        Assert.Equal(TagManagementService.AddTagResult.Added, result);
+        using var verify = CreateContext();
+        var tag = verify.Tags.Single(t => t.Name == $"tag-{color}");
+        Assert.Equal(color, tag.Color);
+    }
+
+    [Fact]
+    public async Task UpdateTagAsync_RejectsColorOutsideTheAllowedPalette()
+    {
+        using var context = CreateContext();
+        await TagManagementService.AddTagAsync(context, "primary", Color.Primary, CancellationToken.None);
+        var tagId = context.Tags.Single().Id;
+
+        var result = await TagManagementService.UpdateTagAsync(context, tagId, "primary", Color.Warning, CancellationToken.None);
+
+        Assert.Equal(TagManagementService.AddTagResult.InvalidColor, result);
+        using var verify = CreateContext();
+        Assert.Equal(Color.Primary, verify.Tags.Single().Color);
+    }
+
+    [Fact]
     public async Task UpdateTagAsync_UpdatesNameAndColorTogether()
     {
         using var context = CreateContext();
