@@ -17,33 +17,39 @@ else
 {
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Height="100%" Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5">@_summary.DomainCount</MudText>
                 <MudText Typo="Typo.caption">domains monitored</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Height="100%" Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5" Color="Color.Success">@_summary.OverallPassRate.ToString("P1")</MudText>
                 <MudText Typo="Typo.caption">overall pass rate (30d)</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Height="100%" Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5" Color="Color.Warning">@_summary.WarningCount</MudText>
                 <MudText Typo="Typo.caption">domains with warnings</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Height="100%" Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5" Color="Color.Error">@_summary.MissingCount</MudText>
                 <MudText Typo="Typo.caption">missing expected report</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
+            <MudPaper Height="100%" Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
                 <MudText Typo="Typo.h5" Color="@(_summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
                 <MudText Typo="Typo.caption">unparseable messages</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Height= "100%" Class="pa-4 cursor-pointer" Elevation="1">
+                <MudText Typo="Typo.h5">@_summary.SourceCount</MudText>
+                <MudText Typo="Typo.caption">sources provided reports</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -152,12 +158,15 @@ else
             .Select(p => new PollStatusRow(p.PolledUtc, p.MessagesChecked, p.ReportsParsed, p.ParseFailures, p.Succeeded, p.ErrorMessage))
             .FirstOrDefaultAsync();
 
+        var sourceCount = domains.SelectMany(d => d.Reports).Select(r => r.ReportingOrg).Distinct().Count();
+
         _summary = new DashboardSummary(
             _rows.Count,
             DomainStatistics.GetOverallPassRate(domains.Select(d => (IEnumerable<Report>)d.Reports)),
             _rows.Count(r => r.Status == "Warning"),
             _rows.Count(r => r.Status == "Missing"),
-            parseFailureCount);
+            parseFailureCount,
+            sourceCount);
     }
 
     private async Task ToggleMonitoredAsync(DomainRow row, bool isMonitored)
@@ -174,7 +183,7 @@ else
         await LoadAsync();
     }
 
-    private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount);
+    private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount, int SourceCount);
     private sealed record DomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsMonitored, DmarcCheckStatus DmarcCheckStatus);
     private sealed record PollStatusRow(DateTimeOffset PolledUtc, int MessagesChecked, int ReportsParsed, int ParseFailures, bool Succeeded, string? ErrorMessage);
 }
