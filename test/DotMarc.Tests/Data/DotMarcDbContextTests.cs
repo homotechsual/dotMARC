@@ -45,7 +45,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
             var domain = new Domain
             {
                 Name = "contoso.io",
-                IsPinned = true,
+                IsMonitored = true,
                 FirstSeenUtc = DateTimeOffset.UtcNow
             };
             var report = new Report
@@ -81,7 +81,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
                 .Single();
 
             Assert.Equal("contoso.io", savedDomain.Name);
-            Assert.True(savedDomain.IsPinned);
+            Assert.True(savedDomain.IsMonitored);
             Assert.Single(savedDomain.Reports);
             Assert.Single(savedDomain.Reports[0].Records);
             Assert.Equal(AuthResult.Pass, savedDomain.Reports[0].Records[0].SpfResult);
@@ -213,5 +213,44 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         context.PollCycleDailySummaries.Add(new PollCycleDailySummary { Date = new DateOnly(2026, 8, 1) });
 
         Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void CanInsertAndQuery_DomainWithDmarcCheckFields()
+    {
+        using (var context = CreateContext())
+        {
+            context.Domains.Add(new Domain
+            {
+                Name = "contoso.io",
+                FirstSeenUtc = DateTimeOffset.UtcNow,
+                DmarcCheckStatus = DmarcCheckStatus.MissingAuthorizationRecord,
+                DmarcCheckedUtc = DateTimeOffset.UtcNow,
+                DmarcCheckDetail = "No TXT record found at contoso.io._report._dmarc.mjco.uk"
+            });
+            context.SaveChanges();
+        }
+
+        using (var verify = CreateContext())
+        {
+            var domain = verify.Domains.Single();
+            Assert.Equal(DmarcCheckStatus.MissingAuthorizationRecord, domain.DmarcCheckStatus);
+            Assert.NotNull(domain.DmarcCheckedUtc);
+            Assert.Equal("No TXT record found at contoso.io._report._dmarc.mjco.uk", domain.DmarcCheckDetail);
+        }
+    }
+
+    [Fact]
+    public void Domain_DmarcCheckStatus_DefaultsToNotChecked()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow });
+        context.SaveChanges();
+
+        using var verify = CreateContext();
+        var domain = verify.Domains.Single();
+        Assert.Equal(DmarcCheckStatus.NotChecked, domain.DmarcCheckStatus);
+        Assert.Null(domain.DmarcCheckedUtc);
+        Assert.Null(domain.DmarcCheckDetail);
     }
 }

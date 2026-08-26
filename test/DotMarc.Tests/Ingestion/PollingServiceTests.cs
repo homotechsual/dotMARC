@@ -221,7 +221,7 @@ public class PollingServiceTests : IAsyncLifetime
         using var verify = CreateContext();
         var domain = verify.Domains.Include(d => d.Reports).Single();
         Assert.Equal("contoso.io", domain.Name);
-        Assert.True(domain.IsPinned);
+        Assert.True(domain.IsMonitored);
         Assert.Single(domain.Reports);
     }
 

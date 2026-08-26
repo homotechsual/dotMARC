@@ -22,6 +22,25 @@ else
                 <MudItem xs="4"><MudText>Sources: <b>@_sourceCount</b></MudText></MudItem>
             </MudGrid>
             <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
+            <MudPaper Class="pa-4 mt-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">DMARC record status</MudText>
+                @if (_domain.DmarcCheckStatus == DmarcCheckStatus.NotChecked)
+                {
+                    <MudText Typo="Typo.body2">Not checked yet.</MudText>
+                }
+                else
+                {
+                    <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(_domain.DmarcCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(_domain.DmarcCheckStatus)</MudChip>
+                    @if (_domain.DmarcCheckedUtc is { } checkedUtc)
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_domain.DmarcCheckDetail))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1">@_domain.DmarcCheckDetail</MudText>
+                    }
+                }
+            </MudPaper>
         </MudTabPanel>
 
         <MudTabPanel Text="Sources">
