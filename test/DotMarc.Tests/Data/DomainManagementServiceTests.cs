@@ -148,4 +148,58 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         var pgEx = Assert.IsType<Npgsql.PostgresException>(ex.InnerException);
         Assert.Equal("23505", pgEx.SqlState);
     }
+
+    [Fact]
+    public async Task ReorderAsync_SetsSortOrderToMatchTheGivenSequence()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "a.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, "b.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, "c.com", CancellationToken.None);
+
+        var domains = context.Domains.OrderBy(d => d.Name).ToList();
+        var a = domains.Single(d => d.Name == "a.com");
+        var b = domains.Single(d => d.Name == "b.com");
+        var c = domains.Single(d => d.Name == "c.com");
+
+        await DomainManagementService.ReorderAsync(context, [c.Id, a.Id, b.Id], CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Equal(0, verify.Domains.Single(d => d.Name == "c.com").SortOrder);
+        Assert.Equal(1, verify.Domains.Single(d => d.Name == "a.com").SortOrder);
+        Assert.Equal(2, verify.Domains.Single(d => d.Name == "b.com").SortOrder);
+    }
+
+    [Fact]
+    public async Task AddDomainAsync_AppendsToTheEnd_WhenOtherDomainsAlreadyHaveDistinctSortOrder()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "a.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, "b.com", CancellationToken.None);
+        var existing = context.Domains.OrderBy(d => d.Name).ToList();
+        await DomainManagementService.ReorderAsync(context, [existing[1].Id, existing[0].Id], CancellationToken.None);
+
+        await DomainManagementService.AddDomainAsync(context, "c.com", CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Equal(2, verify.Domains.Single(d => d.Name == "c.com").SortOrder);
+    }
+
+    [Fact]
+    public void DomainsWithTiedSortOrder_SortByNameAsTheSecondaryKey()
+    {
+        // Regression coverage for "existing installs don't need a data-backfill migration": rows
+        // created directly (bypassing AddDomainAsync's append-at-end logic), the way every domain
+        // that predates this feature exists today, are left at SortOrder's default of 0 — tied.
+        // The ordering query's secondary key must still produce a sensible, predictable order.
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "zebra.com", FirstSeenUtc = DateTimeOffset.UtcNow });
+        context.Domains.Add(new Domain { Name = "apple.com", FirstSeenUtc = DateTimeOffset.UtcNow });
+        context.Domains.Add(new Domain { Name = "mango.com", FirstSeenUtc = DateTimeOffset.UtcNow });
+        context.SaveChanges();
+
+        var ordered = context.Domains.OrderBy(d => d.SortOrder).ThenBy(d => d.Name).Select(d => d.Name).ToList();
+
+        Assert.Equal(["apple.com", "mango.com", "zebra.com"], ordered);
+    }
 }

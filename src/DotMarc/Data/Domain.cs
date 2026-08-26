@@ -9,6 +9,7 @@ public sealed class Domain
     public int Id { get; set; }
     public required string Name { get; set; }
     public bool IsPinned { get; set; }
+    public int SortOrder { get; set; }
     public DateTimeOffset FirstSeenUtc { get; set; }
     public DateTimeOffset? LastReportReceivedUtc { get; set; }
 

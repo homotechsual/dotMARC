@@ -27,7 +27,8 @@ public static class DomainManagementService
             return AddDomainResult.AlreadyMonitored;
         }
 
-        context.Domains.Add(new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsPinned = true });
+        var nextSortOrder = (await context.Domains.MaxAsync(d => (int?)d.SortOrder, cancellationToken).ConfigureAwait(false) ?? -1) + 1;
+        context.Domains.Add(new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsPinned = true, SortOrder = nextSortOrder });
 
         try
         {
@@ -62,6 +63,24 @@ public static class DomainManagementService
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
         domain.IsPinned = isPinned;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Persists a full custom display order: SortOrder is set to each domain's index in
+    /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme — simple, and
+    /// correct at the scale (a handful to a few dozen domains) this app is designed for.</summary>
+    public static async Task ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default)
+    {
+        var domains = await context.Domains
+            .Where(d => orderedDomainIds.Contains(d.Id))
+            .ToDictionaryAsync(d => d.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        for (var index = 0; index < orderedDomainIds.Count; index++)
+        {
+            domains[orderedDomainIds[index]].SortOrder = index;
+        }
+
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }
