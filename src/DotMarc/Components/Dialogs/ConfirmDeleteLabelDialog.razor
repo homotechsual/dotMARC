@@ -1,0 +1,30 @@
+<MudDialog>
+    <TitleContent>Remove @Kind</TitleContent>
+    <DialogContent>
+        @if (DomainCount > 0)
+        {
+            <MudText Color="Color.Error">
+                This will remove <b>@LabelName</b> and unassign it from @DomainCount domain(s).
+                Domain data itself is not affected. This cannot be undone.
+            </MudText>
+        }
+        else
+        {
+            <MudText>Remove <b>@LabelName</b>? It isn't assigned to any domains.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Confirm">Remove</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string Kind { get; set; } = "";
+    [Parameter] public string LabelName { get; set; } = "";
+    [Parameter] public int DomainCount { get; set; }
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+}

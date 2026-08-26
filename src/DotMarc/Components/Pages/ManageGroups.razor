@@ -1,0 +1,277 @@
+@page "/groups"
+@using DotMarc.Data
+@using DotMarc.Components.Dialogs
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - Manage Groups</PageTitle>
+<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudText Typo="Typo.h4" Class="mb-4">Manage groups</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>
+    <MudGrid>
+        <MudItem xs="9">
+            <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A"
+                          Error="@(_addGroupError is not null)" ErrorText="@_addGroupError" Immediate="true" />
+        </MudItem>
+        <MudItem xs="3" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddGroupAsync">Add group</MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_groups is { Count: > 0 })
+    {
+        <MudTable Items="_groups" Hover="true" T="GroupRow" Class="mt-4">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Domains</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameGroupAsync(context, v))" />
+                </MudTd>
+                <MudTd>@context.DomainCount</MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-2">Tags</MudText>
+    <MudGrid>
+        <MudItem xs="6">
+            <MudTextField @bind-Value="_newTagName" Label="Tag name" Placeholder="primary"
+                          Error="@(_addTagError is not null)" ErrorText="@_addTagError" Immediate="true" />
+        </MudItem>
+        <MudItem xs="3">
+            <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color">
+                @foreach (var color in TagColors)
+                {
+                    <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="3" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddTagAsync">Add tag</MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_tags is { Count: > 0 })
+    {
+        <MudTable Items="_tags" Hover="true" T="TagRow" Class="mt-4">
+            <HeaderContent>
+                <MudTh>Preview</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Color</MudTh>
+                <MudTh>Domains</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd><MudChip T="string" Color="context.Color">@context.Name</MudChip></MudTd>
+                <MudTd>
+                    <MudTextField T="string" Value="context.Name" ValueChanged="@(v => UpdateTagAsync(context, v, context.Color))" />
+                </MudTd>
+                <MudTd>
+                    <MudSelect T="Color" Value="context.Color" ValueChanged="@(v => UpdateTagAsync(context, context.Name, v))">
+                        @foreach (var color in TagColors)
+                        {
+                            <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTd>
+                <MudTd>@context.DomainCount</MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteTagAsync(context))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private static readonly Color[] TagColors = [Color.Primary, Color.Secondary, Color.Tertiary, Color.Info, Color.Dark];
+
+    private List<GroupRow>? _groups;
+    private List<TagRow>? _tags;
+    private string _newGroupName = "";
+    private string? _addGroupError;
+    private string _newTagName = "";
+    private Color _newTagColor = Color.Primary;
+    private string? _addTagError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _groups = await db.Groups
+            .AsNoTracking()
+            .OrderBy(g => g.Name)
+            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count))
+            .ToListAsync();
+        _tags = await db.Tags
+            .AsNoTracking()
+            .OrderBy(t => t.Name)
+            .Select(t => new TagRow(t.Id, t.Name, t.Color, t.Domains.Count))
+            .ToListAsync();
+    }
+
+    private async Task AddGroupAsync()
+    {
+        _addGroupError = null;
+        GroupManagementService.AddGroupResult result;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            result = await GroupManagementService.AddGroupAsync(db, _newGroupName, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _addGroupError = "Something went wrong adding the group. Try again.";
+            return;
+        }
+
+        _addGroupError = result switch
+        {
+            GroupManagementService.AddGroupResult.InvalidName => "Enter a group name.",
+            GroupManagementService.AddGroupResult.AlreadyExists => "A group with that name already exists.",
+            _ => null
+        };
+
+        if (result == GroupManagementService.AddGroupResult.Added)
+        {
+            _newGroupName = "";
+            await LoadAsync();
+        }
+    }
+
+    private async Task RenameGroupAsync(GroupRow row, string newName)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var result = await GroupManagementService.RenameGroupAsync(db, row.Id, newName, CancellationToken.None);
+            if (result != GroupManagementService.AddGroupResult.Added)
+            {
+                Snackbar.Add("Failed to rename group — a group with that name may already exist.", Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to rename {row.Name}. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task DeleteGroupAsync(GroupRow row)
+    {
+        var parameters = new DialogParameters<ConfirmDeleteLabelDialog>
+        {
+            { x => x.Kind, "group" },
+            { x => x.LabelName, row.Name },
+            { x => x.DomainCount, row.DomainCount }
+        };
+        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>("Remove group", parameters);
+        var result = await dialogRef.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                await using var db = await DbFactory.CreateDbContextAsync();
+                await GroupManagementService.RemoveGroupAsync(db, row.Id, CancellationToken.None);
+                await LoadAsync();
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
+            }
+        }
+    }
+
+    private async Task AddTagAsync()
+    {
+        _addTagError = null;
+        TagManagementService.AddTagResult result;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            result = await TagManagementService.AddTagAsync(db, _newTagName, _newTagColor, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _addTagError = "Something went wrong adding the tag. Try again.";
+            return;
+        }
+
+        _addTagError = result switch
+        {
+            TagManagementService.AddTagResult.InvalidName => "Enter a tag name.",
+            TagManagementService.AddTagResult.AlreadyExists => "A tag with that name already exists.",
+            _ => null
+        };
+
+        if (result == TagManagementService.AddTagResult.Added)
+        {
+            _newTagName = "";
+            _newTagColor = Color.Primary;
+            await LoadAsync();
+        }
+    }
+
+    private async Task UpdateTagAsync(TagRow row, string newName, Color newColor)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var result = await TagManagementService.UpdateTagAsync(db, row.Id, newName, newColor, CancellationToken.None);
+            if (result != TagManagementService.AddTagResult.Added)
+            {
+                Snackbar.Add("Failed to update tag — a tag with that name may already exist.", Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task DeleteTagAsync(TagRow row)
+    {
+        var parameters = new DialogParameters<ConfirmDeleteLabelDialog>
+        {
+            { x => x.Kind, "tag" },
+            { x => x.LabelName, row.Name },
+            { x => x.DomainCount, row.DomainCount }
+        };
+        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>("Remove tag", parameters);
+        var result = await dialogRef.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                await using var db = await DbFactory.CreateDbContextAsync();
+                await TagManagementService.RemoveTagAsync(db, row.Id, CancellationToken.None);
+                await LoadAsync();
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
+            }
+        }
+    }
+
+    private sealed record GroupRow(int Id, string Name, int DomainCount);
+    private sealed record TagRow(int Id, string Name, Color Color, int DomainCount);
+}
