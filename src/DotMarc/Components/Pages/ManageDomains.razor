@@ -32,7 +32,7 @@ else
         <HeaderContent>
             <MudTh></MudTh>
             <MudTh>Domain</MudTh>
-            <MudTh>Pinned</MudTh>
+            <MudTh>Monitored</MudTh>
             <MudTh>Reports</MudTh>
             <MudTh>Last report</MudTh>
             <MudTh></MudTh>
@@ -55,7 +55,7 @@ else
                      style="width:100%; height:100%; margin:-16px; padding:16px;">@context.Name</div>
             </MudTd>
             <MudTd>
-                <MudSwitch T="bool" Value="context.IsPinned" ValueChanged="@(v => SetPinnedAsync(context, v))" Color="Color.Primary" />
+                <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => SetMonitoredAsync(context, v))" Color="Color.Primary" />
             </MudTd>
             <MudTd>@context.ReportCount</MudTd>
             <MudTd>@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
@@ -80,7 +80,7 @@ else
             .AsNoTracking()
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
-            .Select(d => new DomainRow(d.Id, d.Name, d.IsPinned, d.Reports.Count, d.LastReportReceivedUtc))
+            .Select(d => new DomainRow(d.Id, d.Name, d.IsMonitored, d.Reports.Count, d.LastReportReceivedUtc))
             .ToListAsync();
     }
 
@@ -113,12 +113,12 @@ else
         }
     }
 
-    private async Task SetPinnedAsync(DomainRow row, bool isPinned)
+    private async Task SetMonitoredAsync(DomainRow row, bool isMonitored)
     {
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetPinnedAsync(db, row.Id, isPinned, CancellationToken.None);
+            await DomainManagementService.SetMonitoredAsync(db, row.Id, isMonitored, CancellationToken.None);
         }
         catch (Exception)
         {
@@ -192,5 +192,5 @@ else
         await LoadAsync();
     }
 
-    private sealed record DomainRow(int Id, string Name, bool IsPinned, int ReportCount, DateTimeOffset? LastReportReceivedUtc);
+    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc);
 }

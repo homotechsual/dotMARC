@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace DotMarc.Data;
 
-/// <summary>Add/remove/pin operations for Domain rows created through the "Manage domains" page,
+/// <summary>Add/remove/monitor operations for Domain rows created through the "Manage domains" page,
 /// as opposed to auto-discovery from an incoming report (see PollingService.StoreReportAsync).
 /// Follows this project's DatabaseMigrator/PollingService convention of a static class operating
 /// directly on a caller-supplied DotMarcDbContext, rather than owning its own context lifetime.</summary>
@@ -11,8 +11,8 @@ public static class DomainManagementService
 {
     public enum AddDomainResult { Added, InvalidName, AlreadyMonitored }
 
-    /// <summary>Creates a pinned Domain row with no reports yet, so it immediately shows as
-    /// "Missing" on the Dashboard (Dashboard.razor's existing IsPinned &amp;&amp;
+    /// <summary>Creates a monitored Domain row with no reports yet, so it immediately shows as
+    /// "Missing" on the Dashboard (Dashboard.razor's existing IsMonitored &amp;&amp;
     /// LastReportReceivedUtc-is-null check) until its first real report arrives.</summary>
     public static async Task<AddDomainResult> AddDomainAsync(DotMarcDbContext context, string rawName, CancellationToken cancellationToken = default)
     {
@@ -28,7 +28,7 @@ public static class DomainManagementService
         }
 
         var nextSortOrder = (await context.Domains.MaxAsync(d => (int?)d.SortOrder, cancellationToken).ConfigureAwait(false) ?? -1) + 1;
-        context.Domains.Add(new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsPinned = true, SortOrder = nextSortOrder });
+        context.Domains.Add(new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = true, SortOrder = nextSortOrder });
 
         try
         {
@@ -59,10 +59,10 @@ public static class DomainManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public static async Task SetPinnedAsync(DotMarcDbContext context, int domainId, bool isPinned, CancellationToken cancellationToken = default)
+    public static async Task SetMonitoredAsync(DotMarcDbContext context, int domainId, bool isMonitored, CancellationToken cancellationToken = default)
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
-        domain.IsPinned = isPinned;
+        domain.IsMonitored = isMonitored;
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

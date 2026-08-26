@@ -45,7 +45,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
             var domain = new Domain
             {
                 Name = "contoso.io",
-                IsPinned = true,
+                IsMonitored = true,
                 FirstSeenUtc = DateTimeOffset.UtcNow
             };
             var report = new Report
@@ -81,7 +81,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
                 .Single();
 
             Assert.Equal("contoso.io", savedDomain.Name);
-            Assert.True(savedDomain.IsPinned);
+            Assert.True(savedDomain.IsMonitored);
             Assert.Single(savedDomain.Reports);
             Assert.Single(savedDomain.Reports[0].Records);
             Assert.Equal(AuthResult.Pass, savedDomain.Reports[0].Records[0].SpfResult);

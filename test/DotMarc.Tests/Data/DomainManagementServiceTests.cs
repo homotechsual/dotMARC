@@ -47,7 +47,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         Assert.Equal(DomainManagementService.AddDomainResult.Added, result);
         var domain = context.Domains.Single();
         Assert.Equal("contoso.com", domain.Name);
-        Assert.True(domain.IsPinned);
+        Assert.True(domain.IsMonitored);
         Assert.Null(domain.LastReportReceivedUtc);
     }
 
@@ -123,16 +123,16 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SetPinnedAsync_TogglesIsPinned()
+    public async Task SetMonitoredAsync_TogglesIsMonitored()
     {
         using var context = CreateContext();
         await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
 
-        await DomainManagementService.SetPinnedAsync(context, domainId, false, CancellationToken.None);
+        await DomainManagementService.SetMonitoredAsync(context, domainId, false, CancellationToken.None);
 
         using var verify = CreateContext();
-        Assert.False(verify.Domains.Single().IsPinned);
+        Assert.False(verify.Domains.Single().IsMonitored);
     }
 
     [Fact]

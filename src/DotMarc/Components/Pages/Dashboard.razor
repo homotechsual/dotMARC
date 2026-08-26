@@ -53,7 +53,7 @@ else
             <MudTh>Status</MudTh>
             <MudTh>Pass rate (30d)</MudTh>
             <MudTh>Last report</MudTh>
-            <MudTh>Pinned</MudTh>
+            <MudTh>Monitored</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@context.Name</MudTd>
@@ -61,7 +61,7 @@ else
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
             <MudTd>
-                <MudSwitch T="bool" Value="context.IsPinned" ValueChanged="@(v => TogglePinnedAsync(context, v))" Color="Color.Primary" />
+                <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => ToggleMonitoredAsync(context, v))" Color="Color.Primary" />
             </MudTd>
         </RowTemplate>
     </MudTable>
@@ -132,11 +132,11 @@ else
             {
                 var passRate = DomainStatistics.GetPassRate(d.Reports);
 
-                var missingReport = d.IsPinned && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
+                var missingReport = d.IsMonitored && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
                 var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
                 var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
 
-                return new DomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsPinned);
+                return new DomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsMonitored);
             }).ToList();
 
         var parseFailureCount = await db.ParseFailures.CountAsync();
@@ -155,12 +155,12 @@ else
             parseFailureCount);
     }
 
-    private async Task TogglePinnedAsync(DomainRow row, bool isPinned)
+    private async Task ToggleMonitoredAsync(DomainRow row, bool isMonitored)
     {
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetPinnedAsync(db, row.Id, isPinned, CancellationToken.None);
+            await DomainManagementService.SetMonitoredAsync(db, row.Id, isMonitored, CancellationToken.None);
         }
         catch (Exception)
         {
@@ -170,6 +170,6 @@ else
     }
 
     private sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount);
-    private sealed record DomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsPinned);
+    private sealed record DomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsMonitored);
     private sealed record PollStatusRow(DateTimeOffset PolledUtc, int MessagesChecked, int ReportsParsed, int ParseFailures, bool Succeeded, string? ErrorMessage);
 }
