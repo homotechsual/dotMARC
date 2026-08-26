@@ -30,6 +30,7 @@ else
 {
     <MudTable Items="_domains" Hover="true" T="DomainRow">
         <HeaderContent>
+            <MudTh></MudTh>
             <MudTh>Domain</MudTh>
             <MudTh>Pinned</MudTh>
             <MudTh>Reports</MudTh>
@@ -37,7 +38,12 @@ else
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.Name</MudTd>
+            <MudTd draggable="true" @ondragstart="@(() => OnDragStart(context.Id))"
+                   @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))"
+                   Style="cursor:grab; width: 2.5rem;">
+                <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
+            </MudTd>
+            <MudTd @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))">@context.Name</MudTd>
             <MudTd>
                 <MudSwitch T="bool" Value="context.IsPinned" ValueChanged="@(v => SetPinnedAsync(context, v))" Color="Color.Primary" />
             </MudTd>
@@ -62,7 +68,8 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _domains = await db.Domains
             .AsNoTracking()
-            .OrderBy(d => d.Name)
+            .OrderBy(d => d.SortOrder)
+            .ThenBy(d => d.Name)
             .Select(d => new DomainRow(d.Id, d.Name, d.IsPinned, d.Reports.Count, d.LastReportReceivedUtc))
             .ToListAsync();
     }
@@ -135,6 +142,44 @@ else
                 Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
             }
         }
+    }
+
+    private int? _draggedDomainId;
+
+    private void OnDragStart(int domainId) => _draggedDomainId = domainId;
+
+    private async Task OnDropAsync(int targetDomainId)
+    {
+        if (_domains is null || _draggedDomainId is null || _draggedDomainId == targetDomainId)
+        {
+            _draggedDomainId = null;
+            return;
+        }
+
+        var draggedIndex = _domains.FindIndex(d => d.Id == _draggedDomainId);
+        var targetIndex = _domains.FindIndex(d => d.Id == targetDomainId);
+        _draggedDomainId = null;
+
+        if (draggedIndex < 0 || targetIndex < 0)
+        {
+            return;
+        }
+
+        var moved = _domains[draggedIndex];
+        _domains.RemoveAt(draggedIndex);
+        _domains.Insert(targetIndex, moved);
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.ReorderAsync(db, _domains.Select(d => d.Id).ToList(), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save the new order. Try again.", Severity.Error);
+        }
+
+        await LoadAsync();
     }
 
     private sealed record DomainRow(int Id, string Name, bool IsPinned, int ReportCount, DateTimeOffset? LastReportReceivedUtc);
