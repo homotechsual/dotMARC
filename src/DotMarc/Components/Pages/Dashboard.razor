@@ -16,6 +16,25 @@
 else
 {
     <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6">
+            <MudSelect T="int?" Label="Group" Value="_selectedGroupId" ValueChanged="@(v => OnGroupFilterChangedAsync(v))" Clearable="true">
+                @foreach (var group in _allGroups)
+                {
+                    <MudSelectItem T="int?" Value="group.Id">@group.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudSelect T="int?" Label="Tag" Value="_selectedTagId" ValueChanged="@(v => OnTagFilterChangedAsync(v))" Clearable="true">
+                @foreach (var tag in _allTags)
+                {
+                    <MudSelectItem T="int?" Value="tag.Id">@tag.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="2">
             <MudPaper Height="100%" Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h5">@_summary.DomainCount</MudText>
@@ -118,6 +137,10 @@ else
     private DashboardSummary? _summary;
     private List<DashboardDomainRow> _rows = [];
     private PollStatusRow? _lastPoll;
+    private List<Group> _allGroups = [];
+    private List<Tag> _allTags = [];
+    private int? _selectedGroupId;
+    private int? _selectedTagId;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -129,12 +152,26 @@ else
         // stale data as PollingService writes new reports behind it.
         await using var db = await DbFactory.CreateDbContextAsync();
 
+        _allGroups = await db.Groups.AsNoTracking().OrderBy(g => g.Name).ToListAsync();
+        _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
+
         var cutoff = DomainStatistics.GetWindowCutoffUtc();
         var domains = await db.Domains
             .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
+            .Include(d => d.Groups)
+            .Include(d => d.Tags)
             .ToListAsync();
+
+        if (_selectedGroupId is { } groupId)
+        {
+            domains = domains.Where(d => d.Groups.Any(g => g.Id == groupId)).ToList();
+        }
+        if (_selectedTagId is { } tagId)
+        {
+            domains = domains.Where(d => d.Tags.Any(t => t.Id == tagId)).ToList();
+        }
 
         var parseFailureCount = await db.ParseFailures.CountAsync();
 
@@ -158,6 +195,18 @@ else
         {
             Snackbar.Add($"Failed to update {row.Name}. Try again.", Severity.Error);
         }
+        await LoadAsync();
+    }
+
+    private async Task OnGroupFilterChangedAsync(int? groupId)
+    {
+        _selectedGroupId = groupId;
+        await LoadAsync();
+    }
+
+    private async Task OnTagFilterChangedAsync(int? tagId)
+    {
+        _selectedTagId = tagId;
         await LoadAsync();
     }
 
