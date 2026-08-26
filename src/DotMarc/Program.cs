@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
 using MudBlazor.Services;
@@ -57,6 +58,12 @@ builder.Services.AddSingleton<IGraphTokenProvider, ConfidentialClientGraphTokenP
 builder.Services.AddHttpClient<IGraphMailboxClient, GraphMailboxClient>(client =>
 {
     client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
+});
+
+builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
 // PollingService has two constructors (one for direct test construction, one for the real

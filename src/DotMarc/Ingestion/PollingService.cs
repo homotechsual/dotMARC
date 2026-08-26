@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Graph;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,11 @@ public sealed class PollingService : BackgroundService
     /// interval. Prevents duplicate Graph calls and duplicate-report races when scaled beyond one
     /// replica.</summary>
     internal const long PollingLeaderLockKey = 84_200_001;
+
+    /// <summary>Arbitrary fixed key for this service's DMARC-check advisory lock — distinct from
+    /// PollingLeaderLockKey so the mailbox-poll cycle and the DMARC DNS-check cycle run under
+    /// independent locks rather than being forced to share the same leader/timing.</summary>
+    internal const long DmarcCheckLeaderLockKey = 84_200_003;
 
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
@@ -63,6 +69,9 @@ public sealed class PollingService : BackgroundService
                     var graphClient = scope.ServiceProvider.GetRequiredService<IGraphMailboxClient>();
                     var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
                     await RunPollCycleAsync(graphClient, context, stoppingToken).ConfigureAwait(false);
+
+                    var dmarcChecker = scope.ServiceProvider.GetRequiredService<IDmarcDnsChecker>();
+                    await RunDmarcCheckCycleAsync(context, dmarcChecker, _options!.MailboxAddress, stoppingToken).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
@@ -130,6 +139,73 @@ public sealed class PollingService : BackgroundService
             }
 
             await RecordPollCycleAsync(context, counts, succeeded: true, errorMessage: null, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Runs a DMARC DNS status check for every domain whose last check (DmarcCheckedUtc)
+    /// is null or more than 24 hours old — independent of, and under a separate advisory lock from,
+    /// the mailbox poll cycle above, since the two concerns don't need to share timing or a leader.
+    /// A domain whose check itself fails (network error, Cloudflare unreachable) is left with its
+    /// prior status/timestamp untouched and simply retried next cycle — matching this service's
+    /// existing "leave it, retry later" policy for other kinds of per-item failure.</summary>
+    internal async Task RunDmarcCheckCycleAsync(DotMarcDbContext context, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", DmarcCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the DMARC-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(d => d.DmarcCheckedUtc == null || d.DmarcCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                DmarcCheckResult result;
+                try
+                {
+                    result = await dmarcChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "DMARC DNS check failed for {Domain}; will retry next cycle.", domain.Name);
+                    continue;
+                }
+
+                domain.DmarcCheckStatus = result.Status;
+                domain.DmarcCheckedUtc = DateTimeOffset.UtcNow;
+                domain.DmarcCheckDetail = result.Detail;
+                anyUpdated = true;
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {
