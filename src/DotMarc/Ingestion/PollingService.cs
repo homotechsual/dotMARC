@@ -311,6 +311,24 @@ public sealed class PollingService : BackgroundService
                 continue;
             }
 
+            var alreadyProcessed = await context.ProcessedMessages.AnyAsync(m => m.GraphMessageId == message.Id, cancellationToken).ConfigureAwait(false);
+            if (alreadyProcessed)
+            {
+                // Already turned into a Report on an earlier poll; Graph's isRead flag just hasn't
+                // caught up (e.g. a prior MarkAsReadAsync attempt failed). Retry only the cheap
+                // mark-as-read call — the ProcessedMessage row already proves re-fetching and
+                // re-parsing the attachment would be wasted work.
+                try
+                {
+                    await graphClient.MarkAsReadAsync(message.Id, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception markReadEx)
+                {
+                    _logger.LogWarning(markReadEx, "Message {MessageId} was already processed; retrying mark-as-read failed again.", message.Id);
+                }
+                continue;
+            }
+
             try
             {
                 await ProcessMessageAsync(graphClient, context, message, cancellationToken).ConfigureAwait(false);
@@ -354,12 +372,13 @@ public sealed class PollingService : BackgroundService
                 var decompressed = ReportDecompressor.Decompress(attachment.ContentBytes);
                 var parsed = DmarcReportParser.Parse(decompressed);
                 await StoreReportAsync(context, parsed, System.Text.Encoding.UTF8.GetString(decompressed), cancellationToken).ConfigureAwait(false);
+                await RecordProcessedMessageAsync(context, message.Id, cancellationToken).ConfigureAwait(false);
 
-                // The report is safely committed at this point (StoreReportAsync's own
-                // duplicate check makes a re-attempt of this same message harmless). Marking the
-                // message read is a separate, transient Graph call — a failure here is NOT an
-                // unparseable message, so it must not fall into the ParseFailure path below. Log
-                // it distinctly and let the message get picked up again next poll.
+                // The report is safely committed and recorded as processed at this point — a
+                // failure here won't cause re-fetching/re-parsing on the next poll (see
+                // PollOnceAsync's ProcessedMessages check), only a cheap mark-as-read retry. Marking
+                // the message read is a separate Graph call — a failure here is NOT an unparseable
+                // message, so it must not fall into the ParseFailure path below.
                 try
                 {
                     await graphClient.MarkAsReadAsync(message.Id, cancellationToken).ConfigureAwait(false);
@@ -368,7 +387,7 @@ public sealed class PollingService : BackgroundService
                 {
                     _logger.LogWarning(markReadEx,
                         "Report for message {MessageId} was stored successfully, but marking it read failed. " +
-                        "It will be reprocessed next poll; the duplicate-report check makes that safe.",
+                        "It will be retried next poll without re-parsing.",
                         message.Id);
                 }
 
@@ -436,6 +455,25 @@ public sealed class PollingService : BackgroundService
 
         context.Reports.Add(report);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Records that a mailbox message has been successfully turned into a stored Report,
+    /// so PollOnceAsync can skip re-fetching and re-parsing it on a later poll if Graph's isRead
+    /// flag never got set (see <see cref="ProcessedMessage"/>).</summary>
+    private static async Task RecordProcessedMessageAsync(DotMarcDbContext context, string graphMessageId, CancellationToken cancellationToken)
+    {
+        context.ProcessedMessages.Add(new ProcessedMessage { GraphMessageId = graphMessageId, ProcessedUtc = DateTimeOffset.UtcNow });
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Another attempt at this same message (e.g. a retried poll racing this one) already
+            // recorded it first — same outcome either way, nothing further to do.
+            context.ChangeTracker.Clear();
+        }
     }
 
     /// <summary>Inserts a new ParseFailure row for a never-before-failed message, or updates the

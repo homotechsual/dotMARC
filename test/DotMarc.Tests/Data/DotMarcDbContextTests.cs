@@ -253,4 +253,29 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         Assert.Null(domain.DmarcCheckedUtc);
         Assert.Null(domain.DmarcCheckDetail);
     }
+
+    [Fact]
+    public void CanInsertAndQuery_ProcessedMessage()
+    {
+        using (var context = CreateContext())
+        {
+            context.ProcessedMessages.Add(new ProcessedMessage { GraphMessageId = "msg-1", ProcessedUtc = DateTimeOffset.UtcNow });
+            context.SaveChanges();
+        }
+
+        using var verify = CreateContext();
+        var processed = verify.ProcessedMessages.Single();
+        Assert.Equal("msg-1", processed.GraphMessageId);
+    }
+
+    [Fact]
+    public void ProcessedMessage_GraphMessageId_MustBeUnique()
+    {
+        using var context = CreateContext();
+        context.ProcessedMessages.Add(new ProcessedMessage { GraphMessageId = "msg-1", ProcessedUtc = DateTimeOffset.UtcNow });
+        context.SaveChanges();
+
+        context.ProcessedMessages.Add(new ProcessedMessage { GraphMessageId = "msg-1", ProcessedUtc = DateTimeOffset.UtcNow });
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
 }

@@ -12,6 +12,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportRecord> ReportRecords => Set<ReportRecord>();
     public DbSet<ParseFailure> ParseFailures => Set<ParseFailure>();
+    public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     public DbSet<PollCycle> PollCycles => Set<PollCycle>();
     public DbSet<PollCycleDailySummary> PollCycleDailySummaries => Set<PollCycleDailySummary>();
 
@@ -53,6 +54,11 @@ public sealed class DotMarcDbContext : DbContext
         modelBuilder.Entity<ParseFailure>(entity =>
         {
             entity.HasIndex(f => f.GraphMessageId).IsUnique();
+        });
+
+        modelBuilder.Entity<ProcessedMessage>(entity =>
+        {
+            entity.HasIndex(m => m.GraphMessageId).IsUnique();
         });
 
         modelBuilder.Entity<PollCycle>(entity =>

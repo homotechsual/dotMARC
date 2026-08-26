@@ -177,6 +177,63 @@ public class PollingServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PollOnceAsync_SkipsReprocessing_ForAMessageAlreadyMarkedProcessed_EvenWhenMarkAsReadKeepsFailing()
+    {
+        // Regression coverage for the "mark-as-read keeps 403ing forever" case: once a message has
+        // produced a stored Report, later polls must not re-fetch or re-parse its attachment just
+        // because Graph's isRead flag never got set — only a cheap mark-as-read retry.
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+        graphClient.FailMarkAsReadFor.Add("msg-1");
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using (var verify = CreateContext())
+        {
+            Assert.Single(verify.Reports);
+            Assert.Single(verify.ProcessedMessages);
+        }
+
+        // Replace the attachment with something that would fail to parse if the message were
+        // reprocessed — proving the second poll skips the fetch/parse path entirely rather than
+        // merely tolerating a duplicate.
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("garbage.xml", "text/xml", "not xml"u8.ToArray())];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using (var verify = CreateContext())
+        {
+            Assert.Single(verify.Reports);
+            Assert.Empty(verify.ParseFailures);
+        }
+        Assert.DoesNotContain("msg-1", graphClient.MarkedAsRead);
+
+        // Third poll: Graph now succeeds at marking read. The skip path still retries it directly.
+        graphClient.FailMarkAsReadFor.Clear();
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        Assert.Contains("msg-1", graphClient.MarkedAsRead);
+        using (var verify = CreateContext())
+        {
+            Assert.Single(verify.Reports);
+            Assert.Empty(verify.ParseFailures);
+        }
+    }
+
+    [Fact]
     public async Task PollOnceAsync_UpdatesExistingParseFailureRow_InsteadOfGrowingUnboundedly_OnRepeatedFailure()
     {
         var graphClient = new FakeGraphMailboxClient();
