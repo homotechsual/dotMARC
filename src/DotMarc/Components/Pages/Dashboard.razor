@@ -125,16 +125,19 @@ else
             .ThenInclude(r => r.Records)
             .ToListAsync();
 
-        _rows = domains.Select(d =>
-        {
-            var passRate = DomainStatistics.GetPassRate(d.Reports);
+        _rows = domains
+            .OrderBy(d => d.SortOrder)
+            .ThenBy(d => d.Name)
+            .Select(d =>
+            {
+                var passRate = DomainStatistics.GetPassRate(d.Reports);
 
-            var missingReport = d.IsPinned && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
-            var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
-            var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
+                var missingReport = d.IsPinned && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
+                var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
+                var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
 
-            return new DomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsPinned);
-        }).OrderBy(r => r.Name).ToList();
+                return new DomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsPinned);
+            }).ToList();
 
         var parseFailureCount = await db.ParseFailures.CountAsync();
 
