@@ -128,4 +128,45 @@ public class DmarcDnsCheckerTests
 
         Assert.Equal(DmarcCheckStatus.Ok, result.Status);
     }
+
+    [Fact]
+    public async Task CheckAsync_SkipsCnameRecord_AndReadsTheTxtRecordFurtherInTheAnswerArray()
+    {
+        var (checker, handler) = CreateChecker();
+        // A DMARC-hosting-provider setup: _dmarc.contoso.io is a CNAME (type 5) to a
+        // provider-managed name, and Cloudflare returns the full chain — CNAME first, TXT second.
+        // The CNAME's data is not a valid DMARC string, so taking Answer[0] unfiltered would
+        // misread this as Misconfigured.
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":5,"data":"contoso.io._dmarc.provider.net."},{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckAsync_StripsRfc7489SizeLimitSuffix_FromRuaAddress()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk!10m\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckAsync_SetsDnsJsonAcceptHeader_OnEveryRequest()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = NxDomainResponse;
+
+        await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Contains(handler.Requests[0].Headers.Accept, h => h.MediaType == "application/dns-json");
+    }
 }

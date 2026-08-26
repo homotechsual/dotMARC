@@ -57,12 +57,21 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
     /// omits Answer entirely for both NXDOMAIN and NODATA — no need to branch on Status).</summary>
     private async Task<string?> QueryTxtAsync(string name, CancellationToken cancellationToken)
     {
-        var response = await _http.GetAsync($"dns-query?name={Uri.EscapeDataString(name)}&type=TXT", cancellationToken).ConfigureAwait(false);
+        // The Accept header is also set by Program.cs's AddHttpClient<IDmarcDnsChecker,
+        // DmarcDnsChecker> registration; it's set again here so this checker is self-sufficient
+        // and doesn't silently break every check if that DI configuration is ever refactored away.
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type=TXT");
+        request.Headers.Accept.ParseAdd("application/dns-json");
+        var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
 
-        var answer = parsed.Answer?.FirstOrDefault();
+        // Some DMARC hosting providers have customers publish a CNAME at _dmarc.example.com
+        // pointing at a provider-managed TXT record; Cloudflare's JSON API returns the full answer
+        // chain (CNAME then TXT), so the TXT record (type 16) must be selected explicitly rather
+        // than trusting it to be first.
+        var answer = parsed.Answer?.FirstOrDefault(a => a.Type == 16);
         if (answer is null)
         {
             return null;
@@ -92,11 +101,16 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
             .Select(uri => uri.Trim())
             .Where(uri => uri.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
             .Select(uri => uri["mailto:".Length..])
+            // RFC 7489 §6.3 permits a "!<size>" max-report-size suffix on each URI (e.g.
+            // "!10m"); strip it so the address compares equal to the configured mailbox address.
+            .Select(address => address.Split('!')[0])
             .ToList();
     }
 
     private sealed record DnsOverHttpsResponse(
         [property: JsonPropertyName("Status")] int Status,
         [property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
-    private sealed record DnsAnswer([property: JsonPropertyName("data")] string Data);
+    private sealed record DnsAnswer(
+        [property: JsonPropertyName("type")] int Type,
+        [property: JsonPropertyName("data")] string Data);
 }

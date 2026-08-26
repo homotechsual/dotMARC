@@ -66,12 +66,32 @@ public sealed class PollingService : BackgroundService
                 if (_scopeFactory is not null)
                 {
                     using var scope = _scopeFactory.CreateScope();
-                    var graphClient = scope.ServiceProvider.GetRequiredService<IGraphMailboxClient>();
                     var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
-                    await RunPollCycleAsync(graphClient, context, stoppingToken).ConfigureAwait(false);
 
-                    var dmarcChecker = scope.ServiceProvider.GetRequiredService<IDmarcDnsChecker>();
-                    await RunDmarcCheckCycleAsync(context, dmarcChecker, _options!.MailboxAddress, stoppingToken).ConfigureAwait(false);
+                    try
+                    {
+                        var graphClient = scope.ServiceProvider.GetRequiredService<IGraphMailboxClient>();
+                        await RunPollCycleAsync(graphClient, context, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Mailbox poll cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        // The two cycles share this one scoped DotMarcDbContext. If the poll cycle
+                        // above failed, it may have left half-built entities tracked as Added/Modified
+                        // on this context; without clearing the tracker first, the DMARC cycle's own
+                        // SaveChangesAsync could flush those leftovers alongside its own changes.
+                        context.ChangeTracker.Clear();
+                        var dmarcChecker = scope.ServiceProvider.GetRequiredService<IDmarcDnsChecker>();
+                        await RunDmarcCheckCycleAsync(context, dmarcChecker, _options!.MailboxAddress, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "DMARC check cycle failed; will retry next interval.");
+                    }
                 }
             }
             catch (Exception ex)
