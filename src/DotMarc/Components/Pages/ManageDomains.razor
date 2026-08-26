@@ -46,12 +46,13 @@ else
                    does for elements. A native element sidesteps the question entirely. *@
                 <div draggable="true" @ondragstart="@(() => OnDragStart(context.Id))"
                      @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))"
-                     style="cursor:grab; display:flex; align-items:center;">
+                     style="cursor:grab; display:flex; align-items:center; width:100%; height:100%; margin:-16px; padding:16px;">
                     <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
                 </div>
             </MudTd>
             <MudTd>
-                <div @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))">@context.Name</div>
+                <div @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))"
+                     style="width:100%; height:100%; margin:-16px; padding:16px;">@context.Name</div>
             </MudTd>
             <MudTd>
                 <MudSwitch T="bool" Value="context.IsPinned" ValueChanged="@(v => SetPinnedAsync(context, v))" Color="Color.Primary" />
