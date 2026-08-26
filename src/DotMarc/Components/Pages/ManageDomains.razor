@@ -33,6 +33,8 @@ else
         <HeaderContent>
             <MudTh></MudTh>
             <MudTh>Domain</MudTh>
+            <MudTh>Groups</MudTh>
+            <MudTh>Tags</MudTh>
             <MudTh>Monitored</MudTh>
             <MudTh>Reports</MudTh>
             <MudTh>Last report</MudTh>
@@ -56,6 +58,28 @@ else
                      style="width:100%; height:100%; margin:-16px; padding:16px;">@context.Name</div>
             </MudTd>
             <MudTd>
+                <MudSelect T="int" MultiSelection="true" SelectedValues="context.GroupIds"
+                           SelectedValuesChanged="@(ids => SetDomainGroupsAsync(context, ids))"
+                           MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} group(s)")"
+                           Placeholder="None">
+                    @foreach (var group in _allGroups)
+                    {
+                        <MudSelectItem T="int" Value="group.Id">@group.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudTd>
+            <MudTd>
+                <MudSelect T="int" MultiSelection="true" SelectedValues="context.TagIds"
+                           SelectedValuesChanged="@(ids => SetDomainTagsAsync(context, ids))"
+                           MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} tag(s)")"
+                           Placeholder="None">
+                    @foreach (var tag in _allTags)
+                    {
+                        <MudSelectItem T="int" Value="tag.Id">@tag.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudTd>
+            <MudTd>
                 <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => SetMonitoredAsync(context, v))" Color="Color.Primary" />
             </MudTd>
             <MudTd>@context.ReportCount</MudTd>
@@ -69,6 +93,8 @@ else
 
 @code {
     private List<DomainRow>? _domains;
+    private List<Group> _allGroups = [];
+    private List<Tag> _allTags = [];
     private string _newDomainName = "";
     private string? _addError;
 
@@ -77,11 +103,14 @@ else
     private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        _allGroups = await db.Groups.AsNoTracking().OrderBy(g => g.Name).ToListAsync();
+        _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
         _domains = await db.Domains
             .AsNoTracking()
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
-            .Select(d => new DomainRow(d.Id, d.Name, d.IsMonitored, d.Reports.Count, d.LastReportReceivedUtc))
+            .Select(d => new DomainRow(d.Id, d.Name, d.IsMonitored, d.Reports.Count, d.LastReportReceivedUtc,
+                d.Groups.Select(g => g.Id).ToList(), d.Tags.Select(t => t.Id).ToList()))
             .ToListAsync();
     }
 
@@ -124,6 +153,34 @@ else
         catch (Exception)
         {
             Snackbar.Add($"Failed to update {row.Name}. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task SetDomainGroupsAsync(DomainRow row, IEnumerable<int> groupIds)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await GroupManagementService.SetDomainGroupsAsync(db, row.Id, groupIds.ToList(), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}'s groups. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task SetDomainTagsAsync(DomainRow row, IEnumerable<int> tagIds)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await TagManagementService.SetDomainTagsAsync(db, row.Id, tagIds.ToList(), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}'s tags. Try again.", Severity.Error);
         }
         await LoadAsync();
     }
@@ -193,5 +250,5 @@ else
         await LoadAsync();
     }
 
-    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc);
+    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc, List<int> GroupIds, List<int> TagIds);
 }
