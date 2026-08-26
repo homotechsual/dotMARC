@@ -20,6 +20,7 @@ public sealed class DotMarcDbContext : DbContext
         modelBuilder.Entity<Domain>(entity =>
         {
             entity.HasIndex(d => d.Name).IsUnique();
+            entity.Property(d => d.DmarcCheckStatus).HasConversion<string>();
         });
 
         modelBuilder.Entity<Report>(entity =>

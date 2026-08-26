@@ -12,6 +12,9 @@ public sealed class Domain
     public int SortOrder { get; set; }
     public DateTimeOffset FirstSeenUtc { get; set; }
     public DateTimeOffset? LastReportReceivedUtc { get; set; }
+    public DmarcCheckStatus DmarcCheckStatus { get; set; }
+    public DateTimeOffset? DmarcCheckedUtc { get; set; }
+    public string? DmarcCheckDetail { get; set; }
 
     public List<Report> Reports { get; set; } = [];
 }
