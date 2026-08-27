@@ -17,13 +17,21 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
     public const string PermissionClaimType = "dotmarc:permission";
     public const string ScopedGroupClaimType = "dotmarc:scoped-group";
 
+    // Marks a principal as already having been through resolution below, independent of how
+    // many (if any) PermissionClaimType/ScopedGroupClaimType claims that resolution produced. A
+    // scopable Role with an empty Permissions list resolves to zero permission claims but N
+    // group claims, so the idempotency guard can't infer "already transformed" from
+    // PermissionClaimType's presence alone — that under-counts and lets a second invocation
+    // re-add the group claims, duplicating them.
+    private const string ResolvedClaimType = "dotmarc:access-resolved";
+
     private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
 
     public UserAccessClaimsTransformation(IDbContextFactory<DotMarcDbContext> dbFactory) => _dbFactory = dbFactory;
 
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
-        if (principal.Identity?.IsAuthenticated != true || principal.HasClaim(c => c.Type == PermissionClaimType))
+        if (principal.Identity?.IsAuthenticated != true || principal.HasClaim(c => c.Type == ResolvedClaimType))
         {
             // ASP.NET Core can invoke IClaimsTransformation more than once per request; this
             // check makes re-invocation a no-op instead of duplicating claims.
@@ -48,6 +56,7 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
         }
 
         var identity = (ClaimsIdentity)principal.Identity;
+        identity.AddClaim(new Claim(ResolvedClaimType, "true"));
         foreach (var permission in access.Role.Permissions)
         {
             identity.AddClaim(new Claim(PermissionClaimType, permission.ToString()));

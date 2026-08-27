@@ -111,4 +111,30 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
 
         Assert.Single(principal.FindAll(UserAccessClaimsTransformation.PermissionClaimType));
     }
+
+    [Fact]
+    public async Task TransformAsync_IsIdempotent_ForAScopedRoleWithNoPermissions()
+    {
+        // Regression test: a scopable Role with an empty Permissions list produces zero
+        // PermissionClaimType claims but at least one ScopedGroupClaimType claim. The
+        // idempotency guard must not infer "already transformed" from PermissionClaimType's
+        // presence alone, or a second TransformAsync call re-resolves and duplicates the group
+        // claim(s).
+        using (var context = CreateContext())
+        {
+            var role = new Role { Name = "Scoped No-Permissions", IsLocked = false, IsScopable = true, Permissions = [] };
+            var group = new Group { Name = "Client B" };
+            context.Roles.Add(role);
+            context.Groups.Add(group);
+            context.SaveChanges();
+            await UserAccessManagementService.GrantAccessAsync(context, "scoped-empty@example.com", role.Id, [group.Id], CancellationToken.None);
+        }
+
+        var transformation = new UserAccessClaimsTransformation(CreateFactory());
+        var principal = await transformation.TransformAsync(PrincipalFor("oid-4", "scoped-empty@example.com"));
+        principal = await transformation.TransformAsync(principal);
+
+        Assert.Empty(principal.FindAll(UserAccessClaimsTransformation.PermissionClaimType));
+        Assert.Single(principal.FindAll(UserAccessClaimsTransformation.ScopedGroupClaimType));
+    }
 }
