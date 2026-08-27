@@ -23,6 +23,9 @@ param graphMailboxAddress string
 param entraIdTenantId string
 param entraIdClientId string
 
+@description('Comma-separated list of email addresses granted the Admin role the first time the app starts with no existing access grants. Not secret — just email addresses. Only takes effect on that first startup; safe to leave set afterwards.')
+param initialAdminEmails string = ''
+
 var postgresServerName = '${baseName}-pg-${uniqueString(resourceGroup().id)}'
 var keyVaultName = '${take(baseName, 7)}-kv-${uniqueString(resourceGroup().id)}'
 var logAnalyticsName = '${baseName}-logs'
@@ -144,6 +147,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'Graph__MailboxAddress', value: graphMailboxAddress }
             { name: 'EntraId__TenantId', value: entraIdTenantId }
             { name: 'EntraId__ClientId', value: entraIdClientId }
+            { name: 'InitialAdmins__Emails', value: initialAdminEmails }
             { name: 'Graph__ClientSecret', secretRef: 'graph-client-secret' }
             { name: 'EntraId__ClientSecret', secretRef: 'entraid-client-secret' }
             { name: 'ConnectionStrings__DotMarc', secretRef: 'connectionstrings-dotmarc' }

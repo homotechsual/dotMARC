@@ -14,6 +14,7 @@ services:
       EntraId__TenantId: ${ENTRAID_TENANT_ID:?Set ENTRAID_TENANT_ID}
       EntraId__ClientId: ${ENTRAID_CLIENT_ID:?Set ENTRAID_CLIENT_ID}
       EntraId__ClientSecret: ${ENTRAID_CLIENT_SECRET:?Set ENTRAID_CLIENT_SECRET}
+      InitialAdmins__Emails: ${INITIAL_ADMIN_EMAILS:-}
     depends_on:
       postgres:
         condition: service_healthy
