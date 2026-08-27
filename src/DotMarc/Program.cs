@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -85,13 +86,17 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 
+builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
+
 builder.Services.AddCascadingAuthenticationState();
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    await DatabaseMigrator.MigrateWithLeaderLockAsync(scope.ServiceProvider.GetRequiredService<DotMarcDbContext>());
+    var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
+    await DatabaseMigrator.MigrateWithLeaderLockAsync(context);
+    await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, scope.ServiceProvider.GetRequiredService<IOptions<InitialAdminsOptions>>());
 }
 
 // Must run first, before any other middleware that reads the request's scheme/host (redirects,
