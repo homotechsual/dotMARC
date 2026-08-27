@@ -79,6 +79,16 @@ builder.Services.AddHostedService<PollingService>(sp => ActivatorUtilities.Creat
 builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
 
+// AddMicrosoftIdentityWebApp wires up cookie authentication under CookieAuthenticationDefaults's
+// standard "Cookies" scheme alongside OpenIdConnect. Its default AccessDeniedPath sends a denied
+// user to a generic ASP.NET Core 403 page; pointing it at our own AccessDenied.razor instead gives
+// them an explanation instead of a raw 404/403. Without this, [Authorize]/the fallback policy
+// denying a page falls through to the framework default, which this app never configured a
+// friendly page for.
+builder.Services.Configure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
+    Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
+    options => options.AccessDeniedPath = "/AccessDenied");
+
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
 
 builder.Services.AddAuthorization(options =>
@@ -114,7 +124,13 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
     await DatabaseMigrator.MigrateWithLeaderLockAsync(context);
-    await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, scope.ServiceProvider.GetRequiredService<IOptions<InitialAdminsOptions>>());
+    // AccessBootstrapper is a static class (matching this project's other *ManagementService
+    // statics), so it can't take a constructor-injected ILogger<AccessBootstrapper> the way
+    // PollingService does — a static class can't be used as a generic type argument. Creating a
+    // logger from the category type directly gets the same category-name behavior ILogger<T>
+    // would have given a non-static class.
+    var accessBootstrapperLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AccessBootstrapper));
+    await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, scope.ServiceProvider.GetRequiredService<IOptions<InitialAdminsOptions>>(), accessBootstrapperLogger);
 }
 
 // Must run first, before any other middleware that reads the request's scheme/host (redirects,
