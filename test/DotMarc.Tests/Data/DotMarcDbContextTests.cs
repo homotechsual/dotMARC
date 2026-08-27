@@ -349,6 +349,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
             domain.Groups.Add(new Group { Name = "Client A" });
             domain.Groups.Add(new Group { Name = "Project X" });
             domain.Tags.Add(new Tag { Name = "primary", Color = Color.Primary });
+            domain.Tags.Add(new Tag { Name = "secondary", Color = Color.Secondary });
             context.Domains.Add(domain);
             context.SaveChanges();
         }
@@ -356,6 +357,6 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         using var verify = CreateContext();
         var savedDomain = verify.Domains.Include(d => d.Groups).Include(d => d.Tags).Single();
         Assert.Equal(2, savedDomain.Groups.Count);
-        Assert.Single(savedDomain.Tags);
+        Assert.Equal(2, savedDomain.Tags.Count);
     }
 }

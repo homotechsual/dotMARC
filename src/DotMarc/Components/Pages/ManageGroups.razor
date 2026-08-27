@@ -42,6 +42,10 @@
             </RowTemplate>
         </MudTable>
     }
+    else if (_groups is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mt-4">No groups yet — add one above.</MudText>
+    }
 </MudPaper>
 
 <MudPaper Class="pa-4" Elevation="1">
@@ -94,6 +98,10 @@
                 </MudTd>
             </RowTemplate>
         </MudTable>
+    }
+    else if (_tags is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mt-4">No tags yet — add one above.</MudText>
     }
 </MudPaper>
 
@@ -158,9 +166,15 @@
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             var result = await GroupManagementService.RenameGroupAsync(db, row.Id, newName, CancellationToken.None);
-            if (result != GroupManagementService.AddGroupResult.Added)
+            var error = result switch
             {
-                Snackbar.Add("Failed to rename group — a group with that name may already exist.", Severity.Error);
+                GroupManagementService.AddGroupResult.InvalidName => "Group name can't be empty.",
+                GroupManagementService.AddGroupResult.AlreadyExists => "A group with that name already exists.",
+                _ => null
+            };
+            if (error is not null)
+            {
+                Snackbar.Add(error, Severity.Error);
             }
         }
         catch (Exception)
@@ -178,7 +192,7 @@
             { x => x.LabelName, row.Name },
             { x => x.DomainCount, row.DomainCount }
         };
-        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>("Remove group", parameters);
+        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>(parameters);
         var result = await dialogRef.Result;
 
         if (result is { Canceled: false })
@@ -233,9 +247,16 @@
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             var result = await TagManagementService.UpdateTagAsync(db, row.Id, newName, newColor, CancellationToken.None);
-            if (result != TagManagementService.AddTagResult.Added)
+            var error = result switch
             {
-                Snackbar.Add("Failed to update tag — a tag with that name may already exist.", Severity.Error);
+                TagManagementService.AddTagResult.InvalidName => "Tag name can't be empty.",
+                TagManagementService.AddTagResult.AlreadyExists => "A tag with that name already exists.",
+                TagManagementService.AddTagResult.InvalidColor => "Choose one of the available colors.",
+                _ => null
+            };
+            if (error is not null)
+            {
+                Snackbar.Add(error, Severity.Error);
             }
         }
         catch (Exception)
@@ -253,7 +274,7 @@
             { x => x.LabelName, row.Name },
             { x => x.DomainCount, row.DomainCount }
         };
-        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>("Remove tag", parameters);
+        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>(parameters);
         var result = await dialogRef.Result;
 
         if (result is { Canceled: false })

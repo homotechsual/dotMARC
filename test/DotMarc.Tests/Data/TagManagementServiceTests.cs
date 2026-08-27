@@ -129,6 +129,19 @@ public sealed class TagManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UpdateTagAsync_RejectsRenamingToAnExistingName()
+    {
+        using var context = CreateContext();
+        await TagManagementService.AddTagAsync(context, "primary", Color.Primary, CancellationToken.None);
+        await TagManagementService.AddTagAsync(context, "secondary", Color.Secondary, CancellationToken.None);
+        var secondaryId = context.Tags.Single(t => t.Name == "secondary").Id;
+
+        var result = await TagManagementService.UpdateTagAsync(context, secondaryId, "primary", Color.Secondary, CancellationToken.None);
+
+        Assert.Equal(TagManagementService.AddTagResult.AlreadyExists, result);
+    }
+
+    [Fact]
     public async Task RemoveTagAsync_RemovesTheTag_ButNotItsMemberDomain()
     {
         using var context = CreateContext();

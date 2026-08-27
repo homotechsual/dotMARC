@@ -61,7 +61,7 @@ else
                 <MudSelect T="int" MultiSelection="true" SelectedValues="context.GroupIds"
                            SelectedValuesChanged="@(ids => SetDomainGroupsAsync(context, ids))"
                            MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} group(s)")"
-                           Placeholder="None" RelativeWidth="DropdownWidth.Adaptive">
+                           RelativeWidth="DropdownWidth.Adaptive">
                     @foreach (var group in _allGroups)
                     {
                         <MudSelectItem T="int" Value="group.Id">@group.Name</MudSelectItem>
@@ -72,7 +72,7 @@ else
                 <MudSelect T="int" MultiSelection="true" SelectedValues="context.TagIds"
                            SelectedValuesChanged="@(ids => SetDomainTagsAsync(context, ids))"
                            MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} tag(s)")"
-                           Placeholder="None" RelativeWidth="DropdownWidth.Adaptive">
+                           RelativeWidth="DropdownWidth.Adaptive">
                     @foreach (var tag in _allTags)
                     {
                         <MudSelectItem T="int" Value="tag.Id">@tag.Name</MudSelectItem>
