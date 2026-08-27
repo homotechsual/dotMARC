@@ -112,12 +112,14 @@
                 <MudTh>Email</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>Role</MudTh>
+                <MudTh>Groups</MudTh>
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.Email</MudTd>
                 <MudTd>@(context.IsBound ? "Active" : "Pending first sign-in")</MudTd>
                 <MudTd>@context.RoleName</MudTd>
+                <MudTd>@context.ScopedGroupsDisplay</MudTd>
                 <MudTd>
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RevokeAccessAsync(context))" />
                 </MudTd>
@@ -157,7 +159,7 @@
         _grants = await db.UserAccesses
             .AsNoTracking()
             .OrderBy(u => u.Email)
-            .Select(u => new GrantRow(u.Id, u.Email, u.EntraObjectId != null, u.Role.Name))
+            .Select(u => new GrantRow(u.Id, u.Email, u.EntraObjectId != null, u.Role.Name, u.ScopedGroups.Select(g => g.Name).ToList()))
             .ToListAsync();
 
         if (_newGrantRoleId == 0 && _roles.Count > 0)
@@ -285,7 +287,12 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await UserAccessManagementService.RevokeAccessAsync(db, row.Id, CancellationToken.None);
+            var result = await UserAccessManagementService.RevokeAccessAsync(db, row.Id, CancellationToken.None);
+            if (result == UserAccessManagementService.RevokeAccessResult.LastAdminGuard)
+            {
+                Snackbar.Add($"Can't revoke {row.Email} — they're the last remaining grant with Manage Access permission. Grant Manage Access to someone else first.", Severity.Error);
+                return;
+            }
             await LoadAsync();
         }
         catch (Exception)
@@ -295,5 +302,9 @@
     }
 
     private sealed record RoleRow(int Id, string Name, bool IsLocked, bool IsScopable, List<Permission> Permissions);
-    private sealed record GrantRow(int Id, string Email, bool IsBound, string RoleName);
+
+    private sealed record GrantRow(int Id, string Email, bool IsBound, string RoleName, List<string> ScopedGroupNames)
+    {
+        public string ScopedGroupsDisplay => ScopedGroupNames.Count == 0 ? "All" : string.Join(", ", ScopedGroupNames);
+    }
 }

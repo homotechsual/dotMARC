@@ -11,6 +11,7 @@ public static class UserAccessManagementService
 {
     public enum GrantAccessResult { Granted, InvalidEmail, AlreadyExists, RoleNotFound }
     public enum UpdateAccessResult { Updated, RoleNotFound }
+    public enum RevokeAccessResult { Revoked, LastAdminGuard }
 
     public static async Task<GrantAccessResult> GrantAccessAsync(DotMarcDbContext context, string rawEmail, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
     {
@@ -50,6 +51,10 @@ public static class UserAccessManagementService
         return GrantAccessResult.Granted;
     }
 
+    /// <summary>Not yet called from any UI — ManageAccess.razor's page spec deliberately only
+    /// covers Grant + Revoke, not editing an existing grant's role/scope. Reserved here for a
+    /// future edit-grant feature; kept rather than removed so that feature doesn't have to
+    /// re-derive this logic.</summary>
     public static async Task<UpdateAccessResult> UpdateAccessAsync(DotMarcDbContext context, int userAccessId, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
     {
         var role = await context.Roles.SingleOrDefaultAsync(r => r.Id == roleId, cancellationToken).ConfigureAwait(false);
@@ -68,11 +73,39 @@ public static class UserAccessManagementService
         return UpdateAccessResult.Updated;
     }
 
-    public static async Task RevokeAccessAsync(DotMarcDbContext context, int userAccessId, CancellationToken cancellationToken = default)
+    /// <summary>Refuses to revoke the last remaining grant that carries AccessManage — doing so
+    /// would permanently lock the app out of its own Manage Access page, recoverable only via
+    /// direct SQL. Checked by role/permission content, not by the built-in Admin role's identity,
+    /// since a custom role could also carry AccessManage.</summary>
+    public static async Task<RevokeAccessResult> RevokeAccessAsync(DotMarcDbContext context, int userAccessId, CancellationToken cancellationToken = default)
     {
-        var access = await context.UserAccesses.SingleAsync(u => u.Id == userAccessId, cancellationToken).ConfigureAwait(false);
+        var access = await context.UserAccesses.Include(u => u.Role).SingleAsync(u => u.Id == userAccessId, cancellationToken).ConfigureAwait(false);
+
+        if (access.Role.Permissions.Contains(Permission.AccessManage))
+        {
+            // Role.Permissions is a List<Permission> behind an EF Core value converter (see
+            // DotMarcDbContext's ValueComparer comment) rather than a translatable primitive
+            // collection, so a server-side .Contains() predicate on it isn't reliable. The access
+            // grants table is small (staff plus a handful of external client contacts), so
+            // pulling every other grant's role into memory for this one-off guard check is cheap
+            // and avoids depending on unsupported LINQ translation.
+            var otherGrants = await context.UserAccesses
+                .Where(u => u.Id != userAccessId)
+                .Include(u => u.Role)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anotherAdminExists = otherGrants.Any(u => u.Role.Permissions.Contains(Permission.AccessManage));
+            if (!anotherAdminExists)
+            {
+                return RevokeAccessResult.LastAdminGuard;
+            }
+        }
+
         context.UserAccesses.Remove(access);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return RevokeAccessResult.Revoked;
     }
 
     /// <summary>Looks up the caller's access grant by Entra object ID first (the stable,

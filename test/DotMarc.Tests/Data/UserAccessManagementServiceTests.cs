@@ -122,8 +122,56 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
         var accessId = context.UserAccesses.Single().Id;
 
-        await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
 
+        Assert.Equal(UserAccessManagementService.RevokeAccessResult.Revoked, result);
+        using var verify = CreateContext();
+        Assert.Empty(verify.UserAccesses);
+    }
+
+    [Fact]
+    public async Task RevokeAccessAsync_RefusesToRemoveTheLastGrantWithAccessManage()
+    {
+        using var context = CreateContext();
+        var adminRoleId = SeedRole(context, "Admin", isScopable: false, Permission.AccessManage);
+        await UserAccessManagementService.GrantAccessAsync(context, "admin@example.com", adminRoleId, [], CancellationToken.None);
+        var accessId = context.UserAccesses.Single().Id;
+
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
+
+        Assert.Equal(UserAccessManagementService.RevokeAccessResult.LastAdminGuard, result);
+        using var verify = CreateContext();
+        Assert.Single(verify.UserAccesses); // not removed.
+    }
+
+    [Fact]
+    public async Task RevokeAccessAsync_AllowsRemovingAnAccessManageGrant_WhenAnotherOneRemains()
+    {
+        using var context = CreateContext();
+        var adminRoleId = SeedRole(context, "Admin", isScopable: false, Permission.AccessManage);
+        await UserAccessManagementService.GrantAccessAsync(context, "admin1@example.com", adminRoleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, "admin2@example.com", adminRoleId, [], CancellationToken.None);
+        var firstAccessId = context.UserAccesses.Single(u => u.Email == "admin1@example.com").Id;
+
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, firstAccessId, CancellationToken.None);
+
+        Assert.Equal(UserAccessManagementService.RevokeAccessResult.Revoked, result);
+        using var verify = CreateContext();
+        var remaining = verify.UserAccesses.Single();
+        Assert.Equal("admin2@example.com", remaining.Email);
+    }
+
+    [Fact]
+    public async Task RevokeAccessAsync_AllowsRemovingANonAccessManageGrant_EvenAsTheOnlyGrant()
+    {
+        using var context = CreateContext();
+        var roleId = SeedRole(context, "Viewer", isScopable: true, Permission.DomainsView);
+        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        var accessId = context.UserAccesses.Single().Id;
+
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
+
+        Assert.Equal(UserAccessManagementService.RevokeAccessResult.Revoked, result);
         using var verify = CreateContext();
         Assert.Empty(verify.UserAccesses);
     }
