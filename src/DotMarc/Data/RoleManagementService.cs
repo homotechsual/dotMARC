@@ -95,7 +95,30 @@ public static class RoleManagementService
         }
 
         context.Roles.Remove(role);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23001" or "23503" })
+        {
+            // A UserAccess grant was inserted against this role in the window between the
+            // AnyAsync check above and this SaveChangesAsync (READ COMMITTED, no explicit
+            // locking) — the FK's DeleteBehavior.Restrict caught it. Report the same InUse
+            // result the upfront check would have given, rather than letting the FK violation
+            // leak out as an unhandled exception.
+            //
+            // SqlState is 23001 (restrict_violation), not 23503 (foreign_key_violation), because
+            // this FK is configured with DeleteBehavior.Restrict, which Npgsql's migrations
+            // generator emits as an explicit "ON DELETE RESTRICT" clause rather than the
+            // clauseless default (ON DELETE NO ACTION) that raises 23503 — confirmed by actually
+            // triggering this catch block against a real Postgres container
+            // (RemoveRoleAsync_ReturnsInUse_WhenAGrantIsInsertedBetweenTheCheckAndTheDelete).
+            // 23503 is kept alongside it as a defensive fallback in case that mapping ever
+            // changes.
+            return RemoveRoleResult.InUse;
+        }
+
         return RemoveRoleResult.Removed;
     }
 }
