@@ -1,6 +1,9 @@
 @page "/groups"
+@attribute [Authorize(Policy = "GroupsOrTagsWrite")]
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
@@ -12,16 +15,18 @@
 
 <MudPaper Class="pa-4 mb-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>
-    <MudGrid>
-        <MudItem xs="9">
-            <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A"
-                          Error="@(_addGroupError is not null)" ErrorText="@_addGroupError" Immediate="true" />
-        </MudItem>
-        <MudItem xs="3" Class="d-flex align-center">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="AddGroupAsync">Add group</MudButton>
-        </MudItem>
-    </MudGrid>
+    <AuthorizeView Policy="GroupsAdd">
+        <MudGrid>
+            <MudItem xs="9">
+                <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A"
+                              Error="@(_addGroupError is not null)" ErrorText="@_addGroupError" Immediate="true" />
+            </MudItem>
+            <MudItem xs="3" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddGroupAsync">Add group</MudButton>
+            </MudItem>
+        </MudGrid>
+    </AuthorizeView>
 
     @if (_groups is { Count: > 0 })
     {
@@ -33,11 +38,20 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd>
-                    <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameGroupAsync(context, v))" />
+                    <AuthorizeView Policy="GroupsRename" Context="authState">
+                        <Authorized>
+                            <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameGroupAsync(context, v))" />
+                        </Authorized>
+                        <NotAuthorized>
+                            @context.Name
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </MudTd>
                 <MudTd>@context.DomainCount</MudTd>
                 <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
+                    <AuthorizeView Policy="GroupsDelete" Context="authState">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
+                    </AuthorizeView>
                 </MudTd>
             </RowTemplate>
         </MudTable>
@@ -50,24 +64,26 @@
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">Tags</MudText>
-    <MudGrid>
-        <MudItem xs="6">
-            <MudTextField @bind-Value="_newTagName" Label="Tag name" Placeholder="primary"
-                          Error="@(_addTagError is not null)" ErrorText="@_addTagError" Immediate="true" />
-        </MudItem>
-        <MudItem xs="3">
-            <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color">
-                @foreach (var color in TagManagementService.AllowedColors)
-                {
-                    <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="3" Class="d-flex align-center">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="AddTagAsync">Add tag</MudButton>
-        </MudItem>
-    </MudGrid>
+    <AuthorizeView Policy="TagsAdd">
+        <MudGrid>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_newTagName" Label="Tag name" Placeholder="primary"
+                              Error="@(_addTagError is not null)" ErrorText="@_addTagError" Immediate="true" />
+            </MudItem>
+            <MudItem xs="3">
+                <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color">
+                    @foreach (var color in TagManagementService.AllowedColors)
+                    {
+                        <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="3" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddTagAsync">Add tag</MudButton>
+            </MudItem>
+        </MudGrid>
+    </AuthorizeView>
 
     @if (_tags is { Count: > 0 })
     {
@@ -82,19 +98,35 @@
             <RowTemplate>
                 <MudTd><MudChip T="string" Color="context.Color">@context.Name</MudChip></MudTd>
                 <MudTd>
-                    <MudTextField T="string" Value="context.Name" ValueChanged="@(v => UpdateTagAsync(context, v, context.Color))" />
+                    <AuthorizeView Policy="TagsEdit" Context="authState">
+                        <Authorized>
+                            <MudTextField T="string" Value="context.Name" ValueChanged="@(v => UpdateTagAsync(context, v, context.Color))" />
+                        </Authorized>
+                        <NotAuthorized>
+                            @context.Name
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </MudTd>
                 <MudTd>
-                    <MudSelect T="Color" Value="context.Color" ValueChanged="@(v => UpdateTagAsync(context, context.Name, v))">
-                        @foreach (var color in TagManagementService.AllowedColors)
-                        {
-                            <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
-                        }
-                    </MudSelect>
+                    <AuthorizeView Policy="TagsEdit" Context="authState">
+                        <Authorized>
+                            <MudSelect T="Color" Value="context.Color" ValueChanged="@(v => UpdateTagAsync(context, context.Name, v))">
+                                @foreach (var color in TagManagementService.AllowedColors)
+                                {
+                                    <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </Authorized>
+                        <NotAuthorized>
+                            <MudChip T="string" Color="context.Color">@context.Name</MudChip>
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </MudTd>
                 <MudTd>@context.DomainCount</MudTd>
                 <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteTagAsync(context))" />
+                    <AuthorizeView Policy="TagsDelete" Context="authState">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteTagAsync(context))" />
+                    </AuthorizeView>
                 </MudTd>
             </RowTemplate>
         </MudTable>
