@@ -44,6 +44,19 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
         return new ClaimsPrincipal(identity);
     }
 
+    private static ClaimsPrincipal PrincipalForWithoutPreferredUsername(string objectId, string email)
+    {
+        // No "preferred_username" claim at all — only ClaimTypes.Email — to exercise the fallback
+        // chain in UserAccessClaimsTransformation.TransformAsync. This assumption (that
+        // preferred_username is the right claim to look at first) is unverifiable without a live
+        // Entra sign-in, so the transformation falls back through ClaimTypes.Upn/Email/"email"
+        // rather than relying on preferred_username alone.
+        var identity = new ClaimsIdentity(
+            [new Claim("http://schemas.microsoft.com/identity/claims/objectidentifier", objectId), new Claim(ClaimTypes.Email, email)],
+            authenticationType: "TestAuth");
+        return new ClaimsPrincipal(identity);
+    }
+
     [Fact]
     public async Task TransformAsync_AddsAPermissionClaimPerGrantedPermission()
     {
@@ -82,6 +95,24 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
 
         var scopedGroupClaims = principal.FindAll(UserAccessClaimsTransformation.ScopedGroupClaimType).ToList();
         Assert.Single(scopedGroupClaims);
+    }
+
+    [Fact]
+    public async Task TransformAsync_ResolvesByEmail_WhenPreferredUsernameClaimIsAbsentButClaimTypesEmailIsPresent()
+    {
+        using (var context = CreateContext())
+        {
+            var role = new Role { Name = "Domain Manager", IsLocked = false, IsScopable = false, Permissions = [Permission.DomainsView] };
+            context.Roles.Add(role);
+            context.SaveChanges();
+            await UserAccessManagementService.GrantAccessAsync(context, "fallback@example.com", role.Id, [], CancellationToken.None);
+        }
+
+        var transformation = new UserAccessClaimsTransformation(CreateFactory());
+        var principal = await transformation.TransformAsync(PrincipalForWithoutPreferredUsername("oid-fallback", "fallback@example.com"));
+
+        var permissionClaims = principal.FindAll(UserAccessClaimsTransformation.PermissionClaimType).Select(c => c.Value).ToList();
+        Assert.Contains(nameof(Permission.DomainsView), permissionClaims);
     }
 
     [Fact]

@@ -42,7 +42,17 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
         // preferred over reading a raw claim type string, since it's resilient to the exact
         // claim-type mapping in effect for a given token version/configuration.
         var objectId = principal.GetObjectId();
-        var email = principal.FindFirst("preferred_username")?.Value;
+
+        // Which claim actually carries the signed-in user's email can't be verified without a
+        // live Entra sign-in (none available in this environment), and getting it wrong would
+        // silently lock out every user forever — ResolveAsync's email fallback path would never
+        // match a granted UserAccess row. preferred_username is correct for the common
+        // v2.0-token/delegated-flow case this app uses, but this fallback chain reduces the blast
+        // radius of that specific claim being absent or empty for some tenant/token
+        // configuration: try preferred_username first, then the UPN and Email claim types
+        // (populated by Microsoft.Identity.Web's default claim mapping for some configurations),
+        // then a literal "email" claim type some tenants emit instead.
+        var email = FirstNonEmptyClaim(principal, "preferred_username", ClaimTypes.Upn, ClaimTypes.Email, "email");
         if (string.IsNullOrEmpty(objectId) && string.IsNullOrEmpty(email))
         {
             return principal;
@@ -67,5 +77,23 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
         }
 
         return principal;
+    }
+
+    /// <summary>Returns the value of the first of the given claim types that's present with a
+    /// non-empty value, or null if none are. Distinct from FindFirst(...)?.Value on a single
+    /// claim type: a claim present but empty-valued should still fall through to the next
+    /// candidate rather than short-circuiting the chain with an unusable value.</summary>
+    private static string? FirstNonEmptyClaim(ClaimsPrincipal principal, params string[] claimTypes)
+    {
+        foreach (var claimType in claimTypes)
+        {
+            var value = principal.FindFirst(claimType)?.Value;
+            if (!string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 }
