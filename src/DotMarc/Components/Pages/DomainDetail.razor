@@ -1,8 +1,13 @@
 @page "/domains/{DomainName}"
+@attribute [Authorize(Policy = "DomainsView")]
 @using DotMarc.Data
 @using DotMarc.Reporting
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -100,11 +105,25 @@ else
             .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
+            .Include(d => d.Groups)
             .SingleOrDefaultAsync(d => d.Name == DomainName);
 
         if (_domain is null)
         {
             return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var scopedGroupClaims = authState.User.FindAll(DotMarc.Security.UserAccessClaimsTransformation.ScopedGroupClaimType).ToList();
+        if (scopedGroupClaims.Count > 0)
+        {
+            var scopedGroupIds = scopedGroupClaims.Select(c => int.Parse(c.Value)).ToHashSet();
+            var domainGroupIds = _domain.Groups.Select(g => g.Id).ToHashSet();
+            if (!domainGroupIds.Overlaps(scopedGroupIds))
+            {
+                Navigation.NavigateTo("/AccessDenied");
+                return;
+            }
         }
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();

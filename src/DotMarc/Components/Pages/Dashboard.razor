@@ -1,10 +1,14 @@
 @page "/dashboard"
+@attribute [Authorize(Policy = "DomainsView")]
 @using DotMarc.Data
 @using DotMarc.Reporting
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>dotMARC - Dashboard</PageTitle>
 <MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
@@ -17,7 +21,7 @@ else
 {
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6">
-            <MudSelect T="int?" Label="Group" Value="_selectedGroupId" ValueChanged="@(v => OnGroupFilterChangedAsync(v))" Clearable="true">
+            <MudSelect T="int?" Label="Group" Value="_selectedGroupId" ValueChanged="@(v => OnGroupFilterChangedAsync(v))" Clearable="@(_scopedGroupIds is null)" Disabled="@(_scopedGroupIds is not null && _scopedGroupIds.Count == 1)">
                 @foreach (var group in _allGroups)
                 {
                     <MudSelectItem T="int?" Value="group.Id">@group.Name</MudSelectItem>
@@ -141,6 +145,7 @@ else
     private List<Tag> _allTags = [];
     private int? _selectedGroupId;
     private int? _selectedTagId;
+    private List<int>? _scopedGroupIds;
 
     private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
 
@@ -148,6 +153,14 @@ else
 
     private async Task LoadAsync()
     {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var scopedGroupClaims = authState.User.FindAll(DotMarc.Security.UserAccessClaimsTransformation.ScopedGroupClaimType).ToList();
+        _scopedGroupIds = scopedGroupClaims.Count == 0 ? null : scopedGroupClaims.Select(c => int.Parse(c.Value)).ToList();
+        if (_scopedGroupIds is not null && (_selectedGroupId is null || !_scopedGroupIds.Contains(_selectedGroupId.Value)))
+        {
+            _selectedGroupId = _scopedGroupIds[0];
+        }
+
         // A fresh, untracked context per render: the page is read-only and Blazor Server's DI
         // scope lives for the whole circuit, so injecting DotMarcDbContext directly would keep one
         // context (and its tracked entities) alive for as long as the tab stays open, showing
@@ -155,6 +168,10 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
 
         _allGroups = await db.Groups.AsNoTracking().OrderBy(g => g.Name).ToListAsync();
+        if (_scopedGroupIds is not null)
+        {
+            _allGroups = _allGroups.Where(g => _scopedGroupIds.Contains(g.Id)).ToList();
+        }
         _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
 
         var cutoff = DomainStatistics.GetWindowCutoffUtc();
