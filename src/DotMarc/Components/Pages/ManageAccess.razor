@@ -1,0 +1,295 @@
+@page "/access"
+@attribute [Authorize(Policy = "AccessManage")]
+@using DotMarc.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - Manage Access</PageTitle>
+<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudText Typo="Typo.h4" Class="mb-4">Manage access</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-2">Roles</MudText>
+    <MudGrid>
+        <MudItem xs="9">
+            <MudTextField @bind-Value="_newRoleName" Label="Role name" Placeholder="Domain Manager"
+                          Error="@(_addRoleError is not null)" ErrorText="@_addRoleError" Immediate="true" />
+        </MudItem>
+        <MudItem xs="3" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddRoleAsync">Add role</MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_roles is { Count: > 0 })
+    {
+        <MudTable Items="_roles" Hover="true" T="RoleRow" Class="mt-4">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Permissions</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    @if (context.IsLocked)
+                    {
+                        <MudText>@context.Name</MudText>
+                    }
+                    else
+                    {
+                        <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameRoleAsync(context, v))" />
+                    }
+                </MudTd>
+                <MudTd>
+                    @if (context.IsLocked)
+                    {
+                        <MudText Typo="Typo.body2">All permissions</MudText>
+                    }
+                    else
+                    {
+                        <MudSelect T="Permission" MultiSelection="true" SelectedValues="context.Permissions"
+                                   SelectedValuesChanged="@(p => SetRolePermissionsAsync(context, p))"
+                                   MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} permission(s)")"
+                                   RelativeWidth="DropdownWidth.Adaptive">
+                            @foreach (var permission in Enum.GetValues<Permission>())
+                            {
+                                <MudSelectItem T="Permission" Value="permission">@permission</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                </MudTd>
+                <MudTd>
+                    @if (!context.IsLocked)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteRoleAsync(context))" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-2">Access grants</MudText>
+    <MudGrid>
+        <MudItem xs="5">
+            <MudTextField @bind-Value="_newGrantEmail" Label="Email" Placeholder="person@example.com"
+                          Error="@(_addGrantError is not null)" ErrorText="@_addGrantError" Immediate="true" />
+        </MudItem>
+        <MudItem xs="3">
+            <MudSelect T="int" @bind-Value="_newGrantRoleId" Label="Role">
+                @foreach (var role in _roles ?? [])
+                {
+                    <MudSelectItem T="int" Value="role.Id">@role.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        @if (SelectedNewGrantRoleIsScopable)
+        {
+            <MudItem xs="4">
+                <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_newGrantGroupIds" Label="Groups"
+                           MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "All (unrestricted)" : $"{selected.Count} group(s)")"
+                           RelativeWidth="DropdownWidth.Adaptive">
+                    @foreach (var group in _allGroups)
+                    {
+                        <MudSelectItem T="int" Value="group.Id">@group.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        }
+        <MudItem xs="12" Class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="GrantAccessAsync">Grant access</MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_grants is { Count: > 0 })
+    {
+        <MudTable Items="_grants" Hover="true" T="GrantRow" Class="mt-4">
+            <HeaderContent>
+                <MudTh>Email</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Email</MudTd>
+                <MudTd>@(context.IsBound ? "Active" : "Pending first sign-in")</MudTd>
+                <MudTd>@context.RoleName</MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RevokeAccessAsync(context))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+    else if (_grants is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mt-4">No one has been granted access yet.</MudText>
+    }
+</MudPaper>
+
+@code {
+    private List<RoleRow>? _roles;
+    private List<GrantRow>? _grants;
+    private List<Group> _allGroups = [];
+    private string _newRoleName = "";
+    private string? _addRoleError;
+    private string _newGrantEmail = "";
+    private int _newGrantRoleId;
+    private IReadOnlyCollection<int> _newGrantGroupIds = [];
+    private string? _addGrantError;
+
+    private bool SelectedNewGrantRoleIsScopable => _roles?.SingleOrDefault(r => r.Id == _newGrantRoleId)?.IsScopable ?? false;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _allGroups = await db.Groups.AsNoTracking().OrderBy(g => g.Name).ToListAsync();
+        _roles = await db.Roles
+            .AsNoTracking()
+            .OrderBy(r => r.Name)
+            .Select(r => new RoleRow(r.Id, r.Name, r.IsLocked, r.IsScopable, r.Permissions))
+            .ToListAsync();
+        _grants = await db.UserAccesses
+            .AsNoTracking()
+            .OrderBy(u => u.Email)
+            .Select(u => new GrantRow(u.Id, u.Email, u.EntraObjectId != null, u.Role.Name))
+            .ToListAsync();
+
+        if (_newGrantRoleId == 0 && _roles.Count > 0)
+        {
+            _newGrantRoleId = _roles[0].Id;
+        }
+    }
+
+    private async Task AddRoleAsync()
+    {
+        _addRoleError = null;
+        RoleManagementService.AddRoleResult result;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            result = await RoleManagementService.AddRoleAsync(db, _newRoleName, [], CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _addRoleError = "Something went wrong adding the role. Try again.";
+            return;
+        }
+
+        _addRoleError = result switch
+        {
+            RoleManagementService.AddRoleResult.InvalidName => "Enter a role name.",
+            RoleManagementService.AddRoleResult.AlreadyExists => "A role with that name already exists.",
+            _ => null
+        };
+
+        if (result == RoleManagementService.AddRoleResult.Added)
+        {
+            _newRoleName = "";
+            await LoadAsync();
+        }
+    }
+
+    private async Task RenameRoleAsync(RoleRow row, string newName)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var result = await RoleManagementService.UpdateRoleAsync(db, row.Id, newName, row.Permissions, CancellationToken.None);
+            if (result != RoleManagementService.UpdateRoleResult.Updated)
+            {
+                Snackbar.Add("Failed to rename role — the name may be empty or already taken.", Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to rename {row.Name}. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task SetRolePermissionsAsync(RoleRow row, IEnumerable<Permission> permissions)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await RoleManagementService.UpdateRoleAsync(db, row.Id, row.Name, permissions.ToList(), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}'s permissions. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task DeleteRoleAsync(RoleRow row)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var result = await RoleManagementService.RemoveRoleAsync(db, row.Id, CancellationToken.None);
+            if (result == RoleManagementService.RemoveRoleResult.InUse)
+            {
+                Snackbar.Add($"Can't remove {row.Name} — it's still granted to at least one person. Revoke or reassign their access first.", Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task GrantAccessAsync()
+    {
+        _addGrantError = null;
+        UserAccessManagementService.GrantAccessResult result;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            result = await UserAccessManagementService.GrantAccessAsync(db, _newGrantEmail, _newGrantRoleId, _newGrantGroupIds.ToList(), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _addGrantError = "Something went wrong granting access. Try again.";
+            return;
+        }
+
+        _addGrantError = result switch
+        {
+            UserAccessManagementService.GrantAccessResult.InvalidEmail => "Enter an email address.",
+            UserAccessManagementService.GrantAccessResult.AlreadyExists => "That email already has access.",
+            UserAccessManagementService.GrantAccessResult.RoleNotFound => "Choose a role.",
+            _ => null
+        };
+
+        if (result == UserAccessManagementService.GrantAccessResult.Granted)
+        {
+            _newGrantEmail = "";
+            _newGrantGroupIds = [];
+            await LoadAsync();
+        }
+    }
+
+    private async Task RevokeAccessAsync(GrantRow row)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await UserAccessManagementService.RevokeAccessAsync(db, row.Id, CancellationToken.None);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to revoke access for {row.Email}. Try again.", Severity.Error);
+        }
+    }
+
+    private sealed record RoleRow(int Id, string Name, bool IsLocked, bool IsScopable, List<Permission> Permissions);
+    private sealed record GrantRow(int Id, string Email, bool IsBound, string RoleName);
+}
