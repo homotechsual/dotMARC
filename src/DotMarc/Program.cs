@@ -79,11 +79,29 @@ builder.Services.AddHostedService<PollingService>(sp => ActivatorUtilities.Creat
 builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
 
+builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
+
 builder.Services.AddAuthorization(options =>
 {
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
+        .RequireClaim(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType)
         .Build();
+
+    foreach (var permission in Enum.GetValues<Permission>())
+    {
+        options.AddPolicy(permission.ToString(), policy =>
+            policy.RequireClaim(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, permission.ToString()));
+    }
+
+    options.AddPolicy("DomainsWrite", policy => policy.RequireClaim(
+        DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
+        nameof(Permission.DomainsAdd), nameof(Permission.DomainsEdit), nameof(Permission.DomainsReorder), nameof(Permission.DomainsDelete)));
+
+    options.AddPolicy("GroupsOrTagsWrite", policy => policy.RequireClaim(
+        DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
+        nameof(Permission.GroupsAdd), nameof(Permission.GroupsRename), nameof(Permission.GroupsDelete),
+        nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
 });
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
