@@ -218,7 +218,11 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await RoleManagementService.UpdateRoleAsync(db, row.Id, row.Name, permissions.ToList(), CancellationToken.None);
+            var result = await RoleManagementService.UpdateRoleAsync(db, row.Id, row.Name, permissions.ToList(), CancellationToken.None);
+            if (result != RoleManagementService.UpdateRoleResult.Updated)
+            {
+                Snackbar.Add($"Failed to update {row.Name}'s permissions — the role may have been renamed or locked elsewhere. Try again.", Severity.Error);
+            }
         }
         catch (Exception)
         {
