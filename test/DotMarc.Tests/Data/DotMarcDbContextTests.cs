@@ -359,4 +359,80 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         Assert.Equal(2, savedDomain.Groups.Count);
         Assert.Equal(2, savedDomain.Tags.Count);
     }
+
+    [Fact]
+    public void CanInsertAndQuery_RoleWithPermissions()
+    {
+        using (var context = CreateContext())
+        {
+            context.Roles.Add(new Role
+            {
+                Name = "Domain Manager",
+                IsLocked = false,
+                IsScopable = false,
+                Permissions = [Permission.DomainsView, Permission.DomainsAdd, Permission.DomainsEdit]
+            });
+            context.SaveChanges();
+        }
+
+        using var verify = CreateContext();
+        var role = verify.Roles.Single();
+        Assert.Equal("Domain Manager", role.Name);
+        Assert.Equal(3, role.Permissions.Count);
+        Assert.Contains(Permission.DomainsAdd, role.Permissions);
+    }
+
+    [Fact]
+    public void Role_Name_MustBeUnique()
+    {
+        using var context = CreateContext();
+        context.Roles.Add(new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = [Permission.DomainsView] });
+        context.SaveChanges();
+
+        context.Roles.Add(new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = [Permission.DomainsView] });
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void CanInsertAndQuery_UserAccessWithScopedGroups()
+    {
+        using (var context = CreateContext())
+        {
+            var role = new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = [Permission.DomainsView] };
+            var group = new Group { Name = "Client A" };
+            context.Roles.Add(role);
+            context.Groups.Add(group);
+            context.SaveChanges();
+
+            context.UserAccesses.Add(new UserAccess
+            {
+                Email = "client@example.com",
+                RoleId = role.Id,
+                ScopedGroups = [group]
+            });
+            context.SaveChanges();
+        }
+
+        using var verify = CreateContext();
+        var access = verify.UserAccesses.Include(u => u.Role).Include(u => u.ScopedGroups).Single();
+        Assert.Equal("client@example.com", access.Email);
+        Assert.Null(access.EntraObjectId);
+        Assert.Equal("Viewer", access.Role.Name);
+        Assert.Single(access.ScopedGroups);
+    }
+
+    [Fact]
+    public void UserAccess_Email_MustBeUnique()
+    {
+        using var context = CreateContext();
+        var role = new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = [Permission.DomainsView] };
+        context.Roles.Add(role);
+        context.SaveChanges();
+
+        context.UserAccesses.Add(new UserAccess { Email = "person@example.com", RoleId = role.Id });
+        context.SaveChanges();
+
+        context.UserAccesses.Add(new UserAccess { Email = "person@example.com", RoleId = role.Id });
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+    }
 }

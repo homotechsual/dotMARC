@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace DotMarc.Data;
 
@@ -17,6 +18,8 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<PollCycleDailySummary> PollCycleDailySummaries => Set<PollCycleDailySummary>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -82,6 +85,44 @@ public sealed class DotMarcDbContext : DbContext
         {
             entity.HasIndex(t => t.Name).IsUnique();
             entity.Property(t => t.Color).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.HasIndex(r => r.Name).IsUnique();
+
+            // Without an explicit ValueComparer, EF Core's default comparer generation for a
+            // List<TEnum> behind a value converter throws at runtime ("cannot be used as a
+            // primitive collection") the first time an entity with this property is tracked —
+            // it isn't just the cosmetic warning it looks like from the model-validation log.
+            entity.Property(r => r.Permissions)
+                .HasConversion(
+                    permissions => permissions.Select(p => p.ToString()).ToArray(),
+                    stored => stored.Select(s => Enum.Parse<Permission>(s)).ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<Permission>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, p) => HashCode.Combine(hash, p)),
+                    c => c.ToList()));
+        });
+
+        modelBuilder.Entity<UserAccess>(entity =>
+        {
+            entity.HasIndex(u => u.Email).IsUnique();
+            entity.HasOne(u => u.Role)
+                .WithMany()
+                .HasForeignKey(u => u.RoleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Group has no reciprocal navigation back to UserAccess (unlike Domain.Groups /
+            // Group.Domains, which are bidirectional), so EF Core's implicit many-to-many
+            // convention does not apply here — left unconfigured, EF instead infers a one-to-many
+            // and adds a UserAccessId column directly onto the existing Groups table, which is
+            // both the wrong cardinality (a Group must be scopable by more than one UserAccess)
+            // and an unwanted change to an existing table. Configuring it explicitly with its own
+            // join table avoids both problems.
+            entity.HasMany(u => u.ScopedGroups)
+                .WithMany()
+                .UsingEntity("UserAccessScopedGroups");
         });
     }
 }
