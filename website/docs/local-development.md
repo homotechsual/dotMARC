@@ -1,0 +1,47 @@
+---
+sidebar_position: 2
+---
+
+# Local Development
+
+The repo is designed to work in two common local modes: run the full stack with Docker Compose, or
+run the app locally while connecting to a PostgreSQL instance on `localhost:5432`.
+
+## Build and test
+
+```powershell
+dotnet restore dotMARC.sln
+dotnet build dotMARC.sln
+dotnet test dotMARC.sln
+```
+
+`dotnet test` uses Testcontainers.PostgreSql, so Docker must be running; the first run pulls the
+`postgres:18` image automatically.
+
+## Local database-first flow
+
+To start just the database for local debugging:
+
+```powershell
+docker compose up postgres
+```
+
+This publishes PostgreSQL on `localhost:5432` using the default development connection values from
+`src/DotMarc/appsettings.json`: database `dotmarc`, username `dotmarc`, and password `dotmarc`.
+
+If you want to run the app directly on the host instead of using the container stack, use:
+
+```powershell
+dotnet run --project src/DotMarc/DotMarc.csproj
+```
+
+The app expects the same PostgreSQL connection settings as the Docker Compose setup.
+
+## Full stack with Docker Compose
+
+```powershell
+docker compose up --build
+```
+
+This starts dotMARC together with PostgreSQL in one command, using the repo's `docker-compose.yml`
+configuration and the environment variables described in [Getting Started](./getting-started.md).
