@@ -63,12 +63,14 @@ else
                 <MudText Typo="Typo.caption">missing expected report</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" sm="6" md="2">
-            <MudPaper Height="100%" Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
-                <MudText Typo="Typo.h5" Color="@(!IsFilterActive && _summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
-                <MudText Typo="Typo.caption">unparseable messages@(IsFilterActive ? " (all domains)" : "")</MudText>
-            </MudPaper>
-        </MudItem>
+        <AuthorizeView Policy="DomainsWrite">
+            <MudItem xs="12" sm="6" md="2">
+                <MudPaper Height="100%" Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
+                    <MudText Typo="Typo.h5" Color="@(!IsFilterActive && _summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
+                    <MudText Typo="Typo.caption">unparseable messages@(IsFilterActive ? " (all domains)" : "")</MudText>
+                </MudPaper>
+            </MudItem>
+        </AuthorizeView>
         <MudItem xs="12" sm="6" md="2">
             <MudPaper Height= "100%" Class="pa-4 cursor-pointer" Elevation="1">
                 <MudText Typo="Typo.h5">@_summary.SourceCount</MudText>
@@ -92,7 +94,14 @@ else
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
             <MudTd>
-                <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => ToggleMonitoredAsync(context, v))" Color="Color.Primary" />
+                <AuthorizeView Policy="DomainsEdit" Context="authState">
+                    <Authorized>
+                        <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => ToggleMonitoredAsync(context, v))" Color="Color.Primary" />
+                    </Authorized>
+                    <NotAuthorized>
+                        @(context.IsMonitored ? "Yes" : "No")
+                    </NotAuthorized>
+                </AuthorizeView>
             </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
                 <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus)</MudChip>
