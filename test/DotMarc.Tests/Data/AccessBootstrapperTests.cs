@@ -1,6 +1,7 @@
 using DotMarc.Data;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -41,7 +42,7 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(""), CancellationToken.None);
+        await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(""), NullLogger.Instance, CancellationToken.None);
 
         using var verify = CreateContext();
         var admin = verify.Roles.Single(r => r.Name == "Admin");
@@ -60,7 +61,7 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(" first@example.com , second@example.com "), CancellationToken.None);
+        await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(" first@example.com , second@example.com "), NullLogger.Instance, CancellationToken.None);
 
         using var verify = CreateContext();
         var adminRoleId = verify.Roles.Single(r => r.Name == "Admin").Id;
@@ -76,12 +77,12 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
     {
         using (var context = CreateContext())
         {
-            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options("existing@example.com"), CancellationToken.None);
+            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options("existing@example.com"), NullLogger.Instance, CancellationToken.None);
         }
 
         using (var context = CreateContext())
         {
-            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options("someone-else@example.com"), CancellationToken.None);
+            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options("someone-else@example.com"), NullLogger.Instance, CancellationToken.None);
         }
 
         using var verify = CreateContext();
@@ -95,15 +96,29 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
     {
         using (var context = CreateContext())
         {
-            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(""), CancellationToken.None);
+            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(""), NullLogger.Instance, CancellationToken.None);
         }
 
         using (var context = CreateContext())
         {
-            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(""), CancellationToken.None);
+            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options(""), NullLogger.Instance, CancellationToken.None);
         }
 
         using var verify = CreateContext();
         Assert.Equal(2, verify.Roles.Count()); // still exactly Admin + Viewer, not duplicated.
+    }
+
+    [Fact]
+    public async Task BootstrapWithLeaderLockAsync_DeduplicatesCaseVariantEmails_InsteadOfCrashingOnTheUniqueIndex()
+    {
+        using var context = CreateContext();
+
+        await AccessBootstrapper.BootstrapWithLeaderLockAsync(
+            context, Options("dup@example.com,DUP@example.com, dup@example.com "), NullLogger.Instance, CancellationToken.None);
+
+        using var verify = CreateContext();
+        var grants = verify.UserAccesses.ToList();
+        Assert.Single(grants); // deduplicated case-insensitively rather than throwing on the unique index.
+        Assert.Equal("dup@example.com", grants[0].Email); // first occurrence's casing wins.
     }
 }

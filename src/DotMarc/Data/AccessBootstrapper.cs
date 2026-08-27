@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -18,7 +19,7 @@ public static class AccessBootstrapper
 {
     internal const long BootstrapLeaderLockKey = 84_200_004;
 
-    public static async Task BootstrapWithLeaderLockAsync(DotMarcDbContext context, IOptions<InitialAdminsOptions> options, CancellationToken cancellationToken = default)
+    public static async Task BootstrapWithLeaderLockAsync(DotMarcDbContext context, IOptions<InitialAdminsOptions> options, ILogger logger, CancellationToken cancellationToken = default)
     {
         var connectionString = context.Database.GetConnectionString()
             ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
@@ -41,7 +42,14 @@ public static class AccessBootstrapper
             var anyAccessExists = await context.UserAccesses.AnyAsync(cancellationToken).ConfigureAwait(false);
             if (!anyAccessExists)
             {
-                var emails = options.Value.Emails.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                // Distinct (case-insensitively) before inserting: a duplicate or case-variant
+                // entry in InitialAdmins:Emails (e.g. "a@x.com,A@X.com") would otherwise throw on
+                // UserAccess's unique index on Email rather than being silently deduplicated —
+                // crashing startup over what's obviously meant as one grant.
+                var emails = options.Value.Emails
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
                 foreach (var email in emails)
                 {
                     context.UserAccesses.Add(new UserAccess { Email = email, RoleId = adminRoleId });
@@ -49,7 +57,21 @@ public static class AccessBootstrapper
                 if (emails.Length > 0)
                 {
                     await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    logger.LogInformation("Seeded {Count} initial admin grant(s) from InitialAdmins:Emails.", emails.Length);
                 }
+                else
+                {
+                    // The Critical-1-style lockout scenario: no existing grants AND nothing
+                    // configured to seed. Every sign-in will be denied by the fallback policy
+                    // until a grant is added, and only direct database access can add one at that
+                    // point — this line is what makes that state self-diagnosing from the logs
+                    // instead of a silent 403 with no explanation.
+                    logger.LogWarning("No access grants exist and InitialAdmins:Emails is empty — every sign-in will be denied until an access grant is added, e.g. directly in the database.");
+                }
+            }
+            else
+            {
+                logger.LogInformation("Skipped seeding initial admins — access grants already exist.");
             }
         }
         finally
