@@ -1,5 +1,6 @@
 ---
 sidebar_position: 4
+description: How dotMARC's role-based access control and Group-scoped external client access works.
 ---
 
 # Permissions & Access

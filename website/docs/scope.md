@@ -1,5 +1,6 @@
 ---
 sidebar_position: 5
+description: "What dotMARC deliberately doesn't do: forensic reports, push notifications, and long-term raw-data rollups."
 ---
 
 # Scope

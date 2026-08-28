@@ -25,6 +25,7 @@
   --ifm-code-font-size: 95%;
   --ifm-background-surface-color: #fcfcfc;
   --docusaurus-highlighted-code-line-bg: rgba(227, 89, 79, 0.1);
+  --ifm-footer-background-color: #263141;
 }
 
 [data-theme='dark'] {
@@ -44,7 +45,6 @@ html {
 }
 
 body {
-  height: auto;
   min-height: 100vh;
   font-family: var(--ifm-font-family-base);
   background-color: #f7f8fa;
@@ -83,9 +83,12 @@ body::before {
 }
 
 .navbar {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.navbar:not(.navbar-sidebar--show) {
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-  background: rgba(255, 255, 255, 0.75);
 }
 
 [data-theme='dark'] .navbar {

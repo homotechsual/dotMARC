@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+description: Set up the two Entra app registrations dotMARC needs, configure environment variables, and run it with Docker Compose.
 ---
 
 # Getting Started
@@ -56,7 +57,7 @@ Set via environment variables (double-underscore nesting):
 | `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to `Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc` |
 | `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants — either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
 
-:::danger Set `InitialAdmins__Emails` before deploying this feature
+:::danger[Set `InitialAdmins__Emails` before deploying this feature]
 Authorization is deny-by-default: with no existing access grants, the fallback policy locks out
 every user, including the operator, unless `InitialAdmins__Emails` seeds at least one Admin grant
 on that first startup. If you deploy without it, recovery requires direct database access to
@@ -73,13 +74,17 @@ $env:GRAPH_MAILBOX_ADDRESS = '...'
 $env:ENTRAID_TENANT_ID = '...'
 $env:ENTRAID_CLIENT_ID = '...'
 $env:ENTRAID_CLIENT_SECRET = '...'
+$env:INITIAL_ADMIN_EMAILS = '...'
 docker compose up
 ```
 
 This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
 Docker volume (`dotmarc-postgres-data`). Set the required environment variables from the setup
 steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
-automatically).
+automatically). `INITIAL_ADMIN_EMAILS` is how you set the `InitialAdmins__Emails` config value
+described above via Docker Compose specifically — `docker-compose.yml` maps this shell variable
+(`INITIAL_ADMIN_EMAILS`) onto the `InitialAdmins__Emails` app setting, so the naming differs in
+casing/format even though it's the same setting.
 
 ### Reverse proxy / TLS termination
 

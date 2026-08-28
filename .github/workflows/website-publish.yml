@@ -1,5 +1,11 @@
 name: Website Publish
 
+# Manual, one-time setup required before this workflow can succeed on a real push:
+#   1. Create a Cloudflare Pages project. The workflow reads its name from the
+#      CF_PAGES_PROJECT_DOTMARC repo/org variable, defaulting to `dotmarc-website` if unset.
+#   2. Set the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN repository secrets.
+#   3. Attach the dotmarc.app custom domain to that Cloudflare Pages project.
+
 on:
   push:
     branches:

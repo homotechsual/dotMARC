@@ -1,5 +1,6 @@
 ---
 sidebar_position: 2
+description: Build, test, and run dotMARC locally, with or without Docker Compose.
 ---
 
 # Local Development

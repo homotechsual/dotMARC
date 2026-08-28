@@ -1,5 +1,6 @@
 ---
 sidebar_position: 3
+description: Deploy dotMARC to Azure Container Apps using the included Bicep template.
 ---
 
 # Deploy to Azure
@@ -85,7 +86,7 @@ container app's secrets reference these by versionless Key Vault URL, so
 `az containerapp revision restart` forces it to re-fetch them immediately rather than waiting for
 their normal refresh cycle.
 
-:::danger Don't forget InitialAdmins\_\_Emails
+:::danger[Don't forget InitialAdmins\_\_Emails]
 Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.md#configure)) before this
 deployment's first startup — without it, the tightened authorization policy locks out every user,
 including you.
