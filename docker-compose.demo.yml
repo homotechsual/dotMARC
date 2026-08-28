@@ -1,0 +1,37 @@
+# docker-compose.demo.yml
+services:
+  dotmarc-demo:
+    image: ${DOTMARC_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__DotMarc: Host=postgres;Database=dotmarc;Username=dotmarc;Password=${POSTGRES_PASSWORD}
+      Demo__Enabled: "true"
+    expose:
+      - "8080"
+    networks:
+      - default
+      - proxy
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: dotmarc
+      POSTGRES_USER: dotmarc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - dotmarc-demo-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dotmarc -d dotmarc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  dotmarc-demo-postgres-data:

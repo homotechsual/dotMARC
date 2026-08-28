@@ -182,6 +182,45 @@ container app's secrets reference these by versionless Key Vault URL, so
 `az containerapp revision restart` forces it to re-fetch them immediately rather than waiting for
 their normal refresh cycle.
 
+## Demo instance
+
+`Demo__Enabled=true` switches the app into demo mode: real Entra/Graph auth and mailbox polling
+are skipped entirely, an anonymous `/demo` page lets a visitor sign in as one of two fixed
+personas (Demo Admin, or Demo Viewer scoped to one client group), and a generated dataset for a
+fictional MSP is (re)written on every startup and again every night at `Demo__ResetHourUtc`
+(default `4`, UTC). See
+[docs/superpowers/specs/2026-08-28-demo-instance-design.md](docs/superpowers/specs/2026-08-28-demo-instance-design.md)
+for the full design and the narrative the generated data tells.
+
+No `Graph__*`/`EntraId__*`/`InitialAdmins__Emails` variables are needed in this mode — only
+`ConnectionStrings__DotMarc` and `Demo__Enabled`.
+
+### Running the demo stack
+
+```powershell
+docker compose -f docker-compose.demo.yml --env-file .env.demo up -d
+```
+
+with a `.env.demo` file next to `docker-compose.demo.yml` containing:
+
+```
+DOTMARC_IMAGE=ghcr.io/homotechsual/dotmarc:demo
+POSTGRES_PASSWORD=<pick a password>
+```
+
+The `dotmarc-demo` container joins an external Docker network named `proxy` and only `expose`s
+port 8080 — it does not publish a host port or run its own reverse proxy. Point your existing
+Caddy instance (on that same `proxy` network) at it, e.g.:
+
+```
+demo.dotmarc.app {
+    reverse_proxy dotmarc-demo:8080
+}
+```
+
+Deployment to the demo VM is automated by `.github/workflows/demo-deploy.yml` on every push to
+`main` — see that workflow for the required repository secrets/variables.
+
 ## Development
 
 The repo is designed to work in two common local modes:
