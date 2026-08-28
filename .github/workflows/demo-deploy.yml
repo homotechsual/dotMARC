@@ -1,0 +1,98 @@
+# .github/workflows/demo-deploy.yml
+name: Deploy demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  DEPLOY_PATH: /opt/dotmarc-demo
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compute image name
+        id: image
+        run: echo "name=${REGISTRY}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push demo image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/DotMarc/Dockerfile
+          target: final
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:demo
+            ${{ steps.image.outputs.name }}:demo-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    env:
+      DOTMARC_IMAGE: ${{ needs.build-and-push.outputs.image }}:demo
+      DOTMARC_DEMO_DOMAIN: ${{ vars.DOTMARC_DEMO_DOMAIN }}
+      POSTGRES_PASSWORD: ${{ secrets.DOTMARC_DEMO_POSTGRES_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOTMARC_DEMO_DEPLOY_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null
+          ssh-keyscan -H "${{ secrets.DOTMARC_DEMO_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy stack file to server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DOTMARC_DEMO_DEPLOY_USER }}@${{ secrets.DOTMARC_DEMO_DEPLOY_HOST }} \
+            "mkdir -p ${{ env.DEPLOY_PATH }}"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            docker-compose.demo.yml \
+            ${{ secrets.DOTMARC_DEMO_DEPLOY_USER }}@${{ secrets.DOTMARC_DEMO_DEPLOY_HOST }}:${{ env.DEPLOY_PATH }}/
+
+      - name: Write .env on server
+        run: |
+          {
+            echo "DOTMARC_IMAGE=$DOTMARC_IMAGE"
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+          } | base64 -w0 | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DOTMARC_DEMO_DEPLOY_USER }}@${{ secrets.DOTMARC_DEMO_DEPLOY_HOST }} \
+            'base64 -d > ${{ env.DEPLOY_PATH }}/.env && chmod 600 ${{ env.DEPLOY_PATH }}/.env'
+
+      - name: Roll out stack
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DOTMARC_DEMO_DEPLOY_USER }}@${{ secrets.DOTMARC_DEMO_DEPLOY_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && \
+             docker compose -f docker-compose.demo.yml --env-file .env pull && \
+             docker compose -f docker-compose.demo.yml --env-file .env up -d && \
+             docker image prune -f"
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
