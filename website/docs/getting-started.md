@@ -1,11 +1,12 @@
----
-sidebar_position: 1
+***
+
+sidebar\_position: 1
 description: Set up the two Entra app registrations dotMARC needs, configure environment variables, and run it with Docker Compose.
----
+-----------------------------------------------------------------------------------------------------------------------------------
 
 # Getting Started
 
-dotMARC needs **two separate** Entra app registrations — do not reuse one for both purposes.
+dotMARC needs **two separate** Entra app registrations: do not reuse one for both purposes.
 
 ## 1. Mailbox access (app-only)
 
@@ -55,9 +56,9 @@ Set via environment variables (double-underscore nesting):
 | `EntraId__ClientId` | Dashboard app registration's client ID |
 | `EntraId__ClientSecret` | Dashboard app registration's client secret |
 | `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to `Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc` |
-| `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants — either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
+| `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
 
-:::danger[Set `InitialAdmins__Emails` before deploying this feature]
+:::danger\[Set `InitialAdmins__Emails` before deploying this feature]
 Authorization is deny-by-default: with no existing access grants, the fallback policy locks out
 every user, including the operator, unless `InitialAdmins__Emails` seeds at least one Admin grant
 on that first startup. If you deploy without it, recovery requires direct database access to
@@ -80,9 +81,9 @@ docker compose up
 
 This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
 Docker volume (`dotmarc-postgres-data`). Set the required environment variables from the setup
-steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
+steps above (or put them in a `.env` file next to `docker-compose.yml`, compose reads that
 automatically). `INITIAL_ADMIN_EMAILS` is how you set the `InitialAdmins__Emails` config value
-described above via Docker Compose specifically — `docker-compose.yml` maps this shell variable
+described above via Docker Compose specifically, `docker-compose.yml` maps this shell variable
 (`INITIAL_ADMIN_EMAILS`) onto the `InitialAdmins__Emails` app setting, so the naming differs in
 casing/format even though it's the same setting.
 

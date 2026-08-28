@@ -6,7 +6,7 @@ for the full design.
 
 ## One-time setup: two Entra app registrations
 
-dotMARC needs **two separate** Entra app registrations — do not reuse one for both purposes:
+dotMARC needs **two separate** Entra app registrations: do not reuse one for both purposes:
 
 ### 1. Mailbox access (app-only)
 
@@ -56,7 +56,7 @@ Set via environment variables (double-underscore nesting):
 | `EntraId__ClientId` | Dashboard app registration's client ID |
 | `EntraId__ClientSecret` | Dashboard app registration's client secret |
 | `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to `Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc` |
-| `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants — either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
+| `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants - either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
 
 > **Set `InitialAdmins__Emails` before deploying this feature.** Authorization is deny-by-default:
 > with no existing access grants, the fallback policy locks out every user, including the
@@ -79,7 +79,7 @@ docker compose up
 
 This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
 Docker volume (`dotmarc-postgres-data`). Set the seven required environment variables from the
-setup steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
+setup steps above (or put them in a `.env` file next to `docker-compose.yml` compose reads that
 automatically).
 
 ### Reverse proxy / TLS termination
@@ -95,8 +95,8 @@ dashboard app registration).
 loopback (i.e. the proxy and dotMARC on the same host), which wouldn't hold for a reverse proxy on
 a different host/container, or for Azure Container Apps' ingress proxy (see
 [Deploy to Azure](#deploy-to-azure)). `Program.cs` clears both restrictions unconditionally, since
-the container has no other ingress path in either supported deployment model — it's never directly
-reachable except through that trusted front-end — so any upstream proxy is trusted without needing
+the container has no other ingress path in either supported deployment model, it's never directly
+reachable except through that trusted front-end, so any upstream proxy is trusted without needing
 per-deployment configuration.
 
 ## Deploy to Azure
@@ -112,17 +112,17 @@ per-deployment configuration.
   `Key Vault Secrets User` role.
 
 Before deploying, complete the **two Entra app registrations** described in
-[One-time setup: two Entra app registrations](#one-time-setup-two-entra-app-registrations) above —
+[One-time setup: two Entra app registrations](#one-time-setup-two-entra-app-registrations) above:
 the Bicep template takes the same non-secret client IDs/tenant IDs as deployment parameters, and
 the client secrets are set into Key Vault after deployment (see below).
 
 ### 1. Fill in the parameters
 
-Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders — as checked in, the
+Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders, as checked in, the
 file contains placeholder values only and is **not meant to be deployed as-is**. At minimum, set
 `postgresAdminPassword`, `graphClientId`, `graphTenantId`, `graphMailboxAddress`,
 `entraIdTenantId`, and `entraIdClientId`. For `containerImage`, use the GHCR image published by
-CI/CD — `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release — rather
+CI/CD `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release rather
 than building your own.
 
 Alternatively, leave the file untouched and pass overrides inline with `--parameters key=value` on
@@ -156,8 +156,8 @@ added during one-time setup). Sign-in will fail with AADSTS50011 until this is d
 
 ### 4. Populate the Key Vault secrets
 
-The template deliberately provisions three Key Vault secrets — `Graph-ClientSecret`,
-`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` — empty, rather than accepting secret
+The template deliberately provisions three Key Vault secrets `Graph-ClientSecret`,
+`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` empty, rather than accepting secret
 material as deployment parameters (which would put it on the command line or in a parameters
 file). Until these are set, the app can't sign in or reach Postgres. Populate them directly:
 
@@ -236,6 +236,6 @@ v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@yourtenant.com
 
 ## Scope
 
-See the design spec's Non-goals section — forensic (RUF) reports, push notifications (email
+See the design spec's Non-goals section forensic (RUF) reports, push notifications (email
 digest, real-time alerts), and the 12-month raw-data rollup job are all deliberately out of scope
 for this build.

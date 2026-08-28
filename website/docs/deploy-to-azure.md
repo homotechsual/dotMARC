@@ -23,11 +23,11 @@ deployment (see below).
 
 ## 1. Fill in the parameters
 
-Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders — as checked in, the
+Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders, as checked in, the
 file contains placeholder values only and is **not meant to be deployed as-is**. At minimum, set
 `postgresAdminPassword`, `graphClientId`, `graphTenantId`, `graphMailboxAddress`,
 `entraIdTenantId`, and `entraIdClientId`. For `containerImage`, use the GHCR image published by
-CI/CD — `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release — rather
+CI/CD, `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release, rather
 than building your own.
 
 Alternatively, leave the file untouched and pass overrides inline with `--parameters key=value` on
@@ -61,8 +61,8 @@ added during one-time setup). Sign-in will fail with AADSTS50011 until this is d
 
 ## 4. Populate the Key Vault secrets
 
-The template deliberately provisions three Key Vault secrets — `Graph-ClientSecret`,
-`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` — empty, rather than accepting secret
+The template deliberately provisions three Key Vault secrets: `Graph-ClientSecret`,
+`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` with empty values, rather than accepting secret
 material as deployment parameters (which would put it on the command line or in a parameters
 file). Until these are set, the app can't sign in or reach Postgres. Populate them directly:
 
@@ -89,6 +89,6 @@ their normal refresh cycle.
 
 :::danger\[Don't forget InitialAdmins\_\_Emails]
 Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.md#configure)) before this
-deployment's first startup — without it, the tightened authorization policy locks out every user,
+deployment's first startup, without it, the tightened authorization policy locks out every user,
 including you.
 :::
