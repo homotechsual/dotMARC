@@ -1,5 +1,4 @@
 // test/DotMarc.Tests/Demo/DemoSignInEndpointTests.cs
-using DotMarc.Demo;
 using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
