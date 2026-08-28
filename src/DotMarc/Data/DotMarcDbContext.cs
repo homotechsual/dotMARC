@@ -20,6 +20,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
+    public DbSet<IpInfo> IpInfos => Set<IpInfo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -123,6 +124,13 @@ public sealed class DotMarcDbContext : DbContext
             entity.HasMany(u => u.ScopedGroups)
                 .WithMany()
                 .UsingEntity("UserAccessScopedGroups");
+        });
+
+        modelBuilder.Entity<IpInfo>(entity =>
+        {
+            entity.HasKey(i => i.Ip);
+            entity.Property(i => i.Ip).HasMaxLength(45); // enough for a full IPv6 address
+            entity.Property(i => i.Status).HasConversion<string>();
         });
     }
 }
