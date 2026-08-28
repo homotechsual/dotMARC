@@ -1,7 +1,10 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.JSInterop
+@using DotMarc.Demo
+@using Microsoft.Extensions.Options
 @inject IJSRuntime Js
+@inject IOptions<DemoOptions> DemoOptions
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -15,6 +18,15 @@
                 <img src="logo.svg" alt="dotMARC Logo" height="48" />
             </a>
         </div>
+        @if (DemoOptions.Value.Enabled)
+        {
+            <AuthorizeView>
+                <Authorized>
+                    <MudChip T="string" Color="Color.Warning" Class="mr-2">Demo — viewing as @context.User.Identity?.Name</MudChip>
+                    <MudButton Href="/demo" Color="Color.Inherit">Switch persona</MudButton>
+                </Authorized>
+            </AuthorizeView>
+        }
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                        Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="Toggle dark mode" />

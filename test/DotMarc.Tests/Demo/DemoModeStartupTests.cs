@@ -33,12 +33,7 @@ public sealed class DemoModeStartupTests : IAsyncLifetime
             builder.UseSetting("Demo:Enabled", demoEnabled ? "true" : "false");
         });
 
-    [Fact(Skip = "Depends on Task 6's src/DotMarc/Components/Pages/Demo/DemoSignIn.razor " +
-        "(@page \"/demo\", [AllowAnonymous]), which doesn't exist yet — Task 5 only adds the demo-mode " +
-        "DI wiring and the sign-in endpoint stub, not the picker page itself. Until that page exists, " +
-        "GET /demo has no matching endpoint, so it's caught by the FallbackPolicy like every other " +
-        "unauthenticated request and redirects to itself (observed: 302 Found after WebApplicationFactory's " +
-        "default 7 automatic redirects, not 200 OK). Un-skip once Task 6 lands.")]
+    [Fact]
     public async Task StartsSuccessfully_WithNoGraphOrEntraIdConfiguration_WhenDemoModeIsEnabled()
     {
         await using var factory = CreateFactory(demoEnabled: true);

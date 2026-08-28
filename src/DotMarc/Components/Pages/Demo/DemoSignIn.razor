@@ -1,0 +1,50 @@
+@* src/DotMarc/Components/Pages/Demo/DemoSignIn.razor *@
+@page "/demo"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@using DotMarc.Demo
+@using Microsoft.Extensions.Options
+@inject IOptions<DemoOptions> DemoOptions
+@inject NavigationManager Navigation
+
+@if (DemoOptions.Value.Enabled)
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+        <MudText Typo="Typo.h4" Class="mb-4">dotMARC demo</MudText>
+        <MudText Class="mb-6">
+            This is a live demo with simulated data for a fictional MSP, Nova MSP. Nothing you
+            enter is sent anywhere, and the dataset resets automatically every day.
+        </MudText>
+
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <MudText Typo="Typo.h6">Demo Admin</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">Full access to every domain, group, and the access management pages.</MudText>
+            <form method="post" action="/demo/sign-in/admin">
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Continue as Demo Admin</MudButton>
+            </form>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.h6">Demo Viewer</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">Scoped to Aurora Retail only — shows what a limited, client-scoped viewer sees.</MudText>
+            <form method="post" action="/demo/sign-in/viewer">
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Secondary">Continue as Demo Viewer</MudButton>
+            </form>
+        </MudPaper>
+    </MudContainer>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Defense in depth: this page (and the sign-in endpoint it posts to, which Program.cs
+        // only maps when Demo:Enabled is true) only do anything in demo mode. Reachable in the
+        // real app only if someone guesses the URL; redirect them away rather than showing a
+        // picker that leads nowhere. Done in OnInitialized rather than inline in markup — calling
+        // NavigationManager.NavigateTo from within BuildRenderTree isn't reliable under
+        // interactive server rendering (the mode this whole app uses).
+        if (!DemoOptions.Value.Enabled)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+    }
+}

@@ -4,6 +4,7 @@ using DotMarc.Graph;
 using DotMarc.Ingestion;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
@@ -191,7 +192,44 @@ app.UseAntiforgery();
 
 if (demoOptions.Enabled)
 {
-    app.MapPost("/demo/sign-in/{persona}", () => Results.NotFound("Not implemented yet.")).AllowAnonymous();
+    app.MapPost("/demo/sign-in/{persona}", async (string persona, HttpContext httpContext) =>
+    {
+        string email;
+        string displayName;
+        switch (persona)
+        {
+            case "admin":
+                email = DotMarc.Demo.DemoDataSeeder.AdminEmail;
+                displayName = "Demo Admin";
+                break;
+            case "viewer":
+                email = DotMarc.Demo.DemoDataSeeder.ViewerEmail;
+                displayName = $"Demo Viewer ({DotMarc.Demo.DemoDataSeeder.ViewerScopedGroupName})";
+                break;
+            default:
+                return Results.BadRequest($"Unknown demo persona '{persona}'.");
+        }
+
+        // No antiforgery token: the only effect of this endpoint is changing which fixed demo
+        // persona the calling browser's own session views as — there's no cross-user or
+        // cross-tenant side effect a forged request could cause, so skipping CSRF protection
+        // here (unlike every other mutating endpoint in this app, which goes through Blazor's
+        // own antiforgery-protected form handling) is a deliberate, low-risk simplification.
+        var identity = new System.Security.Claims.ClaimsIdentity(
+            [
+                new System.Security.Claims.Claim("preferred_username", email),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, displayName)
+            ],
+            Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
+            nameType: System.Security.Claims.ClaimTypes.Name,
+            roleType: System.Security.Claims.ClaimTypes.Role);
+
+        await httpContext.SignInAsync(
+            Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
+            new System.Security.Claims.ClaimsPrincipal(identity));
+
+        return Results.Redirect("/");
+    }).AllowAnonymous();
 }
 
 app.MapRazorComponents<DotMarc.Components.App>()
