@@ -57,11 +57,13 @@ Set via environment variables (double-underscore nesting):
 | `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to `Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc` |
 | `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
 
-:::danger\[Set `InitialAdmins__Emails` before deploying this feature]
+:::danger[Set `InitialAdmins__Emails` before deploying this feature]
+
 Authorization is deny-by-default: with no existing access grants, the fallback policy locks out
 every user, including the operator, unless `InitialAdmins__Emails` seeds at least one Admin grant
 on that first startup. If you deploy without it, recovery requires direct database access to
 insert a `UserAccess` row pointing at a locked `Admin` role.
+
 :::
 
 ## Run
