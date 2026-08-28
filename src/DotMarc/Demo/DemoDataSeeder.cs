@@ -41,7 +41,7 @@ public static class DemoDataSeeder
     internal static async Task WriteAsync(DotMarcDbContext context, DemoDataset dataset, CancellationToken cancellationToken)
     {
         var adminRole = new Role { Name = "Admin", IsLocked = true, IsScopable = false, Permissions = [.. Enum.GetValues<Permission>()] };
-        var viewerRole = new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView] };
+        var viewerRole = new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = AccessBootstrapper.ViewerPermissions };
         context.Roles.AddRange(adminRole, viewerRole);
 
         var groupsByName = dataset.Groups.ToDictionary(g => g.Name, g => new Group { Name = g.Name });

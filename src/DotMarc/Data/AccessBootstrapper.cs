@@ -19,6 +19,13 @@ public static class AccessBootstrapper
 {
     internal const long BootstrapLeaderLockKey = 84_200_004;
 
+    /// <summary>Canonical permission set for the built-in Viewer role, shared with
+    /// DemoDataSeeder so the demo and production paths can't silently diverge if this list ever
+    /// changes. The Admin role's permission list is NOT similarly shared: both places derive it
+    /// identically via <c>[.. Enum.GetValues&lt;Permission&gt;()]</c>, which self-syncs when the
+    /// enum grows, so there's no equivalent duplication risk there.</summary>
+    public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView];
+
     public static async Task BootstrapWithLeaderLockAsync(DotMarcDbContext context, IOptions<InitialAdminsOptions> options, ILogger logger, CancellationToken cancellationToken = default)
     {
         var connectionString = context.Database.GetConnectionString()
@@ -37,7 +44,7 @@ public static class AccessBootstrapper
         try
         {
             var adminRoleId = await EnsureBuiltInRoleAsync(context, "Admin", isLocked: true, isScopable: false, [.. Enum.GetValues<Permission>()], cancellationToken).ConfigureAwait(false);
-            await EnsureBuiltInRoleAsync(context, "Viewer", isLocked: false, isScopable: true, [Permission.DomainsView, Permission.GroupsView, Permission.TagsView], cancellationToken).ConfigureAwait(false);
+            await EnsureBuiltInRoleAsync(context, "Viewer", isLocked: false, isScopable: true, ViewerPermissions, cancellationToken).ConfigureAwait(false);
 
             var anyAccessExists = await context.UserAccesses.AnyAsync(cancellationToken).ConfigureAwait(false);
             if (!anyAccessExists)
