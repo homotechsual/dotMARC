@@ -50,7 +50,16 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // wasn't caught by a Docker smoke test alone.
 builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(connectionString));
 
-builder.Services.Configure<DotMarc.Demo.DemoOptions>(builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName));
+// DemoDataResetService and the Razor components resolve IOptions<DemoOptions> from the
+// container, validated (ResetHourUtc must be 0-23) and checked on start here, same pattern as
+// GraphOptions below. The plain local `demoOptions` variable further down is a separate,
+// unvalidated read of the same section: it has to stay a plain bind because it's read
+// synchronously here, before builder.Build() runs any startup validation, to make early
+// branching decisions (skip GraphOptions, register the demo auth scheme, etc.).
+builder.Services.AddOptions<DotMarc.Demo.DemoOptions>()
+    .Bind(builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 var demoOptions = new DotMarc.Demo.DemoOptions();
 builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);

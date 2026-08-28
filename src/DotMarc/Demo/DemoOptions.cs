@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace DotMarc.Demo;
 
 /// <summary>Gates every demo-mode addition in this app. See
@@ -10,6 +12,11 @@ public sealed class DemoOptions
 
     public bool Enabled { get; set; }
 
-    /// <summary>UTC hour DemoDataResetService resets the dataset each day.</summary>
+    /// <summary>UTC hour DemoDataResetService resets the dataset each day. Range-validated
+    /// because DemoDataResetService.GetDelayUntilNextReset constructs a DateTimeOffset directly
+    /// from this value outside any try/catch in BackgroundService.ExecuteAsync's loop — an
+    /// out-of-range value would otherwise throw ArgumentOutOfRangeException there and crash the
+    /// whole host under .NET's default BackgroundServiceExceptionBehavior.StopHost.</summary>
+    [Range(0, 23)]
     public int ResetHourUtc { get; set; } = 4;
 }
