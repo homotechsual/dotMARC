@@ -1,6 +1,11 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import plausiblePlugin from '@homotechsual/docusaurus-plugin-plausible';
+import type {PluginOptions as PlausiblePluginOptions} from '@homotechsual/docusaurus-plugin-plausible';
+
+const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = require('./lib/ImageRenderers.cjs');
+const ogPlugin = require('@homotechsual/docusaurus-og');
 
 const siteTitle = 'dotMARC';
 const siteTagline = 'Self-hosted DMARC monitoring for every client domain, from one mailbox.';
@@ -68,8 +73,28 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    [
+      plausiblePlugin,
+      {
+        domain: 'dotmarc.app',
+      } satisfies PlausiblePluginOptions,
+    ],
+    [
+      ogPlugin,
+      {
+        path: './og-img',
+        imageRenderers: {
+          'docusaurus-plugin-content-docs': docsOgRenderer,
+          'docusaurus-plugin-content-pages': pagesOgRenderer,
+          'docusaurus-plugin-content-blog': blogOgRenderer,
+        },
+      },
+    ],
+  ],
+
   themeConfig: {
-    image: 'img/favicon.svg',
+    image: 'img/og-backgrounds/pages-gradient.svg',
     colorMode: {
       respectPrefersColorScheme: true,
     },
