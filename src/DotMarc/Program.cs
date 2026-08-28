@@ -49,17 +49,25 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // wasn't caught by a Docker smoke test alone.
 builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(connectionString));
 
-builder.Services.AddOptions<GraphOptions>()
-    .Bind(builder.Configuration.GetSection(GraphOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
+builder.Services.Configure<DotMarc.Demo.DemoOptions>(builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName));
 
-builder.Services.AddSingleton<IGraphTokenProvider, ConfidentialClientGraphTokenProvider>();
+var demoOptions = new DotMarc.Demo.DemoOptions();
+builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
 
-builder.Services.AddHttpClient<IGraphMailboxClient, GraphMailboxClient>(client =>
+if (!demoOptions.Enabled)
 {
-    client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
-});
+    builder.Services.AddOptions<GraphOptions>()
+        .Bind(builder.Configuration.GetSection(GraphOptions.SectionName))
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    builder.Services.AddSingleton<IGraphTokenProvider, ConfidentialClientGraphTokenProvider>();
+
+    builder.Services.AddHttpClient<IGraphMailboxClient, GraphMailboxClient>(client =>
+    {
+        client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
+    });
+}
 
 builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
 {
@@ -67,27 +75,44 @@ builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
-// PollingService has two constructors (one for direct test construction, one for the real
-// DI-scoped host path), both with 3 parameters. The built-in container's own constructor
-// selection does NOT consult [ActivatorUtilitiesConstructor] when activating a plain
-// AddHostedService<PollingService>() registration, so that alone throws "ambiguous
-// constructors" here (both IGraphMailboxClient and DotMarcDbContext are also registered in
-// this container). Routing activation through ActivatorUtilities.CreateInstance explicitly
-// does honor that attribute, so it deterministically selects the host constructor.
-builder.Services.AddHostedService<PollingService>(sp => ActivatorUtilities.CreateInstance<PollingService>(sp));
+if (demoOptions.Enabled)
+{
+    builder.Services.AddHostedService<DotMarc.Demo.DemoDataResetService>();
+}
+else
+{
+    // PollingService has two constructors (one for direct test construction, one for the real
+    // DI-scoped host path), both with 3 parameters. The built-in container's own constructor
+    // selection does NOT consult [ActivatorUtilitiesConstructor] when activating a plain
+    // AddHostedService<PollingService>() registration, so that alone throws "ambiguous
+    // constructors" here (both IGraphMailboxClient and DotMarcDbContext are also registered in
+    // this container). Routing activation through ActivatorUtilities.CreateInstance explicitly
+    // does honor that attribute, so it deterministically selects the host constructor.
+    builder.Services.AddHostedService<PollingService>(sp => ActivatorUtilities.CreateInstance<PollingService>(sp));
+}
 
-builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
+if (demoOptions.Enabled)
+{
+    builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)
+        .AddCookie(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme, options =>
+        {
+            options.LoginPath = "/demo";
+            options.AccessDeniedPath = "/AccessDenied";
+        });
+}
+else
+{
+    builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme)
+        .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
 
-// AddMicrosoftIdentityWebApp wires up cookie authentication under CookieAuthenticationDefaults's
-// standard "Cookies" scheme alongside OpenIdConnect. Its default AccessDeniedPath sends a denied
-// user to a generic ASP.NET Core 403 page; pointing it at our own AccessDenied.razor instead gives
-// them an explanation instead of a raw 404/403. Without this, [Authorize]/the fallback policy
-// denying a page falls through to the framework default, which this app never configured a
-// friendly page for.
-builder.Services.Configure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
-    Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
-    options => options.AccessDeniedPath = "/AccessDenied");
+    // AddMicrosoftIdentityWebApp wires up cookie authentication under CookieAuthenticationDefaults's
+    // standard "Cookies" scheme alongside OpenIdConnect. Its default AccessDeniedPath sends a denied
+    // user to a generic ASP.NET Core 403 page; pointing it at our own AccessDenied.razor instead gives
+    // them an explanation instead of a raw 404/403.
+    builder.Services.Configure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
+        Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
+        options => options.AccessDeniedPath = "/AccessDenied");
+}
 
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
 
@@ -116,11 +141,6 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
-builder.Services.Configure<DotMarc.Demo.DemoOptions>(builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName));
-
-var demoOptions = new DotMarc.Demo.DemoOptions();
-builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
-
 builder.Services.AddCascadingAuthenticationState();
 
 var app = builder.Build();
@@ -136,6 +156,21 @@ using (var scope = app.Services.CreateScope())
     // would have given a non-static class.
     var accessBootstrapperLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AccessBootstrapper));
     await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, scope.ServiceProvider.GetRequiredService<IOptions<InitialAdminsOptions>>(), accessBootstrapperLogger);
+
+    if (demoOptions.Enabled)
+    {
+        // AccessBootstrapper (just above) already saved and tracks Admin/Viewer Role entities on
+        // this same context. DemoDataSeeder.ResetAsync truncates every table with raw SQL — which
+        // bypasses the change tracker entirely — then inserts its own fresh Role rows; Postgres
+        // reissues identity 1 for those (RESTART IDENTITY), colliding with the still-tracked stale
+        // Role from bootstrap. Clearing the tracker first (nothing above still needs saving; it's
+        // all already persisted) avoids that collision.
+        context.ChangeTracker.Clear();
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var dataset = DotMarc.Demo.DemoDataGenerator.Generate(new Random(DotMarc.Demo.DemoDataResetService.SeedFor(nowUtc)), nowUtc);
+        await DotMarc.Demo.DemoDataSeeder.ResetAsync(context, dataset);
+    }
 }
 
 // Must run first, before any other middleware that reads the request's scheme/host (redirects,
@@ -153,6 +188,11 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+if (demoOptions.Enabled)
+{
+    app.MapPost("/demo/sign-in/{persona}", () => Results.NotFound("Not implemented yet."));
+}
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();
