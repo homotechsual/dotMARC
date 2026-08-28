@@ -85,6 +85,11 @@ builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
+builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://rdap.org/");
+});
+
 if (demoOptions.Enabled)
 {
     builder.Services.AddHostedService<DotMarc.Demo.DemoDataResetService>();

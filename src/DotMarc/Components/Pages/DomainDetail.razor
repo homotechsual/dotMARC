@@ -5,7 +5,9 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
+@using DotMarc.IpEnrichment
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IIpInfoLookup IpLookup
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 
@@ -56,6 +58,8 @@ else
                     <MudTh>SPF</MudTh>
                     <MudTh>DKIM</MudTh>
                     <MudTh>Disposition</MudTh>
+                    <MudTh>Owner</MudTh>
+                    <MudTh>Country</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.SourceIp</MudTd>
@@ -63,6 +67,17 @@ else
                     <MudTd>@context.SpfResult</MudTd>
                     <MudTd>@context.DkimResult</MudTd>
                     <MudTd>@context.Disposition</MudTd>
+                    <MudTd>
+                        @if (context.IsEnrichmentPending)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            @(context.Organization ?? "—")
+                        }
+                    </MudTd>
+                    <MudTd>@(context.IsEnrichmentPending ? "" : (context.Country ?? "—"))</MudTd>
                 </RowTemplate>
             </MudTable>
         </MudTabPanel>
@@ -83,6 +98,8 @@ else
 }
 
 @code {
+    private static readonly SemaphoreSlim EnrichmentThrottle = new(4);
+
     [Parameter] public string DomainName { get; set; } = "";
 
     private Domain? _domain;
@@ -137,6 +154,25 @@ else
             .OrderByDescending(s => s.Volume)
             .ToList();
 
+        var ips = _sources.Select(s => s.SourceIp).Distinct().ToList();
+        var cachedInfo = await IpInfoService.GetCachedAsync(db, ips, CancellationToken.None);
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        foreach (var source in _sources)
+        {
+            cachedInfo.TryGetValue(source.SourceIp, out var info);
+            if (info is not null && !IpInfoService.NeedsLookup(info, nowUtc))
+            {
+                source.Organization = info.Organization;
+                source.Country = info.Country;
+                source.IsEnrichmentPending = false;
+            }
+            else
+            {
+                _ = EnrichSourceInBackgroundAsync(source);
+            }
+        }
+
         // Bucket by day-received (of the report, not the record) rather than the record itself,
         // since ReportRecord has no timestamp of its own — Report.ReceivedUtc is what's available.
         var dailyBuckets = _domain.Reports
@@ -161,5 +197,39 @@ else
         ];
     }
 
-    private sealed record SourceRow(string SourceIp, int Volume, string SpfResult, string DkimResult, string Disposition);
+    private async Task EnrichSourceInBackgroundAsync(SourceRow source)
+    {
+        await EnrichmentThrottle.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var info = await IpInfoService.EnrichAsync(DbFactory, IpLookup, source.SourceIp, CancellationToken.None).ConfigureAwait(false);
+            source.Organization = info.Organization;
+            source.Country = info.Country;
+        }
+        catch (Exception)
+        {
+            // Leave Organization/Country null — the row settles into an "unknown" state below
+            // rather than spinning forever. EnrichAsync itself already turns network failures
+            // into a persisted LookupFailed IpInfo row; this catch only guards against something
+            // unexpected in that path taking down the whole fire-and-forget task.
+        }
+        finally
+        {
+            EnrichmentThrottle.Release();
+            source.IsEnrichmentPending = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private sealed class SourceRow(string sourceIp, int volume, string spfResult, string dkimResult, string disposition)
+    {
+        public string SourceIp { get; } = sourceIp;
+        public int Volume { get; } = volume;
+        public string SpfResult { get; } = spfResult;
+        public string DkimResult { get; } = dkimResult;
+        public string Disposition { get; } = disposition;
+        public string? Organization { get; set; }
+        public string? Country { get; set; }
+        public bool IsEnrichmentPending { get; set; } = true;
+    }
 }
