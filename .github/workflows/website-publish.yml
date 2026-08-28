@@ -1,0 +1,124 @@
+name: Website Publish
+
+# Manual, one-time setup required before this workflow can succeed on a real push:
+#   1. Create a Cloudflare Pages project. The workflow reads its name from the
+#      CF_PAGES_PROJECT_DOTMARC repo/org variable, defaulting to `dotmarc-website` if unset.
+#   2. Set the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN repository secrets.
+#   3. Attach the dotmarc.app custom domain to that Cloudflare Pages project.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-publish.yml'
+  pull_request:
+    types:
+      - opened
+      - synchronize
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: website
+    env:
+      CF_PAGES_PROJECT: ${{ vars.CF_PAGES_PROJECT_DOTMARC || 'dotmarc-website' }}
+
+    concurrency:
+      group: website-publish-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
+      cancel-in-progress: true
+
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to Cloudflare Pages
+        id: cloudflare-pages-deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: website
+          command: pages deploy build --project-name=${{ env.CF_PAGES_PROJECT }} --branch=${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve deployment URL
+        id: deployment-url
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.cloudflare-pages-deploy.outputs.deployment-url }}
+          ALIAS_URL: ${{ steps.cloudflare-pages-deploy.outputs.pages-deployment-alias-url }}
+        run: |
+          preview_url="$ALIAS_URL"
+          if [ -z "$preview_url" ] || [ "$preview_url" = "undefined" ]; then
+            preview_url="$DEPLOYMENT_URL"
+          fi
+          echo "production_url=https://dotmarc.app" >> "$GITHUB_OUTPUT"
+          echo "deployment_url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
+
+      - name: Write deployment summary
+        shell: bash
+        env:
+          ENVIRONMENT: ${{ steps.cloudflare-pages-deploy.outputs.pages-environment }}
+          PRODUCTION_URL: ${{ steps.deployment-url.outputs.production_url }}
+          DEPLOYMENT_URL: ${{ steps.deployment-url.outputs.deployment_url }}
+          PREVIEW_URL: ${{ steps.deployment-url.outputs.preview_url }}
+        run: |
+          {
+            echo "## Cloudflare Pages deployment"
+            echo
+            echo "| Name | Value |"
+            echo "| --- | --- |"
+            if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              echo "| Production URL | [$PRODUCTION_URL]($PRODUCTION_URL) |"
+            else
+              echo "| Preview URL | [$PREVIEW_URL]($PREVIEW_URL) |"
+            fi
+            echo "| Deployment URL | [$DEPLOYMENT_URL]($DEPLOYMENT_URL) |"
+            echo "| Environment | $ENVIRONMENT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create PR comment
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: mshick/add-pr-comment@v3
+        with:
+          message: |
+            ### Cloudflare Pages preview deployed
+
+            | Item | Value |
+            | --- | --- |
+            | Preview URL | [${{ steps.deployment-url.outputs.preview_url }}](${{ steps.deployment-url.outputs.preview_url }}) |
+            | Deployment URL | [${{ steps.deployment-url.outputs.deployment_url }}](${{ steps.deployment-url.outputs.deployment_url }}) |
+            | Environment | ${{ steps.cloudflare-pages-deploy.outputs.pages-environment }} |

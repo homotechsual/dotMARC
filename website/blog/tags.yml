@@ -1,0 +1,4 @@
+# Blog post tags are declared here and referenced from each post's front matter
+# (e.g. `tags: [release]`). Empty until the first post is written.
+# {} is required: a comment-only YAML file parses to null, which fails Docusaurus's tags-file schema validation.
+{}

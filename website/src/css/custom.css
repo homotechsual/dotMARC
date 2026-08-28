@@ -1,0 +1,139 @@
+@config "../../tailwind.config.js";
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/900.css';
+@import 'tailwindcss/theme';
+@import 'tailwindcss/utilities';
+
+/* dotMARC's existing dashboard brand palette (src/DotMarc/Components/Layout/MainLayout.razor's MudTheme) */
+:root {
+  --ifm-font-family-base: 'Inter', 'Segoe UI', sans-serif;
+  --ifm-font-family-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --ifm-color-primary: #e3594f;
+  --ifm-color-primary-dark: #c9443a;
+  --ifm-color-primary-darker: #b93d33;
+  --ifm-color-primary-darkest: #99332a;
+  --ifm-color-primary-light: #e87971;
+  --ifm-color-primary-lighter: #eb8981;
+  --ifm-color-primary-lightest: #efaaa5;
+  --ifm-code-font-size: 95%;
+  --ifm-background-surface-color: #fcfcfc;
+  --docusaurus-highlighted-code-line-bg: rgba(227, 89, 79, 0.1);
+  --ifm-footer-background-color: #263141;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #ef8b86;
+  --ifm-color-primary-dark: #e3594f;
+  --ifm-color-primary-darker: #db473c;
+  --ifm-color-primary-darkest: #b93d33;
+  --ifm-color-primary-light: #f2a19d;
+  --ifm-color-primary-lighter: #f6c1be;
+  --ifm-color-primary-lightest: #fad0cc;
+  --ifm-background-surface-color: #1e2a3a;
+  --docusaurus-highlighted-code-line-bg: rgba(239, 139, 134, 0.18);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--ifm-font-family-base);
+  background-color: #f7f8fa;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top left, rgba(38, 49, 65, 0.1), transparent 34%),
+    radial-gradient(circle at top right, rgba(227, 89, 79, 0.1), transparent 28%),
+    linear-gradient(180deg, #fcfcfc 0%, #ffffff 34%, #f7f8fa 100%);
+}
+
+[data-theme='dark'] body {
+  background-color: #111827;
+}
+
+[data-theme='dark'] body::before {
+  background:
+    radial-gradient(circle at top left, rgba(239, 139, 134, 0.12), transparent 34%),
+    radial-gradient(circle at top right, rgba(61, 79, 99, 0.16), transparent 28%),
+    linear-gradient(180deg, #0d141f 0%, #111827 36%, #1e2a3a 100%);
+}
+
+.main-wrapper {
+  background: transparent;
+}
+
+.theme-layout-main {
+  background: inherit;
+}
+
+.navbar {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.navbar:not(.navbar-sidebar--show) {
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+[data-theme='dark'] .navbar {
+  background: rgba(17, 24, 39, 0.85);
+}
+
+.navbar__title {
+  display: none !important;
+}
+
+.navbar__logo {
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+}
+
+.navbar__logo img,
+.navbar__logo svg {
+  display: block;
+  height: 2.4rem;
+  width: auto;
+  max-height: none;
+}
+
+.button--primary {
+  --ifm-button-background-color: #e3594f;
+  --ifm-button-border-color: #e3594f;
+  --ifm-button-color: #fcfcfc;
+}
+
+.button--primary:hover {
+  --ifm-button-background-color: #c9443a;
+  --ifm-button-border-color: #c9443a;
+}
+
+.footer--dark {
+  --ifm-footer-background-color: #263141;
+}
+
+::selection {
+  background: rgba(227, 89, 79, 0.2);
+  color: #263141;
+}
+
+[data-theme='dark'] ::selection {
+  background: rgba(239, 139, 134, 0.28);
+  color: #fcfcfc;
+}
