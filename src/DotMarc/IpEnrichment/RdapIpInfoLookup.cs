@@ -24,6 +24,11 @@ public sealed class RdapIpInfoLookup : IIpInfoLookup
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"ip/{Uri.EscapeDataString(ip)}");
         request.Headers.Accept.ParseAdd("application/rdap+json");
+        // The User-Agent header is also set by Program.cs's AddHttpClient<IIpInfoLookup,
+        // RdapIpInfoLookup> registration; it's set again here so this lookup is self-sufficient
+        // and doesn't silently start getting 403'd by rdap.org's WAF if that DI configuration is
+        // ever refactored away — this exact failure mode is what this header fixes.
+        request.Headers.UserAgent.ParseAdd("dotMARC (+https://github.com/homotechsual/dotMARC)");
 
         HttpResponseMessage response;
         try

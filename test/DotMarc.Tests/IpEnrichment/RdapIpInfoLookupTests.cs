@@ -78,6 +78,17 @@ public sealed class RdapIpInfoLookupTests
         Assert.Equal(IpLookupStatus.LookupFailed, result.Status);
     }
 
+    [Fact]
+    public async Task LookupAsync_SetsAUserAgentHeader_OnEveryRequest()
+    {
+        var (lookup, handler) = CreateLookup();
+        handler.ResponseBody = "{}";
+
+        await lookup.LookupAsync("142.250.10.20", CancellationToken.None);
+
+        Assert.NotEmpty(handler.Requests[0].Headers.UserAgent);
+    }
+
     private sealed class ThrowingHttpMessageHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
