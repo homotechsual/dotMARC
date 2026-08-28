@@ -10,6 +10,7 @@
 @inject IIpInfoLookup IpLookup
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
+@inject ILogger<DomainDetail> Logger
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -154,22 +155,35 @@ else
             .OrderByDescending(s => s.Volume)
             .ToList();
 
-        var ips = _sources.Select(s => s.SourceIp).Distinct().ToList();
-        var cachedInfo = await IpInfoService.GetCachedAsync(db, ips, CancellationToken.None);
-        var nowUtc = DateTimeOffset.UtcNow;
-
-        foreach (var source in _sources)
+        // Blazor Server's default prerendering means OnInitializedAsync genuinely runs twice on
+        // every cold page load: once for the static prerender pass (no live circuit, no
+        // SignalR connection back to the browser yet), once again when the real interactive
+        // circuit starts. That's harmless for the plain DB queries above, but the enrichment
+        // kick-off below makes real network calls (RDAP lookups) through a process-wide
+        // semaphore — running it during the prerender pass would double every lookup and burn a
+        // throttle permit that pass can't even display the result of (its renderer is disposed
+        // by the time InvokeAsync(StateHasChanged) below would run). RendererInfo.IsInteractive
+        // is false during prerendering and true once the interactive circuit is live, so gating
+        // on it here confines enrichment to the one execution that can actually show it.
+        if (RendererInfo.IsInteractive)
         {
-            cachedInfo.TryGetValue(source.SourceIp, out var info);
-            if (info is not null && !IpInfoService.NeedsLookup(info, nowUtc))
+            var ips = _sources.Select(s => s.SourceIp).Distinct().ToList();
+            var cachedInfo = await IpInfoService.GetCachedAsync(db, ips, CancellationToken.None);
+            var nowUtc = DateTimeOffset.UtcNow;
+
+            foreach (var source in _sources)
             {
-                source.Organization = info.Organization;
-                source.Country = info.Country;
-                source.IsEnrichmentPending = false;
-            }
-            else
-            {
-                _ = EnrichSourceInBackgroundAsync(source);
+                cachedInfo.TryGetValue(source.SourceIp, out var info);
+                if (info is not null && !IpInfoService.NeedsLookup(info, nowUtc))
+                {
+                    source.Organization = info.Organization;
+                    source.Country = info.Country;
+                    source.IsEnrichmentPending = false;
+                }
+                else
+                {
+                    _ = EnrichSourceInBackgroundAsync(source);
+                }
             }
         }
 
@@ -205,13 +219,23 @@ else
             var info = await IpInfoService.EnrichAsync(DbFactory, IpLookup, source.SourceIp, CancellationToken.None).ConfigureAwait(false);
             source.Organization = info.Organization;
             source.Country = info.Country;
+
+            if (info.Status != IpLookupStatus.Ok)
+            {
+                // Operational visibility for the failure mode this feature already hit once
+                // (rdap.org's WAF silently rejecting requests): the orchestrating caller logs, not
+                // the low-level checker (RdapIpInfoLookup) itself — matches
+                // PollingService.RunDmarcCheckCycleAsync's logging around DmarcDnsChecker.
+                Logger.LogWarning("RDAP lookup for source IP {SourceIp} did not resolve to Ok (status: {Status}).", source.SourceIp, info.Status);
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Leave Organization/Country null — the row settles into an "unknown" state below
             // rather than spinning forever. EnrichAsync itself already turns network failures
             // into a persisted LookupFailed IpInfo row; this catch only guards against something
             // unexpected in that path taking down the whole fire-and-forget task.
+            Logger.LogWarning(ex, "Background RDAP enrichment for source IP {SourceIp} threw unexpectedly.", source.SourceIp);
         }
         finally
         {

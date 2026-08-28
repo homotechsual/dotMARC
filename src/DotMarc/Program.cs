@@ -89,6 +89,11 @@ builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnr
 {
     client.BaseAddress = new Uri("https://rdap.org/");
     client.DefaultRequestHeaders.Add("User-Agent", "dotMARC (+https://github.com/homotechsual/dotMARC)");
+    // Only 4 lookups can run concurrently app-wide (DomainDetail.razor's EnrichmentThrottle
+    // semaphore), so HttpClient's 100s default timeout would let one hung request block that
+    // permit long enough to stall enrichment for every other visitor. 10s is generous for a
+    // simple RDAP GET.
+    client.Timeout = TimeSpan.FromSeconds(10);
 });
 
 if (demoOptions.Enabled)
