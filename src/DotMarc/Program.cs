@@ -116,6 +116,11 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
+builder.Services.Configure<DotMarc.Demo.DemoOptions>(builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName));
+
+var demoOptions = new DotMarc.Demo.DemoOptions();
+builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
+
 builder.Services.AddCascadingAuthenticationState();
 
 var app = builder.Build();
