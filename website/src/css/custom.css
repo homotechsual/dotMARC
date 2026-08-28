@@ -124,6 +124,10 @@ body::before {
   --ifm-button-border-color: #c9443a;
 }
 
+.footer--dark {
+  --ifm-footer-background-color: #263141;
+}
+
 ::selection {
   background: rgba(227, 89, 79, 0.2);
   color: #263141;
