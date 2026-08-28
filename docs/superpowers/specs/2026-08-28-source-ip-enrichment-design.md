@@ -52,11 +52,15 @@ A single GET to `https://rdap.org/ip/{ip}` — the public RDAP bootstrap redirec
 redirects to whichever RIR (RIPE, ARIN, APNIC, LACNIC, AFRINIC) actually holds that address
 block. `HttpClient` follows redirects by default, so this needs no bootstrap/dispatch logic of
 its own: one URL, global coverage. The response is IETF RDAP JSON (RFC 9083); organization name
-comes from the response's `entities` (the registrant/administrative vCard), country from the
-top-level `country` field when present, falling back to an entity's address country if not.
-RDAP structure varies slightly between RIRs in practice, so parsing is defensive: missing fields
-produce a partially-populated `IpInfo` (e.g. organization known, country unknown) rather than a
-failure.
+comes from the response's `entities` (the registrant/administrative vCard), country from
+the response's top-level `country` field, when present. Several RIRs — notably ARIN — do not
+populate this field at all, and RDAP entities' address information (where present) is free-text
+rather than structured, so there is no safe fallback to parse a country from it; a domain whose
+sources are mostly ARIN-registered (which in practice means most large US-based mail senders —
+Google, Microsoft, Yahoo, Amazon) will show a blank Country for many rows. This is an accepted
+limitation of the data source, not a bug. RDAP structure varies slightly between RIRs in
+practice otherwise too, so parsing is defensive: missing fields produce a partially-populated
+`IpInfo` (e.g. organization known, country unknown) rather than a failure.
 
 ## UI and interaction
 
