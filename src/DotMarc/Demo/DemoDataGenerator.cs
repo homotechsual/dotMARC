@@ -35,7 +35,7 @@ public static class DemoDataGenerator
                 orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.996,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays),
             BuildDomain(random, nowUtc, sortOrder: 2, name: "brightline-legal.example", groupName: "Brightline Legal",
-                orgs: ["google.com", "outlook.com"], passRateForDay: day => Lerp(0.70, 0.99, day / (double)(HistoryDays - 1)),
+                orgs: ["google.com", "outlook.com"], passRateForDay: day => Lerp(0.93, 0.995, day / (double)(HistoryDays - 1)),
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays),
             BuildDomain(random, nowUtc, sortOrder: 3, name: "cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.87,
@@ -49,7 +49,7 @@ public static class DemoDataGenerator
                 detail: "No TXT record found at driftwood-media.example._report._dmarc.nova-msp.example",
                 daysOfHistory: HistoryDays),
             BuildDomain(random, nowUtc, sortOrder: 6, name: "driftwood-events.example", groupName: null,
-                orgs: ["google.com"], passRateForDay: _ => 0.93,
+                orgs: ["google.com"], passRateForDay: _ => 0.97,
                 status: DmarcCheckStatus.NotChecked, detail: null, daysOfHistory: HistoryDays),
         };
 
@@ -89,7 +89,7 @@ public static class DemoDataGenerator
 
                 if (failingVolume > 0)
                 {
-                    records.Add(new DemoRecordSeed(ProblemSourceIp(name), failingVolume, AuthResult.Fail, AuthResult.Fail,
+                    records.Add(new DemoRecordSeed(ProblemSourceIp(sortOrder), failingVolume, AuthResult.Fail, AuthResult.Fail,
                         failingVolume > totalVolume / 4 ? DispositionResult.Quarantine : DispositionResult.None));
                 }
 
@@ -111,9 +111,13 @@ public static class DemoDataGenerator
     };
 
     /// <summary>A fixed, deliberately "third-party ESP"-looking address, distinct per domain so
-    /// each shows up as its own row in that domain's Sources tab. Not a real allocation.</summary>
-    private static string ProblemSourceIp(string domainName) =>
-        "203.0.113." + (Math.Abs(domainName.GetHashCode()) % 200 + 10);
+    /// each shows up as its own row in that domain's Sources tab. Not a real allocation. Derived
+    /// from the domain's sortOrder (not domainName.GetHashCode(), which .NET Core randomizes
+    /// per-process) so the same domain always gets the same IP across container restarts, per
+    /// this class's own reproducibility contract and the design spec's "a given day's dataset is
+    /// reproducible if the container restarts without crossing a reset boundary."</summary>
+    private static string ProblemSourceIp(int sortOrder) =>
+        "203.0.113." + (10 + (sortOrder * 37 % 200));
 
     private static List<DemoPollCycleSeed> BuildPollCycles(Random random, DateTimeOffset nowUtc)
     {
@@ -140,11 +144,16 @@ public static class DemoDataGenerator
 
         // Guarantee the injected failure exists even if the random roll above never hit it —
         // the test suite (and a visitor looking at the poll status page) expects at least one,
-        // for texture, without depending on a low-probability random draw.
+        // for texture, without depending on a low-probability random draw. Rewrite a cycle in
+        // the MIDDLE of the window rather than the last one: Dashboard.razor shows the most
+        // recent poll cycle's status prominently, so forcing the failure onto cycles[^1] would
+        // make the demo's landing page show a failed "last poll" on the rare reset where the
+        // random roll above never fires.
         if (!failureInjected && cycles.Count > 0)
         {
-            var last = cycles[^1];
-            cycles[^1] = last with { Succeeded = false, ErrorMessage = "Graph API request timed out.", MessagesChecked = 0, ReportsParsed = 0 };
+            var middleIndex = cycles.Count / 2;
+            var middle = cycles[middleIndex];
+            cycles[middleIndex] = middle with { Succeeded = false, ErrorMessage = "Graph API request timed out.", MessagesChecked = 0, ReportsParsed = 0 };
         }
 
         return cycles;

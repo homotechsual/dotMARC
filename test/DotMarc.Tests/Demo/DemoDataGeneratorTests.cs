@@ -49,6 +49,26 @@ public sealed class DemoDataGeneratorTests
         Assert.True(latePassRate >= 0.95, $"expected the domain to read as healthy by the end of the window, got {latePassRate}");
     }
 
+    /// <summary>The Dashboard classifies a domain as "OK" only when DashboardSummary.Build's
+    /// DomainStatistics.GetPassRate — a volume-weighted average over the FULL 30-day window,
+    /// not just the most recent week — clears 0.95. driftwood-events.example (the ungrouped
+    /// domain, meant only to demonstrate the "no group" dashboard case) and
+    /// brightline-legal.example (meant to read as "ramped up and now healthy") both need to
+    /// clear that bar across the whole window, not just at the end of it. This is the test that
+    /// would have caught the narrative bug where both instead read as "Warning".</summary>
+    [Theory]
+    [InlineData("driftwood-events.example")]
+    [InlineData("brightline-legal.example")]
+    public void ReadsAsHealthyOnTheDashboard_OverTheFull30DayWindow(string domainName)
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == domainName);
+
+        var fullWindowPassRate = DomainStatistics.GetPassRate(ToReports(domain))!.Value;
+
+        Assert.True(fullWindowPassRate >= 0.95, $"expected {domainName} to read as OK (>=95%) over the full window, got {fullWindowPassRate}");
+    }
+
     [Fact]
     public void CobaltFreight_FirstDomainReadsAsWarning_DueToAPersistentFailingSource()
     {
@@ -95,12 +115,73 @@ public sealed class DemoDataGeneratorTests
         Assert.All(dataset.PollCycleDailySummaries, s => Assert.True(s.Date < DateOnly.FromDateTime(NowUtc.AddDays(-7).UtcDateTime)));
     }
 
+    /// <summary>Dashboard.razor prominently shows the most recent poll cycle's status. When the
+    /// random roll that normally injects a failure never fires, BuildPollCycles' fallback used
+    /// to rewrite cycles[^1] — the MOST RECENT cycle — as a guaranteed failure, making the
+    /// demo's landing page show a failed "last poll" on whichever reset happened to miss that
+    /// roll. It should rewrite a cycle in the middle of the window instead, so the most recent
+    /// poll always reads as healthy. Checked across several seeds so this isn't a lucky draw
+    /// with just one.</summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(11)]
+    [InlineData(13)]
+    [InlineData(17)]
+    [InlineData(19)]
+    [InlineData(23)]
+    [InlineData(29)]
+    [InlineData(31)]
+    [InlineData(33)] // reproduces the pre-fix bug: the random injection never fires within 3
+                      // days for this seed, so the fallback used to rewrite cycles[^1].
+    public void PollCycles_LastCycle_IsNeverTheGuaranteedInjectedFailure(int seed)
+    {
+        var dataset = DemoDataGenerator.Generate(new Random(seed), NowUtc);
+
+        var lastCycle = dataset.PollCycles[^1];
+
+        Assert.True(lastCycle.Succeeded, $"seed {seed}: the most recent poll cycle should never be the guaranteed-failure fallback");
+    }
+
     [Fact]
     public void ParseFailures_AreNotEmpty()
     {
         var dataset = Generate();
         Assert.NotEmpty(dataset.ParseFailures);
     }
+
+    /// <summary>ProblemSourceIp used to derive its IP from domainName.GetHashCode(), which .NET
+    /// Core randomizes per process — a different IP on every container restart, contradicting
+    /// this class's own reproducibility doc comment and the design spec's "a given day's dataset
+    /// is reproducible if the container restarts without crossing a reset boundary." It's now
+    /// derived from the domain's fixed sortOrder instead, which doesn't depend on Random at all
+    /// — so the same domain gets the same problem-source IP regardless of which seed generated
+    /// the rest of that day's dataset.</summary>
+    [Fact]
+    public void ProblemSourceIp_IsTheSameForAGivenDomain_AcrossDifferentRandomSeeds()
+    {
+        var first = DemoDataGenerator.Generate(new Random(1), NowUtc);
+        var second = DemoDataGenerator.Generate(new Random(999), NowUtc);
+
+        var firstIps = ProblemSourceIpsFor(first, "cobalt-freight.example");
+        var secondIps = ProblemSourceIpsFor(second, "cobalt-freight.example");
+
+        // Every failing record for this domain, across the whole 30-day window, uses the exact
+        // same source IP within one generation (it's derived from the domain's fixed sortOrder,
+        // not from any random draw) — and that IP is identical across two entirely different
+        // seeds, proving it no longer depends on the per-process-randomized
+        // string.GetHashCode() it used to.
+        Assert.Single(firstIps);
+        Assert.Single(secondIps);
+        Assert.Equal(firstIps, secondIps);
+    }
+
+    private static HashSet<string> ProblemSourceIpsFor(DemoDataset dataset, string domainName) =>
+        [.. dataset.Domains.Single(d => d.Name == domainName).Reports
+            .SelectMany(r => r.Records)
+            .Where(r => r.SpfResult == AuthResult.Fail && r.DkimResult == AuthResult.Fail)
+            .Select(r => r.SourceIp)];
 
     [Fact]
     public void SameSeedAndTime_ProducesTheSameDataset()
