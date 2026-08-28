@@ -16,7 +16,7 @@ description: Deploy dotMARC to Azure Container Apps using the included Bicep tem
   `Key Vault Secrets User` role.
 
 Before deploying, complete the two Entra app registrations described in
-[Getting Started](./getting-started.md), the Bicep template takes the same non-secret client
+[Getting Started](./getting-started.mdx), the Bicep template takes the same non-secret client
 IDs/tenant IDs as deployment parameters, and the client secrets are set into Key Vault after
 deployment (see below).
 
@@ -93,7 +93,7 @@ container app's secrets reference these by versionless Key Vault URL, so
 their normal refresh cycle.
 
 :::danger\[Don't forget InitialAdmins\_\_Emails]
-Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.md#configure)) before this
+Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.mdx#configure)) before this
 deployment's first startup, without it, the tightened authorization policy locks out every user,
 including you.
 :::
