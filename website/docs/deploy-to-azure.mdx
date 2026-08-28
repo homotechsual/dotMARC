@@ -1,8 +1,7 @@
-***
-
-sidebar\_position: 3
+---
+sidebar_position: 3
 description: Deploy dotMARC to Azure Container Apps using the included Bicep template.
---------------------------------------------------------------------------------------
+---
 
 # Deploy to Azure
 
@@ -45,6 +44,12 @@ az deployment group create `
 ```
 
 ## 3. Register the deployed hostname as an OIDC redirect URI
+
+:::tip[Custom Domain]
+
+If you're configuring a custom domain in the Azure Portal for your container app your OIDC redirect URI should be `https://<yourcustomURL>/signin-oidc`
+
+:::
 
 The Container App's hostname isn't known until after deployment (Container Apps assigns its FQDN
 from the environment's own DNS suffix), so the redirect URI registered in the dashboard sign-in app
