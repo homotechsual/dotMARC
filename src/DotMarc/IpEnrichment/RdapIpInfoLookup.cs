@@ -1,0 +1,55 @@
+// src/DotMarc/IpEnrichment/RdapIpInfoLookup.cs
+using System.Net;
+using DotMarc.Data;
+
+namespace DotMarc.IpEnrichment;
+
+/// <summary>Looks up one IP's registered organization/country via a single GET to
+/// https://rdap.org/ip/{ip} — the public RDAP bootstrap redirector, which forwards to whichever
+/// RIR (RIPE, ARIN, APNIC, LACNIC, AFRINIC) actually holds that address block. HttpClient follows
+/// the redirect automatically, so this needs no dispatch logic of its own.
+///
+/// Unlike DmarcDnsChecker (which lets a failed check simply not update Domain.DmarcCheckedUtc, so
+/// it's naturally retried on the next uniform 24h cycle), a network failure here is turned into an
+/// explicit LookupFailed result rather than left to throw: IpInfoService needs to persist that
+/// outcome so a source IP that's briefly unreachable doesn't get re-queried on every single page
+/// view before its 24h retry window elapses.</summary>
+public sealed class RdapIpInfoLookup : IIpInfoLookup
+{
+    private readonly HttpClient _http;
+
+    public RdapIpInfoLookup(HttpClient http) => _http = http;
+
+    public async Task<IpLookupResult> LookupAsync(string ip, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"ip/{Uri.EscapeDataString(ip)}");
+        request.Headers.Accept.ParseAdd("application/rdap+json");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return new IpLookupResult(IpLookupStatus.LookupFailed, null, null);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new IpLookupResult(IpLookupStatus.NotFound, null, null);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new IpLookupResult(IpLookupStatus.LookupFailed, null, null);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var (organization, country) = RdapResponseParser.Parse(body);
+            return new IpLookupResult(IpLookupStatus.Ok, organization, country);
+        }
+    }
+}
