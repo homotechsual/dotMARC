@@ -191,7 +191,7 @@ app.UseAntiforgery();
 
 if (demoOptions.Enabled)
 {
-    app.MapPost("/demo/sign-in/{persona}", () => Results.NotFound("Not implemented yet."));
+    app.MapPost("/demo/sign-in/{persona}", () => Results.NotFound("Not implemented yet.")).AllowAnonymous();
 }
 
 app.MapRazorComponents<DotMarc.Components.App>()
