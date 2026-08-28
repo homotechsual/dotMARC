@@ -11,7 +11,7 @@ const heroCopy = {
   primaryCta: 'Read the docs',
   secondaryCta: 'View on GitHub',
   description:
-    'Built for MSPs managing DMARC across many client domains — and equally usable for a single organization watching its own.',
+    'Built for MSPs managing DMARC across many client domains and equally usable for a single organization watching its own.',
 };
 
 const features = [
@@ -23,12 +23,12 @@ const features = [
   {
     title: 'Built for MSPs',
     description:
-      'Fine-grained, per-domain access control means you can grant an external client visibility into just their own domains — scoped Viewer roles, not an all-or-nothing login.',
+      'Fine-grained, per-domain access control means you can grant an external client visibility into just their own domains scoped Viewer roles, not an all-or-nothing login.',
   },
   {
     title: 'Self-hosted, your data',
     description:
-      'Runs on your own infrastructure — Docker Compose or Azure Container Apps — backed by PostgreSQL. Aggregate report data never leaves your environment.',
+      'Runs on your own infrastructure Docker Compose or Azure Container Apps backed by PostgreSQL. Aggregate report data never leaves your environment.',
   },
 ];
 
@@ -46,7 +46,7 @@ const capabilities = [
   {
     label: 'Access control',
     value:
-      'Fine-grained permissions — roles, Group-scoped Viewer grants for external clients, and an Admin/Viewer preset out of the box.',
+      'Fine-grained permissions roles, Group-scoped Viewer grants for external clients, and an Admin/Viewer preset out of the box.',
   },
   {
     label: 'DNS status checks',

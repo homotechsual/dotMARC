@@ -10,7 +10,7 @@ const ogPlugin = require('@homotechsual/docusaurus-og');
 const siteTitle = 'dotMARC';
 const siteTagline = 'Self-hosted DMARC monitoring for every client domain, from one mailbox.';
 const siteDescription =
-  'dotMARC is a self-hosted DMARC aggregate report analyzer for monitoring email authentication posture across multiple domains from a single mailbox — built for MSPs managing client domains, and equally usable by a single organization.';
+  'dotMARC is a self-hosted DMARC aggregate report analyzer for monitoring email authentication posture across multiple domains from a single mailbox,built for MSPs managing client domains, and equally usable by a single organization.';
 const siteUrl = 'https://dotmarc.app';
 
 const config: Config = {
