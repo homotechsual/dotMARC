@@ -30,18 +30,15 @@ public sealed class RdapIpInfoLookup : IIpInfoLookup
         // ever refactored away — this exact failure mode is what this header fixes.
         request.Headers.UserAgent.ParseAdd("dotMARC (+https://github.com/homotechsual/dotMARC)");
 
-        HttpResponseMessage response;
+        // The whole request/response/parse pipeline is guarded, not just SendAsync: a 200
+        // response with a truncated body, an HTML WAF interstitial, or any other non-JSON success
+        // response would otherwise throw out of ReadAsStringAsync/JsonDocument.Parse uncaught,
+        // breaking this method's documented invariant that a lookup always resolves to
+        // Ok/NotFound/LookupFailed and never throws for an ordinary I/O-shaped failure.
         try
         {
-            response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            return new IpLookupResult(IpLookupStatus.LookupFailed, null, null);
-        }
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
-        using (response)
-        {
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 return new IpLookupResult(IpLookupStatus.NotFound, null, null);
@@ -55,6 +52,18 @@ public sealed class RdapIpInfoLookup : IIpInfoLookup
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var (organization, country) = RdapResponseParser.Parse(body);
             return new IpLookupResult(IpLookupStatus.Ok, organization, country);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A genuine cancellation (a live token, not today's CancellationToken.None call
+            // sites) should propagate as OperationCanceledException rather than being folded into
+            // an ordinary LookupFailed result — a future caller that does pass a live token
+            // needs to be able to tell "the caller gave up" apart from "the lookup failed."
+            throw;
+        }
+        catch (Exception)
+        {
+            return new IpLookupResult(IpLookupStatus.LookupFailed, null, null);
         }
     }
 }

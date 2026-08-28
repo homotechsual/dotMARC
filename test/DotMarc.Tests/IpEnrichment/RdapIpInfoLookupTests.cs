@@ -68,6 +68,21 @@ public sealed class RdapIpInfoLookupTests
     }
 
     [Fact]
+    public async Task LookupAsync_ReturnsLookupFailed_OnA200ResponseWithAnUnparseableBody()
+    {
+        // Reproduces a WAF interstitial or truncated proxy response: HTTP 200, but the body isn't
+        // valid JSON, so RdapResponseParser.Parse's JsonDocument.Parse would throw JsonException
+        // if that weren't guarded by the same try/catch as the request itself.
+        var (lookup, handler) = CreateLookup();
+        handler.StatusCode = HttpStatusCode.OK;
+        handler.ResponseBody = "not json";
+
+        var result = await lookup.LookupAsync("203.0.113.1", CancellationToken.None);
+
+        Assert.Equal(IpLookupStatus.LookupFailed, result.Status);
+    }
+
+    [Fact]
     public async Task LookupAsync_ReturnsLookupFailed_WhenTheRequestThrows()
     {
         var http = new HttpClient(new ThrowingHttpMessageHandler()) { BaseAddress = new Uri("https://rdap.org/") };

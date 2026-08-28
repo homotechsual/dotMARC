@@ -108,4 +108,86 @@ public sealed class RdapResponseParserTests
         Assert.Null(organization);
         Assert.Equal("DE", country);
     }
+
+    [Fact]
+    public void Parse_PrefersTheOrgKindEntity_OverAnEarlierRegistrantMaintainerStub()
+    {
+        // Reproduces the real RIPE shape for 185.60.216.35 (Meta): a registrant-role maintainer
+        // stub entity ("meta-mnt", kind "individual") is listed first, and the actual
+        // organization entity ("Meta Platforms Ireland Limited", kind "org") comes second with no
+        // roles at all. The maintainer handle must not win just because it's first and
+        // registrant-tagged.
+        const string json = """
+            {
+                "objectClassName": "ip network",
+                "country": "ie",
+                "entities": [
+                    {
+                        "objectClassName": "entity",
+                        "handle": "META-MNT",
+                        "roles": ["registrant"],
+                        "vcardArray": ["vcard", [
+                            ["version", {}, "text", "4.0"],
+                            ["kind", {}, "text", "individual"],
+                            ["fn", {}, "text", "meta-mnt"]
+                        ]]
+                    },
+                    {
+                        "objectClassName": "entity",
+                        "handle": "ORG-META1-RIPE",
+                        "vcardArray": ["vcard", [
+                            ["version", {}, "text", "4.0"],
+                            ["kind", {}, "text", "org"],
+                            ["fn", {}, "text", "Meta Platforms Ireland Limited"]
+                        ]]
+                    }
+                ]
+            }
+            """;
+
+        var (organization, country) = RdapResponseParser.Parse(json);
+
+        Assert.Equal("Meta Platforms Ireland Limited", organization);
+        Assert.Equal("IE", country);
+    }
+
+    [Fact]
+    public void Parse_StillPrefersTheSimpleRegistrantEntity_WhenNoEntityHasAKindAtAll()
+    {
+        // The pre-existing ARIN-style shape: a single registrant entity, no "kind" property
+        // anywhere. Proves the new org-kind preference doesn't regress the simple case where
+        // there's only one sensible entity and it never declares a kind.
+        const string json = """
+            {
+                "objectClassName": "ip network",
+                "name": "GOOGLE",
+                "country": "US",
+                "entities": [
+                    {
+                        "objectClassName": "entity",
+                        "roles": ["registrant"],
+                        "vcardArray": ["vcard", [
+                            ["version", {}, "text", "4.0"],
+                            ["fn", {}, "text", "Google LLC"]
+                        ]]
+                    }
+                ]
+            }
+            """;
+
+        var (organization, country) = RdapResponseParser.Parse(json);
+
+        Assert.Equal("Google LLC", organization);
+        Assert.Equal("US", country);
+    }
+
+    [Fact]
+    public void Parse_NormalizesALowercaseCountryCode_ToUppercase()
+    {
+        const string json = """{ "objectClassName": "ip network", "country": "ch", "entities": [] }""";
+
+        var (_, country) = RdapResponseParser.Parse(json);
+
+        Assert.Equal("CH", country);
+    }
 }
