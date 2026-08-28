@@ -16,8 +16,15 @@ public static class DemoDataSeeder
 
     public static async Task ResetAsync(DotMarcDbContext context, DemoDataset dataset, CancellationToken cancellationToken = default)
     {
+        // Wrapped in a transaction per the design spec's "writes it... inside a transaction"
+        // requirement: Postgres's TRUNCATE ... RESTART IDENTITY is fully transactional, so a
+        // mid-reset failure (e.g. WriteAsync throwing partway through) rolls the truncate back
+        // too, instead of leaving the database truncated with zero UserAccess rows — which would
+        // otherwise deny every visitor access until the next scheduled reset, up to 24h later.
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await TruncateAllTablesAsync(context, cancellationToken).ConfigureAwait(false);
         await WriteAsync(context, dataset, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     internal static Task TruncateAllTablesAsync(DotMarcDbContext context, CancellationToken cancellationToken) =>

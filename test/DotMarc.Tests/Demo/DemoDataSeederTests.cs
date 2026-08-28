@@ -101,4 +101,47 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         Assert.True(await verify.PollCycleDailySummaries.CountAsync() > 0);
         Assert.True(await verify.ParseFailures.CountAsync() > 0);
     }
+
+    /// <summary>Proves ResetAsync's truncate-then-write is one atomic transaction, per the design
+    /// spec's explicit requirement. Seeds a valid baseline, then feeds a dataset engineered to
+    /// throw mid-WriteAsync (two domains sharing a name, violating Domain's unique index on
+    /// Name) into a second ResetAsync call. If the truncate and write were not in the same
+    /// transaction, the failed reset would still have committed the TRUNCATE, leaving the
+    /// database empty (denying every demo visitor access until the next scheduled reset). With
+    /// the fix, the whole attempt rolls back and the baseline data seeded before it is
+    /// untouched.</summary>
+    [Fact]
+    public async Task ResetAsync_RollsBackTheTruncate_WhenWriteAsyncFailsPartway()
+    {
+        using (var context = CreateContext())
+        {
+            await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+        }
+
+        using (var verifyBaseline = CreateContext())
+        {
+            Assert.Equal(7, await verifyBaseline.Domains.CountAsync());
+        }
+
+        var validDataset = SampleDataset();
+        var brokenDataset = validDataset with
+        {
+            Domains =
+            [
+                validDataset.Domains[0],
+                validDataset.Domains[1] with { Name = validDataset.Domains[0].Name },
+                .. validDataset.Domains.Skip(2)
+            ]
+        };
+
+        using (var context = CreateContext())
+        {
+            await Assert.ThrowsAnyAsync<Exception>(
+                () => DemoDataSeeder.ResetAsync(context, brokenDataset, CancellationToken.None));
+        }
+
+        using var verify = CreateContext();
+        Assert.Equal(7, await verify.Domains.CountAsync());
+        Assert.Equal(2, await verify.UserAccesses.CountAsync());
+    }
 }
