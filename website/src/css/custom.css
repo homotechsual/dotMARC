@@ -137,3 +137,27 @@ body::before {
   background: rgba(239, 139, 134, 0.28);
   color: #fcfcfc;
 }
+
+@keyframes heart {
+  0%, 40%, 80%, 100% {
+    transform: scale(1);
+  }
+  20%, 60% {
+    transform: scale(1.15);
+  }
+}
+
+.designedBy {
+  display: inline-flex;
+  align-items: center;
+
+  .heart {
+    margin: 0.25rem;
+    animation: heart 1500ms infinite;
+    fill: red;
+  }
+  
+  a {
+    margin-inline-start: 0.25rem;
+  }
+}
