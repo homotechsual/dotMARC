@@ -50,18 +50,24 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Remove built-in Yarn
+        run: npm uninstall -g yarn
+
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: lts/*
-          cache: npm
-          cache-dependency-path: website/package-lock.json
+          cache: yarn
+          cache-dependency-path: website/yarn.lock
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --check-cache --inline-builds
 
       - name: Build
-        run: npm run build
+        run: yarn build
 
       - name: Publish to Cloudflare Pages
         id: cloudflare-pages-deploy
