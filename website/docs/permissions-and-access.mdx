@@ -3,6 +3,9 @@ sidebar_position: 4
 description: How dotMARC's role-based access control and Group-scoped external client access works.
 ---
 
+import ThemedImage from '@theme/ThemedImage';
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # Permissions & Access
 
 dotMARC uses a fine-grained permissions model so internal staff and external clients can be
@@ -27,6 +30,14 @@ Access is granted from the **Manage Access** page: type an email, pick a role, a
 is Viewer, optionally pick which Groups they can see. This works identically whether the person
 is internal staff or an external client contact.
 
+<ThemedImage
+  alt="dotMARC Manage Access page showing roles and pending access grants"
+  sources={{
+    light: useBaseUrl('/img/screenshots/manage-access.png'),
+    dark: useBaseUrl('/img/screenshots/manage-access-dark.png'),
+  }}
+/>
+
 * A grant made before someone's first sign-in stays pending until they actually authenticate, at
   which point it binds to their stable Entra object ID.
 * A Viewer scoped to specific Groups can only ever see domains in those Groups enforced at the
@@ -34,6 +45,17 @@ is internal staff or an external client contact.
   domain outside their scope.
 * An unscoped Viewer grant (no Groups selected) sees every domain, the same as before scoping was
   introduced.
+
+Here's what a Viewer scoped to a single Group sees on the dashboard, just their domains, nothing
+else:
+
+<ThemedImage
+  alt="dotMARC dashboard as seen by a Viewer scoped to a single Group, showing only that client's domains"
+  sources={{
+    light: useBaseUrl('/img/screenshots/dashboard-viewer-scoped.png'),
+    dark: useBaseUrl('/img/screenshots/dashboard-viewer-scoped-dark.png'),
+  }}
+/>
 
 ## Bootstrapping the first Admin
 

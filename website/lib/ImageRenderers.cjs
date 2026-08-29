@@ -1,6 +1,11 @@
 const React = require('react');
-const {readFileSync} = require('fs');
+const {readFileSync, existsSync} = require('fs');
 const {join} = require('path');
+
+const BACKGROUND_MIME_TYPES = {
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+};
 
 const WIDTH = 1200;
 const HEIGHT = 630;
@@ -58,17 +63,24 @@ function clampText(text, max = 220) {
   return `${normalized.slice(0, max - 1).trimEnd()}...`;
 }
 
-function toDataUrl(filePath) {
+function toDataUrl(filePath, mime) {
   try {
     const content = readFileSync(filePath);
-    return `data:image/svg+xml;base64,${content.toString('base64')}`;
+    return `data:${mime};base64,${content.toString('base64')}`;
   } catch {
     return undefined;
   }
 }
 
 function backgroundDataUrl(name) {
-  return toDataUrl(join(process.cwd(), 'static', 'img', 'og-backgrounds', `${name}.svg`));
+  const dir = join(process.cwd(), 'static', 'img', 'og-backgrounds');
+  for (const [ext, mime] of Object.entries(BACKGROUND_MIME_TYPES)) {
+    const filePath = join(dir, `${name}${ext}`);
+    if (existsSync(filePath)) {
+      return toDataUrl(filePath, mime);
+    }
+  }
+  return undefined;
 }
 
 function root(backgroundImage, content) {
@@ -141,7 +153,11 @@ const docs = data => {
 };
 
 const pages = data => {
-  const title = clampText(data.metadata.title || 'dotMARC', 90);
+  // Docusaurus appends " | dotMARC" to the <title> tag automatically (see
+  // titleFormatterUtils.tsx); strip it so the image's baked-in headline
+  // stays as the clean page title rather than repeating the site name.
+  const rawTitle = (data.metadata.title || 'dotMARC').replace(/\s*\|\s*dotMARC\s*$/, '');
+  const title = clampText(rawTitle, 90);
   const description = clampText(data.metadata.description, 180);
 
   return [
@@ -158,14 +174,22 @@ const pages = data => {
           boxSizing: 'border-box',
         },
         div(
-          {display: 'flex', flexDirection: 'column', gap: 14},
-          badge('dotMARC', '#263141', '#fcfcfc'),
-          div({display: 'flex', fontSize: 64, lineHeight: 1.02, fontWeight: 900, letterSpacing: -1.15, color: '#161e29'}, title),
+          {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            maxWidth: 700,
+            background: 'rgba(11,15,20,0.66)',
+            borderRadius: 20,
+            padding: '22px 26px',
+          },
+          badge('dotMARC', 'rgba(255,255,255,0.14)', '#fcfcfc'),
+          div({display: 'flex', fontSize: 60, lineHeight: 1.05, fontWeight: 900, letterSpacing: -1.1, color: '#fcfcfc'}, title),
           description
-            ? div({display: 'flex', maxWidth: 980, fontSize: 30, lineHeight: 1.22, color: '#3d4f63'}, description)
+            ? div({display: 'flex', fontSize: 27, lineHeight: 1.28, color: '#c7d0dc'}, description)
             : null,
         ),
-        div({display: 'flex', fontSize: 28, color: '#e3594f', fontWeight: 800}, 'dotmarc.app'),
+        div({display: 'flex', fontSize: 28, color: '#ef8b86', fontWeight: 800}, 'dotmarc.app'),
       ),
     ),
     baseOptions,

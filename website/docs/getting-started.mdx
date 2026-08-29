@@ -3,6 +3,9 @@ sidebar_position: 1
 description: Set up the two Entra app registrations dotMARC needs, configure environment variables, and run it with Docker Compose.
 ---
 
+import ThemedImage from '@theme/ThemedImage';
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # Getting Started
 
 dotMARC needs **two separate** Entra app registrations: do not reuse one for both purposes.
@@ -100,6 +103,27 @@ Point each monitored domain's DMARC record's `rua=` tag at the same mailbox this
 ```txt
 v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@yourtenant.com
 ```
+
+Once the first report comes in, the dashboard shows pass/fail rates, DNS status, and polling
+status across every monitored domain:
+
+<ThemedImage
+  alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
+  sources={{
+    light: useBaseUrl('/img/screenshots/dashboard-admin.png'),
+    dark: useBaseUrl('/img/screenshots/dashboard-admin-dark.png'),
+  }}
+/>
+
+Drill into any domain for a 30-day pass/quarantine/reject chart and its DMARC record status:
+
+<ThemedImage
+  alt="dotMARC domain detail page showing a 30-day pass/fail chart for aurora-retail.example"
+  sources={{
+    light: useBaseUrl('/img/screenshots/domain-detail.png'),
+    dark: useBaseUrl('/img/screenshots/domain-detail-dark.png'),
+  }}
+/>
 
 Next: [Local Development](./local-development.mdx) to run and test the app from source, or
 [Deploy to Azure](./deploy-to-azure.mdx) to run it in production.

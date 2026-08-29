@@ -2,6 +2,8 @@ import type {ReactNode} from 'react';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import Head from '@docusaurus/Head';
+import ThemedImage from '@theme/ThemedImage';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 
 const heroCopy = {
   eyebrow: 'dotMARC',
@@ -28,7 +30,7 @@ const features = [
   {
     title: 'Self-hosted, your data',
     description:
-      'Runs on your own infrastructure Docker Compose or Azure Container Apps backed by PostgreSQL. Aggregate report data never leaves your environment.',
+      'Runs on your own infrastructure using  Docker Compose or Azure Container Apps backed by PostgreSQL. Aggregate report data never leaves your environment.',
   },
 ];
 
@@ -40,7 +42,7 @@ const capabilities = [
   },
   {
     label: 'Multi-domain dashboard',
-    value:
+    value: 
       'Pass/fail rates, source breakdowns, and DNS record status across every monitored domain, filterable by Group and Tag.',
   },
   {
@@ -96,18 +98,27 @@ export default function Home(): ReactNode {
   const pageUrl = 'https://dotmarc.app/';
 
   return (
-    <Layout title="dotMARC" description={heroCopy.description}>
+    <Layout title={heroCopy.title} description={heroCopy.subtitle}>
       <Head>
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="dotMARC" />
-        <meta property="og:description" content={heroCopy.description} />
         <meta property="og:url" content={pageUrl} />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="dotMARC" />
-        <meta name="twitter:description" content={heroCopy.description} />
+        <meta name="twitter:title" content={heroCopy.title} />
+        <meta name="twitter:description" content={heroCopy.subtitle} />
       </Head>
       <HomepageHeader />
       <main className="relative z-10 mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
+        <section className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/80 p-2 shadow-[0_24px_70px_rgba(38,49,65,0.14)] backdrop-blur dark:border-white/10 dark:bg-[#1e2a3a]/85">
+          <ThemedImage
+            alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
+            sources={{
+              light: useBaseUrl('/img/screenshots/dashboard-admin.png'),
+              dark: useBaseUrl('/img/screenshots/dashboard-admin-dark.png'),
+            }}
+            className="w-full rounded-[1.4rem]"
+          />
+        </section>
+
         <section className="mt-10 grid gap-5 md:grid-cols-3">
           {features.map(feature => (
             <div
