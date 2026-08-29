@@ -10,8 +10,9 @@ const heroCopy = {
   title: 'DMARC monitoring for every domain you manage.',
   subtitle:
     'dotMARC is a self-hosted DMARC aggregate report analyzer. Point every client domain at one mailbox, and see authentication posture across all of them from a single dashboard.',
-  primaryCta: 'Read the docs',
-  secondaryCta: 'View on GitHub',
+  docsCta: 'Read the docs',
+  demoCta: 'Try the demo',
+  ghCta: 'View on GitHub',
   description:
     'Built for MSPs managing DMARC across many client domains and equally usable for a single organization watching its own.',
 };
@@ -79,13 +80,18 @@ function HomepageHeader() {
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               className="inline-flex items-center justify-center rounded-full bg-[#e3594f] px-6 py-3 text-sm font-bold text-white shadow-[0_16px_36px_rgba(227,89,79,0.28)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[#c9443a] hover:no-underline"
-              to="/docs/getting-started">
-              {heroCopy.primaryCta}
+              to="https://demo.dotmarc.app/">
+              {heroCopy.demoCta}
             </Link>
             <Link
               className="inline-flex items-center justify-center rounded-full border border-[#263141]/15 bg-white/80 px-6 py-3 text-sm font-bold text-[#161e29] shadow-[0_16px_36px_rgba(38,49,65,0.08)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#263141]/25 hover:bg-white hover:text-[#e3594f] hover:no-underline dark:border-white/10 dark:bg-[#1e2a3a]/80 dark:text-[#fcfcfc] dark:hover:text-[#ef8b86]"
+              to="/docs/getting-started">
+              {heroCopy.docsCta}
+            </Link>
+            <Link
+              className="inline-flex items-center justify-center rounded-full border border-[#263141]/10 px-6 py-3 text-sm font-bold text-[#5b6b7d] transition-colors duration-200 hover:border-[#263141]/20 hover:text-[#161e29] hover:no-underline dark:border-white/10 dark:text-[#9fb0c2] dark:hover:text-[#fcfcfc]"
               href="https://github.com/homotechsual/dotMARC">
-              {heroCopy.secondaryCta}
+              {heroCopy.ghCta}
             </Link>
           </div>
         </div>

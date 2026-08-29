@@ -109,8 +109,9 @@ const config: Config = {
       items: [
         {to: '/docs/getting-started', label: 'Docs', position: 'left'},
         {to: '/blog', label: 'Blog', position: 'left'},
+        {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
         {
-          href: 'https://github.com/homotechsual/dotMARC',
+          to: 'https://github.com/homotechsual/dotMARC',
           label: 'GitHub',
           position: 'right',
         },
@@ -131,6 +132,7 @@ const config: Config = {
           title: 'More',
           items: [
             {label: 'Blog', to: '/blog'},
+            {label: 'Demo', to: 'https://demo.dotmarc.app/'},
             {label: 'GitHub', href: 'https://github.com/homotechsual/dotMARC'},
           ],
         },
