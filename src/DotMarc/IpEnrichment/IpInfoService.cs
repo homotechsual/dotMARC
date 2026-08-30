@@ -23,6 +23,14 @@ public static class IpInfoService
             .ToDictionaryAsync(i => i.Ip, cancellationToken)
             .ConfigureAwait(false);
 
+    /// <summary>All cached allocation-block ranges, for IpRangeMatcher's containment check
+    /// against IPs with no exact IpInfo hit. Loaded in full rather than queried per-IP: the
+    /// number of distinct RDAP allocation blocks ever seen is expected to stay small (each one
+    /// covers many individual sender IPs), so an in-memory scan is simpler and cheaper than
+    /// translating a range-containment condition into SQL.</summary>
+    public static async Task<List<IpRange>> GetCachedRangesAsync(DotMarcDbContext context, CancellationToken cancellationToken) =>
+        await context.IpRanges.ToListAsync(cancellationToken).ConfigureAwait(false);
+
     public static bool NeedsLookup(IpInfo? cached, DateTimeOffset nowUtc) =>
         cached is null || (cached.Status != IpLookupStatus.Ok && cached.LookedUpUtc < nowUtc - FailureRetryWindow);
 
@@ -62,6 +70,46 @@ public static class IpInfoService
             existing = await context.IpInfos.SingleAsync(i => i.Ip == ip, cancellationToken).ConfigureAwait(false);
         }
 
+        if (result.RangeStart is not null && result.RangeEnd is not null)
+        {
+            await UpsertRangeAsync(context, result, cancellationToken).ConfigureAwait(false);
+        }
+
         return existing;
+    }
+
+    /// <summary>Caches the whole allocation block a successful lookup's IP falls within, so
+    /// every other IP in that same block resolves from IpRangeMatcher instead of triggering its
+    /// own RDAP lookup. Only ever called with an Ok result's bounds (see RdapResponseParser.
+    /// ParseRange) — a NotFound/LookupFailed result has no reliable bounds to cache.</summary>
+    private static async Task UpsertRangeAsync(DotMarcDbContext context, IpLookupResult result, CancellationToken cancellationToken)
+    {
+        var existingRange = await context.IpRanges
+            .SingleOrDefaultAsync(r => r.RangeStart == result.RangeStart && r.RangeEnd == result.RangeEnd, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (existingRange is null)
+        {
+            existingRange = new IpRange { RangeStart = result.RangeStart!, RangeEnd = result.RangeEnd! };
+            context.IpRanges.Add(existingRange);
+        }
+
+        existingRange.Organization = result.Organization;
+        existingRange.Country = result.Country;
+        existingRange.LookedUpUtc = DateTimeOffset.UtcNow;
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Same concurrent-first-lookup race as the IpInfo upsert above, but for two
+            // different IPs that happen to fall in the same not-yet-cached range (e.g. two of a
+            // domain's Sources tab rows viewed in the same page load, each triggering its own
+            // background EnrichAsync). Whichever inserted first wins; this one just needs to not
+            // throw — the row it would have written is already there.
+            context.ChangeTracker.Clear();
+        }
     }
 }

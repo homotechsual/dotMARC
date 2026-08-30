@@ -59,6 +59,29 @@ public static class RdapResponseParser
         return (organization, country);
     }
 
+    /// <summary>Extracts the RDAP "ip network" object's start/end address bounds — mandatory
+    /// fields on every such object per RFC 9083, unlike organization/country which are often
+    /// absent. Used to cache the whole allocation block (e.g. "2a01:110::/31") a looked-up IP
+    /// falls within, so every other IP in that same block resolves from the cache instead of
+    /// triggering its own RDAP lookup — see IpRangeMatcher. Returns nulls unless both bounds are
+    /// present: a range with only one bound would let IpRangeMatcher's containment check match
+    /// everything above or below it.</summary>
+    public static (string? Start, string? End) ParseRange(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        var start = GetString(root, "startAddress");
+        var end = GetString(root, "endAddress");
+
+        return start is not null && end is not null ? (start, end) : (null, null);
+    }
+
+    private static string? GetString(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
     private static bool HasRole(JsonElement entity, string role) =>
         entity.ValueKind == JsonValueKind.Object &&
         entity.TryGetProperty("roles", out var rolesEl) &&

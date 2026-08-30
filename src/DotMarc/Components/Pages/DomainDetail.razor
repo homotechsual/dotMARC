@@ -169,6 +169,7 @@ else
         {
             var ips = _sources.Select(s => s.SourceIp).Distinct().ToList();
             var cachedInfo = await IpInfoService.GetCachedAsync(db, ips, CancellationToken.None);
+            var cachedRanges = await IpInfoService.GetCachedRangesAsync(db, CancellationToken.None);
             var nowUtc = DateTimeOffset.UtcNow;
 
             foreach (var source in _sources)
@@ -178,6 +179,15 @@ else
                 {
                     source.Organization = info.Organization;
                     source.Country = info.Country;
+                    source.IsEnrichmentPending = false;
+                }
+                else if (IpRangeMatcher.FindContaining(cachedRanges, source.SourceIp) is { } range)
+                {
+                    // A different IP in the same RDAP allocation block was already looked up —
+                    // no need to spend another background lookup (or throttle permit) on this
+                    // one, or to write it its own IpInfo row; the range cache alone covers it.
+                    source.Organization = range.Organization;
+                    source.Country = range.Country;
                     source.IsEnrichmentPending = false;
                 }
                 else

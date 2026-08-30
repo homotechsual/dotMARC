@@ -27,10 +27,10 @@ public static class DemoDataSeeder
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    // "IpInfos" is deliberately NOT in this list: it's a shared external-lookup cache (RDAP
-    // ownership/country data, keyed by IP address, not by domain/report), not demo-narrative
-    // data — wiping it on every reset would just force every demo IP to be re-looked-up against
-    // rdap.org for no benefit.
+    // "IpInfos" and "IpRanges" are deliberately NOT in this list: they're a shared
+    // external-lookup cache (RDAP ownership/country data, keyed by IP address or by allocation
+    // block, not by domain/report), not demo-narrative data — wiping them on every reset would
+    // just force every demo IP to be re-looked-up against rdap.org for no benefit.
     internal static Task TruncateAllTablesAsync(DotMarcDbContext context, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlRawAsync(
             """

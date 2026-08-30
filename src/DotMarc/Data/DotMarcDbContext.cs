@@ -21,6 +21,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
+    public DbSet<IpRange> IpRanges => Set<IpRange>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -131,6 +132,13 @@ public sealed class DotMarcDbContext : DbContext
             entity.HasKey(i => i.Ip);
             entity.Property(i => i.Ip).HasMaxLength(45); // enough for a full IPv6 address
             entity.Property(i => i.Status).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<IpRange>(entity =>
+        {
+            entity.HasKey(r => new { r.RangeStart, r.RangeEnd });
+            entity.Property(r => r.RangeStart).HasMaxLength(45); // enough for a full IPv6 address
+            entity.Property(r => r.RangeEnd).HasMaxLength(45);
         });
     }
 }

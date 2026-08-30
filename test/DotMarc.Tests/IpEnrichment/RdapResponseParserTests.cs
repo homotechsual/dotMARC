@@ -190,4 +190,51 @@ public sealed class RdapResponseParserTests
 
         Assert.Equal("CH", country);
     }
+
+    [Fact]
+    public void ParseRange_ExtractsStartAndEndAddress_WhenPresent()
+    {
+        // The real RIPE shape for 2a01:111:f403:c207::3 — the whole /31 this address falls
+        // within is one registry allocation, so every other address inside it should resolve
+        // from the same cached range rather than triggering its own RDAP lookup.
+        const string json = """
+            {
+                "objectClassName": "ip network",
+                "handle": "2a01:110::/31",
+                "startAddress": "2a01:110::",
+                "endAddress": "2a01:111:ffff:ffff:ffff:ffff:ffff:ffff",
+                "ipVersion": "v6"
+            }
+            """;
+
+        var (start, end) = RdapResponseParser.ParseRange(json);
+
+        Assert.Equal("2a01:110::", start);
+        Assert.Equal("2a01:111:ffff:ffff:ffff:ffff:ffff:ffff", end);
+    }
+
+    [Fact]
+    public void ParseRange_ReturnsNulls_WhenAbsent()
+    {
+        const string json = """{ "objectClassName": "ip network", "name": "RESERVED-BLOCK" }""";
+
+        var (start, end) = RdapResponseParser.ParseRange(json);
+
+        Assert.Null(start);
+        Assert.Null(end);
+    }
+
+    [Fact]
+    public void ParseRange_ReturnsNulls_WhenOnlyOneBoundIsPresent()
+    {
+        // A partial/malformed response shouldn't produce a range with an open-ended bound —
+        // that would make the containment check (IpRangeMatcher) match everything above or
+        // below it.
+        const string json = """{ "objectClassName": "ip network", "startAddress": "203.0.113.0" }""";
+
+        var (start, end) = RdapResponseParser.ParseRange(json);
+
+        Assert.Null(start);
+        Assert.Null(end);
+    }
 }

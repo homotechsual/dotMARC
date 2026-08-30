@@ -114,6 +114,64 @@ public sealed class IpInfoServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EnrichAsync_UpsertsAnIpRange_WhenTheResultIncludesRangeBounds()
+    {
+        var lookup = new FakeIpInfoLookup
+        {
+            Result = new IpLookupResult(IpLookupStatus.Ok, "Microsoft Limited", "GB", "2a01:110::", "2a01:111:ffff:ffff:ffff:ffff:ffff:ffff")
+        };
+
+        await IpInfoService.EnrichAsync(CreateDbContextFactory(), lookup, "2a01:111:f403:c207::3", CancellationToken.None);
+
+        await using var verify = CreateContext();
+        var stored = await verify.IpRanges.SingleAsync(r => r.RangeStart == "2a01:110::" && r.RangeEnd == "2a01:111:ffff:ffff:ffff:ffff:ffff:ffff");
+        Assert.Equal("Microsoft Limited", stored.Organization);
+        Assert.Equal("GB", stored.Country);
+    }
+
+    [Fact]
+    public async Task EnrichAsync_DoesNotUpsertARange_WhenTheResultHasNoRangeBounds()
+    {
+        var lookup = new FakeIpInfoLookup { Result = new IpLookupResult(IpLookupStatus.Ok, "Example Org", "US") };
+
+        await IpInfoService.EnrichAsync(CreateDbContextFactory(), lookup, "203.0.113.7", CancellationToken.None);
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.IpRanges);
+    }
+
+    [Fact]
+    public async Task EnrichAsync_HandlesConcurrentFirstLookups_ForTheSameRange_WithoutThrowing()
+    {
+        var dbFactory = CreateDbContextFactory();
+        var lookupA = new FakeIpInfoLookup { Result = new IpLookupResult(IpLookupStatus.Ok, "Microsoft Limited", "GB", "2a01:110::", "2a01:111:ffff:ffff:ffff:ffff:ffff:ffff") };
+        var lookupB = new FakeIpInfoLookup { Result = new IpLookupResult(IpLookupStatus.Ok, "Microsoft Limited", "GB", "2a01:110::", "2a01:111:ffff:ffff:ffff:ffff:ffff:ffff") };
+
+        await Task.WhenAll(
+            IpInfoService.EnrichAsync(dbFactory, lookupA, "2a01:111:f403:c200::1", CancellationToken.None),
+            IpInfoService.EnrichAsync(dbFactory, lookupB, "2a01:111:f403:c201::1", CancellationToken.None));
+
+        await using var verify = CreateContext();
+        Assert.Single(verify.IpRanges);
+    }
+
+    [Fact]
+    public async Task GetCachedRangesAsync_ReturnsAllStoredRanges()
+    {
+        await using (var context = CreateContext())
+        {
+            context.IpRanges.Add(new IpRange { RangeStart = "203.0.113.0", RangeEnd = "203.0.113.255", Organization = "Example Org", LookedUpUtc = DateTimeOffset.UtcNow });
+            await context.SaveChangesAsync();
+        }
+
+        await using var verify = CreateContext();
+        var ranges = await IpInfoService.GetCachedRangesAsync(verify, CancellationToken.None);
+
+        Assert.Single(ranges);
+        Assert.Equal("Example Org", ranges[0].Organization);
+    }
+
+    [Fact]
     public async Task EnrichAsync_HandlesConcurrentFirstLookups_ForTheSameIp_WithoutThrowing()
     {
         var dbFactory = CreateDbContextFactory();

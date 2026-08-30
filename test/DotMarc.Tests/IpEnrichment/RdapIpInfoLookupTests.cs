@@ -43,6 +43,57 @@ public sealed class RdapIpInfoLookupTests
     }
 
     [Fact]
+    public async Task LookupAsync_RequestsTheExpectedRdapPath_ForAnIPv6Address()
+    {
+        // Reproduces the live bug: Uri.EscapeDataString percent-encodes ':' to '%3A', and
+        // rdap.org's redirector 400s on that — every IPv6 lookup failed as a result. The path
+        // must carry literal colons (legal unescaped in a URL path segment per RFC 3986).
+        var (lookup, handler) = CreateLookup();
+        handler.ResponseBody = "{}";
+
+        await lookup.LookupAsync("2a01:111:f403:c207::3", CancellationToken.None);
+
+        Assert.Equal("https://rdap.org/ip/2a01:111:f403:c207::3", handler.Requests[0].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task LookupAsync_ReturnsLookupFailed_ForAnUnparsableIp_WithoutMakingARequest()
+    {
+        var (lookup, handler) = CreateLookup();
+
+        var result = await lookup.LookupAsync("not-an-ip", CancellationToken.None);
+
+        Assert.Equal(IpLookupStatus.LookupFailed, result.Status);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task LookupAsync_ReturnsRangeBounds_OnASuccessfulResponse()
+    {
+        var (lookup, handler) = CreateLookup();
+        handler.ResponseBody = """
+            {"startAddress":"2a01:110::","endAddress":"2a01:111:ffff:ffff:ffff:ffff:ffff:ffff"}
+            """;
+
+        var result = await lookup.LookupAsync("2a01:111:f403:c207::3", CancellationToken.None);
+
+        Assert.Equal("2a01:110::", result.RangeStart);
+        Assert.Equal("2a01:111:ffff:ffff:ffff:ffff:ffff:ffff", result.RangeEnd);
+    }
+
+    [Fact]
+    public async Task LookupAsync_ReturnsNoRangeBounds_WhenTheResponseOmitsThem()
+    {
+        var (lookup, handler) = CreateLookup();
+        handler.ResponseBody = "{}";
+
+        var result = await lookup.LookupAsync("142.250.10.20", CancellationToken.None);
+
+        Assert.Null(result.RangeStart);
+        Assert.Null(result.RangeEnd);
+    }
+
+    [Fact]
     public async Task LookupAsync_ReturnsNotFound_On404()
     {
         var (lookup, handler) = CreateLookup();

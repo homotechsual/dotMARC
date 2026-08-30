@@ -103,3 +103,30 @@ injected, circuit-lifetime context).
 No new configuration. `https://rdap.org` needs no API key and has no documented rate limit
 significant at this app's scale (looking up unique source IPs on demand, cached indefinitely
 after the first success).
+
+## Addendum: IPv6 URL-escaping fix and range-based batch caching (2026-08-30)
+
+`RdapIpInfoLookup` built its request path with `Uri.EscapeDataString(ip)`, which percent-encodes
+`:` to `%3A`. rdap.org's redirector 400s on that, so every IPv6 lookup failed — 100%
+reproducibly, not a transient issue. IPv4 was unaffected only because dotted-decimal has no
+characters that need escaping. Fixed by validating with `IPAddress.TryParse` and interpolating
+the canonical `IPAddress.ToString()` unescaped into the path (legal per RFC 3986); an unparsable
+`SourceIp` now short-circuits to `LookupFailed` without a network call.
+
+Separately, many source IPs seen in practice share the same RDAP allocation block (e.g. several
+of one sender's outbound relays), so a new `IpRange` table caches the whole block an `Ok` lookup
+resolves to — keyed by the RDAP response's `startAddress`/`endAddress` (mandatory fields per RFC
+9083, extracted by `RdapResponseParser.ParseRange`), applied to both IPv4 and IPv6:
+
+* `IpInfoService.EnrichAsync` upserts the range alongside its existing per-IP `IpInfo` upsert,
+  whenever the lookup result carries bounds. No `Status`/retry semantics: a range is only ever
+  written from an `Ok` result (a failed lookup has no reliable bounds to cache), and `Ok` is
+  already cached indefinitely.
+* `IpRangeMatcher.FindContaining` is a pure, in-memory containment check against all cached
+  ranges (loaded in full — the number of distinct allocation blocks ever seen is expected to
+  stay small relative to the individual IPs they cover).
+* `DomainDetail.razor`'s `OnInitializedAsync` checks the range cache before falling back to a
+  background `EnrichAsync` call: an IP covered by an already-cached range renders immediately,
+  with no HTTP call, no throttle permit spent, and no new `IpInfo` row written for that literal
+  IP — the existing per-IP cache and this addition compose without either needing to change the
+  other's shape.

@@ -22,7 +22,19 @@ public sealed class RdapIpInfoLookup : IIpInfoLookup
 
     public async Task<IpLookupResult> LookupAsync(string ip, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"ip/{Uri.EscapeDataString(ip)}");
+        // Uri.EscapeDataString percent-encodes ':' (e.g. to "%3A"), but rdap.org's redirector
+        // 400s on an IPv6 path with encoded colons — every IPv6 lookup failed as a result.
+        // IPAddress.ToString()'s canonical form only ever emits digits/hex/colons/dots, all of
+        // which are legal unescaped in a URL path segment per RFC 3986, so it's used directly
+        // instead of an escaped form of the caller-supplied string. This also validates the
+        // input: a SourceIp that isn't actually a parsable IP address (malformed report data)
+        // fails fast without making a network call rather than sending rdap.org a nonsense path.
+        if (!IPAddress.TryParse(ip, out var parsed))
+        {
+            return new IpLookupResult(IpLookupStatus.LookupFailed, null, null);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"ip/{parsed}");
         request.Headers.Accept.ParseAdd("application/rdap+json");
         // The User-Agent header is also set by Program.cs's AddHttpClient<IIpInfoLookup,
         // RdapIpInfoLookup> registration; it's set again here so this lookup is self-sufficient
@@ -51,7 +63,8 @@ public sealed class RdapIpInfoLookup : IIpInfoLookup
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var (organization, country) = RdapResponseParser.Parse(body);
-            return new IpLookupResult(IpLookupStatus.Ok, organization, country);
+            var (rangeStart, rangeEnd) = RdapResponseParser.ParseRange(body);
+            return new IpLookupResult(IpLookupStatus.Ok, organization, country, rangeStart, rangeEnd);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
