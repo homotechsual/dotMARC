@@ -1,0 +1,21 @@
+# Handles MTA-STS policy hosting only (mta-sts.<domain> for each domain a customer has opted in
+# to hosting) — it does not front dotMARC's own hostname, which keeps its own TLS setup exactly as
+# documented in getting-started.mdx. See that doc's "MTA-STS policy hosting" section, including
+# what to do if something is already bound to port 443/80 on this host.
+#
+# on_demand_tls issues a certificate for any hostname the "ask" endpoint approves, rather than a
+# fixed list configured here — dotMARC decides which mta-sts.<domain> hostnames are legitimate
+# (a customer's CNAME has to resolve here first; see IMtaStsDnsVerifier) and Caddy defers to that
+# decision instead of needing every hosted domain listed in this file.
+{
+	on_demand_tls {
+		ask http://app:8080/.well-known/mta-sts-ask
+	}
+}
+
+:443 {
+	tls {
+		on_demand
+	}
+	reverse_proxy app:8080
+}

@@ -98,6 +98,42 @@ The container listens on plain HTTP on port 8080; it expects a TLS-terminating r
 `X-Forwarded-Proto`. Without this, sign-in fails with AADSTS50011 because the redirect URI sent to
 Entra doesn't match the `https://` one registered on the dashboard app registration.
 
+### MTA-STS policy hosting (optional)
+
+dotMARC can host an [MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) policy on a customer's
+behalf — serving `https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain they opt in to,
+so they don't have to host it themselves. This needs a small amount of extra infrastructure beyond
+the app container, since it means serving valid TLS for an open-ended, admin-growing set of
+hostnames dotMARC doesn't know about until a customer enables it.
+
+1. Set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to — typically the
+   same hostname this dotMARC instance is already reachable at.
+2. Bring up the bundled [Caddy](https://caddyserver.com/) service, which handles on-demand TLS
+   issuance for `mta-sts.*` traffic specifically (it does not front this app's own hostname —
+   that stays exactly as described above):
+
+   ```powershell
+   docker compose --profile mta-sts up
+   ```
+
+3. For each domain a customer wants hosted, they add one CNAME:
+
+   ```txt
+   mta-sts.<their-domain> CNAME <your MtaSts__HostingHostname value>
+   ```
+
+**If something is already bound to port 443/80 on this host** (your own reverse proxy for this
+app's hostname, or anything else), the bundled `caddy` service will fail to start — two processes
+can't both bind the same port. Two ways to handle it:
+
+- **It's already Caddy**: don't run the bundled service at all. Instead, merge this repo's
+  [`Caddyfile`](https://github.com/homotechsual/dotMARC/blob/main/Caddyfile) — the `on_demand_tls`
+  block and its `ask` directive — into your existing Caddy config, pointed at this app's internal
+  address.
+- **It's something else** (nginx, Traefik, a cloud load balancer): route `mta-sts.*` traffic
+  through to the bundled Caddy service on an internal port instead of 443/80 directly, or the
+  reverse — whichever fits how the rest of this host is set up.
+
 Point each monitored domain's DMARC record's `rua=` tag at the same mailbox this app polls, e.g.:
 
 ```txt

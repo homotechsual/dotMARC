@@ -15,9 +15,26 @@ services:
       EntraId__ClientId: ${ENTRAID_CLIENT_ID:?Set ENTRAID_CLIENT_ID}
       EntraId__ClientSecret: ${ENTRAID_CLIENT_SECRET:?Set ENTRAID_CLIENT_SECRET}
       InitialAdmins__Emails: ${INITIAL_ADMIN_EMAILS:-}
+      MtaSts__HostingHostname: ${MTA_STS_HOSTING_HOSTNAME:-}
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Only needed for MTA-STS policy hosting (see getting-started.mdx) — not started by a plain
+  # `docker compose up`. Bring it up explicitly with `docker compose --profile mta-sts up`, and
+  # only after reading that doc's guidance on port 443/80 conflicts if this host already runs a
+  # reverse proxy for anything else.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["mta-sts"]
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - app
 
   postgres:
     image: postgres:18
@@ -37,3 +54,4 @@ services:
 
 volumes:
   dotmarc-postgres-data:
+  caddy-data:

@@ -271,9 +271,34 @@ if (demoOptions.Enabled)
     }).AllowAnonymous();
 }
 
-// Hostname-routed (mta-sts.<domain>), not path-routed under this app's own hostname, so it's
-// unauthenticated by necessity — receiving mail servers fetching this policy are never signed in.
-// Gating is done by looking up the Domain instead.
+// Both endpoints below are hostname-routed (mta-sts.<domain>), not path-routed under this app's
+// own hostname, so they're unauthenticated by necessity — Caddy and receiving mail servers are
+// never signed in. Gating is done by looking up the Domain instead (see each endpoint).
+
+// Caddy's on-demand-TLS "ask" callback: only let Caddy attempt certificate issuance for a
+// hostname once DNS has actually been verified to point here, not the moment a customer merely
+// enables hosting (PendingDns) — otherwise a typo'd or not-yet-propagated CNAME would burn a
+// Let's Encrypt validation attempt against a hostname that doesn't resolve here yet.
+app.MapGet("/.well-known/mta-sts-ask", async (string domain, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    const string prefix = "mta-sts.";
+    if (!domain.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.NotFound();
+    }
+
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var domainName = domain[prefix.Length..];
+    var isProvisionable = await context.Domains.AsNoTracking().AnyAsync(d =>
+        d.Name == domainName &&
+        d.MtaStsEnabled &&
+        (d.MtaStsStatus == MtaStsStatus.PendingCertificate || d.MtaStsStatus == MtaStsStatus.Active || d.MtaStsStatus == MtaStsStatus.Failed));
+
+    return isProvisionable ? Results.Ok() : Results.NotFound();
+}).AllowAnonymous();
+
+// The actual hosted policy, served on mta-sts.<domain> (matched by Host header, since this app
+// has no other way to distinguish which of potentially many hosted domains a request is for).
 app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
 {
     const string prefix = "mta-sts.";
