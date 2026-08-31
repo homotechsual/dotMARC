@@ -29,6 +29,21 @@ public sealed class DotMarcDbContext : DbContext
         {
             entity.HasIndex(d => d.Name).IsUnique();
             entity.Property(d => d.DmarcCheckStatus).HasConversion<string>();
+            entity.Property(d => d.MtaStsStatus).HasConversion<string>();
+            entity.Property(d => d.MtaStsMode).HasConversion<string>();
+
+            // Without an explicit ValueComparer, EF Core's default comparer generation for a
+            // List<string> behind a value converter throws at runtime ("cannot be used as a
+            // primitive collection") the first time an entity with this property is tracked — see
+            // Role.Permissions below for the same pattern with a List<Permission>.
+            entity.Property(d => d.MtaStsMxHosts)
+                .HasConversion(
+                    hosts => hosts.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
         });
 
         modelBuilder.Entity<Report>(entity =>

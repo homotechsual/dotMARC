@@ -18,5 +18,7 @@ public enum Permission
     TagsAdd,
     TagsEdit,
     TagsDelete,
-    AccessManage
+    AccessManage,
+    MtaStsView,
+    MtaStsManage
 }

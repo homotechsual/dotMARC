@@ -16,6 +16,14 @@ public sealed class Domain
     public DateTimeOffset? DmarcCheckedUtc { get; set; }
     public string? DmarcCheckDetail { get; set; }
 
+    public bool MtaStsEnabled { get; set; }
+    public MtaStsStatus MtaStsStatus { get; set; }
+    public DateTimeOffset? MtaStsCheckedUtc { get; set; }
+    public string? MtaStsCheckDetail { get; set; }
+    public MtaStsMode MtaStsMode { get; set; }
+    public int MtaStsMaxAgeSeconds { get; set; } = 604_800;
+    public List<string> MtaStsMxHosts { get; set; } = [];
+
     public List<Report> Reports { get; set; } = [];
     public List<Group> Groups { get; set; } = [];
     public List<Tag> Tags { get; set; } = [];

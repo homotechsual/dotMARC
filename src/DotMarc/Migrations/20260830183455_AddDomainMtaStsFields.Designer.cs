@@ -3,6 +3,7 @@ using System;
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DotMarc.Migrations
 {
     [DbContext(typeof(DotMarcDbContext))]
-    partial class DotMarcDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830183455_AddDomainMtaStsFields")]
+    partial class AddDomainMtaStsFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -160,30 +163,6 @@ namespace DotMarc.Migrations
                     b.HasKey("Ip");
 
                     b.ToTable("IpInfos");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.IpRange", b =>
-                {
-                    b.Property<string>("RangeStart")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)");
-
-                    b.Property<string>("RangeEnd")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)");
-
-                    b.Property<string>("Country")
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("LookedUpUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Organization")
-                        .HasColumnType("text");
-
-                    b.HasKey("RangeStart", "RangeEnd");
-
-                    b.ToTable("IpRanges");
                 });
 
             modelBuilder.Entity("DotMarc.Data.ParseFailure", b =>
