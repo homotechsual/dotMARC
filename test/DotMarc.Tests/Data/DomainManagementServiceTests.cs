@@ -136,6 +136,47 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SetMtaStsConfigAsync_SavesConfig_AndResetsStatusToPendingDns_WhenEnablingForTheFirstTime()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+
+        await DomainManagementService.SetMtaStsConfigAsync(
+            context, domainId, enabled: true, MtaStsMode.Enforce, ["mail.contoso.com"], 86_400, CancellationToken.None);
+
+        using var verify = CreateContext();
+        var domain = verify.Domains.Single();
+        Assert.True(domain.MtaStsEnabled);
+        Assert.Equal(MtaStsStatus.PendingDns, domain.MtaStsStatus);
+        Assert.Equal(MtaStsMode.Enforce, domain.MtaStsMode);
+        Assert.Equal(["mail.contoso.com"], domain.MtaStsMxHosts);
+        Assert.Equal(86_400, domain.MtaStsMaxAgeSeconds);
+    }
+
+    [Fact]
+    public async Task SetMtaStsConfigAsync_LeavesStatusAlone_WhenAlreadyEnabled()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+        await DomainManagementService.SetMtaStsConfigAsync(
+            context, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com"], 604_800, CancellationToken.None);
+        context.Domains.Single().MtaStsStatus = MtaStsStatus.Active;
+        await context.SaveChangesAsync();
+
+        // Editing the MX list on an already-enabled, already-Active domain shouldn't reset it back
+        // to PendingDns — only the false-to-true enable transition does that.
+        await DomainManagementService.SetMtaStsConfigAsync(
+            context, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com", "backup.contoso.com"], 604_800, CancellationToken.None);
+
+        using var verify = CreateContext();
+        var domain = verify.Domains.Single();
+        Assert.Equal(MtaStsStatus.Active, domain.MtaStsStatus);
+        Assert.Equal(["mail.contoso.com", "backup.contoso.com"], domain.MtaStsMxHosts);
+    }
+
+    [Fact]
     public async Task DbUpdateException_FromAUniqueViolation_WrapsAPostgresExceptionWithSqlState23505()
     {
         using var context = CreateContext();

@@ -66,6 +66,38 @@ public static class DomainManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Saves a domain's MTA-STS hosting configuration from the domain detail page's MTA-STS
+    /// tab. Enabling hosting for the first time (false -&gt; true) resets MtaStsStatus to PendingDns
+    /// so PollingService's MTA-STS cycle picks it up on its next ~15 minute pass; disabling it
+    /// (true -&gt; false) is intentionally left alone here — that same cycle detects the flip and
+    /// runs IMtaStsHostProvisioner.TeardownAsync before resetting the status itself, since teardown
+    /// is a network call this pure-DB service does not make.</summary>
+    public static async Task SetMtaStsConfigAsync(
+        DotMarcDbContext context,
+        int domainId,
+        bool enabled,
+        MtaStsMode mode,
+        List<string> mxHosts,
+        int maxAgeSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+
+        if (enabled && !domain.MtaStsEnabled)
+        {
+            domain.MtaStsStatus = MtaStsStatus.PendingDns;
+            domain.MtaStsCheckDetail = null;
+            domain.MtaStsCheckedUtc = null;
+        }
+
+        domain.MtaStsEnabled = enabled;
+        domain.MtaStsMode = mode;
+        domain.MtaStsMxHosts = mxHosts;
+        domain.MtaStsMaxAgeSeconds = maxAgeSeconds;
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Persists a full custom display order: SortOrder is set to each domain's index in
     /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme — simple, and
     /// correct at the scale (a handful to a few dozen domains) this app is designed for. Two

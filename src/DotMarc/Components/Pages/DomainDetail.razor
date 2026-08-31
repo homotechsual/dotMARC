@@ -11,6 +11,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ILogger<DomainDetail> Logger
+@inject ISnackbar Snackbar
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -49,6 +50,47 @@ else
                     }
                 }
             </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="MTA-STS">
+            <AuthorizeView Policy="MtaStsView" Context="viewAuthState">
+                <MudPaper Class="pa-4 my-2" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Policy hosting status</MudText>
+                    <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(_domain.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(_domain.MtaStsStatus)</MudChip>
+                    @if (_domain.MtaStsCheckedUtc is { } checkedUtc)
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_domain.MtaStsCheckDetail))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1">@_domain.MtaStsCheckDetail</MudText>
+                    }
+                </MudPaper>
+            </AuthorizeView>
+
+            <AuthorizeView Policy="MtaStsManage" Context="manageAuthState">
+                <MudPaper Class="pa-4 my-2" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Configuration</MudText>
+                    <MudSwitch T="bool" @bind-Value="_mtaStsEnabled" Color="Color.Primary" Label="Host this domain's MTA-STS policy" />
+                    <MudGrid Class="mt-2">
+                        <MudItem xs="12" sm="4">
+                            <MudSelect T="MtaStsMode" @bind-Value="_mtaStsMode" Label="Mode">
+                                <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Testing">Testing</MudSelectItem>
+                                <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Enforce">Enforce</MudSelectItem>
+                                <MudSelectItem T="MtaStsMode" Value="MtaStsMode.None">None</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudNumericField T="int" @bind-Value="_mtaStsMaxAgeSeconds" Label="Max age (seconds)" Min="0" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_mtaStsMxHostsText" Label="MX hosts" Lines="3"
+                                          HelperText="One per line, e.g. mail.example.com" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="SaveMtaStsConfigAsync">Save</MudButton>
+                </MudPaper>
+            </AuthorizeView>
         </MudTabPanel>
 
         <MudTabPanel Text="Sources">
@@ -112,6 +154,11 @@ else
     private List<ChartSeries<double>> _series = [];
     private string[] _xAxisLabels = [];
 
+    private bool _mtaStsEnabled;
+    private MtaStsMode _mtaStsMode;
+    private int _mtaStsMaxAgeSeconds;
+    private string _mtaStsMxHostsText = "";
+
     protected override async Task OnInitializedAsync()
     {
         // See Dashboard.razor's OnInitializedAsync for why this is a fresh, untracked,
@@ -143,6 +190,11 @@ else
                 return;
             }
         }
+
+        _mtaStsEnabled = _domain.MtaStsEnabled;
+        _mtaStsMode = _domain.MtaStsMode;
+        _mtaStsMaxAgeSeconds = _domain.MtaStsMaxAgeSeconds;
+        _mtaStsMxHostsText = string.Join('\n', _domain.MtaStsMxHosts);
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
 
@@ -219,6 +271,41 @@ else
             new ChartSeries<double> { Name = "Quarantined", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.Quarantine : 0)).ToArray() },
             new ChartSeries<double> { Name = "Rejected", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.Reject : 0)).ToArray() }
         ];
+    }
+
+    private async Task SaveMtaStsConfigAsync()
+    {
+        if (_domain is null)
+        {
+            return;
+        }
+
+        var mxHosts = _mtaStsMxHostsText
+            .Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.SetMtaStsConfigAsync(db, _domain.Id, _mtaStsEnabled, _mtaStsMode, mxHosts, _mtaStsMaxAgeSeconds, CancellationToken.None);
+
+            // Refresh the read-only status panel above without re-running this page's full
+            // OnInitializedAsync (which would re-trigger RDAP enrichment for every source row).
+            var updated = await db.Domains.AsNoTracking().SingleAsync(d => d.Id == _domain.Id);
+            _domain.MtaStsEnabled = updated.MtaStsEnabled;
+            _domain.MtaStsStatus = updated.MtaStsStatus;
+            _domain.MtaStsCheckedUtc = updated.MtaStsCheckedUtc;
+            _domain.MtaStsCheckDetail = updated.MtaStsCheckDetail;
+            _domain.MtaStsMode = updated.MtaStsMode;
+            _domain.MtaStsMxHosts = updated.MtaStsMxHosts;
+            _domain.MtaStsMaxAgeSeconds = updated.MtaStsMaxAgeSeconds;
+
+            Snackbar.Add("MTA-STS configuration saved.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save MTA-STS configuration. Try again.", Severity.Error);
+        }
     }
 
     private async Task EnrichSourceInBackgroundAsync(SourceRow source)
