@@ -1,7 +1,7 @@
 ---
 slug: v0-1-0
 title: "dotMARC v0.1.0: DMARC monitoring for every domain you manage"
-description: The first tagged release of dotMARC — a self-hosted DMARC aggregate report analyzer built for MSPs managing many client domains from one mailbox.
+description: The first tagged release of dotMARC, a self-hosted DMARC aggregate report analyzer built for MSPs managing many client domains from one mailbox.
 authors: [mikey]
 tags: [release]
 ---
@@ -18,11 +18,11 @@ through raw XML attachments or standing up a separate tool per client.
 
 ## Why dotMARC
 
-If you manage DMARC for more than a handful of domains — an MSP watching client domains, or one
-org watching its own — the aggregate reports mail providers send back pile up fast, and they're
-not meant to be read by a human. dotMARC points every monitored domain's DMARC record at one
-mailbox, polls it, parses the reports, and attributes each one back to the right domain
-automatically. No per-domain mailbox, no manual XML wrangling.
+If you manage DMARC for more than a handful of domains (an MSP watching client domains, or one org
+watching its own), the aggregate reports mail providers send back pile up fast, and they're not
+meant to be read by a human. dotMARC points every monitored domain's DMARC record at one mailbox,
+polls it, parses the reports, and attributes each one back to the right domain automatically. No
+per-domain mailbox, no manual XML wrangling.
 
 <ThemedImage
   alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
@@ -34,17 +34,16 @@ automatically. No per-domain mailbox, no manual XML wrangling.
 
 ## What's in this release
 
-- **One mailbox, every domain** — automatic polling and parsing of DMARC aggregate (RUA) reports,
+- **One mailbox, every domain**: automatic polling and parsing of DMARC aggregate (RUA) reports,
   deduplicated so a message is never processed twice, attributed back to the right domain from its
   `From` header.
-- **Multi-domain dashboard** — pass/fail rates, source breakdowns, and DNS record status across
+- **Multi-domain dashboard**: pass/fail rates, source breakdowns, and DNS record status across
   every monitored domain, filterable by Group and Tag.
-- **DNS status checks** — live DNS lookups confirm each monitored domain's DMARC record is
-  actually in place and pointed at the right mailbox, not just assumed.
-- **Built for MSPs** — fine-grained, per-domain access control. Grant an external client
-  visibility into just their own domains via a Group-scoped Viewer role, not an all-or-nothing
-  login.
-- **Self-hosted, your data** — runs on your own infrastructure via Docker Compose or the included
+- **DNS status checks**: live DNS lookups confirm each monitored domain's DMARC record is actually
+  in place and pointed at the right mailbox, not just assumed.
+- **Built for MSPs**: fine-grained, per-domain access control. Grant an external client visibility
+  into just their own domains via a Group-scoped Viewer role, not an all-or-nothing login.
+- **Self-hosted, your data**: runs on your own infrastructure via Docker Compose or the included
   Azure Container Apps Bicep template, backed by PostgreSQL. Report data never leaves your
   environment.
 
@@ -60,6 +59,6 @@ automatically. No per-domain mailbox, no manual XML wrangling.
 
 - [Read the docs](/docs/getting-started) to set up the two Entra app registrations dotMARC needs
   and run it with Docker Compose.
-- [View the source on GitHub](https://github.com/homotechsual/dotMARC) — dotMARC is open source.
+- [View the source on GitHub](https://github.com/homotechsual/dotMARC): dotMARC is open source.
 
-More to come — check back here for release notes as new versions ship.
+More to come. Check back here for release notes as new versions ship.
