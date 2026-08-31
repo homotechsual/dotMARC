@@ -8,6 +8,7 @@
 
 @if (DemoOptions.Value.Enabled)
 {
+    <PageTitle>dotMARC - Demo Sign In</PageTitle>
     <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
         <MudText Typo="Typo.h4" Class="mb-4">dotMARC demo</MudText>
         <MudText Class="mb-6">
@@ -31,6 +32,12 @@
             </form>
         </MudPaper>
     </MudContainer>
+}
+else 
+{
+    <PageTitle>dotMARC - Demo Disabled</PageTitle>
+    <MudText Typo="Typo.h5">Demo mode is disabled</MudText>
+    <MudText>Contact an administrator if you believe this is a mistake.</MudText>
 }
 
 @code {
