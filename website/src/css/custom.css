@@ -45,6 +45,14 @@ html {
 }
 
 body {
+  /* Infima's base stylesheet sets `body { height: 100% }`, which resolves to exactly one
+     viewport height and, unlike min-height, actually caps the box: on any page taller than the
+     viewport, body's own background-color paint stops at that height while the real content
+     keeps rendering past it, exposing html's own default background (Infima's
+     --ifm-background-color, not this site's navy) as a hard-edged band for the rest of the page.
+     Overriding back to auto lets body grow to fit its actual content, like min-height already
+     assumes it does. */
+  height: auto;
   min-height: 100vh;
   font-family: var(--ifm-font-family-base);
   background-color: #f7f8fa;
