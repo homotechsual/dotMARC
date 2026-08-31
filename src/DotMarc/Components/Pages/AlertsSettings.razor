@@ -1,0 +1,69 @@
+@page "/alerts/settings"
+@attribute [Authorize(Policy = "AccessManage")]
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@inject IConfiguration Configuration
+@inject IWebHostEnvironment Environment
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h4" Class="mb-4">Alert settings</MudText>
+
+<MudPaper Class="pa-4">
+    <MudGrid>
+        <MudItem xs="12">
+            <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudSelect T="string" Label="Delivery mode" Variant="Variant.Outlined" @bind-Value="_settings.DeliveryMode">
+                <MudSelectItem Value="@("Teams")">Teams only</MudSelectItem>
+                <MudSelectItem Value="@("Generic")">Generic webhook only</MudSelectItem>
+                <MudSelectItem Value="@("Both")">Teams + generic webhook</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudTextField Label="Teams webhook URL" @bind-Value="_settings.TeamsWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudTextField Label="Generic webhook URL" @bind-Value="_settings.GenericWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudNumericField Label="Missing report threshold (days)" @bind-Value="_settings.MissingReportThresholdDays" Min="1" Max="90" Variant="Variant.Outlined" />
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudNumericField Label="Cooldown (minutes)" @bind-Value="_settings.CooldownMinutes" Min="1" Max="10080" Variant="Variant.Outlined" />
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudNumericField Label="Monitor interval (seconds)" @bind-Value="_settings.MonitorIntervalSeconds" Min="30" Max="86400" Variant="Variant.Outlined" />
+        </MudItem>
+    </MudGrid>
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAsync">Save settings</MudButton>
+</MudPaper>
+
+@code {
+    private NotificationOptions _settings = new();
+
+    protected override void OnInitialized()
+    {
+        _settings = Configuration.GetSection(NotificationOptions.SectionName).Get<NotificationOptions>() ?? new NotificationOptions();
+    }
+
+    private async Task SaveAsync()
+    {
+        var filePath = Path.Combine(Environment.ContentRootPath, "appsettings.json");
+        var document = JsonNode.Parse(await File.ReadAllTextAsync(filePath)) as JsonObject ?? new JsonObject();
+        document[NotificationOptions.SectionName] = JsonSerializer.SerializeToNode(_settings);
+        await File.WriteAllTextAsync(filePath, document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+
+        ((IConfigurationRoot)Configuration).Reload();
+        Snackbar.Add("Alert settings saved.", Severity.Success);
+    }
+}

@@ -2,6 +2,7 @@ using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.Graph;
 using DotMarc.MtaSts;
+using DotMarc.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -33,6 +34,7 @@ public sealed class PollingService : BackgroundService
 
     private readonly IGraphMailboxClient? _graphClient;
     private readonly DotMarcDbContext? _context;
+    private readonly IAlertingService? _alertingService;
     private readonly ILogger<PollingService> _logger;
     private readonly IServiceScopeFactory? _scopeFactory;
     private readonly GraphOptions? _options;
@@ -40,9 +42,15 @@ public sealed class PollingService : BackgroundService
     /// <summary>Constructor used by tests: operates directly against an already-open
     /// IGraphMailboxClient and DotMarcDbContext, bypassing DI scoping entirely.</summary>
     public PollingService(IGraphMailboxClient graphClient, DotMarcDbContext context, ILogger<PollingService> logger)
+        : this(graphClient, context, null, logger)
+    {
+    }
+
+    public PollingService(IGraphMailboxClient graphClient, DotMarcDbContext context, IAlertingService? alertingService, ILogger<PollingService> logger)
     {
         _graphClient = graphClient;
         _context = context;
+        _alertingService = alertingService;
         _logger = logger;
     }
 
@@ -54,10 +62,11 @@ public sealed class PollingService : BackgroundService
     /// parameters would all be resolvable too, and the container would throw on activation
     /// rather than pick one.</summary>
     [ActivatorUtilitiesConstructor]
-    public PollingService(IServiceScopeFactory scopeFactory, IOptions<GraphOptions> options, ILogger<PollingService> logger)
+    public PollingService(IServiceScopeFactory scopeFactory, IOptions<GraphOptions> options, IAlertingService alertingService, ILogger<PollingService> logger)
     {
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _alertingService = alertingService;
         _logger = logger;
     }
 
@@ -564,8 +573,13 @@ public sealed class PollingService : BackgroundService
             {
                 var decompressed = ReportDecompressor.Decompress(attachment.ContentBytes);
                 var parsed = DmarcReportParser.Parse(decompressed);
-                await StoreReportAsync(context, parsed, System.Text.Encoding.UTF8.GetString(decompressed), cancellationToken).ConfigureAwait(false);
+                var domain = await StoreReportAsync(context, parsed, System.Text.Encoding.UTF8.GetString(decompressed), cancellationToken).ConfigureAwait(false);
                 await RecordProcessedMessageAsync(context, message.Id, cancellationToken).ConfigureAwait(false);
+
+                if (_alertingService is not null)
+                {
+                    await _alertingService.ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                }
 
                 // The report is safely committed and recorded as processed at this point — a
                 // failure here won't cause re-fetching/re-parsing on the next poll (see
@@ -595,7 +609,7 @@ public sealed class PollingService : BackgroundService
         throw lastError ?? new InvalidDataException("No attachment could be parsed as a DMARC report.");
     }
 
-    private static async Task StoreReportAsync(DotMarcDbContext context, ParsedReport parsed, string rawXml, CancellationToken cancellationToken)
+    private async Task<Domain> StoreReportAsync(DotMarcDbContext context, ParsedReport parsed, string rawXml, CancellationToken cancellationToken)
     {
         var domain = await context.Domains.SingleOrDefaultAsync(d => d.Name == parsed.Domain, cancellationToken).ConfigureAwait(false);
         if (domain is null)
@@ -617,7 +631,7 @@ public sealed class PollingService : BackgroundService
             // Same report already stored from an earlier attempt at this message (see the
             // MarkAsReadAsync-failure handling in ProcessMessageAsync). Nothing to insert — the
             // caller still retries marking the message read.
-            return;
+            return domain;
         }
 
         domain.LastReportReceivedUtc = DateTimeOffset.UtcNow;
@@ -648,6 +662,7 @@ public sealed class PollingService : BackgroundService
 
         context.Reports.Add(report);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return domain;
     }
 
     /// <summary>Records that a mailbox message has been successfully turned into a stored Report,

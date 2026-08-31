@@ -1,3 +1,4 @@
+using DotMarc.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -22,6 +23,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
     public DbSet<IpRange> IpRanges => Set<IpRange>();
+    public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -154,6 +156,11 @@ public sealed class DotMarcDbContext : DbContext
             entity.HasKey(r => new { r.RangeStart, r.RangeEnd });
             entity.Property(r => r.RangeStart).HasMaxLength(45); // enough for a full IPv6 address
             entity.Property(r => r.RangeEnd).HasMaxLength(45);
+        });
+
+        modelBuilder.Entity<AlertEvent>(entity =>
+        {
+            entity.HasIndex(e => new { e.DomainName, e.AlertType, e.CreatedUtc });
         });
     }
 }

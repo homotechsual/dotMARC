@@ -1,6 +1,7 @@
 using DotMarc.Data;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
+using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,6 +67,7 @@ public sealed class PollingServiceDiActivationTests : IAsyncLifetime
         services.AddLogging();
         services.AddDbContext<DotMarcDbContext>(options => options.UseNpgsql(_connectionString));
         services.AddSingleton<IGraphMailboxClient>(new NoOpGraphMailboxClient());
+        services.AddSingleton<IAlertingService>(new NoOpAlertingService());
         services.Configure<GraphOptions>(o =>
         {
             o.ClientId = "test-client-id";
@@ -94,5 +96,12 @@ public sealed class PollingServiceDiActivationTests : IAsyncLifetime
             Task.FromResult<IReadOnlyList<MailboxAttachment>>([]);
 
         public Task MarkAsReadAsync(string messageId, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpAlertingService : IAlertingService
+    {
+        public Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
