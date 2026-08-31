@@ -1,0 +1,64 @@
+---
+slug: v0-2-0
+title: "dotMARC v0.2.0: source IP ownership, MTA-STS hosting, and a live demo"
+description: Source IP ownership/country enrichment, self-hosted MTA-STS policy hosting, a public demo instance, and pinned-domain alerting.
+authors: [mikey]
+tags: [release]
+draft: true
+---
+
+:::note[Draft]
+This post is a draft, written ahead of the v0.2.0 tag. Before publishing: flip `draft: true` to
+`false` in the front matter, confirm every feature below actually shipped in the tagged release
+(the alerting section in particular — check homotechsual/dotMARC#1 has merged), rename this file
+to the actual tag date, and add screenshots for the new Sources tab, MTA-STS tab, and Alerts pages
+once they exist.
+:::
+
+Since [`v0.1.0`](/blog/v0-1-0), dotMARC has picked up four things worth calling out: you can now
+see who actually owns a source IP, host MTA-STS policies without standing up your own
+infrastructure, try the whole thing without installing anything, and get notified when a domain
+you're watching goes quiet.
+
+{/* truncate */}
+
+## Who owns that source IP?
+
+The Sources tab on each domain's detail page now enriches every source IP with its registered
+organization and country, looked up via RDAP — so a DMARC failure from an unfamiliar IP doesn't
+mean pasting it into an external WHOIS tool by hand. Lookups are cached indefinitely once
+resolved, covering both IPv4 and IPv6, and — new since the very first version of this — related
+IPs in the same registry allocation block (for example a whole `/31` from one provider) share a
+single cached lookup instead of each triggering its own RDAP call.
+
+## Self-hosted MTA-STS, without the yak-shave
+
+MTA-STS tells receiving mail servers to require a valid, verified TLS connection when delivering
+to your domain — but standing it up means hosting a policy file on `mta-sts.<yourdomain>` with a
+real, publicly trusted certificate, for every domain you manage. dotMARC now does this for you:
+enable it per domain from the detail page, point a CNAME where it tells you, and dotMARC verifies
+DNS, provisions the certificate, and serves the policy — either through your own self-hosted
+instance (via Caddy's on-demand TLS) or, if you're on the Azure deployment, through Azure
+Container Apps' managed custom domains. A status indicator on the domain detail page walks you
+through onboarding and flags anything that regresses later.
+
+## Try it without installing anything
+
+There's now a public demo at [demo.dotmarc.app](https://demo.dotmarc.app/), seeded with a
+simulated MSP's worth of client domains and DMARC history. Switch between an Admin and a
+Group-scoped Viewer persona to see exactly what an external client would (and wouldn't) have
+access to. It resets on a nightly schedule, so feel free to poke at everything.
+
+## Know when a domain goes quiet
+
+A new pinned-domain health check watches every monitored domain's report cadence and raises an
+alert — delivered to Microsoft Teams and/or a generic JSON webhook, your choice — if one stops
+sending reports for longer than expected. The alert clears itself automatically the moment a
+report comes back in. Delivery, thresholds, and cooldown are all configurable from a new Alert
+settings page, gated behind their own dedicated permissions rather than reusing broader
+domain-management access.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.2.0) for
+everything that shipped between these two tags, including the usual pile of fixes.

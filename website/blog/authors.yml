@@ -1,2 +1,6 @@
 # Blog post authors are declared here and referenced from each post's front matter
 # (e.g. `authors: [someone]`). Empty until the first post is written.
+mikey:
+  name: Mikey O'Toole
+  title: Creator of dotMARC
+  url: https://homotechsual.dev
