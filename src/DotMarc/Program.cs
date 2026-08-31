@@ -66,9 +66,6 @@ builder.Services.AddOptions<DotMarc.Demo.DemoOptions>()
 var demoOptions = new DotMarc.Demo.DemoOptions();
 builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
 
-builder.Services.AddOptions<NotificationOptions>()
-    .Bind(builder.Configuration.GetSection(NotificationOptions.SectionName));
-
 builder.Services.AddSingleton<IAlertingService, AlertingService>();
 
 if (!demoOptions.Enabled)

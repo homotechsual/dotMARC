@@ -1,7 +1,6 @@
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DotMarc.Notifications;
 
@@ -15,27 +14,30 @@ public sealed class AlertingService : IAlertingService
 {
     private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
     private readonly IAlertWebhookClient _alertWebhookClient;
-    private readonly NotificationOptions _options;
     private readonly ILogger<AlertingService> _logger;
 
-    public AlertingService(IDbContextFactory<DotMarcDbContext> dbFactory, IAlertWebhookClient alertWebhookClient, IOptions<NotificationOptions> options, ILogger<AlertingService> logger)
+    public AlertingService(IDbContextFactory<DotMarcDbContext> dbFactory, IAlertWebhookClient alertWebhookClient, ILogger<AlertingService> logger)
     {
         _dbFactory = dbFactory;
         _alertWebhookClient = alertWebhookClient;
-        _options = options.Value;
         _logger = logger;
     }
 
     public async Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+
+        // Read live rather than once at startup: this is a singleton service, and settings are
+        // now editable at any time from /alerts/settings (see NotificationSettings's doc
+        // comment) — a value bound once via IOptions would never pick up a later change without
+        // a restart.
+        var settings = await NotificationSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
+        if (!settings.Enabled)
         {
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-
-        var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-_options.MissingReportThresholdDays);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.MissingReportThresholdDays);
         var domains = await db.Domains
             .AsNoTracking()
             .Where(d => d.IsMonitored)
@@ -51,7 +53,7 @@ public sealed class AlertingService : IAlertingService
                 continue;
             }
 
-            await EnsureAlertAsync(db, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", $"The pinned domain '{domain.Name}' has not received a DMARC report since {lastReport:O}.", cancellationToken).ConfigureAwait(false);
+            await EnsureAlertAsync(db, settings, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", $"The pinned domain '{domain.Name}' has not received a DMARC report since {lastReport:O}.", cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -75,7 +77,7 @@ public sealed class AlertingService : IAlertingService
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task EnsureAlertAsync(DotMarcDbContext context, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken)
+    private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken)
     {
         var activeAlert = await context.AlertEvents
             .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
@@ -85,7 +87,7 @@ public sealed class AlertingService : IAlertingService
 
         if (activeAlert is not null)
         {
-            var cooldown = TimeSpan.FromMinutes(_options.CooldownMinutes);
+            var cooldown = TimeSpan.FromMinutes(settings.CooldownMinutes);
             if (activeAlert.CreatedUtc > DateTimeOffset.UtcNow.Subtract(cooldown))
             {
                 return;
@@ -107,7 +109,7 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _alertWebhookClient.SendAlertAsync(domainName, alertType, title, message, cancellationToken).ConfigureAwait(false);
+            await _alertWebhookClient.SendAlertAsync(settings, domainName, alertType, title, message, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

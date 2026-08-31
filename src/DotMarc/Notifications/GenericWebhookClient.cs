@@ -1,27 +1,21 @@
 using System.Net.Http.Json;
-using Microsoft.Extensions.Options;
 
 namespace DotMarc.Notifications;
 
 public interface IGenericWebhookClient
 {
-    Task SendAlertAsync(string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
+    Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
 }
 
 public sealed class GenericWebhookClient : IGenericWebhookClient
 {
     private readonly HttpClient _httpClient;
-    private readonly NotificationOptions _options;
 
-    public GenericWebhookClient(HttpClient httpClient, IOptions<NotificationOptions> options)
-    {
-        _httpClient = httpClient;
-        _options = options.Value;
-    }
+    public GenericWebhookClient(HttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task SendAlertAsync(string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.GenericWebhookUrl))
+        if (!settings.Enabled || string.IsNullOrWhiteSpace(settings.GenericWebhookUrl))
         {
             return;
         }
@@ -36,7 +30,7 @@ public sealed class GenericWebhookClient : IGenericWebhookClient
             createdUtc = DateTimeOffset.UtcNow
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(_options.GenericWebhookUrl, payload, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.PostAsJsonAsync(settings.GenericWebhookUrl, payload, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 }

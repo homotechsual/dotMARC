@@ -30,7 +30,7 @@
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                        Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="Toggle dark mode" />
-        <AuthorizeView Policy="DomainsView">
+        <AuthorizeView Policy="AlertsView">
             <MudButton Href="/alerts" Color="Color.Inherit">Alerts</MudButton>
         </AuthorizeView>
         <AuthorizeView Policy="DomainsWrite">
@@ -39,9 +39,11 @@
         <AuthorizeView Policy="GroupsOrTagsWrite">
             <MudButton Href="/groups" Color="Color.Inherit">Manage groups</MudButton>
         </AuthorizeView>
+        <AuthorizeView Policy="AlertsManage">
+            <MudButton Href="/alerts/settings" Color="Color.Inherit">Alert settings</MudButton>
+        </AuthorizeView>
         <AuthorizeView Policy="AccessManage">
             <MudButton Href="/access" Color="Color.Inherit">Manage access</MudButton>
-            <MudButton Href="/alerts/settings" Color="Color.Inherit">Alert settings</MudButton>
         </AuthorizeView>
     </MudAppBar>
     <MudMainContent>

@@ -20,5 +20,7 @@ public enum Permission
     TagsDelete,
     AccessManage,
     MtaStsView,
-    MtaStsManage
+    MtaStsManage,
+    AlertsView,
+    AlertsManage
 }

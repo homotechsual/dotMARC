@@ -3,7 +3,6 @@ using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace DotMarc.Tests.Notifications;
@@ -32,33 +31,43 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         }
     }
 
+    private DotMarcDbContext CreateContext() =>
+        new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
+
+    private async Task SeedSettingsAsync(bool enabled = true, int missingReportThresholdDays = 2, int cooldownMinutes = 180)
+    {
+        await using var context = CreateContext();
+        await NotificationSettingsService.SaveAsync(context, new NotificationSettings
+        {
+            Enabled = enabled,
+            DeliveryMode = "Teams",
+            TeamsWebhookUrl = "https://example.test/webhook",
+            MissingReportThresholdDays = missingReportThresholdDays,
+            CooldownMinutes = cooldownMinutes
+        });
+    }
+
+    private async Task SeedMonitoredDomainAsync(string name, DateTimeOffset? lastReportReceivedUtc)
+    {
+        await using var context = CreateContext();
+        context.Domains.Add(new Domain
+        {
+            Name = name,
+            IsMonitored = true,
+            FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+            LastReportReceivedUtc = lastReportReceivedUtc
+        });
+        await context.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task CheckPinnedDomainsAsync_CreatesOneMissedReportAlert_PerDomainWithinCooldown()
     {
-        await using var seedContext = CreateContext();
-        seedContext.Domains.Add(new Domain
-        {
-            Name = "contoso.io",
-            IsMonitored = true,
-            FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
-            LastReportReceivedUtc = DateTimeOffset.UtcNow.AddDays(-3)
-        });
-        await seedContext.SaveChangesAsync();
+        await SeedSettingsAsync();
+        await SeedMonitoredDomainAsync("contoso.io", DateTimeOffset.UtcNow.AddDays(-3));
 
         var fakeNotifier = new FakeAlertWebhookClient();
-        var factory = new TestDbContextFactory(_connectionString);
-        var service = new AlertingService(
-            factory,
-            fakeNotifier,
-            Options.Create(new NotificationOptions
-            {
-                Enabled = true,
-                DeliveryMode = "Teams",
-                TeamsWebhookUrl = "https://example.test/webhook",
-                MissingReportThresholdDays = 2,
-                CooldownMinutes = 180
-            }),
-            NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance);
 
         await service.CheckPinnedDomainsAsync();
         await service.CheckPinnedDomainsAsync();
@@ -72,37 +81,27 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         Assert.Equal(1, fakeNotifier.CallCount);
     }
 
-    private DotMarcDbContext CreateContext()
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_DoesNothing_WhenSettingsAreDisabled()
     {
-        var options = new DbContextOptionsBuilder<DotMarcDbContext>()
-            .UseNpgsql(_connectionString)
-            .Options;
-        return new DotMarcDbContext(options);
-    }
+        await SeedSettingsAsync(enabled: false);
+        await SeedMonitoredDomainAsync("contoso.io", DateTimeOffset.UtcNow.AddDays(-30));
 
-    private sealed class TestDbContextFactory : IDbContextFactory<DotMarcDbContext>
-    {
-        private readonly string _connectionString;
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance);
 
-        public TestDbContextFactory(string connectionString) => _connectionString = connectionString;
+        await service.CheckPinnedDomainsAsync();
 
-        public DotMarcDbContext CreateDbContext()
-        {
-            var options = new DbContextOptionsBuilder<DotMarcDbContext>()
-                .UseNpgsql(_connectionString)
-                .Options;
-            return new DotMarcDbContext(options);
-        }
-
-        public ValueTask<DotMarcDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
-            => new(CreateDbContext());
+        await using var verifyContext = CreateContext();
+        Assert.Empty(verifyContext.AlertEvents);
+        Assert.Equal(0, fakeNotifier.CallCount);
     }
 
     private sealed class FakeAlertWebhookClient : IAlertWebhookClient
     {
         public int CallCount { get; private set; }
 
-        public Task SendAlertAsync(string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+        public Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
         {
             CallCount++;
             return Task.CompletedTask;

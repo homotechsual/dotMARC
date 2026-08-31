@@ -1,33 +1,27 @@
 using System.Net.Http.Json;
-using Microsoft.Extensions.Options;
 
 namespace DotMarc.Notifications;
 
 public interface ITeamsWebhookClient
 {
-    Task SendAlertAsync(string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
+    Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
 }
 
 public sealed class TeamsWebhookClient : ITeamsWebhookClient
 {
     private readonly HttpClient _httpClient;
-    private readonly NotificationOptions _options;
 
-    public TeamsWebhookClient(HttpClient httpClient, IOptions<NotificationOptions> options)
-    {
-        _httpClient = httpClient;
-        _options = options.Value;
-    }
+    public TeamsWebhookClient(HttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task SendAlertAsync(string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.TeamsWebhookUrl))
+        if (!settings.Enabled || string.IsNullOrWhiteSpace(settings.TeamsWebhookUrl))
         {
             return;
         }
 
         var payload = BuildPayload(domainName, alertType, title, message);
-        using var response = await _httpClient.PostAsJsonAsync(_options.TeamsWebhookUrl, payload, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.PostAsJsonAsync(settings.TeamsWebhookUrl, payload, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 

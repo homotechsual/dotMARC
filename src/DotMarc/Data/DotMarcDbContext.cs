@@ -24,6 +24,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
+    public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -162,5 +163,11 @@ public sealed class DotMarcDbContext : DbContext
         {
             entity.HasIndex(e => new { e.DomainName, e.AlertType, e.CreatedUtc });
         });
+
+        // Seeds the one row every reader relies on existing (see NotificationSettings's doc
+        // comment) — HasData rather than runtime bootstrap logic (cf. AccessBootstrapper) because
+        // there's no leader-election concern here: it's static seed data applied once by the
+        // migration itself, not something computed per-deployment at startup.
+        modelBuilder.Entity<NotificationSettings>().HasData(new NotificationSettings { Id = 1 });
     }
 }

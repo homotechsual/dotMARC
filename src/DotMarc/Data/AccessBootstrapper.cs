@@ -24,7 +24,7 @@ public static class AccessBootstrapper
     /// changes. The Admin role's permission list is NOT similarly shared: both places derive it
     /// identically via <c>[.. Enum.GetValues&lt;Permission&gt;()]</c>, which self-syncs when the
     /// enum grows, so there's no equivalent duplication risk there.</summary>
-    public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView];
+    public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView, Permission.AlertsView];
 
     public static async Task BootstrapWithLeaderLockAsync(DotMarcDbContext context, IOptions<InitialAdminsOptions> options, ILogger logger, CancellationToken cancellationToken = default)
     {
