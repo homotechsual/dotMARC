@@ -102,7 +102,13 @@ builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts
 // (mta-sts.<domain>) per call, so each request carries its own absolute URI.
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsServingVerifier, DotMarc.MtaSts.MtaStsServingVerifier>();
 
-builder.Services.AddScoped<DotMarc.MtaSts.IMtaStsHostProvisioner>(sp => new DotMarc.MtaSts.CaddyMtaStsHostProvisioner());
+builder.Services.AddScoped<DotMarc.MtaSts.IMtaStsHostProvisioner>(sp =>
+{
+    var mtaStsOptions = sp.GetRequiredService<IOptions<DotMarc.MtaSts.MtaStsOptions>>();
+    return string.Equals(mtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase)
+        ? new DotMarc.MtaSts.AzureMtaStsHostProvisioner(mtaStsOptions)
+        : new DotMarc.MtaSts.CaddyMtaStsHostProvisioner();
+});
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {

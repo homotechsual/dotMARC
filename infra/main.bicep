@@ -26,6 +26,12 @@ param entraIdClientId string
 @description('Comma-separated list of email addresses granted the Admin role the first time the app starts with no existing access grants. Not secret — just email addresses. Only takes effect on that first startup; safe to leave set afterwards.')
 param initialAdminEmails string = ''
 
+@description('Enable MTA-STS policy hosting (see getting-started.mdx). Grants the container app a narrowly-scoped custom RBAC role to manage its own custom domains and managed certificates — off by default, since it widens the managed identity beyond Key Vault Secrets User.')
+param enableMtaStsHosting bool = false
+
+@description('Hostname customers CNAME mta-sts.<their-domain> to. Only meaningful when enableMtaStsHosting is true. The Container App\'s own generated hostname isn\'t known until after a first deployment (see containerAppUrl output) — leave this blank on that first deployment, then set it on a follow-up update, same two-step pattern as the OIDC redirect URI below.')
+param mtaStsHostingHostname string = ''
+
 var postgresServerName = '${baseName}-pg-${uniqueString(resourceGroup().id)}'
 var keyVaultName = '${take(baseName, 7)}-kv-${uniqueString(resourceGroup().id)}'
 var logAnalyticsName = '${baseName}-logs'
@@ -148,6 +154,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'EntraId__TenantId', value: entraIdTenantId }
             { name: 'EntraId__ClientId', value: entraIdClientId }
             { name: 'InitialAdmins__Emails', value: initialAdminEmails }
+            // Harmless to always set: PollingService's MTA-STS cycle no-ops entirely whenever
+            // MtaSts__HostingHostname is empty (see MtaStsOptions), which is the default above.
+            { name: 'MtaSts__HostingHostname', value: mtaStsHostingHostname }
+            { name: 'MtaSts__Provisioner', value: 'Azure' }
+            { name: 'MtaSts__AzureSubscriptionId', value: subscription().subscriptionId }
+            { name: 'MtaSts__AzureResourceGroupName', value: resourceGroup().name }
+            { name: 'MtaSts__AzureContainerAppName', value: containerAppName }
+            { name: 'MtaSts__AzureManagedEnvironmentName', value: containerAppEnvName }
             { name: 'Graph__ClientSecret', secretRef: 'graph-client-secret' }
             { name: 'EntraId__ClientSecret', secretRef: 'entraid-client-secret' }
             { name: 'ConnectionStrings__DotMarc', secretRef: 'connectionstrings-dotmarc' }
@@ -184,6 +198,81 @@ resource keyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-0
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// MTA-STS hosting needs the app's own managed identity to bind custom domains to itself and
+// create managed certificates on its own environment (see AzureMtaStsHostProvisioner). Azure has
+// no built-in role scoped that narrowly — the only write action that exists for custom domains
+// (containerApps/write) also covers the rest of the container app's config, image/scale/env
+// included, and the built-in "Container Apps Contributor" role additionally bundles alert-rule
+// management and environment create/join rights this identity has no use for. Two separate
+// custom roles, each assigned only at the one resource it actually needs (not
+// resource-group-wide), is as narrow as Azure's RBAC surface allows for this.
+resource mtaStsContainerAppRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enableMtaStsHosting) {
+  name: guid(containerApp.id, 'dotMARC MTA-STS Container App Role')
+  properties: {
+    roleName: 'dotMARC MTA-STS Container App Role (${baseName})'
+    description: 'Lets dotMARC bind mta-sts.<domain> custom domains to its own Container App.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: [
+          'Microsoft.App/containerApps/read'
+          'Microsoft.App/containerApps/write'
+        ]
+        notActions: []
+        dataActions: []
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [
+      resourceGroup().id
+    ]
+  }
+}
+
+resource mtaStsContainerAppRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableMtaStsHosting) {
+  name: guid(containerApp.id, 'dotMARC MTA-STS Container App Role Assignment')
+  scope: containerApp
+  properties: {
+    roleDefinitionId: mtaStsContainerAppRole.id
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource mtaStsManagedEnvironmentRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enableMtaStsHosting) {
+  name: guid(containerAppEnv.id, 'dotMARC MTA-STS Managed Environment Role')
+  properties: {
+    roleName: 'dotMARC MTA-STS Managed Environment Role (${baseName})'
+    description: 'Lets dotMARC create and read managed certificates on its own Container Apps environment, for MTA-STS custom domain hosting.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: [
+          'Microsoft.App/managedEnvironments/read'
+          'Microsoft.App/managedEnvironments/managedCertificates/read'
+          'Microsoft.App/managedEnvironments/managedCertificates/write'
+        ]
+        notActions: []
+        dataActions: []
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [
+      resourceGroup().id
+    ]
+  }
+}
+
+resource mtaStsManagedEnvironmentRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableMtaStsHosting) {
+  name: guid(containerAppEnv.id, 'dotMARC MTA-STS Managed Environment Role Assignment')
+  scope: containerAppEnv
+  properties: {
+    roleDefinitionId: mtaStsManagedEnvironmentRole.id
     principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
