@@ -2,6 +2,7 @@ using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
+using DotMarc.MtaSts;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
@@ -251,6 +252,30 @@ if (demoOptions.Enabled)
         return Results.Redirect("/");
     }).AllowAnonymous();
 }
+
+// Hostname-routed (mta-sts.<domain>), not path-routed under this app's own hostname, so it's
+// unauthenticated by necessity — receiving mail servers fetching this policy are never signed in.
+// Gating is done by looking up the Domain instead.
+app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    const string prefix = "mta-sts.";
+    var host = httpContext.Request.Host.Host;
+    if (!host.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.NotFound();
+    }
+
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var domainName = host[prefix.Length..];
+    var domain = await context.Domains.AsNoTracking().FirstOrDefaultAsync(d => d.Name == domainName);
+    if (domain is null || !domain.MtaStsEnabled)
+    {
+        return Results.NotFound();
+    }
+
+    var policyText = MtaStsPolicyRenderer.Render(domain.MtaStsMode, domain.MtaStsMxHosts, domain.MtaStsMaxAgeSeconds);
+    return Results.Text(policyText, "text/plain");
+}).AllowAnonymous();
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();
