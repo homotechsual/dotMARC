@@ -86,6 +86,24 @@ builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
+// MTA-STS hosting is opt-in per deployment (see MtaStsOptions), so this section is intentionally
+// not validated at startup the way GraphOptions is above — a deployment that never sets
+// MtaSts:HostingHostname simply never enables MtaStsEnabled on any domain, and the background
+// cycle no-ops without it (see PollingService.RunMtaStsCheckCycleAsync).
+builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.GetSection(DotMarc.MtaSts.MtaStsOptions.SectionName));
+
+builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts.MtaStsDnsVerifier>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
+// No fixed BaseAddress: unlike the typed clients above, this one requests a different hostname
+// (mta-sts.<domain>) per call, so each request carries its own absolute URI.
+builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsServingVerifier, DotMarc.MtaSts.MtaStsServingVerifier>();
+
+builder.Services.AddScoped<DotMarc.MtaSts.IMtaStsHostProvisioner>(sp => new DotMarc.MtaSts.CaddyMtaStsHostProvisioner());
+
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {
     client.BaseAddress = new Uri("https://rdap.org/");

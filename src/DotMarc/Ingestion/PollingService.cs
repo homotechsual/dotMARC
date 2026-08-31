@@ -1,6 +1,7 @@
 using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.Graph;
+using DotMarc.MtaSts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,6 +24,10 @@ public sealed class PollingService : BackgroundService
     /// PollingLeaderLockKey so the mailbox-poll cycle and the DMARC DNS-check cycle run under
     /// independent locks rather than being forced to share the same leader/timing.</summary>
     internal const long DmarcCheckLeaderLockKey = 84_200_003;
+
+    /// <summary>Arbitrary fixed key for this service's MTA-STS-check advisory lock — distinct
+    /// from the other two so this cycle runs under its own independent lock/timing.</summary>
+    internal const long MtaStsCheckLeaderLockKey = 84_200_005;
 
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
@@ -91,6 +96,20 @@ public sealed class PollingService : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "DMARC check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var mtaStsOptions = scope.ServiceProvider.GetRequiredService<IOptions<MtaStsOptions>>().Value;
+                        var dnsVerifier = scope.ServiceProvider.GetRequiredService<IMtaStsDnsVerifier>();
+                        var servingVerifier = scope.ServiceProvider.GetRequiredService<IMtaStsServingVerifier>();
+                        var hostProvisioner = scope.ServiceProvider.GetRequiredService<IMtaStsHostProvisioner>();
+                        await RunMtaStsCheckCycleAsync(context, dnsVerifier, servingVerifier, hostProvisioner, mtaStsOptions.HostingHostname, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "MTA-STS check cycle failed; will retry next interval.");
                     }
                 }
             }
@@ -231,6 +250,180 @@ public sealed class PollingService : BackgroundService
         {
             await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Runs MTA-STS DNS verification/provisioning checks for every enabled domain that's
+    /// due — a shorter ~15 minute window for anything not yet Active (a customer onboarding is
+    /// actively watching progress), a 24 hour window for already-Active domains (catches
+    /// certificate renewal failures or an accidentally-removed CNAME, same cadence as the DMARC
+    /// cycle). No-ops entirely, without acquiring the lock, if this deployment has no
+    /// MtaSts:HostingHostname configured — MTA-STS hosting is opt-in per deployment, not just per
+    /// domain.</summary>
+    internal async Task RunMtaStsCheckCycleAsync(
+        DotMarcDbContext context,
+        IMtaStsDnsVerifier dnsVerifier,
+        IMtaStsServingVerifier servingVerifier,
+        IMtaStsHostProvisioner hostProvisioner,
+        string? hostingHostname,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(hostingHostname))
+        {
+            return;
+        }
+
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", MtaStsCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the MTA-STS check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var anyUpdated = false;
+
+            // A domain disabled since the last cycle (MtaStsEnabled flipped false, e.g. from the
+            // domain detail page) never matches the staleness query below, since that query only
+            // looks at enabled domains — without this pass, an Azure custom domain binding would
+            // stay orphaned forever once a customer turns hosting off.
+            var disabledDomains = await context.Domains
+                .Where(d => !d.MtaStsEnabled && d.MtaStsStatus != MtaStsStatus.NotConfigured)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (var domain in disabledDomains)
+            {
+                try
+                {
+                    await hostProvisioner.TeardownAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                    domain.MtaStsStatus = MtaStsStatus.NotConfigured;
+                    domain.MtaStsCheckDetail = null;
+                    domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "MTA-STS teardown failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            var fastCutoff = DateTimeOffset.UtcNow.AddMinutes(-15);
+            var slowCutoff = DateTimeOffset.UtcNow.AddHours(-24);
+
+            var staleDomains = await context.Domains
+                .Where(d => d.MtaStsEnabled && (
+                    (d.MtaStsStatus == MtaStsStatus.Active && (d.MtaStsCheckedUtc == null || d.MtaStsCheckedUtc < slowCutoff)) ||
+                    (d.MtaStsStatus != MtaStsStatus.Active && (d.MtaStsCheckedUtc == null || d.MtaStsCheckedUtc < fastCutoff))))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    await RunSingleMtaStsCheckAsync(domain, dnsVerifier, servingVerifier, hostProvisioner, hostingHostname, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "MTA-STS check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>One domain's transition through the state machine described in the design spec.
+    /// PendingDns only ever needs the DNS check; PendingCertificate/Active/Failed all funnel
+    /// through the same provisioner-then-serving-check path, since that path is what both moves a
+    /// domain forward and detects a regression on one that was already Active.</summary>
+    private static async Task RunSingleMtaStsCheckAsync(
+        Domain domain,
+        IMtaStsDnsVerifier dnsVerifier,
+        IMtaStsServingVerifier servingVerifier,
+        IMtaStsHostProvisioner hostProvisioner,
+        string hostingHostname,
+        CancellationToken cancellationToken)
+    {
+        if (domain.MtaStsStatus == MtaStsStatus.PendingDns)
+        {
+            var dnsResult = await dnsVerifier.VerifyAsync(domain.Name, hostingHostname, cancellationToken).ConfigureAwait(false);
+            switch (dnsResult)
+            {
+                case MtaStsDnsVerificationResult.Resolved:
+                    domain.MtaStsStatus = MtaStsStatus.PendingCertificate;
+                    domain.MtaStsCheckDetail = null;
+                    break;
+                case MtaStsDnsVerificationResult.PointsElsewhere:
+                    domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} resolves, but not to {hostingHostname} — check the CNAME's target.";
+                    break;
+                default:
+                    domain.MtaStsCheckDetail = $"Waiting for mta-sts.{domain.Name} to resolve to {hostingHostname}.";
+                    break;
+            }
+
+            domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
+            return;
+        }
+
+        // PendingCertificate, Active, or Failed: ensure provisioning has been requested (a no-op
+        // on Caddy, an ARM call on Azure), then run the one check that works identically on both
+        // targets — does the public URL actually serve the expected policy?
+        try
+        {
+            await hostProvisioner.EnsureProvisionedAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            domain.MtaStsStatus = MtaStsStatus.Failed;
+            domain.MtaStsCheckDetail = $"Provisioning failed: {ex.Message}";
+            domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
+            return;
+        }
+
+        var expectedPolicyText = MtaStsPolicyRenderer.Render(domain.MtaStsMode, domain.MtaStsMxHosts, domain.MtaStsMaxAgeSeconds);
+        var isServing = await servingVerifier.IsServingCorrectlyAsync(domain.Name, expectedPolicyText, cancellationToken).ConfigureAwait(false);
+
+        if (isServing)
+        {
+            domain.MtaStsStatus = MtaStsStatus.Active;
+            domain.MtaStsCheckDetail = null;
+        }
+        else if (domain.MtaStsStatus == MtaStsStatus.Active)
+        {
+            // Was working, isn't now — a regression, not an onboarding wait state.
+            domain.MtaStsStatus = MtaStsStatus.Failed;
+            domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} stopped serving the expected policy.";
+        }
+        else if (domain.MtaStsStatus != MtaStsStatus.Failed)
+        {
+            domain.MtaStsStatus = MtaStsStatus.PendingCertificate;
+            domain.MtaStsCheckDetail = "Waiting for the certificate to be issued.";
+        }
+
+        domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
     }
 
     /// <summary>Writes one PollCycle row for a cycle that actually ran (never for one skipped due
