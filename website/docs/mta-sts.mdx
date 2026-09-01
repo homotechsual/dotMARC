@@ -24,6 +24,11 @@ mta-sts.<domain> CNAME <the hosting hostname shown on the Manage MTA-STS page>
 That CNAME is the only DNS change needed. dotMARC verifies it, provisions a certificate, and
 starts serving the policy automatically once it resolves.
 
+If this deployment has DNS provider push configured (see [Getting
+Started](./getting-started.mdx#dns-provider-push-optional)) and the domain's DNS is hosted on
+Cloudflare or Azure DNS, a push button appears next to the CNAME instructions instead — it pushes
+the record for you via that provider's own consent screen, with nothing stored.
+
 On the Azure deployment, that hosting hostname is the Container App's own generated
 `*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't
 a choice dotMARC makes: Azure's free managed certificates require the CNAME to point directly at
