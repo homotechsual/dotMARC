@@ -33,6 +33,17 @@ requirements](https://learn.microsoft.com/azure/container-apps/custom-domains-ma
 The self-hosted Caddy path doesn't have this restriction, since it isn't using Azure's managed
 certificates.
 
+### A note on scale
+
+Every domain you enable adds one custom domain, and one managed certificate, to the same shared
+Container App. Azure doesn't publish a hard limit on how many of either a single Container App (or
+its environment) can hold, unlike App Service, which documents a cap of 1,000 public certificates
+per plan. There's no equivalent number for Container Apps in Microsoft's docs, so growth here is
+soft-bounded rather than capped: each certificate is issued and renewed independently, so a large
+domain count means more independent renewals to track, not a ceiling you hit. This isn't something
+to plan around for a typical list of domains; it'd only be worth revisiting if the enabled-domain
+count ran into the hundreds.
+
 ### Mode
 
 * **Testing**: the policy is published, but recommends senders only report failures rather than
