@@ -3,7 +3,6 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import plausiblePlugin from '@homotechsual/docusaurus-plugin-plausible';
 import type {PluginOptions as PlausiblePluginOptions} from '@homotechsual/docusaurus-plugin-plausible';
-import FeatureRequestsPlugin from './src/plugins/FeatureRequestsPlugin';
 
 const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = require('./lib/ImageRenderers.cjs');
 const ogPlugin = require('@homotechsual/docusaurus-og');
@@ -147,7 +146,7 @@ const config: Config = {
       darkTheme: prismThemes.dracula,
     },
     plugins: [
-      FeatureRequestsPlugin,
+      './src/plugins/featureRequests/FeatureRequestsPlugin.js',
     ],
   } satisfies Preset.ThemeConfig,
 };
