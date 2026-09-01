@@ -110,6 +110,7 @@ const config: Config = {
         {to: '/docs/getting-started', label: 'Docs', position: 'left'},
         {to: '/blog', label: 'Blog', position: 'left'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
+        {to: '/feedback', label: 'Feedback & Feature Requests', position: 'left'},
         {
           to: 'https://github.com/homotechsual/dotMARC',
           label: 'GitHub',
