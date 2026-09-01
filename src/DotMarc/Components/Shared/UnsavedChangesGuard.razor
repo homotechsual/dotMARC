@@ -1,0 +1,25 @@
+@using DotMarc.Components.Dialogs
+@using Microsoft.AspNetCore.Components.Routing
+@inject IDialogService DialogService
+
+<NavigationLock ConfirmExternalNavigation="HasUnsavedChanges" OnBeforeInternalNavigation="OnBeforeInternalNavigationAsync" />
+
+@code {
+    [Parameter] public bool HasUnsavedChanges { get; set; }
+
+    private async Task OnBeforeInternalNavigationAsync(LocationChangingContext context)
+    {
+        if (!HasUnsavedChanges)
+        {
+            return;
+        }
+
+        var dialogRef = await DialogService.ShowAsync<ConfirmDiscardChangesDialog>();
+        var result = await dialogRef.Result;
+
+        if (result is null || result.Canceled)
+        {
+            context.PreventNavigation();
+        }
+    }
+}

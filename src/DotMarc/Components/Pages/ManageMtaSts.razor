@@ -12,10 +12,11 @@
 @inject IMxHostsLookup MxHostsLookup
 
 <PageTitle>dotMARC - Manage MTA-STS</PageTitle>
+<UnsavedChangesGuard HasUnsavedChanges="AnyUnsavedChanges" />
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">Manage MTA-STS</MudText>
 
-<HelpAlert DocsUrl="https://dotmarc.app/docs/mta-sts">
+<HelpAlert DocsUrl="https://dotmarc.app/docs/mta-sts#enabling-a-domain">
     @if (string.IsNullOrEmpty(MtaStsOptions.Value.HostingHostname))
     {
         <text>MTA-STS hosting isn't configured on this deployment yet (no <code>MtaSts__HostingHostname</code> set), so enabling a domain below won't progress past "Waiting for DNS."</text>
@@ -30,7 +31,8 @@
         {
             <text> That's this deployment's raw Container App hostname, not a nicer custom domain,
             because Azure's free managed certificates refuse to issue through an intermediate CNAME
-            like one.</text>
+            like one. Each enabled domain adds its own custom domain and certificate to this app;
+            Azure doesn't publish a hard limit on either, so there's no cap to plan around here.</text>
         }</text>
     }
 </HelpAlert>
@@ -92,6 +94,8 @@ else
 @code {
     private List<MtaStsRow>? _domains;
 
+    private bool AnyUnsavedChanges => _domains?.Any(d => d.IsDirty) ?? false;
+
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
@@ -111,6 +115,11 @@ else
                 MxHostsText = string.Join('\n', d.MtaStsMxHosts)
             })
             .ToListAsync();
+
+        foreach (var row in _domains)
+        {
+            row.ResetSnapshot();
+        }
     }
 
     private async Task FetchMxHostsAsync(MtaStsRow row)
@@ -148,6 +157,7 @@ else
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             await DomainManagementService.SetMtaStsConfigAsync(db, row.Id, row.Enabled, row.Mode, mxHosts, row.MaxAgeSeconds, CancellationToken.None);
+            row.ResetSnapshot();
             Snackbar.Add($"MTA-STS configuration saved for {row.Name}.", Severity.Success);
         }
         catch (Exception)
@@ -165,5 +175,11 @@ else
         public int MaxAgeSeconds { get; set; }
         public string MxHostsText { get; set; } = "";
         public bool IsFetchingMxHosts { get; set; }
+
+        private (bool Enabled, MtaStsMode Mode, int MaxAgeSeconds, string MxHostsText) _snapshot;
+
+        public void ResetSnapshot() => _snapshot = (Enabled, Mode, MaxAgeSeconds, MxHostsText);
+
+        public bool IsDirty => _snapshot != (Enabled, Mode, MaxAgeSeconds, MxHostsText);
     }
 }
