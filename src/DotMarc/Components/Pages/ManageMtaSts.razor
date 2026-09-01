@@ -1,0 +1,104 @@
+@page "/mta-sts"
+@attribute [Authorize(Policy = "MtaStsManage")]
+@using DotMarc.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - Manage MTA-STS</PageTitle>
+<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudText Typo="Typo.h4" Class="mb-4">Manage MTA-STS</MudText>
+
+@if (_domains is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTable Items="_domains" Hover="true" T="MtaStsRow">
+        <HeaderContent>
+            <MudTh>Domain</MudTh>
+            <MudTh>Enabled</MudTh>
+            <MudTh>Mode</MudTh>
+            <MudTh>Max age (seconds)</MudTh>
+            <MudTh>MX hosts</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>
+                <MudSwitch T="bool" @bind-Value="context.Enabled" Color="Color.Primary" />
+            </MudTd>
+            <MudTd>
+                <MudSelect T="MtaStsMode" @bind-Value="context.Mode">
+                    <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Testing">Testing</MudSelectItem>
+                    <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Enforce">Enforce</MudSelectItem>
+                    <MudSelectItem T="MtaStsMode" Value="MtaStsMode.None">None</MudSelectItem>
+                </MudSelect>
+            </MudTd>
+            <MudTd>
+                <MudNumericField T="int" @bind-Value="context.MaxAgeSeconds" Min="0" />
+            </MudTd>
+            <MudTd>
+                <MudTextField @bind-Value="context.MxHostsText" Lines="3" HelperText="One per line, e.g. mail.example.com" />
+            </MudTd>
+            <MudTd>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveAsync(context))">Save</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<MtaStsRow>? _domains;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _domains = await db.Domains
+            .AsNoTracking()
+            .OrderBy(d => d.SortOrder)
+            .ThenBy(d => d.Name)
+            .Select(d => new MtaStsRow
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Enabled = d.MtaStsEnabled,
+                Mode = d.MtaStsMode,
+                MaxAgeSeconds = d.MtaStsMaxAgeSeconds,
+                MxHostsText = string.Join('\n', d.MtaStsMxHosts)
+            })
+            .ToListAsync();
+    }
+
+    private async Task SaveAsync(MtaStsRow row)
+    {
+        var mxHosts = row.MxHostsText
+            .Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.SetMtaStsConfigAsync(db, row.Id, row.Enabled, row.Mode, mxHosts, row.MaxAgeSeconds, CancellationToken.None);
+            Snackbar.Add($"MTA-STS configuration saved for {row.Name}.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to save {row.Name}'s MTA-STS configuration. Try again.", Severity.Error);
+        }
+    }
+
+    private sealed class MtaStsRow
+    {
+        public required int Id { get; set; }
+        public required string Name { get; set; }
+        public bool Enabled { get; set; }
+        public MtaStsMode Mode { get; set; }
+        public int MaxAgeSeconds { get; set; }
+        public string MxHostsText { get; set; } = "";
+    }
+}

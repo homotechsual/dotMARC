@@ -37,6 +37,9 @@
         <AuthorizeView Policy="GroupsOrTagsWrite">
             <MudButton Href="/groups" Color="Color.Inherit">Manage groups</MudButton>
         </AuthorizeView>
+        <AuthorizeView Policy="MtaStsManage">
+            <MudButton Href="/mta-sts" Color="Color.Inherit">Manage MTA-STS</MudButton>
+        </AuthorizeView>
         <AuthorizeView Policy="AccessManage">
             <MudButton Href="/access" Color="Color.Inherit">Manage access</MudButton>
         </AuthorizeView>
