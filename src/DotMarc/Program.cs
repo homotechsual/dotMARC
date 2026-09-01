@@ -98,6 +98,12 @@ builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
+builder.Services.AddHttpClient<DotMarc.MtaSts.IMxHostsLookup, DotMarc.MtaSts.MxHostsLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
 // No fixed BaseAddress: unlike the typed clients above, this one requests a different hostname
 // (mta-sts.<domain>) per call, so each request carries its own absolute URI.
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsServingVerifier, DotMarc.MtaSts.MtaStsServingVerifier>();
