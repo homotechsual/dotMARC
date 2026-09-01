@@ -103,11 +103,18 @@ means that provider's push button never renders — pure fallback to manual inst
   `Microsoft.Network/dnsZones/*/write` on the target zone — dotMARC inherits the user's own access,
   never holds a standing grant of its own.
 
-> **Implementation-time note:** Cloudflare's published docs describe OAuth client *registration*
-> in full, but not the runtime authorize/token endpoint URLs for this specific third-party-consent
-> flow — confirm those against Cloudflare's OAuth docs (or its discovery metadata, if published)
-> when wiring up `CloudflareDnsPushProvider`, rather than assuming the pattern used by Cloudflare
-> Access's unrelated per-team-name SSO endpoints.
+Cloudflare's OAuth endpoints, confirmed against its live discovery document
+(`https://dash.cloudflare.com/.well-known/openid-configuration`), are fixed and not per-account:
+
+- Authorization endpoint: `https://dash.cloudflare.com/oauth2/auth`
+- Token endpoint: `https://dash.cloudflare.com/oauth2/token`
+- PKCE is supported (`S256`) and worth using even for this confidential/server-side client, as
+  defense in depth on the authorization-code exchange.
+- `refresh_token` is a supported grant, gated behind the `offline_access` scope — deliberately never
+  requested here, so there's nothing longer-lived than the one authorization code to ever consider
+  persisting.
+- Token endpoint auth: `client_secret_basic` or `client_secret_post`, matching the "Server-side web
+  app or backend service" row in Cloudflare's own flow-choice guidance.
 
 Two new minimal-API endpoints per provider, registered the same way as the existing
 `/.well-known/mta-sts.txt` endpoints in `Program.cs`:
