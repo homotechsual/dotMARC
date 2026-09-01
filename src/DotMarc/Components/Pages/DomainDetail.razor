@@ -6,12 +6,22 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
 @using DotMarc.IpEnrichment
+@using DotMarc.DnsPush
+@using DotMarc.Graph
+@using DotMarc.Components.Dialogs
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IIpInfoLookup IpLookup
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ILogger<DomainDetail> Logger
+@inject IDnsProviderDetector DnsProviderDetector
+@inject IEnumerable<IDnsPushProvider> DnsPushProviders
+@inject IDmarcTxtLookup DmarcTxtLookup
+@inject IOptions<GraphOptions> GraphOptions
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -47,6 +57,22 @@ else
                     @if (!string.IsNullOrWhiteSpace(_domain.DmarcCheckDetail))
                     {
                         <MudText Typo="Typo.body2" Class="mt-1">@_domain.DmarcCheckDetail</MudText>
+                    }
+                    @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured)
+                    {
+                        <AuthorizeView Policy="DomainsEdit" Context="dmarcPushAuthState">
+                            <div class="mt-2">
+                                @if (_isPushingDmarcRecord)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                               OnClick="PushDmarcRecordAsync">Push via your DNS provider</MudButton>
+                                }
+                            </div>
+                        </AuthorizeView>
                     }
                 }
             </MudPaper>
@@ -138,6 +164,7 @@ else
     private int _sourceCount;
     private List<ChartSeries<double>> _series = [];
     private string[] _xAxisLabels = [];
+    private bool _isPushingDmarcRecord;
 
     protected override void OnParametersSet()
     {
@@ -236,6 +263,8 @@ else
                     _ = EnrichSourceInBackgroundAsync(source);
                 }
             }
+
+            ShowDnsPushResultToast();
         }
 
         // Bucket by day-received (of the report, not the record) rather than the record itself,
@@ -293,6 +322,94 @@ else
             EnrichmentThrottle.Release();
             source.IsEnrichmentPending = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task PushDmarcRecordAsync()
+    {
+        _isPushingDmarcRecord = true;
+        try
+        {
+            var detected = await DnsProviderDetector.DetectAsync(DomainName, CancellationToken.None);
+            var providerKey = detected switch
+            {
+                DetectedDnsProvider.Cloudflare => "cloudflare",
+                DetectedDnsProvider.AzureDns => "azure-dns",
+                _ => null
+            };
+            var pushProvider = providerKey is null ? null : DnsPushProviders.SingleOrDefault(p => p.ProviderKey == providerKey && p.IsConfigured);
+            if (pushProvider is null)
+            {
+                Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+                return;
+            }
+
+            if (_domain!.DmarcCheckStatus != DmarcCheckStatus.Misconfigured)
+            {
+                Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={_domain.Id}&target=dmarc", forceLoad: true);
+                return;
+            }
+
+            string? existing;
+            try
+            {
+                existing = await DmarcTxtLookup.LookupAsync(DomainName, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                // DmarcTxtLookup.LookupAsync mirrors MxHostsLookup.LookupAsync and doesn't catch
+                // internally, so its caller must — matches FetchMxHostsAsync in ManageMtaSts.razor.
+                // Left uncaught, an HttpRequestException here would escape a Blazor button-click
+                // event handler and take down the whole circuit instead of just this action.
+                Snackbar.Add($"Failed to look up {DomainName}'s current DMARC record. Try again.", Severity.Error);
+                return;
+            }
+
+            var merged = existing is null ? null : DmarcRuaMerge.TryMerge(existing, GraphOptions.Value.MailboxAddress);
+            if (existing is null || merged is null)
+            {
+                Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                return;
+            }
+
+            var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
+            {
+                { x => x.DomainName, DomainName },
+                { x => x.ExistingValue, existing },
+                { x => x.ProposedValue, merged }
+            };
+            var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC record fix", parameters);
+            var result = await dialogRef.Result;
+            if (result is { Canceled: false })
+            {
+                Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={_domain.Id}&target=dmarc", forceLoad: true);
+            }
+        }
+        finally
+        {
+            _isPushingDmarcRecord = false;
+        }
+    }
+
+    private void ShowDnsPushResultToast()
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
+        switch (query["dnsPush"])
+        {
+            case "pushed":
+                Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
+                break;
+            case "cancelled":
+                break; // user backed out of the provider's consent screen — no need to say anything
+            case "zone-not-found":
+                Snackbar.Add("Couldn't find that domain in the account you authorized.", Severity.Warning);
+                break;
+            case "unmergeable":
+                Snackbar.Add("Couldn't safely compute a fix for that record — it needs a manual look.", Severity.Warning);
+                break;
+            case "error":
+                Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
+                break;
         }
     }
 
