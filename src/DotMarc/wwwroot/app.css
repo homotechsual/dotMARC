@@ -2,3 +2,10 @@ html, body {
     margin: 0;
     font-family: 'Avenir Next', 'Segoe UI Variable', 'Segoe UI', sans-serif;
 }
+
+html {
+    /* MudBlazor's own CSS sets this on body, not html — without it, page area below
+       short content (e.g. min-height:100vh pushing html taller than body) falls
+       through to the browser's default canvas fill instead of the theme background. */
+    background-color: var(--mud-palette-background);
+}
