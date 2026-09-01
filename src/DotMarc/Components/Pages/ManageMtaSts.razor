@@ -46,9 +46,9 @@ else
             <MudTh>Domain</MudTh>
             <MudTh>Enabled</MudTh>
             <MudTh>Mode</MudTh>
-            <MudTh>Max age (seconds)</MudTh>
+            <MudTh Style="width: 8rem;">Max age (seconds)</MudTh>
             <MudTh>MX hosts</MudTh>
-            <MudTh></MudTh>
+            <MudTh Style="width: 3rem;"></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
@@ -62,7 +62,7 @@ else
                     <MudSelectItem T="MtaStsMode" Value="MtaStsMode.None">None</MudSelectItem>
                 </MudSelect>
             </MudTd>
-            <MudTd>
+            <MudTd Style="width: 8rem;">
                 <MudNumericField T="int" @bind-Value="context.MaxAgeSeconds" Min="0" />
             </MudTd>
             <MudTd>
@@ -75,12 +75,15 @@ else
                     else
                     {
                         <MudIconButton Icon="@Icons.Material.Filled.Sync" Size="Size.Small" Class="mt-1"
-                                       title="Fetch MX hosts from DNS" OnClick="@(() => FetchMxHostsAsync(context))" />
+                                       title="Fetch MX hosts from DNS" aria-label="Fetch MX hosts from DNS"
+                                       OnClick="@(() => FetchMxHostsAsync(context))" />
                     }
                 </div>
             </MudTd>
-            <MudTd>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveAsync(context))">Save</MudButton>
+            <MudTd Style="width: 3rem;">
+                <MudIconButton Icon="@Icons.Material.Filled.Save" Color="Color.Primary" Size="Size.Small"
+                               title="Save" aria-label="@($"Save MTA-STS configuration for {context.Name}")"
+                               OnClick="@(() => SaveAsync(context))" />
             </MudTd>
         </RowTemplate>
     </MudTable>
