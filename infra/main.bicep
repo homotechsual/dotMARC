@@ -26,6 +26,15 @@ param entraIdClientId string
 @description('Comma-separated list of email addresses granted the Admin role the first time the app starts with no existing access grants. Not secret — just email addresses. Only takes effect on that first startup; safe to leave set afterwards.')
 param initialAdminEmails string = ''
 
+// Before re-running this template against a resource group that's already deployed (e.g. to
+// flip this flag on later), run `az deployment group what-if` first and read the diff — this
+// template's `containerApp.ingress` and `postgresServer` resources declare those objects in
+// full, so a redeploy replaces a custom domain bound after the original deployment (Portal or
+// `az containerapp hostname add`) or Postgres storage/auth settings changed since, not just
+// merges into them. See deploy-to-azure.mdx's "Re-running the template later" section for the
+// what-if walkthrough and a by-hand fallback (the exact `az role definition create` /
+// `az containerapp update --set-env-vars` calls) that applies just this flag's effects without
+// touching anything else.
 @description('Enable MTA-STS policy hosting (see getting-started.mdx). Grants the container app a narrowly-scoped custom RBAC role to manage its own custom domains and managed certificates — off by default, since it widens the managed identity beyond Key Vault Secrets User.')
 param enableMtaStsHosting bool = false
 

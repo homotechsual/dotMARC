@@ -100,3 +100,54 @@ Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.mdx#configu
 deployment's first startup, without it, the tightened authorization policy locks out every user,
 including you.
 :::
+
+## 5. Re-running the template later (e.g. to turn on MTA-STS hosting)
+
+`enableMtaStsHosting` is off by default, so enabling it (or making any other change) usually means
+re-running `az deployment group create` against a resource group that's no longer in exactly the
+state the template describes: you've likely since bound a custom domain to the Container App
+(through the Portal, or `az containerapp hostname add`), and Azure may have changed Postgres
+storage/tier/Entra-auth settings that aren't declared in `main.bicep` at all. ARM deployments only
+touch what's declared, but for a property Bicep explicitly declares as a whole object (this
+template's `ingress` block, or `flexibleServers`' `storage`/`authConfig`), a redeploy replaces that
+whole object with what the template says, silently dropping anything set outside it.
+
+**Always run `--what-if` before the real deployment** once a resource group has any post-deploy
+customization:
+
+```powershell
+az deployment group what-if `
+  --resource-group $RG `
+  --template-file infra/main.bicep `
+  --parameters infra/main.parameters.json
+```
+
+Read the diff carefully. A `~ Microsoft.App/containerApps/<name>` entry removing
+`properties.configuration.ingress.customDomains`, or a `~ Microsoft.DBforPostgreSQL/flexibleServers/<name>`
+entry removing `storage`/`authConfig` properties, means applying it would break your custom domain
+or reset database settings you configured after the original deployment. Don't proceed if you see
+that; either update the template's parameters/resources to match current state first, or apply just
+the specific change you actually need by hand instead of the whole template:
+
+```powershell
+# The two custom roles enableMtaStsHosting would have created, applied directly instead of via
+# a full template redeploy. See the roleDefinition resources in main.bicep for the exact
+# actions/description each one needs.
+az role definition create --role-definition <role JSON, one per role>
+az role assignment create --assignee-object-id <container app's principalId> `
+  --assignee-principal-type ServicePrincipal --role <role id> --scope <container app or environment resource id>
+
+# The env vars enableMtaStsHosting's parameters would have set, merged onto the existing
+# container without touching anything else (existing env vars are left alone):
+az containerapp update --name $APP --resource-group $RG --set-env-vars `
+  "MtaSts__HostingHostname=<container app FQDN>" "MtaSts__Provisioner=Azure" `
+  "MtaSts__AzureSubscriptionId=<subscription id>" "MtaSts__AzureResourceGroupName=$RG" `
+  "MtaSts__AzureContainerAppName=$APP" "MtaSts__AzureManagedEnvironmentName=<environment name>"
+```
+
+:::tip[Git Bash]
+If you're running these `az` commands from Git Bash on Windows rather than PowerShell, any
+argument starting with `/` (every Azure resource ID) gets silently mangled into a Windows path by
+MSYS's path conversion, `MissingSubscription` errors on `az role assignment create` are the
+usual symptom. Set `export MSYS_NO_PATHCONV=1` first.
+:::
