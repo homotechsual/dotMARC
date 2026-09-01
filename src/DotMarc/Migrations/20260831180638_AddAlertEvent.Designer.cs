@@ -3,6 +3,7 @@ using System;
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DotMarc.Migrations
 {
     [DbContext(typeof(DotMarcDbContext))]
-    partial class DotMarcDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831180638_AddAlertEvent")]
+    partial class AddAlertEvent
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -514,52 +517,6 @@ namespace DotMarc.Migrations
                     b.HasIndex("DomainName", "AlertType", "CreatedUtc");
 
                     b.ToTable("AlertEvents");
-                });
-
-            modelBuilder.Entity("DotMarc.Notifications.NotificationSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CooldownMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DeliveryMode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("GenericWebhookUrl")
-                        .HasColumnType("text");
-
-                    b.Property<int>("MissingReportThresholdDays")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MonitorIntervalSeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TeamsWebhookUrl")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("NotificationSettings");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            CooldownMinutes = 180,
-                            DeliveryMode = "Teams",
-                            Enabled = true,
-                            MissingReportThresholdDays = 2,
-                            MonitorIntervalSeconds = 300
-                        });
                 });
 
             modelBuilder.Entity("UserAccessScopedGroups", b =>

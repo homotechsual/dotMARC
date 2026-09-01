@@ -1,0 +1,60 @@
+@page "/alerts"
+@attribute [Authorize(Policy = "AlertsView")]
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+
+<MudText Typo="Typo.h4" Class="mb-4">Alerts</MudText>
+
+@if (_alerts is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_alerts.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No alert events have fired yet.</MudAlert>
+}
+else
+{
+    <MudTable Items="_alerts" Hover="true" T="AlertEvent">
+        <HeaderContent>
+            <MudTh>Domain</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Severity</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh>Resolved</MudTh>
+            <MudTh>Message</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.DomainName</MudTd>
+            <MudTd>@context.AlertType</MudTd>
+            <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
+            <MudTd>@context.CreatedUtc.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
+            <MudTd>@context.Message</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<AlertEvent>? _alerts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _alerts = await db.AlertEvents
+            .AsNoTracking()
+            .OrderByDescending(e => e.CreatedUtc)
+            .Take(100)
+            .ToListAsync();
+    }
+
+    private static Color GetSeverityColor(string severity) => severity switch
+    {
+        "Error" => Color.Error,
+        "Warning" => Color.Warning,
+        _ => Color.Info
+    };
+}

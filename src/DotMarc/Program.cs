@@ -4,6 +4,7 @@ using DotMarc.DnsPush;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
 using DotMarc.MtaSts;
+using DotMarc.Notifications;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
@@ -66,6 +67,8 @@ builder.Services.AddOptions<DotMarc.Demo.DemoOptions>()
 var demoOptions = new DotMarc.Demo.DemoOptions();
 builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
 
+builder.Services.AddSingleton<IAlertingService, AlertingService>();
+
 if (!demoOptions.Enabled)
 {
     builder.Services.AddOptions<GraphOptions>()
@@ -92,6 +95,15 @@ builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
 // MtaSts:HostingHostname simply never enables MtaStsEnabled on any domain, and the background
 // cycle no-ops without it (see PollingService.RunMtaStsCheckCycleAsync).
 builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.GetSection(DotMarc.MtaSts.MtaStsOptions.SectionName));
+
+builder.Services.AddHttpClient<ITeamsWebhookClient, TeamsWebhookClient>();
+builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
+builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();
+
+// Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
+// mailbox dependency), so it's just as meaningful against seeded demo data as against real
+// polled reports.
+builder.Services.AddHostedService<PinnedDomainHealthMonitor>();
 
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts.MtaStsDnsVerifier>(client =>
 {

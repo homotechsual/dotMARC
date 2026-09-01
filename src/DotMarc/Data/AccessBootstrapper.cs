@@ -26,7 +26,7 @@ public static class AccessBootstrapper
     /// duplication risk there. It self-syncs when the enum grows because EnsureBuiltInRoleAsync
     /// backfills a mismatched permission list onto an already-existing locked role (Admin) —
     /// Viewer is excluded from that backfill since, unlike Admin, it's user-editable.</summary>
-    public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView];
+    public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView, Permission.AlertsView];
 
     public static async Task BootstrapWithLeaderLockAsync(DotMarcDbContext context, IOptions<InitialAdminsOptions> options, ILogger logger, CancellationToken cancellationToken = default)
     {

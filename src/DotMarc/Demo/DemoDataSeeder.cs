@@ -31,13 +31,20 @@ public static class DemoDataSeeder
     // external-lookup cache (RDAP ownership/country data, keyed by IP address or by allocation
     // block, not by domain/report), not demo-narrative data — wiping them on every reset would
     // just force every demo IP to be re-looked-up against rdap.org for no benefit.
+    //
+    // "NotificationSettings" is also deliberately NOT in this list, for the same "shared
+    // config, not demo-narrative data" reason — plus it's a migration-seeded singleton row (see
+    // NotificationSettings's doc comment), so truncating it would leave the table empty until a
+    // fresh row was reseeded, breaking every reader's SingleAsync assumption. "AlertEvents" IS
+    // included: unlike those two, an alert is inherently tied to one demo domain's history, and
+    // that history is rewritten by every reset.
     internal static Task TruncateAllTablesAsync(DotMarcDbContext context, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlRawAsync(
             """
             TRUNCATE TABLE
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
-                "UserAccessScopedGroups", "DomainGroup", "DomainTag"
+                "UserAccessScopedGroups", "DomainGroup", "DomainTag", "AlertEvents"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);

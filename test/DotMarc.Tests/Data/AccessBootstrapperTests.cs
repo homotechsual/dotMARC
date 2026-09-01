@@ -53,7 +53,7 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
         var viewer = verify.Roles.Single(r => r.Name == "Viewer");
         Assert.False(viewer.IsLocked);
         Assert.True(viewer.IsScopable);
-        Assert.Equal([Permission.DomainsView, Permission.GroupsView, Permission.TagsView], viewer.Permissions);
+        Assert.Equal(AccessBootstrapper.ViewerPermissions, viewer.Permissions);
     }
 
     [Fact]
