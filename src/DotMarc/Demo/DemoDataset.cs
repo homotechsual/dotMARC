@@ -21,7 +21,14 @@ public sealed record DemoDomainSeed(
     DateTimeOffset? LastReportReceivedUtc,
     DmarcCheckStatus DmarcCheckStatus,
     string? DmarcCheckDetail,
-    List<DemoReportSeed> Reports);
+    List<DemoReportSeed> Reports,
+    bool MtaStsEnabled,
+    MtaStsMode MtaStsMode,
+    MtaStsStatus MtaStsStatus,
+    DateTimeOffset? MtaStsCheckedUtc,
+    string? MtaStsCheckDetail,
+    int MtaStsMaxAgeSeconds,
+    List<string> MtaStsMxHosts);
 
 public sealed record DemoReportSeed(
     string ReportingOrg,

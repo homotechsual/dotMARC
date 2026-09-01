@@ -30,19 +30,29 @@ public static class DemoDataGenerator
         {
             BuildDomain(random, nowUtc, sortOrder: 0, name: "aurora-retail.example", groupName: "Aurora Retail",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.997,
-                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays),
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.Active,
+                mtaStsDetail: "Policy is live and being enforced."),
             BuildDomain(random, nowUtc, sortOrder: 1, name: "shop.aurora-retail.example", groupName: "Aurora Retail",
                 orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.996,
-                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays),
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                mtaStsEnabled: true, mtaStsMode: MtaStsMode.Testing, mtaStsStatus: MtaStsStatus.Active,
+                mtaStsDetail: "Policy is live in testing mode."),
             BuildDomain(random, nowUtc, sortOrder: 2, name: "brightline-legal.example", groupName: "Brightline Legal",
                 orgs: ["google.com", "outlook.com"], passRateForDay: day => Lerp(0.93, 0.995, day / (double)(HistoryDays - 1)),
-                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays),
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.PendingCertificate,
+                mtaStsDetail: "DNS resolved; a TLS certificate is being issued."),
             BuildDomain(random, nowUtc, sortOrder: 3, name: "cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.87,
-                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays),
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.Failed,
+                mtaStsDetail: "Certificate renewal failed: mta-sts.cobalt-freight.example no longer resolves to the hosting hostname."),
             BuildDomain(random, nowUtc, sortOrder: 4, name: "fleet.cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com"], passRateForDay: _ => 0.98,
-                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays - 4),
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays - 4,
+                mtaStsEnabled: true, mtaStsMode: MtaStsMode.Testing, mtaStsStatus: MtaStsStatus.PendingDns,
+                mtaStsDetail: "Waiting for mta-sts.fleet.cobalt-freight.example to resolve."),
             BuildDomain(random, nowUtc, sortOrder: 5, name: "driftwood-media.example", groupName: "Driftwood Media",
                 orgs: ["yahoo.com", "protonmail.com"], passRateForDay: _ => 0.85,
                 status: DmarcCheckStatus.MissingAuthorizationRecord,
@@ -65,7 +75,9 @@ public static class DemoDataGenerator
 
     private static DemoDomainSeed BuildDomain(
         Random random, DateTimeOffset nowUtc, int sortOrder, string name, string? groupName,
-        string[] orgs, Func<int, double> passRateForDay, DmarcCheckStatus status, string? detail, int daysOfHistory)
+        string[] orgs, Func<int, double> passRateForDay, DmarcCheckStatus status, string? detail, int daysOfHistory,
+        bool mtaStsEnabled = false, MtaStsMode mtaStsMode = MtaStsMode.Testing, MtaStsStatus mtaStsStatus = MtaStsStatus.NotConfigured,
+        string? mtaStsDetail = null)
     {
         var reports = new List<DemoReportSeed>();
         DateTimeOffset? lastReportReceivedUtc = null;
@@ -98,7 +110,15 @@ public static class DemoDataGenerator
             }
         }
 
-        return new DemoDomainSeed(name, groupName, sortOrder, nowUtc.AddDays(-HistoryDays), lastReportReceivedUtc, status, detail, reports);
+        return new DemoDomainSeed(
+            name, groupName, sortOrder, nowUtc.AddDays(-HistoryDays), lastReportReceivedUtc, status, detail, reports,
+            MtaStsEnabled: mtaStsEnabled,
+            MtaStsMode: mtaStsMode,
+            MtaStsStatus: mtaStsStatus,
+            MtaStsCheckedUtc: mtaStsEnabled ? nowUtc.AddHours(-3) : null,
+            MtaStsCheckDetail: mtaStsDetail,
+            MtaStsMaxAgeSeconds: 604_800,
+            MtaStsMxHosts: mtaStsEnabled ? [$"mail.{name}", $"mail2.{name}"] : []);
     }
 
     private static string LegitimateSourceIp(string org) => org switch

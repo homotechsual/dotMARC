@@ -151,6 +151,64 @@ public sealed class DemoDataGeneratorTests
         Assert.NotEmpty(dataset.ParseFailures);
     }
 
+    /// <summary>Each domain's MTA-STS state is chosen to match its existing DMARC narrative rather
+    /// than being arbitrary: the flagship healthy client is fully rolled out, the struggling
+    /// client's MTA-STS has regressed too, etc. — see DemoDataGenerator.BuildDomain's MTA-STS
+    /// parameters.</summary>
+    [Theory]
+    [InlineData("aurora-retail.example", true, MtaStsStatus.Active, MtaStsMode.Enforce)]
+    [InlineData("shop.aurora-retail.example", true, MtaStsStatus.Active, MtaStsMode.Testing)]
+    [InlineData("brightline-legal.example", true, MtaStsStatus.PendingCertificate, MtaStsMode.Enforce)]
+    [InlineData("cobalt-freight.example", true, MtaStsStatus.Failed, MtaStsMode.Enforce)]
+    [InlineData("fleet.cobalt-freight.example", true, MtaStsStatus.PendingDns, MtaStsMode.Testing)]
+    [InlineData("driftwood-media.example", false, MtaStsStatus.NotConfigured, MtaStsMode.Testing)]
+    [InlineData("driftwood-events.example", false, MtaStsStatus.NotConfigured, MtaStsMode.Testing)]
+    public void MtaStsNarrative_MatchesEachDomainsStory(string domainName, bool expectedEnabled, MtaStsStatus expectedStatus, MtaStsMode expectedMode)
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == domainName);
+
+        Assert.Equal(expectedEnabled, domain.MtaStsEnabled);
+        Assert.Equal(expectedStatus, domain.MtaStsStatus);
+        Assert.Equal(expectedMode, domain.MtaStsMode);
+    }
+
+    [Fact]
+    public void CobaltFreight_MtaStsFailure_HasADetailMessage()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == "cobalt-freight.example");
+
+        Assert.False(string.IsNullOrWhiteSpace(domain.MtaStsCheckDetail));
+    }
+
+    [Theory]
+    [InlineData("driftwood-media.example")]
+    [InlineData("driftwood-events.example")]
+    public void NotConfiguredDomains_HaveNoMxHostsOrCheckedTimestamp(string domainName)
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == domainName);
+
+        Assert.Empty(domain.MtaStsMxHosts);
+        Assert.Null(domain.MtaStsCheckedUtc);
+    }
+
+    [Theory]
+    [InlineData("aurora-retail.example")]
+    [InlineData("shop.aurora-retail.example")]
+    [InlineData("brightline-legal.example")]
+    [InlineData("cobalt-freight.example")]
+    [InlineData("fleet.cobalt-freight.example")]
+    public void EnabledDomains_HaveMxHostsAndACheckedTimestamp(string domainName)
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == domainName);
+
+        Assert.NotEmpty(domain.MtaStsMxHosts);
+        Assert.NotNull(domain.MtaStsCheckedUtc);
+    }
+
     /// <summary>ProblemSourceIp used to derive its IP from domainName.GetHashCode(), which .NET
     /// Core randomizes per process — a different IP on every container restart, contradicting
     /// this class's own reproducibility doc comment and the design spec's "a given day's dataset
