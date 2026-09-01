@@ -1,0 +1,59 @@
+---
+sidebar_position: 6
+description: How to enable MTA-STS policy hosting for a domain, what each status means, and how to troubleshoot it.
+---
+
+# MTA-STS
+
+[MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) tells receiving mail servers to require a
+valid, verified TLS connection when delivering to a domain. dotMARC can host the policy file on a
+domain's behalf, so nobody has to stand up their own hosting for it.
+
+This deployment needs to have MTA-STS hosting set up first, see [Getting
+Started](./getting-started.mdx#mta-sts-policy-hosting-optional) for the one-time infrastructure
+step. If it isn't, the **Manage MTA-STS** page will tell you.
+
+## Enabling a domain
+
+From **Manage MTA-STS**, toggle a domain on and add a CNAME for it:
+
+```txt
+mta-sts.<domain> CNAME <the hosting hostname shown on the Manage MTA-STS page>
+```
+
+That CNAME is the only DNS change needed. dotMARC verifies it, provisions a certificate, and
+starts serving the policy automatically once it resolves.
+
+### Mode
+
+* **Testing**: the policy is published, but recommends senders only report failures rather than
+  reject mail. Use this while you confirm everything's working before enforcing.
+* **Enforce**: senders are told to actually require the connection to be secure.
+* **None**: publishes a policy that asserts no strictness, effectively opting out while still
+  responding at the well-known URL.
+
+### Max age and MX hosts
+
+**Max age** is how long (in seconds) a receiving server should cache the policy before re-checking
+it. The default (7 days) is fine for most domains; lower it temporarily while you're actively
+changing MX records. **MX hosts** should list every hostname mail for this domain is actually
+delivered to, one per line. A receiving server rejects the connection if the live MX record
+points somewhere not on this list.
+
+## Status
+
+The domain detail page's MTA-STS tab shows live status, not the Manage MTA-STS page. See
+[Permissions & Access](./permissions-and-access.mdx) for why configuration and status live on
+separate pages here.
+
+| Status | Meaning |
+| --- | --- |
+| Not configured | MTA-STS isn't enabled for this domain. |
+| Waiting for DNS | Enabled, but the `mta-sts.<domain>` CNAME hasn't resolved to this deployment yet. |
+| Waiting for certificate | DNS resolved; a TLS certificate is being issued. Usually resolves within a few minutes. |
+| Active | The policy is live and serving correctly. |
+| Failed | Something regressed after being Active, or provisioning failed. Check the detail message on the domain's MTA-STS tab. |
+
+A domain re-checks automatically on a schedule (faster while onboarding, slower once Active), so
+there's no manual "check now". Give it a few minutes after a DNS change before assuming something's
+wrong.

@@ -1,14 +1,32 @@
 @page "/mta-sts"
 @attribute [Authorize(Policy = "MtaStsManage")]
+@using DotMarc.Components.Shared
 @using DotMarc.Data
+@using DotMarc.MtaSts
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject IOptions<MtaStsOptions> MtaStsOptions
 
 <PageTitle>dotMARC - Manage MTA-STS</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">Manage MTA-STS</MudText>
+
+<HelpAlert DocsUrl="https://dotmarc.app/docs/mta-sts">
+    @if (string.IsNullOrEmpty(MtaStsOptions.Value.HostingHostname))
+    {
+        <text>MTA-STS hosting isn't configured on this deployment yet (no <code>MtaSts__HostingHostname</code> set), so enabling a domain below won't progress past "Waiting for DNS."</text>
+    }
+    else
+    {
+        <text>Enabling a domain starts hosting its MTA-STS policy. For each one, add a CNAME:
+        <code>mta-sts.&lt;domain&gt; → @MtaStsOptions.Value.HostingHostname</code>.
+        <b>Testing</b> reports without enforcing; <b>Enforce</b> requires a valid TLS connection;
+        <b>None</b> publishes no strictness policy. Status updates automatically once DNS propagates.</text>
+    }
+</HelpAlert>
 
 @if (_domains is null)
 {
