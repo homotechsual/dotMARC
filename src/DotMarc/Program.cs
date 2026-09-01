@@ -1,5 +1,6 @@
 using DotMarc.Data;
 using DotMarc.Dns;
+using DotMarc.DnsPush;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
 using DotMarc.MtaSts;
@@ -115,6 +116,28 @@ builder.Services.AddScoped<DotMarc.MtaSts.IMtaStsHostProvisioner>(sp =>
         ? new DotMarc.MtaSts.AzureMtaStsHostProvisioner(mtaStsOptions)
         : new DotMarc.MtaSts.CaddyMtaStsHostProvisioner();
 });
+
+builder.Services.Configure<DotMarc.DnsPush.CloudflareDnsOptions>(builder.Configuration.GetSection(DotMarc.DnsPush.CloudflareDnsOptions.SectionName));
+builder.Services.AddHttpClient<DotMarc.DnsPush.CloudflareDnsPushProvider>();
+builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.CloudflareDnsPushProvider>());
+
+builder.Services.Configure<DotMarc.DnsPush.AzureDnsOptions>(builder.Configuration.GetSection(DotMarc.DnsPush.AzureDnsOptions.SectionName));
+builder.Services.AddSingleton<DotMarc.DnsPush.AzureDnsPushProvider>();
+builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.AzureDnsPushProvider>());
+
+builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.DnsPush.DnsProviderDetector>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
+builder.Services.AddHttpClient<DotMarc.DnsPush.IDmarcTxtLookup, DotMarc.DnsPush.DmarcTxtLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
+builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushStateProtector>();
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {
@@ -331,6 +354,109 @@ app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContex
     var policyText = MtaStsPolicyRenderer.Render(domain.MtaStsMode, domain.MtaStsMxHosts, domain.MtaStsMaxAgeSeconds);
     return Results.Text(policyText, "text/plain");
 }).AllowAnonymous();
+
+// Unlike the two /.well-known/mta-sts* endpoints above, these run under this app's own hostname
+// and DO require the caller to already be signed in — a push is a write action gated by the same
+// permission its target already needs (MtaStsManage for the CNAME, DomainsEdit for the DMARC TXT
+// record), checked explicitly below since /start doesn't yet know which target it's for from route
+// data alone.
+app.MapGet("/dns-push/{provider}/start", async (
+    string provider, int domainId, string target, HttpContext httpContext,
+    IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
+    IAuthorizationService authorizationService) =>
+{
+    var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" => "DomainsEdit", _ => null };
+    if (requiredPolicy is null)
+    {
+        return Results.BadRequest();
+    }
+
+    var authResult = await authorizationService.AuthorizeAsync(httpContext.User, requiredPolicy);
+    if (!authResult.Succeeded)
+    {
+        return Results.Forbid();
+    }
+
+    var pushProvider = pushProviders.SingleOrDefault(p => p.ProviderKey == provider && p.IsConfigured);
+    if (pushProvider is null)
+    {
+        return Results.NotFound();
+    }
+
+    var (codeVerifier, codeChallenge) = PkceGenerator.Generate();
+    var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow);
+    var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
+
+    return Results.Redirect(pushProvider.BuildAuthorizationUrl(state, codeChallenge, redirectUri));
+});
+
+app.MapGet("/dns-push/{provider}/callback", async (
+    string provider, string? code, string? state, string? error, HttpContext httpContext,
+    IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
+    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup,
+    IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions) =>
+{
+    var pushProvider = pushProviders.SingleOrDefault(p => p.ProviderKey == provider && p.IsConfigured);
+    var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
+    if (pushProvider is null || decodedState is null)
+    {
+        return Results.Redirect("/dashboard?dnsPush=invalid");
+    }
+
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var domain = await context.Domains.AsNoTracking().SingleOrDefaultAsync(d => d.Id == decodedState.DomainId);
+    if (domain is null)
+    {
+        return Results.Redirect("/dashboard?dnsPush=invalid");
+    }
+
+    var returnPath = decodedState.PushTarget == "mta-sts" ? "/mta-sts" : $"/domains/{domain.Name}";
+
+    if (error is not null || code is null)
+    {
+        return Results.Redirect($"{returnPath}?dnsPush=cancelled");
+    }
+
+    DnsRecordChange change;
+    if (decodedState.PushTarget == "mta-sts")
+    {
+        var hostingHostname = mtaStsOptions.Value.HostingHostname;
+        if (string.IsNullOrEmpty(hostingHostname))
+        {
+            return Results.Redirect($"{returnPath}?dnsPush=error");
+        }
+        change = new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null);
+    }
+    else
+    {
+        var existing = await dmarcTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
+        var mailbox = graphOptions.Value.MailboxAddress;
+        if (existing is null)
+        {
+            change = new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null);
+        }
+        else
+        {
+            var merged = DmarcRuaMerge.TryMerge(existing, mailbox);
+            if (merged is null)
+            {
+                return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
+            }
+            change = new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing);
+        }
+    }
+
+    var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
+    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, change, CancellationToken.None);
+
+    var resultFlag = result.Outcome switch
+    {
+        DnsPushOutcome.Pushed => "pushed",
+        DnsPushOutcome.ZoneNotFound => "zone-not-found",
+        _ => "error"
+    };
+    return Results.Redirect($"{returnPath}?dnsPush={resultFlag}");
+});
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();
