@@ -101,14 +101,30 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         {
             if (string.Equals(change.RecordType, "CNAME", StringComparison.OrdinalIgnoreCase))
             {
+                var cnameRecords = zone.GetDnsCnameRecords();
+                if (change.Kind == DnsRecordChangeKind.Create
+                    && (await cnameRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
+                {
+                    return new DnsPushResult(DnsPushOutcome.ProviderError,
+                        $"A DNS record already exists at {change.Name} — remove it or update it manually rather than risk overwriting it.");
+                }
+
                 var data = new DnsCnameRecordData { TtlInSeconds = 3600, Cname = change.DesiredValue };
-                await zone.GetDnsCnameRecords().CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+                await cnameRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             else
             {
+                var txtRecords = zone.GetDnsTxtRecords();
+                if (change.Kind == DnsRecordChangeKind.Create
+                    && (await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
+                {
+                    return new DnsPushResult(DnsPushOutcome.ProviderError,
+                        $"A DNS record already exists at {change.Name} — remove it or update it manually rather than risk overwriting it.");
+                }
+
                 var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
                 data.DnsTxtRecords.Add(new DnsTxtRecordInfo { Values = { change.DesiredValue } });
-                await zone.GetDnsTxtRecords().CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+                await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
         }
         catch (RequestFailedException ex)

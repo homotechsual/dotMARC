@@ -164,7 +164,24 @@ else
 
     private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        if (RendererInfo.IsInteractive)
+        {
+            ShowDnsPushResultToast();
+        }
+    }
+
+    private void ShowDnsPushResultToast()
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
+        if (query["dnsPush"] == "invalid")
+        {
+            Snackbar.Add("That DNS push link was invalid or has expired. Try again from the domain's page.", Severity.Warning);
+        }
+    }
 
     private async Task LoadAsync()
     {

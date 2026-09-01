@@ -25,9 +25,12 @@ That CNAME is the only DNS change needed. dotMARC verifies it, provisions a cert
 starts serving the policy automatically once it resolves.
 
 If this deployment has DNS provider push configured (see [Getting
-Started](./getting-started.mdx#dns-provider-push-optional)) and the domain's DNS is hosted on
-Cloudflare or Azure DNS, a push button appears next to the CNAME instructions instead. It pushes
-the record for you via that provider's own consent screen, with nothing stored.
+Started](./getting-started.mdx#dns-provider-push-optional)), a small push button also appears in
+the row for any domain waiting on DNS, in addition to (not instead of) the manual CNAME
+instructions above. Clicking it detects the domain's DNS provider and either starts the push flow,
+authorizing via that provider's own consent screen with nothing stored, or shows a message
+explaining why it couldn't: the domain's provider wasn't recognized, or that provider's OAuth app
+isn't configured on this deployment.
 
 On the Azure deployment, that hosting hostname is the Container App's own generated
 `*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't

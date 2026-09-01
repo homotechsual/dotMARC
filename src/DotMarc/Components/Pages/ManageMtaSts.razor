@@ -228,11 +228,20 @@ else
             .Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
 
+        // Mirrors the enable-transition check DomainManagementService.SetMtaStsConfigAsync makes
+        // server-side (enabled && !previously enabled) so the row's Status can be updated to match
+        // without a full reload.
+        var justEnabled = row.Enabled && !row.WasEnabled;
+
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             await DomainManagementService.SetMtaStsConfigAsync(db, row.Id, row.Enabled, row.Mode, mxHosts, row.MaxAgeSeconds, CancellationToken.None);
             row.ResetSnapshot();
+            if (justEnabled)
+            {
+                row.Status = MtaStsStatus.PendingDns;
+            }
             Snackbar.Add($"MTA-STS configuration saved for {row.Name}.", Severity.Success);
         }
         catch (Exception)
@@ -254,6 +263,11 @@ else
         public bool IsDetectingProvider { get; set; }
 
         private (bool Enabled, MtaStsMode Mode, int MaxAgeSeconds, string MxHostsText) _snapshot;
+
+        /// <summary>The Enabled value as of the last load or successful save — i.e. before any
+        /// in-progress edits on this row. Used to detect a disabled-&gt;enabled transition the same
+        /// way DomainManagementService.SetMtaStsConfigAsync does server-side.</summary>
+        public bool WasEnabled => _snapshot.Enabled;
 
         public void ResetSnapshot() => _snapshot = (Enabled, Mode, MaxAgeSeconds, MxHostsText);
 

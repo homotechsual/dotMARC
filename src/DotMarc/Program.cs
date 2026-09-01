@@ -394,13 +394,29 @@ app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
     IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup,
-    IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions) =>
+    IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
+    IAuthorizationService authorizationService) =>
 {
     var pushProvider = pushProviders.SingleOrDefault(p => p.ProviderKey == provider && p.IsConfigured);
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
     if (pushProvider is null || decodedState is null)
     {
         return Results.Redirect("/dashboard?dnsPush=invalid");
+    }
+
+    // The signed state proves the /start redirect was legitimate, but says nothing about whether
+    // whoever's browser lands HERE still holds the permission the push actually needs — re-run the
+    // same target-to-policy check /start already made rather than relying solely on the app's
+    // FallbackPolicy (any authenticated user).
+    var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" => "DomainsEdit", _ => null };
+    if (requiredPolicy is null)
+    {
+        return Results.Forbid();
+    }
+    var authResult = await authorizationService.AuthorizeAsync(httpContext.User, requiredPolicy);
+    if (!authResult.Succeeded)
+    {
+        return Results.Forbid();
     }
 
     await using var context = await dbContextFactory.CreateDbContextAsync();
