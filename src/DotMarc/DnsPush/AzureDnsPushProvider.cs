@@ -47,6 +47,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         var confidentialClient = ConfidentialClientApplicationBuilder.Create(_options.ClientId)
             .WithClientSecret(_options.ClientSecret)
             .WithAuthority($"https://login.microsoftonline.com/{_options.TenantId}")
+            .WithRedirectUri(redirectUri)
             .Build();
 
         AuthenticationResult authResult;
@@ -54,6 +55,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         {
             authResult = await confidentialClient
                 .AcquireTokenByAuthorizationCode([Scope], code)
+                .WithPkceCodeVerifier(codeVerifier)
                 .ExecuteAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
