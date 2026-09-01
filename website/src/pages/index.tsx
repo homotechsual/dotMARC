@@ -13,6 +13,7 @@ const heroCopy = {
   docsCta: 'Read the docs',
   demoCta: 'Try the demo',
   ghCta: 'View on GitHub',
+  discordCta: 'Join the Discord',
   description:
     'Built for MSPs managing DMARC across many client domains and equally usable for a single organization watching its own.',
 };
@@ -82,6 +83,11 @@ function HomepageHeader() {
               className="inline-flex items-center justify-center rounded-full bg-[#e3594f] px-6 py-3 text-sm font-bold text-white shadow-[0_16px_36px_rgba(227,89,79,0.28)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[#c9443a] hover:no-underline"
               to="https://demo.dotmarc.app/">
               {heroCopy.demoCta}
+            </Link>
+            <Link
+              className="inline-flex items-center justify-center rounded-full border border-[#263141]/15 bg-[#5865f2] px-6 py-3 text-sm font-bold text-white shadow-[0_16px_36px_rgba(88,101,242,0.28)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#263141]/25 hover:bg-[#4752c4] hover:no-underline"
+              to="https://discord.homotechsual.dev">
+              {heroCopy.discordCta}
             </Link>
             <Link
               className="inline-flex items-center justify-center rounded-full border border-[#263141]/15 bg-white/80 px-6 py-3 text-sm font-bold text-[#161e29] shadow-[0_16px_36px_rgba(38,49,65,0.08)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#263141]/25 hover:bg-white hover:text-[#e3594f] hover:no-underline dark:border-white/10 dark:bg-[#1e2a3a]/80 dark:text-[#fcfcfc] dark:hover:text-[#ef8b86]"

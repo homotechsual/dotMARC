@@ -1,0 +1,92 @@
+---
+sidebar_position: 6
+description: How to enable MTA-STS policy hosting for a domain, what each status means, and how to troubleshoot it.
+---
+
+# MTA-STS
+
+[MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) tells receiving mail servers to require a
+valid, verified TLS connection when delivering to a domain. dotMARC can host the policy file on a
+domain's behalf, so nobody has to stand up their own hosting for it.
+
+This deployment needs to have MTA-STS hosting set up first, see [Getting
+Started](./getting-started.mdx#mta-sts-policy-hosting-optional) for the one-time infrastructure
+step. If it isn't, the **Manage MTA-STS** page will tell you.
+
+## Enabling a domain
+
+From **Manage MTA-STS**, toggle a domain on and add a CNAME for it:
+
+```txt
+mta-sts.<domain> CNAME <the hosting hostname shown on the Manage MTA-STS page>
+```
+
+That CNAME is the only DNS change needed. dotMARC verifies it, provisions a certificate, and
+starts serving the policy automatically once it resolves.
+
+If this deployment has DNS provider push configured (see [Getting
+Started](./getting-started.mdx#dns-provider-push-optional)), a small push button also appears in
+the row for any domain waiting on DNS, in addition to (not instead of) the manual CNAME
+instructions above. Clicking it detects the domain's DNS provider and either starts the push flow,
+authorizing via that provider's own consent screen with nothing stored, or shows a message
+explaining why it couldn't: the domain's provider wasn't recognized, or that provider's OAuth app
+isn't configured on this deployment.
+
+On the Azure deployment, that hosting hostname is the Container App's own generated
+`*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't
+a choice dotMARC makes: Azure's free managed certificates require the CNAME to point directly at
+that generated domain, and explicitly refuse to issue or renew a certificate through any
+intermediate CNAME, including another custom domain on the same app (see [Azure's own
+requirements](https://learn.microsoft.com/azure/container-apps/custom-domains-managed-certificates#free-certificate-requirements)).
+The self-hosted Caddy path doesn't have this restriction, since it isn't using Azure's managed
+certificates.
+
+### A note on scale
+
+Every domain you enable adds one custom domain, and one managed certificate, to the same shared
+Container App. Azure doesn't publish a hard limit on how many of either a single Container App (or
+its environment) can hold, unlike App Service, which documents a cap of 1,000 public certificates
+per plan. There's no equivalent number for Container Apps in Microsoft's docs, so growth here is
+soft-bounded rather than capped: each certificate is issued and renewed independently, so a large
+domain count means more independent renewals to track, not a ceiling you hit. This isn't something
+to plan around for a typical list of domains; it'd only be worth revisiting if the enabled-domain
+count ran into the hundreds.
+
+### Mode
+
+* **Testing**: the policy is published, but recommends senders only report failures rather than
+  reject mail. Use this while you confirm everything's working before enforcing.
+* **Enforce**: senders are told to actually require the connection to be secure.
+* **None**: publishes a policy that asserts no strictness, effectively opting out while still
+  responding at the well-known URL.
+
+### Max age and MX hosts
+
+**Max age** is how long (in seconds) a receiving server should cache the policy before re-checking
+it. The default (7 days) is fine for most domains; lower it temporarily while you're actively
+changing MX records. **MX hosts** should list every hostname mail for this domain is actually
+delivered to, one per line. A receiving server rejects the connection if the live MX record
+points somewhere not on this list.
+
+The sync icon next to the MX hosts field looks up the domain's current MX records and fills the
+field in for you, ordered by preference. It's a starting point, not a save, review the result (and
+still hit **Save**) before it takes effect, since what's live in DNS right now might not match
+what you actually want published.
+
+## Status
+
+The domain detail page's MTA-STS tab shows live status, not the Manage MTA-STS page. See
+[Permissions & Access](./permissions-and-access.mdx) for why configuration and status live on
+separate pages here.
+
+| Status | Meaning |
+| --- | --- |
+| Not configured | MTA-STS isn't enabled for this domain. |
+| Waiting for DNS | Enabled, but the `mta-sts.<domain>` CNAME hasn't resolved to this deployment yet. |
+| Waiting for certificate | DNS resolved; a TLS certificate is being issued. Usually resolves within a few minutes. |
+| Active | The policy is live and serving correctly. |
+| Failed | Something regressed after being Active, or provisioning failed. Check the detail message on the domain's MTA-STS tab. |
+
+A domain re-checks automatically on a schedule (faster while onboarding, slower once Active), so
+there's no manual "check now". Give it a few minutes after a DNS change before assuming something's
+wrong.

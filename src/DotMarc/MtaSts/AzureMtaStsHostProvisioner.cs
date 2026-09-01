@@ -37,17 +37,34 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
 
         var existingBinding = containerApp.Data.Configuration.Ingress.CustomDomains
             .FirstOrDefault(d => string.Equals(d.Name, hostname, StringComparison.OrdinalIgnoreCase));
-        if (existingBinding is not null)
+        if (existingBinding is not null && existingBinding.BindingType == ContainerAppCustomDomainBindingType.SniEnabled)
         {
-            // Already bound from an earlier cycle — nothing further to do here. Whether the
+            // Already fully bound from an earlier cycle — nothing further to do here. Whether the
             // certificate has actually finished issuing is what the serving self-check
             // (IMtaStsServingVerifier) determines, not this provisioner.
             return;
         }
 
+        if (existingBinding is null)
+        {
+            // Azure requires the hostname already registered as a custom domain on the container
+            // app before it will create a managed certificate for it
+            // (RequireCustomHostnameInEnvironment) — so this binds it first with no certificate,
+            // then creates the certificate below, then rebinds with the certificate attached. A
+            // crash between these two steps leaves the binding Disabled with no certificate; the
+            // existingBinding check above only short-circuits once it's fully SniEnabled, so the
+            // next cycle resumes from certificate creation instead of re-adding the binding or
+            // giving up on it.
+            containerApp.Data.Configuration.Ingress.CustomDomains.Add(new ContainerAppCustomDomain(hostname) { BindingType = ContainerAppCustomDomainBindingType.Disabled });
+            containerApp = (await containerApp.UpdateAsync(WaitUntil.Completed, containerApp.Data, cancellationToken).ConfigureAwait(false)).Value;
+        }
+
         var certificateId = await EnsureManagedCertificateAsync(hostname, cancellationToken).ConfigureAwait(false);
 
-        containerApp.Data.Configuration.Ingress.CustomDomains.Add(new ContainerAppCustomDomain(hostname, certificateId));
+        var binding = containerApp.Data.Configuration.Ingress.CustomDomains
+            .First(d => string.Equals(d.Name, hostname, StringComparison.OrdinalIgnoreCase));
+        binding.CertificateId = certificateId;
+        binding.BindingType = ContainerAppCustomDomainBindingType.SniEnabled;
         await containerApp.UpdateAsync(WaitUntil.Completed, containerApp.Data, cancellationToken).ConfigureAwait(false);
     }
 

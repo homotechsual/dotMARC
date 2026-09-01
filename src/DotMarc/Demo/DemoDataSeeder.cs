@@ -69,7 +69,14 @@ public static class DemoDataSeeder
                 LastReportReceivedUtc = domainSeed.LastReportReceivedUtc,
                 DmarcCheckStatus = domainSeed.DmarcCheckStatus,
                 DmarcCheckedUtc = domainSeed.DmarcCheckStatus == DmarcCheckStatus.NotChecked ? null : domainSeed.FirstSeenUtc,
-                DmarcCheckDetail = domainSeed.DmarcCheckDetail
+                DmarcCheckDetail = domainSeed.DmarcCheckDetail,
+                MtaStsEnabled = domainSeed.MtaStsEnabled,
+                MtaStsMode = domainSeed.MtaStsMode,
+                MtaStsStatus = domainSeed.MtaStsStatus,
+                MtaStsCheckedUtc = domainSeed.MtaStsCheckedUtc,
+                MtaStsCheckDetail = domainSeed.MtaStsCheckDetail,
+                MtaStsMaxAgeSeconds = domainSeed.MtaStsMaxAgeSeconds,
+                MtaStsMxHosts = domainSeed.MtaStsMxHosts
             };
 
             if (domainSeed.GroupName is not null)

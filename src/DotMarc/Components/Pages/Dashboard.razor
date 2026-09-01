@@ -1,5 +1,6 @@
 @page "/dashboard"
 @attribute [Authorize(Policy = "DomainsView")]
+@using DotMarc.Components.Shared
 @using DotMarc.Data
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
@@ -12,6 +13,11 @@
 
 <PageTitle>dotMARC - Dashboard</PageTitle>
 <MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<HelpAlert DocsUrl="https://dotmarc.app/docs/getting-started">
+    Pass rate, DNS status, and polling health for every domain you monitor, updated as reports
+    come in. Filter by Group or Tag below, or open a domain for its full report history.
+</HelpAlert>
 
 @if (_summary is null)
 {
@@ -158,7 +164,24 @@ else
 
     private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        if (RendererInfo.IsInteractive)
+        {
+            ShowDnsPushResultToast();
+        }
+    }
+
+    private void ShowDnsPushResultToast()
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
+        if (query["dnsPush"] == "invalid")
+        {
+            Snackbar.Add("That DNS push link was invalid or has expired. Try again from the domain's page.", Severity.Warning);
+        }
+    }
 
     private async Task LoadAsync()
     {

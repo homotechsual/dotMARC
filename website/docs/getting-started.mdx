@@ -161,5 +161,35 @@ Drill into any domain for a 30-day pass/quarantine/reject chart and its DMARC re
   }}
 />
 
+### DNS provider push (optional)
+
+If a domain's DNS is hosted on Cloudflare or Azure DNS, dotMARC can push the MTA-STS CNAME or the
+DMARC TXT record straight there instead of you copying it in by hand. Each push is authenticated
+fresh through that provider's own consent screen, with nothing stored.
+
+**Cloudflare**: register a self-managed OAuth client (**Manage account** → **OAuth clients** in the
+Cloudflare dashboard), scoped to `Zone.DNS` edit, with a redirect URI of
+`https://<your-deployment-host>/dns-push/cloudflare/callback`. Set:
+
+| Variable | Description |
+| --- | --- |
+| `CloudflareDns__ClientId` | The OAuth client's ID |
+| `CloudflareDns__ClientSecret` | The OAuth client's secret |
+
+**Azure DNS**: register a *third*, separate Entra app registration (do not reuse the mailbox or
+dashboard app). Go to **App registrations** → **New registration**, then **Authentication** → add a
+**Web** redirect URI of `https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API
+permissions** → add the delegated **Azure Service Management** → `user_impersonation` permission.
+Set:
+
+| Variable | Description |
+| --- | --- |
+| `AzureDns__TenantId` | Your tenant ID |
+| `AzureDns__ClientId` | This app registration's client ID |
+| `AzureDns__ClientSecret` | This app registration's client secret |
+
+Both are independently optional. Leave either unset and that provider's push button simply never
+appears, with no other effect on the app.
+
 Next: [Local Development](./local-development.mdx) to run and test the app from source, or
 [Deploy to Azure](./deploy-to-azure.mdx) to run it in production.

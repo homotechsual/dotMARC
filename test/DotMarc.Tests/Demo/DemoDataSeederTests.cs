@@ -90,6 +90,27 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ResetAsync_WritesMtaStsFieldsOntoDomains()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        var aurora = await verify.Domains.SingleAsync(d => d.Name == "aurora-retail.example");
+        Assert.True(aurora.MtaStsEnabled);
+        Assert.Equal(MtaStsStatus.Active, aurora.MtaStsStatus);
+        Assert.Equal(MtaStsMode.Enforce, aurora.MtaStsMode);
+        Assert.NotEmpty(aurora.MtaStsMxHosts);
+        Assert.NotNull(aurora.MtaStsCheckedUtc);
+
+        var driftwoodMedia = await verify.Domains.SingleAsync(d => d.Name == "driftwood-media.example");
+        Assert.False(driftwoodMedia.MtaStsEnabled);
+        Assert.Equal(MtaStsStatus.NotConfigured, driftwoodMedia.MtaStsStatus);
+        Assert.Empty(driftwoodMedia.MtaStsMxHosts);
+    }
+
+    [Fact]
     public async Task ResetAsync_WritesPollCyclesAndParseFailures()
     {
         using var context = CreateContext();

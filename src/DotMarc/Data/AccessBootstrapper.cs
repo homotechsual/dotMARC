@@ -22,8 +22,10 @@ public static class AccessBootstrapper
     /// <summary>Canonical permission set for the built-in Viewer role, shared with
     /// DemoDataSeeder so the demo and production paths can't silently diverge if this list ever
     /// changes. The Admin role's permission list is NOT similarly shared: both places derive it
-    /// identically via <c>[.. Enum.GetValues&lt;Permission&gt;()]</c>, which self-syncs when the
-    /// enum grows, so there's no equivalent duplication risk there.</summary>
+    /// identically via <c>[.. Enum.GetValues&lt;Permission&gt;()]</c>, so there's no equivalent
+    /// duplication risk there. It self-syncs when the enum grows because EnsureBuiltInRoleAsync
+    /// backfills a mismatched permission list onto an already-existing locked role (Admin) —
+    /// Viewer is excluded from that backfill since, unlike Admin, it's user-editable.</summary>
     public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView, Permission.AlertsView];
 
     public static async Task BootstrapWithLeaderLockAsync(DotMarcDbContext context, IOptions<InitialAdminsOptions> options, ILogger logger, CancellationToken cancellationToken = default)
@@ -92,6 +94,22 @@ public static class AccessBootstrapper
         var existing = await context.Roles.SingleOrDefaultAsync(r => r.Name == name, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
+            // Only for a locked (non-UI-editable) role, e.g. Admin: its permission list is a
+            // fixed invariant this codebase owns, not something an admin might have deliberately
+            // customized, so it's safe — and necessary — to backfill it back to the current
+            // canonical list here. A live deployment whose Admin role was created before a later
+            // Permission enum value existed would otherwise stay stuck without it forever: this
+            // method's own "only set permissions when creating the row" behavior, unlike what
+            // this class's Permissions doc comment claims, does not self-sync an already-existing
+            // row just because Enum.GetValues<Permission>() grows. Viewer (isLocked: false) is
+            // deliberately excluded — it's user-editable via ManageAccess.razor, and reconciling
+            // it here on every startup would silently discard that customization.
+            if (isLocked && !existing.Permissions.OrderBy(p => p).SequenceEqual(permissions.OrderBy(p => p)))
+            {
+                existing.Permissions = permissions;
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return existing.Id;
         }
 

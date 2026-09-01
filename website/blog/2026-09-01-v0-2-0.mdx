@@ -1,0 +1,47 @@
+---
+slug: v0-2-0
+title: "dotMARC v0.2.0: source IP ownership, MTA-STS hosting, and a live demo"
+description: Source IP ownership/country enrichment, self-hosted and Azure-hosted MTA-STS policy hosting, and a public demo instance.
+authors: [mikey]
+tags: [release]
+---
+
+Since [`v0.1.0`](/blog/v0-1-0), dotMARC has picked up three things worth calling out: you can now
+see who actually owns a source IP, host MTA-STS policies without standing up your own
+infrastructure, and try the whole thing without installing anything.
+
+{/* truncate */}
+
+## Who owns that source IP?
+
+The Sources tab on each domain's detail page now enriches every source IP with its registered
+organization and country, looked up via RDAP. A DMARC failure from an unfamiliar IP no longer
+means pasting it into an external WHOIS tool by hand. Lookups are cached indefinitely once
+resolved, covering both IPv4 and IPv6, and related IPs in the same registry allocation block (for
+example a whole `/31` from one provider) share a single cached lookup instead of each triggering
+its own RDAP call.
+
+## Self-hosted or Azure-hosted MTA-STS, without the yak-shave
+
+MTA-STS tells receiving mail servers to require a valid, verified TLS connection when delivering
+to your domain. Standing it up means hosting a policy file on `mta-sts.<yourdomain>` with a real,
+publicly trusted certificate, for every domain you manage. dotMARC now does this for you, from a
+new **Manage MTA-STS** page: enable a domain, point a CNAME where it tells you (a sync button next
+to the MX hosts field can pull the current record straight from DNS instead of typing it from
+memory), and dotMARC verifies DNS, provisions the certificate, and serves the policy, either
+through your own self-hosted instance (via Caddy's on-demand TLS) or, on the Azure deployment,
+through Azure Container Apps' managed custom domains. The domain detail page's own MTA-STS tab
+stays purely a status view: a chip and a detail message that walks you through onboarding and
+flags anything that regresses later.
+
+## Try it without installing anything
+
+There's now a public demo at [demo.dotmarc.app](https://demo.dotmarc.app/), seeded with a
+simulated MSP's worth of client domains and DMARC history. Switch between an Admin and a
+Group-scoped Viewer persona to see exactly what an external client would (and wouldn't) have
+access to. It resets on a nightly schedule, so feel free to poke at everything.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.2.0) for
+everything that shipped between these two tags, including the usual pile of fixes.

@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "GroupsOrTagsWrite")]
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
+@using DotMarc.Components.Shared
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -12,6 +13,12 @@
 <PageTitle>dotMARC - Manage Groups</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">Manage groups</MudText>
+
+<HelpAlert DocsUrl="https://dotmarc.app/docs/permissions-and-access#granting-access">
+    <b>Groups</b> control access: a Viewer can be scoped to just the Groups you put a domain in,
+    for external clients who should only see their own domains. <b>Tags</b> are for your own
+    filtering on the dashboard and don't affect who can see what.
+</HelpAlert>
 
 <MudPaper Class="pa-4 mb-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>

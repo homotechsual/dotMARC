@@ -1,0 +1,19 @@
+@* A small, consistent in-app help banner: a short explanation plus an optional link out to the
+   docs site for the fuller picture. Used at the top of pages where the UI alone doesn't explain
+   what to do next (e.g. an external DNS step) or a concept the page depends on (e.g. Groups vs
+   Tags). *@
+<MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.Info" Dense="true">
+    @ChildContent
+    @if (!string.IsNullOrEmpty(DocsUrl))
+    {
+        <MudLink Href="@DocsUrl" Target="_blank" Class="ml-1">Learn more</MudLink>
+    }
+</MudAlert>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Absolute URL to the relevant docs.dotmarc.app page — external, so this always
+    /// opens in a new tab rather than navigating the admin away from what they're doing.</summary>
+    [Parameter] public string? DocsUrl { get; set; }
+}
