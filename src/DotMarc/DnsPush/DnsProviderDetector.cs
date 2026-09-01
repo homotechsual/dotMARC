@@ -22,8 +22,17 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(domainName)}&type=NS");
         request.Headers.Accept.ParseAdd("application/dns-json");
-        var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        HttpResponseMessage response;
+        try
+        {
+            response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException)
+        {
+            return DetectedDnsProvider.Unknown;
+        }
+
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
 

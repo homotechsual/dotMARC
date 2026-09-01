@@ -78,4 +78,15 @@ public sealed class DnsProviderDetectorTests
         Assert.Contains("contoso.io", handler.Requests[0].RequestUri!.ToString());
         Assert.Contains("type=NS", handler.Requests[0].RequestUri!.ToString());
     }
+
+    [Fact]
+    public async Task DetectAsync_ReturnsUnknown_WhenHttpRequestFails()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.StatusCode = System.Net.HttpStatusCode.InternalServerError;
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(DetectedDnsProvider.Unknown, result);
+    }
 }
