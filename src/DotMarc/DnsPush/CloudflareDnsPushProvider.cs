@@ -53,7 +53,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         }
 
         var zoneName = ZoneNameFor(change.Name);
-        var zoneId = await FindZoneIdAsync(zoneName, accessToken, cancellationToken).ConfigureAwait(false);
+        var (zoneId, zoneErrorStatus) = await FindZoneIdAsync(zoneName, accessToken, cancellationToken).ConfigureAwait(false);
+        if (zoneErrorStatus.HasValue)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the zone lookup ({zoneErrorStatus}).");
+        }
         if (zoneId is null)
         {
             return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"Couldn't find {zoneName} in the Cloudflare account you authorized.");
@@ -87,13 +91,17 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         return token?.AccessToken;
     }
 
-    private async Task<string?> FindZoneIdAsync(string zoneName, string accessToken, CancellationToken cancellationToken)
+    private async Task<(string? Id, int? ErrorStatusCode)> FindZoneIdAsync(string zoneName, string accessToken, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/zones?name={Uri.EscapeDataString(zoneName)}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (null, (int)response.StatusCode);
+        }
         var zones = await response.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
-        return zones?.Result?.FirstOrDefault()?.Id;
+        return (zones?.Result?.FirstOrDefault()?.Id, null);
     }
 
     private async Task<DnsPushResult> CreateRecordAsync(string zoneId, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
@@ -115,6 +123,10 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             $"{ApiBase}/zones/{zoneId}/dns_records?type={change.RecordType}&name={Uri.EscapeDataString(change.Name)}");
         findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
+        if (!findResponse.IsSuccessStatusCode)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}).");
+        }
         var existing = await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
         var recordId = existing?.Result?.FirstOrDefault()?.Id;
         if (recordId is null)
