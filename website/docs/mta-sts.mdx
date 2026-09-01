@@ -24,6 +24,15 @@ mta-sts.<domain> CNAME <the hosting hostname shown on the Manage MTA-STS page>
 That CNAME is the only DNS change needed. dotMARC verifies it, provisions a certificate, and
 starts serving the policy automatically once it resolves.
 
+On the Azure deployment, that hosting hostname is the Container App's own generated
+`*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't
+a choice dotMARC makes: Azure's free managed certificates require the CNAME to point directly at
+that generated domain, and explicitly refuse to issue or renew a certificate through any
+intermediate CNAME, including another custom domain on the same app (see [Azure's own
+requirements](https://learn.microsoft.com/azure/container-apps/custom-domains-managed-certificates#free-certificate-requirements)).
+The self-hosted Caddy path doesn't have this restriction, since it isn't using Azure's managed
+certificates.
+
 ### Mode
 
 * **Testing**: the policy is published, but recommends senders only report failures rather than

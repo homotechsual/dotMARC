@@ -24,7 +24,13 @@
         <text>Enabling a domain starts hosting its MTA-STS policy. For each one, add a CNAME:
         <code>mta-sts.&lt;domain&gt; → @MtaStsOptions.Value.HostingHostname</code>.
         <b>Testing</b> reports without enforcing; <b>Enforce</b> requires a valid TLS connection;
-        <b>None</b> publishes no strictness policy. Status updates automatically once DNS propagates.</text>
+        <b>None</b> publishes no strictness policy. Status updates automatically once DNS propagates.
+        @if (string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            <text> That's this deployment's raw Container App hostname, not a nicer custom domain,
+            because Azure's free managed certificates refuse to issue through an intermediate CNAME
+            like one.</text>
+        }</text>
     }
 </HelpAlert>
 
