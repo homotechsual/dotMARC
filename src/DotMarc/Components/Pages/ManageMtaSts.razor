@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "MtaStsManage")]
 @using DotMarc.Components.Shared
 @using DotMarc.Data
+@using DotMarc.DnsPush
 @using DotMarc.MtaSts
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -10,6 +11,9 @@
 @inject ISnackbar Snackbar
 @inject IOptions<MtaStsOptions> MtaStsOptions
 @inject IMxHostsLookup MxHostsLookup
+@inject IDnsProviderDetector DnsProviderDetector
+@inject IEnumerable<IDnsPushProvider> DnsPushProviders
+@inject NavigationManager Navigation
 
 <PageTitle>dotMARC - Manage MTA-STS</PageTitle>
 <UnsavedChangesGuard HasUnsavedChanges="AnyUnsavedChanges" />
@@ -83,6 +87,19 @@ else
                 </div>
             </MudTd>
             <MudTd Style="width: 3rem;">
+                @if (context.Status == MtaStsStatus.PendingDns)
+                {
+                    @if (context.IsDetectingProvider)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.CloudSync" Size="Size.Small"
+                                       title="Push the CNAME via your DNS provider" aria-label="@($"Push MTA-STS CNAME for {context.Name} via your DNS provider")"
+                                       OnClick="@(() => PushCnameAsync(context))" />
+                    }
+                }
                 <MudIconButton Icon="@Icons.Material.Filled.Save" Color="Color.Primary" Size="Size.Small"
                                title="Save" aria-label="@($"Save MTA-STS configuration for {context.Name}")"
                                OnClick="@(() => SaveAsync(context))" />
@@ -96,7 +113,15 @@ else
 
     private bool AnyUnsavedChanges => _domains?.Any(d => d.IsDirty) ?? false;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        if (RendererInfo.IsInteractive)
+        {
+            ShowDnsPushResultToast();
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -112,7 +137,8 @@ else
                 Enabled = d.MtaStsEnabled,
                 Mode = d.MtaStsMode,
                 MaxAgeSeconds = d.MtaStsMaxAgeSeconds,
-                MxHostsText = string.Join('\n', d.MtaStsMxHosts)
+                MxHostsText = string.Join('\n', d.MtaStsMxHosts),
+                Status = d.MtaStsStatus
             })
             .ToListAsync();
 
@@ -147,6 +173,55 @@ else
         }
     }
 
+    private async Task PushCnameAsync(MtaStsRow row)
+    {
+        row.IsDetectingProvider = true;
+        try
+        {
+            var detected = await DnsProviderDetector.DetectAsync(row.Name, CancellationToken.None);
+            var providerKey = detected switch
+            {
+                DetectedDnsProvider.Cloudflare => "cloudflare",
+                DetectedDnsProvider.AzureDns => "azure-dns",
+                _ => null
+            };
+            var pushProvider = providerKey is null ? null : DnsPushProviders.SingleOrDefault(p => p.ProviderKey == providerKey && p.IsConfigured);
+            if (pushProvider is null)
+            {
+                Snackbar.Add($"Couldn't find a configured DNS push option for {row.Name} — add the CNAME manually.", Severity.Warning);
+                return;
+            }
+
+            Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={row.Id}&target=mta-sts", forceLoad: true);
+        }
+        finally
+        {
+            row.IsDetectingProvider = false;
+        }
+    }
+
+    private void ShowDnsPushResultToast()
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
+        switch (query["dnsPush"])
+        {
+            case "pushed":
+                Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
+                break;
+            case "cancelled":
+                break; // user backed out of the provider's consent screen — no need to say anything
+            case "zone-not-found":
+                Snackbar.Add("Couldn't find that domain in the account you authorized.", Severity.Warning);
+                break;
+            case "unmergeable":
+                Snackbar.Add("Couldn't safely compute a fix for that record — it needs a manual look.", Severity.Warning);
+                break;
+            case "error":
+                Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
+                break;
+        }
+    }
+
     private async Task SaveAsync(MtaStsRow row)
     {
         var mxHosts = row.MxHostsText
@@ -175,6 +250,8 @@ else
         public int MaxAgeSeconds { get; set; }
         public string MxHostsText { get; set; } = "";
         public bool IsFetchingMxHosts { get; set; }
+        public MtaStsStatus Status { get; set; }
+        public bool IsDetectingProvider { get; set; }
 
         private (bool Enabled, MtaStsMode Mode, int MaxAgeSeconds, string MxHostsText) _snapshot;
 
