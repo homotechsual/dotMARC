@@ -91,6 +91,7 @@ const config: Config = {
         },
       },
     ],
+    './src/plugins/featureRequests/FeatureRequestsPlugin',
   ],
 
   themeConfig: {
@@ -145,9 +146,6 @@ const config: Config = {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
     },
-    plugins: [
-      './src/plugins/featureRequests/FeatureRequestsPlugin.js',
-    ],
   } satisfies Preset.ThemeConfig,
 };
 
