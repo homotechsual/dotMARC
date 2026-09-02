@@ -4794,7 +4794,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/react@npm:*, @types/react@npm:^19.2.17":
+"@types/react@npm:*, @types/react@npm:^19.2.18":
   version: 19.2.18
   resolution: "@types/react@npm:19.2.18"
   dependencies:
@@ -6845,14 +6845,14 @@ __metadata:
     "@homotechsual/docusaurus-plugin-plausible": "npm:^1.1.1"
     "@mdx-js/react": "npm:^3.1.1"
     "@tailwindcss/postcss": "npm:^4.3.3"
-    "@types/react": "npm:^19.2.17"
+    "@types/react": "npm:^19.2.18"
     autoprefixer: "npm:^10.5.4"
     clsx: "npm:^2.1.1"
     postcss: "npm:^8.5.26"
     prism-react-renderer: "npm:^2.4.1"
-    react: "npm:^19.2.7"
-    react-dom: "npm:^19.2.7"
-    tailwindcss: "npm:^4.3.2"
+    react: "npm:^19.2.8"
+    react-dom: "npm:^19.2.8"
+    tailwindcss: "npm:^4.3.3"
     typescript: "npm:~6.0.3"
   languageName: unknown
   linkType: soft
@@ -11744,7 +11744,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-dom@npm:^19.2.7":
+"react-dom@npm:^19.2.8":
   version: 19.2.8
   resolution: "react-dom@npm:19.2.8"
   dependencies:
@@ -11865,7 +11865,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react@npm:^19.2.7":
+"react@npm:^19.2.8":
   version: 19.2.8
   resolution: "react@npm:19.2.8"
   checksum: 10c0/5f86bdb56426652fd6d989d30a6f2e603c057272c47c9ca3a3fbe190a3a39ee9ccce937d63cfc039717abed1b8891d6a499134bc35311acc07eafdacd86537cd
@@ -12998,7 +12998,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tailwindcss@npm:4.3.3, tailwindcss@npm:^4.3.2":
+"tailwindcss@npm:4.3.3, tailwindcss@npm:^4.3.3":
   version: 4.3.3
   resolution: "tailwindcss@npm:4.3.3"
   checksum: 10c0/7e9cd7553cd890ffa5350efb0ca8971ba5435257d0f98bf0714994ac8f1fee5c7cdf9a9da47fe83e8ac995d728410837ac49d3ef5ea66b5afe1db312086ffae2

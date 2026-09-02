@@ -11,3 +11,4 @@ local/
 *.db-shm
 *.db-wal
 .yarn/install-state.gz
+website/.yarn/install-state.gz
