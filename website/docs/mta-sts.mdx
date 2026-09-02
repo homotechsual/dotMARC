@@ -50,27 +50,6 @@ When a received TLSRPT report contains failed TLS delivery sessions, dotMARC cre
 to the existing alert cooldown. A later TLSRPT report with no failed sessions resolves the alert
 automatically.
 
-### Adrodd TLS
-
-Mae [Adrodd TLS SMTP (TLSRPT)](https://www.rfc-editor.org/rfc/rfc8460) yn ategu MTA-STS drwy
-ofyn i systemau post anfon adroddiadau am fethiannau dosbarthu TLS. Ffurfweddwch flwch post ar
-wahan ar gyfer yr adroddiadau hyn gyda `Graph__TlsrptMailboxAddress`. Ar ol ei osod, mae dotMARC
-yn gwirio cofnod TLSRPT pob parth bob dydd, yn holi'r blwch post am adroddiadau JSON cyfanredol,
-ac yn dangos ei statws yn nhrosolwg y parth. Mae adroddiadau a dderbynnir yn ymddangos yn y tab
-**Adroddiadau TLS** ar y parth, gyda chyfansymiau sesiynau llwyddiannus a methiannus fesul polisi
-a rhesymau'r methiannau a adroddwyd.
-
-Pan fydd adroddiad TLSRPT a dderbynnir yn cynnwys sesiynau dosbarthu TLS a fethodd, mae dotMARC
-yn creu rhybudd yn **Rhybuddion** ac yn ei anfon drwy'r sianel hysbysu a ffurfweddwyd. Mae
-adroddiadau ailadroddus yn defnyddio'r cyfnod oeri rhybuddion presennol. Mae adroddiad TLSRPT
-diweddarach heb sesiynau a fethodd yn datrys y rhybudd yn awtomatig.
-
-Y cofnod disgwyliedig yw:
-
-```txt
-_smtp._tls.<domain> TXT "v=TLSRPTv1; rua=mailto:<eich blwch post TLSRPT>"
-```
-
 If this deployment has DNS provider push configured (see [Getting
 Started](./getting-started.mdx#dns-provider-push-optional)), a small push button also appears in
 the row for any domain waiting on DNS, in addition to (not instead of) the manual CNAME
