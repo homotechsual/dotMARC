@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.Demo;
@@ -37,14 +38,18 @@ public static class DemoDataSeeder
     // NotificationSettings's doc comment), so truncating it would leave the table empty until a
     // fresh row was reseeded, breaking every reader's SingleAsync assumption. "AlertEvents" IS
     // included: unlike those two, an alert is inherently tied to one demo domain's history, and
-    // that history is rewritten by every reset.
+    // that history is rewritten by every reset. "TlsrptReports"/"TlsrptReportPolicies"/
+    // "TlsrptFailureDetails" are listed explicitly even though CASCADE would already catch them
+    // via their FK chain back to Domains, matching how every other domain-owned table here is
+    // named rather than relied on implicitly.
     internal static Task TruncateAllTablesAsync(DotMarcDbContext context, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlRawAsync(
             """
             TRUNCATE TABLE
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
-                "UserAccessScopedGroups", "DomainGroup", "DomainTag", "AlertEvents"
+                "UserAccessScopedGroups", "DomainGroup", "DomainTag", "AlertEvents",
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);
@@ -76,7 +81,10 @@ public static class DemoDataSeeder
                 MtaStsCheckedUtc = domainSeed.MtaStsCheckedUtc,
                 MtaStsCheckDetail = domainSeed.MtaStsCheckDetail,
                 MtaStsMaxAgeSeconds = domainSeed.MtaStsMaxAgeSeconds,
-                MtaStsMxHosts = domainSeed.MtaStsMxHosts
+                MtaStsMxHosts = domainSeed.MtaStsMxHosts,
+                TlsrptCheckStatus = domainSeed.TlsrptCheckStatus,
+                TlsrptCheckedUtc = domainSeed.TlsrptCheckedUtc,
+                TlsrptCheckDetail = domainSeed.TlsrptCheckDetail
             };
 
             if (domainSeed.GroupName is not null)
@@ -114,7 +122,65 @@ public static class DemoDataSeeder
                 domain.Reports.Add(report);
             }
 
+            foreach (var tlsrptReportSeed in domainSeed.TlsrptReports)
+            {
+                var tlsrptReport = new TlsrptReport
+                {
+                    Domain = domain,
+                    ReportingOrg = tlsrptReportSeed.ReportingOrg,
+                    ReportId = tlsrptReportSeed.ReportId,
+                    DateRangeBeginUtc = tlsrptReportSeed.DateRangeBeginUtc,
+                    DateRangeEndUtc = tlsrptReportSeed.DateRangeEndUtc,
+                    RawJson = "{\"demo\":\"no raw report retained\"}",
+                    ReceivedUtc = tlsrptReportSeed.DateRangeEndUtc
+                };
+
+                foreach (var policySeed in tlsrptReportSeed.Policies)
+                {
+                    var policy = new TlsrptReportPolicy
+                    {
+                        TlsrptReport = tlsrptReport,
+                        PolicyType = policySeed.PolicyType,
+                        PolicyDomain = policySeed.PolicyDomain,
+                        SuccessfulSessionCount = policySeed.SuccessfulSessionCount,
+                        FailedSessionCount = policySeed.FailedSessionCount
+                    };
+
+                    foreach (var failureDetailSeed in policySeed.FailureDetails)
+                    {
+                        policy.FailureDetails.Add(new TlsrptFailureDetail
+                        {
+                            TlsrptReportPolicy = policy,
+                            ResultType = failureDetailSeed.ResultType,
+                            FailedSessionCount = failureDetailSeed.FailedSessionCount,
+                            ReceivingMxHostname = failureDetailSeed.ReceivingMxHostname,
+                            FailureReasonCode = failureDetailSeed.FailureReasonCode,
+                            AdditionalInformation = failureDetailSeed.AdditionalInformation
+                        });
+                    }
+
+                    tlsrptReport.Policies.Add(policy);
+                }
+
+                domain.TlsrptReports.Add(tlsrptReport);
+            }
+
             context.Domains.Add(domain);
+        }
+
+        foreach (var alertSeed in dataset.AlertEvents)
+        {
+            context.AlertEvents.Add(new AlertEvent
+            {
+                DomainName = alertSeed.DomainName,
+                AlertType = alertSeed.AlertType,
+                Severity = alertSeed.Severity,
+                Title = alertSeed.Title,
+                Message = alertSeed.Message,
+                IsResolved = alertSeed.IsResolved,
+                CreatedUtc = alertSeed.CreatedUtc,
+                ResolvedUtc = alertSeed.ResolvedUtc
+            });
         }
 
         foreach (var pollCycle in dataset.PollCycles)

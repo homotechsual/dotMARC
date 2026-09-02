@@ -9,7 +9,8 @@ public sealed record DemoDataset(
     List<DemoDomainSeed> Domains,
     List<DemoPollCycleSeed> PollCycles,
     List<DemoPollCycleDailySummarySeed> PollCycleDailySummaries,
-    List<DemoParseFailureSeed> ParseFailures);
+    List<DemoParseFailureSeed> ParseFailures,
+    List<DemoAlertEventSeed> AlertEvents);
 
 public sealed record DemoGroupSeed(string Name);
 
@@ -28,7 +29,42 @@ public sealed record DemoDomainSeed(
     DateTimeOffset? MtaStsCheckedUtc,
     string? MtaStsCheckDetail,
     int MtaStsMaxAgeSeconds,
-    List<string> MtaStsMxHosts);
+    List<string> MtaStsMxHosts,
+    TlsrptCheckStatus TlsrptCheckStatus,
+    DateTimeOffset? TlsrptCheckedUtc,
+    string? TlsrptCheckDetail,
+    List<DemoTlsrptReportSeed> TlsrptReports);
+
+public sealed record DemoTlsrptReportSeed(
+    string ReportingOrg,
+    string ReportId,
+    DateTimeOffset DateRangeBeginUtc,
+    DateTimeOffset DateRangeEndUtc,
+    List<DemoTlsrptPolicySeed> Policies);
+
+public sealed record DemoTlsrptPolicySeed(
+    string PolicyType,
+    string PolicyDomain,
+    long SuccessfulSessionCount,
+    long FailedSessionCount,
+    List<DemoTlsrptFailureDetailSeed> FailureDetails);
+
+public sealed record DemoTlsrptFailureDetailSeed(
+    string ResultType,
+    long FailedSessionCount,
+    string? ReceivingMxHostname,
+    string? FailureReasonCode,
+    string? AdditionalInformation);
+
+public sealed record DemoAlertEventSeed(
+    string DomainName,
+    string AlertType,
+    string Severity,
+    string Title,
+    string Message,
+    bool IsResolved,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset? ResolvedUtc);
 
 public sealed record DemoReportSeed(
     string ReportingOrg,

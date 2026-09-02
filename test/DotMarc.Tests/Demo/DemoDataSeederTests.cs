@@ -111,6 +111,51 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ResetAsync_WritesTlsrptFieldsAndReportsOntoDomains()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        var cobaltFreight = await verify.Domains
+            .Include(d => d.TlsrptReports).ThenInclude(r => r.Policies).ThenInclude(p => p.FailureDetails)
+            .SingleAsync(d => d.Name == "cobalt-freight.example");
+        Assert.Equal(TlsrptCheckStatus.Misconfigured, cobaltFreight.TlsrptCheckStatus);
+        Assert.NotNull(cobaltFreight.TlsrptCheckedUtc);
+        Assert.NotEmpty(cobaltFreight.TlsrptReports);
+        var policy = Assert.Single(cobaltFreight.TlsrptReports.First().Policies);
+        Assert.True(policy.FailedSessionCount > 0);
+        Assert.NotEmpty(policy.FailureDetails);
+
+        var brightlineLegal = await verify.Domains
+            .Include(d => d.TlsrptReports)
+            .SingleAsync(d => d.Name == "brightline-legal.example");
+        Assert.Equal(TlsrptCheckStatus.MissingOwnRecord, brightlineLegal.TlsrptCheckStatus);
+        Assert.Empty(brightlineLegal.TlsrptReports);
+    }
+
+    [Fact]
+    public async Task ResetAsync_WritesAlertEvents()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Equal(3, await verify.AlertEvents.CountAsync());
+
+        var missedReport = await verify.AlertEvents.SingleAsync(a => a.DomainName == "fleet.cobalt-freight.example");
+        Assert.Equal("MissedReport", missedReport.AlertType);
+        Assert.False(missedReport.IsResolved);
+
+        var resolvedTlsFailure = await verify.AlertEvents.SingleAsync(a => a.DomainName == "shop.aurora-retail.example");
+        Assert.Equal("TlsrptFailure", resolvedTlsFailure.AlertType);
+        Assert.True(resolvedTlsFailure.IsResolved);
+        Assert.NotNull(resolvedTlsFailure.ResolvedUtc);
+    }
+
+    [Fact]
     public async Task ResetAsync_WritesPollCyclesAndParseFailures()
     {
         using var context = CreateContext();

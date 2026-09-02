@@ -250,6 +250,98 @@ public sealed class DemoDataGeneratorTests
         Assert.Equal(first.Domains.Select(d => d.Reports.Count), second.Domains.Select(d => d.Reports.Count));
     }
 
+    /// <summary>Each domain's TLSRPT state mirrors its existing MTA-STS/DMARC narrative: the
+    /// healthy clients have clean (or one resolved) reports, the struggling client's TLS
+    /// deliveries are actively failing (tying into its already-failed MTA-STS certificate), and
+    /// the domains that never got as far as MTA-STS haven't set up TLSRPT either.</summary>
+    [Theory]
+    [InlineData("aurora-retail.example", TlsrptCheckStatus.Ok)]
+    [InlineData("shop.aurora-retail.example", TlsrptCheckStatus.Ok)]
+    [InlineData("brightline-legal.example", TlsrptCheckStatus.MissingOwnRecord)]
+    [InlineData("cobalt-freight.example", TlsrptCheckStatus.Misconfigured)]
+    [InlineData("fleet.cobalt-freight.example", TlsrptCheckStatus.NotChecked)]
+    [InlineData("driftwood-media.example", TlsrptCheckStatus.NotChecked)]
+    [InlineData("driftwood-events.example", TlsrptCheckStatus.NotChecked)]
+    public void TlsrptNarrative_MatchesEachDomainsStory(string domainName, TlsrptCheckStatus expectedStatus)
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == domainName);
+
+        Assert.Equal(expectedStatus, domain.TlsrptCheckStatus);
+    }
+
+    [Theory]
+    [InlineData("brightline-legal.example")]
+    [InlineData("fleet.cobalt-freight.example")]
+    [InlineData("driftwood-media.example")]
+    [InlineData("driftwood-events.example")]
+    public void DomainsWithoutAWorkingTlsrptRecord_HaveNoReports(string domainName)
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == domainName);
+
+        Assert.Empty(domain.TlsrptReports);
+        Assert.Null(domain.TlsrptCheckedUtc);
+    }
+
+    [Fact]
+    public void CobaltFreight_TlsrptReports_AllShowOngoingFailures_WithAFailureDetail()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == "cobalt-freight.example");
+
+        Assert.NotEmpty(domain.TlsrptReports);
+        Assert.All(domain.TlsrptReports, report =>
+            Assert.All(report.Policies, policy => Assert.True(policy.FailedSessionCount > 0)));
+
+        var failureDetails = domain.TlsrptReports.SelectMany(r => r.Policies).SelectMany(p => p.FailureDetails).ToList();
+        Assert.NotEmpty(failureDetails);
+        Assert.All(failureDetails, d => Assert.False(string.IsNullOrWhiteSpace(d.ResultType)));
+    }
+
+    [Fact]
+    public void ShopAuroraRetail_TlsrptReports_HaveExactlyOneDayWithFailures()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == "shop.aurora-retail.example");
+
+        Assert.NotEmpty(domain.TlsrptReports);
+        var reportsWithFailures = domain.TlsrptReports.Where(r => r.Policies.Any(p => p.FailedSessionCount > 0)).ToList();
+        Assert.Single(reportsWithFailures);
+    }
+
+    [Fact]
+    public void AlertEvents_IncludeAnActiveMissedReportAlert_ForTheQuietDomain()
+    {
+        var dataset = Generate();
+
+        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "fleet.cobalt-freight.example");
+        Assert.Equal("MissedReport", alert.AlertType);
+        Assert.False(alert.IsResolved);
+        Assert.Null(alert.ResolvedUtc);
+    }
+
+    [Fact]
+    public void AlertEvents_IncludeAnActiveTlsrptFailureAlert_ForCobaltFreight()
+    {
+        var dataset = Generate();
+
+        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "cobalt-freight.example");
+        Assert.Equal("TlsrptFailure", alert.AlertType);
+        Assert.False(alert.IsResolved);
+    }
+
+    [Fact]
+    public void AlertEvents_IncludeAResolvedTlsrptFailureAlert_ForShopAuroraRetail()
+    {
+        var dataset = Generate();
+
+        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "shop.aurora-retail.example");
+        Assert.Equal("TlsrptFailure", alert.AlertType);
+        Assert.True(alert.IsResolved);
+        Assert.NotNull(alert.ResolvedUtc);
+    }
+
     private static List<Report> ToReports(DemoDomainSeed domain, List<DemoReportSeed>? reports = null) =>
         (reports ?? domain.Reports).Select(r => new Report
         {

@@ -32,22 +32,29 @@ public static class DemoDataGenerator
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.997,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.Active,
-                mtaStsDetail: "Policy is live and being enforced."),
+                mtaStsDetail: "Policy is live and being enforced.",
+                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 0, 0]),
             BuildDomain(random, nowUtc, sortOrder: 1, name: "shop.aurora-retail.example", groupName: "Aurora Retail",
                 orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.996,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Testing, mtaStsStatus: MtaStsStatus.Active,
-                mtaStsDetail: "Policy is live in testing mode."),
+                mtaStsDetail: "Policy is live in testing mode.",
+                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 4, 0]),
             BuildDomain(random, nowUtc, sortOrder: 2, name: "brightline-legal.example", groupName: "Brightline Legal",
                 orgs: ["google.com", "outlook.com"], passRateForDay: day => Lerp(0.93, 0.995, day / (double)(HistoryDays - 1)),
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.PendingCertificate,
-                mtaStsDetail: "DNS resolved; a TLS certificate is being issued."),
+                mtaStsDetail: "DNS resolved; a TLS certificate is being issued.",
+                tlsrptCheckStatus: TlsrptCheckStatus.MissingOwnRecord,
+                tlsrptCheckDetail: "No TXT record found at _smtp._tls.brightline-legal.example"),
             BuildDomain(random, nowUtc, sortOrder: 3, name: "cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.87,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.Failed,
-                mtaStsDetail: "Certificate renewal failed: mta-sts.cobalt-freight.example no longer resolves to the hosting hostname."),
+                mtaStsDetail: "Certificate renewal failed: mta-sts.cobalt-freight.example no longer resolves to the hosting hostname.",
+                tlsrptCheckStatus: TlsrptCheckStatus.Misconfigured,
+                tlsrptCheckDetail: "_smtp._tls.cobalt-freight.example's rua= does not point at the configured mailbox",
+                tlsrptDailyFailedSessions: [12, 15, 9, 18, 14]),
             BuildDomain(random, nowUtc, sortOrder: 4, name: "fleet.cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com"], passRateForDay: _ => 0.98,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays - 4,
@@ -68,7 +75,8 @@ public static class DemoDataGenerator
             domains,
             BuildPollCycles(random, nowUtc),
             BuildPollCycleDailySummaries(random, nowUtc),
-            BuildParseFailures(nowUtc));
+            BuildParseFailures(nowUtc),
+            BuildAlertEvents(nowUtc, domains));
     }
 
     private static double Lerp(double from, double to, double t) => from + ((to - from) * t);
@@ -77,7 +85,9 @@ public static class DemoDataGenerator
         Random random, DateTimeOffset nowUtc, int sortOrder, string name, string? groupName,
         string[] orgs, Func<int, double> passRateForDay, DmarcCheckStatus status, string? detail, int daysOfHistory,
         bool mtaStsEnabled = false, MtaStsMode mtaStsMode = MtaStsMode.Testing, MtaStsStatus mtaStsStatus = MtaStsStatus.NotConfigured,
-        string? mtaStsDetail = null)
+        string? mtaStsDetail = null,
+        TlsrptCheckStatus tlsrptCheckStatus = TlsrptCheckStatus.NotChecked, string? tlsrptCheckDetail = null,
+        int[]? tlsrptDailyFailedSessions = null)
     {
         var reports = new List<DemoReportSeed>();
         DateTimeOffset? lastReportReceivedUtc = null;
@@ -118,7 +128,82 @@ public static class DemoDataGenerator
             MtaStsCheckedUtc: mtaStsEnabled ? nowUtc.AddHours(-3) : null,
             MtaStsCheckDetail: mtaStsDetail,
             MtaStsMaxAgeSeconds: 604_800,
-            MtaStsMxHosts: mtaStsEnabled ? [$"mail.{name}", $"mail2.{name}"] : []);
+            MtaStsMxHosts: mtaStsEnabled ? [$"mail.{name}", $"mail2.{name}"] : [],
+            TlsrptCheckStatus: tlsrptCheckStatus,
+            TlsrptCheckedUtc: tlsrptDailyFailedSessions is { Length: > 0 } ? nowUtc.AddHours(-2) : null,
+            TlsrptCheckDetail: tlsrptCheckDetail,
+            TlsrptReports: tlsrptDailyFailedSessions is { Length: > 0 } ? BuildTlsrptReports(nowUtc, name, tlsrptDailyFailedSessions) : []);
+    }
+
+    /// <summary>One report per entry in dailyFailedSessions, oldest first, covering that many
+    /// most-recent days (e.g. a 5-entry array covers the last 5 days, entry 0 being 5 days ago and
+    /// the last entry being yesterday) — TLSRPT reports are daily, unlike DMARC's own aggregate
+    /// window. A day with 0 failed sessions gets no FailureDetail; a day with failures gets one,
+    /// pointing at the same mail.&lt;domain&gt; hostname MTA-STS's own MxHosts use, so a reader
+    /// sees one consistent story rather than two unrelated hostnames.</summary>
+    private static List<DemoTlsrptReportSeed> BuildTlsrptReports(DateTimeOffset nowUtc, string domainName, int[] dailyFailedSessions)
+    {
+        var reports = new List<DemoTlsrptReportSeed>();
+
+        for (var i = 0; i < dailyFailedSessions.Length; i++)
+        {
+            var daysAgo = dailyFailedSessions.Length - i;
+            var rangeBegin = new DateTimeOffset(nowUtc.AddDays(-daysAgo).Date, TimeSpan.Zero);
+            var rangeEnd = rangeBegin.AddDays(1).AddSeconds(-1);
+            var failedCount = dailyFailedSessions[i];
+
+            var failureDetails = failedCount > 0
+                ? new List<DemoTlsrptFailureDetailSeed>
+                {
+                    new(
+                        ResultType: "starttls-not-supported",
+                        FailedSessionCount: failedCount,
+                        ReceivingMxHostname: $"mail.{domainName}",
+                        FailureReasonCode: "starttls-not-supported",
+                        AdditionalInformation: $"Certificate presented for mail.{domainName} did not match the expected hostname.")
+                }
+                : [];
+
+            var policy = new DemoTlsrptPolicySeed(
+                PolicyType: "sts",
+                PolicyDomain: domainName,
+                SuccessfulSessionCount: 150,
+                FailedSessionCount: failedCount,
+                FailureDetails: failureDetails);
+
+            reports.Add(new DemoTlsrptReportSeed("google.com", $"demo-tlsrpt-{domainName}-{i:D3}", rangeBegin, rangeEnd, [policy]));
+        }
+
+        return reports;
+    }
+
+    /// <summary>Three alerts, matching the exact AlertType/message shapes AlertingService itself
+    /// produces (see its EnsureAlertAsync/HandleTlsrptReportAsync call sites) so the demo Alerts
+    /// feed looks like real output, not placeholder text: an active MissedReport for the domain
+    /// that's gone quiet, an active TlsrptFailure for the domain whose TLS deliveries are still
+    /// failing, and a resolved TlsrptFailure for a domain that had one bad day and recovered.</summary>
+    private static List<DemoAlertEventSeed> BuildAlertEvents(DateTimeOffset nowUtc, List<DemoDomainSeed> domains)
+    {
+        var quietDomain = domains.Single(d => d.Name == "fleet.cobalt-freight.example");
+        var lastReportUtc = quietDomain.LastReportReceivedUtc!.Value;
+
+        return
+        [
+            new DemoAlertEventSeed(
+                quietDomain.Name, "MissedReport", "Warning", "Missing expected DMARC report",
+                $"The monitored domain '{quietDomain.Name}' has not received a DMARC report since {lastReportUtc:O}.",
+                IsResolved: false, CreatedUtc: lastReportUtc.AddDays(2), ResolvedUtc: null),
+
+            new DemoAlertEventSeed(
+                "cobalt-freight.example", "TlsrptFailure", "Warning", "TLS delivery failures reported",
+                "TLSRPT reported 14 failed TLS delivery session(s) for 'cobalt-freight.example'. Failure types: starttls-not-supported.",
+                IsResolved: false, CreatedUtc: nowUtc.AddDays(-1), ResolvedUtc: null),
+
+            new DemoAlertEventSeed(
+                "shop.aurora-retail.example", "TlsrptFailure", "Warning", "TLS delivery failures reported",
+                "TLSRPT reported 4 failed TLS delivery session(s) for 'shop.aurora-retail.example'. Failure types: starttls-not-supported.",
+                IsResolved: true, CreatedUtc: nowUtc.AddDays(-2), ResolvedUtc: nowUtc.AddDays(-1)),
+        ];
     }
 
     private static string LegitimateSourceIp(string org) => org switch
