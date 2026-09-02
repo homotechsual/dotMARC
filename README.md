@@ -51,6 +51,7 @@ Set via environment variables (double-underscore nesting):
 | `Graph__TenantId` | Your tenant ID |
 | `Graph__ClientSecret` | Mailbox app registration's client secret |
 | `Graph__MailboxAddress` | The shared mailbox address receiving DMARC reports |
+| `Graph__TlsrptMailboxAddress` | Optional separate mailbox address advertised in managed TLSRPT (`_smtp._tls`) records |
 | `Graph__PollIntervalSeconds` | Default `300` |
 | `EntraId__TenantId` | Your tenant ID |
 | `EntraId__ClientId` | Dashboard app registration's client ID |
@@ -71,6 +72,7 @@ $env:GRAPH_CLIENT_ID = '...'
 $env:GRAPH_TENANT_ID = '...'
 $env:GRAPH_CLIENT_SECRET = '...'
 $env:GRAPH_MAILBOX_ADDRESS = '...'
+$env:GRAPH_TLSRPT_MAILBOX_ADDRESS = '...'
 $env:ENTRAID_TENANT_ID = '...'
 $env:ENTRAID_CLIENT_ID = '...'
 $env:ENTRAID_CLIENT_SECRET = '...'

@@ -13,6 +13,9 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<Domain> Domains => Set<Domain>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportRecord> ReportRecords => Set<ReportRecord>();
+    public DbSet<TlsrptReport> TlsrptReports => Set<TlsrptReport>();
+    public DbSet<TlsrptReportPolicy> TlsrptReportPolicies => Set<TlsrptReportPolicy>();
+    public DbSet<TlsrptFailureDetail> TlsrptFailureDetails => Set<TlsrptFailureDetail>();
     public DbSet<ParseFailure> ParseFailures => Set<ParseFailure>();
     public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     public DbSet<PollCycle> PollCycles => Set<PollCycle>();
@@ -32,6 +35,7 @@ public sealed class DotMarcDbContext : DbContext
         {
             entity.HasIndex(d => d.Name).IsUnique();
             entity.Property(d => d.DmarcCheckStatus).HasConversion<string>();
+            entity.Property(d => d.TlsrptCheckStatus).HasConversion<string>();
             entity.Property(d => d.MtaStsStatus).HasConversion<string>();
             entity.Property(d => d.MtaStsMode).HasConversion<string>();
 
@@ -74,6 +78,22 @@ public sealed class DotMarcDbContext : DbContext
             entity.Property(r => r.Disposition).HasConversion<string>();
             entity.Property(r => r.SpfResult).HasConversion<string>();
             entity.Property(r => r.DkimResult).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<TlsrptReport>(entity =>
+        {
+            entity.HasOne(report => report.Domain).WithMany(domain => domain.TlsrptReports).HasForeignKey(report => report.DomainId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(report => new { report.DomainId, report.ReportingOrg, report.ReportId }).IsUnique();
+        });
+
+        modelBuilder.Entity<TlsrptReportPolicy>(entity =>
+        {
+            entity.HasOne(policy => policy.TlsrptReport).WithMany(report => report.Policies).HasForeignKey(policy => policy.TlsrptReportId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TlsrptFailureDetail>(entity =>
+        {
+            entity.HasOne(detail => detail.TlsrptReportPolicy).WithMany(policy => policy.FailureDetails).HasForeignKey(detail => detail.TlsrptReportPolicyId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ParseFailure>(entity =>

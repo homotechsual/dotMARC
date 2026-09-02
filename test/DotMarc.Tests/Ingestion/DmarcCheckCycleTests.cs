@@ -148,4 +148,21 @@ public sealed class DmarcCheckCycleTests : IAsyncLifetime
 
         await lockTransaction.RollbackAsync();
     }
+
+    [Fact]
+    public async Task RunTlsrptCheckCycleAsync_ChecksAndStoresStatusForADomainNeverCheckedBefore()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow });
+        await context.SaveChangesAsync();
+
+        var checker = new FakeTlsrptDnsChecker { Result = new TlsrptCheckResult(TlsrptCheckStatus.MissingOwnRecord, "No TXT record found at _smtp._tls.contoso.io") };
+        var service = CreateService(context);
+        await service.RunTlsrptCheckCycleAsync(context, checker, "tlsrpt@reports.example", CancellationToken.None);
+
+        var domain = context.Domains.Single();
+        Assert.Contains("contoso.io", checker.CheckedDomains);
+        Assert.Equal(TlsrptCheckStatus.MissingOwnRecord, domain.TlsrptCheckStatus);
+        Assert.NotNull(domain.TlsrptCheckedUtc);
+    }
 }

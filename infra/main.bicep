@@ -19,6 +19,9 @@ param graphClientId string
 param graphTenantId string
 param graphMailboxAddress string
 
+@description('Optional separate mailbox for receiving SMTP TLS Reporting aggregate reports.')
+param graphTlsrptMailboxAddress string = ''
+
 @description('Non-secret dashboard sign-in config.')
 param entraIdTenantId string
 param entraIdClientId string
@@ -160,6 +163,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'Graph__ClientId', value: graphClientId }
             { name: 'Graph__TenantId', value: graphTenantId }
             { name: 'Graph__MailboxAddress', value: graphMailboxAddress }
+            { name: 'Graph__TlsrptMailboxAddress', value: graphTlsrptMailboxAddress }
             { name: 'EntraId__TenantId', value: entraIdTenantId }
             { name: 'EntraId__ClientId', value: entraIdClientId }
             { name: 'InitialAdmins__Emails', value: initialAdminEmails }

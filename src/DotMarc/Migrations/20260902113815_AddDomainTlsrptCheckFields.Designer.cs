@@ -3,6 +3,7 @@ using System;
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DotMarc.Migrations
 {
     [DbContext(typeof(DotMarcDbContext))]
-    partial class DotMarcDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260902113815_AddDomainTlsrptCheckFields")]
+    partial class AddDomainTlsrptCheckFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -454,112 +457,6 @@ namespace DotMarc.Migrations
                     b.ToTable("Tags");
                 });
 
-            modelBuilder.Entity("DotMarc.Data.TlsrptFailureDetail", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AdditionalInformation")
-                        .HasColumnType("text");
-
-                    b.Property<long>("FailedSessionCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("FailureReasonCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ReceivingMxHostname")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ResultType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("TlsrptReportPolicyId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TlsrptReportPolicyId");
-
-                    b.ToTable("TlsrptFailureDetails");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.TlsrptReport", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTimeOffset>("DateRangeBeginUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("DateRangeEndUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DomainId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("RawJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("ReceivedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ReportId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ReportingOrg")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DomainId", "ReportingOrg", "ReportId")
-                        .IsUnique();
-
-                    b.ToTable("TlsrptReports");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.TlsrptReportPolicy", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<long>("FailedSessionCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("PolicyDomain")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("PolicyType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<long>("SuccessfulSessionCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("TlsrptReportId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TlsrptReportId");
-
-                    b.ToTable("TlsrptReportPolicies");
-                });
-
             modelBuilder.Entity("DotMarc.Data.UserAccess", b =>
                 {
                     b.Property<int>("Id")
@@ -745,39 +642,6 @@ namespace DotMarc.Migrations
                     b.Navigation("Report");
                 });
 
-            modelBuilder.Entity("DotMarc.Data.TlsrptFailureDetail", b =>
-                {
-                    b.HasOne("DotMarc.Data.TlsrptReportPolicy", "TlsrptReportPolicy")
-                        .WithMany("FailureDetails")
-                        .HasForeignKey("TlsrptReportPolicyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("TlsrptReportPolicy");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.TlsrptReport", b =>
-                {
-                    b.HasOne("DotMarc.Data.Domain", "Domain")
-                        .WithMany("TlsrptReports")
-                        .HasForeignKey("DomainId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Domain");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.TlsrptReportPolicy", b =>
-                {
-                    b.HasOne("DotMarc.Data.TlsrptReport", "TlsrptReport")
-                        .WithMany("Policies")
-                        .HasForeignKey("TlsrptReportId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("TlsrptReport");
-                });
-
             modelBuilder.Entity("DotMarc.Data.UserAccess", b =>
                 {
                     b.HasOne("DotMarc.Data.Role", "Role")
@@ -807,23 +671,11 @@ namespace DotMarc.Migrations
             modelBuilder.Entity("DotMarc.Data.Domain", b =>
                 {
                     b.Navigation("Reports");
-
-                    b.Navigation("TlsrptReports");
                 });
 
             modelBuilder.Entity("DotMarc.Data.Report", b =>
                 {
                     b.Navigation("Records");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.TlsrptReport", b =>
-                {
-                    b.Navigation("Policies");
-                });
-
-            modelBuilder.Entity("DotMarc.Data.TlsrptReportPolicy", b =>
-                {
-                    b.Navigation("FailureDetails");
                 });
 #pragma warning restore 612, 618
         }

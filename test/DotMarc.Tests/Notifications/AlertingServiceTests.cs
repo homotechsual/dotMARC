@@ -125,6 +125,38 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         Assert.False(await TryAcquireAdvisoryLockAsync(second));
     }
 
+    [Fact]
+    public async Task HandleTlsrptReportAsync_CreatesOneAlertForReportedTlsDeliveryFailures()
+    {
+        await SeedSettingsAsync();
+        var notifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), notifier, NullLogger<AlertingService>.Instance);
+
+        await service.HandleTlsrptReportAsync("contoso.io", 3, ["certificate-expired"], CancellationToken.None);
+        await service.HandleTlsrptReportAsync("contoso.io", 3, ["certificate-expired"], CancellationToken.None);
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync();
+        Assert.Equal("TlsrptFailure", alert.AlertType);
+        Assert.Contains("3 failed TLS delivery session(s)", alert.Message);
+        Assert.Equal(1, notifier.CallCount);
+    }
+
+    [Fact]
+    public async Task HandleTlsrptReportAsync_ResolvesFailureAlertWhenALaterReportHasNoFailures()
+    {
+        await SeedSettingsAsync();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), NullLogger<AlertingService>.Instance);
+        await service.HandleTlsrptReportAsync("contoso.io", 1, ["certificate-expired"], CancellationToken.None);
+
+        await service.HandleTlsrptReportAsync("contoso.io", 0, [], CancellationToken.None);
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync();
+        Assert.True(alert.IsResolved);
+        Assert.NotNull(alert.ResolvedUtc);
+    }
+
     private static async Task<bool> TryAcquireAdvisoryLockAsync(DotMarcDbContext context)
     {
         await using var command = context.Database.GetDbConnection().CreateCommand();

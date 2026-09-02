@@ -69,6 +69,23 @@ public class PollingServiceTests : IAsyncLifetime
         </feedback>
         """;
 
+        private const string ValidTlsrptReportJson = """
+                {
+                    "organization-name": "Example Mail",
+                    "report-id": "tlsrpt-1",
+                    "date-range": { "start-datetime": "2026-09-01T00:00:00Z", "end-datetime": "2026-09-02T00:00:00Z" },
+                    "policies": [
+                        {
+                            "policy": { "policy-type": "sts", "policy-domain": "contoso.io" },
+                            "summary": { "total-successful-session-count": 42, "total-failure-session-count": 3 },
+                            "failure-details": [
+                                { "result-type": "certificate-expired", "failed-session-count": 3, "receiving-mx-hostname": "mail.contoso.io" }
+                            ]
+                        }
+                    ]
+                }
+                """;
+
     [Fact]
     public async Task PollOnceAsync_ParsesAndStoresAValidReport_ThenMarksMessageRead()
     {
@@ -92,6 +109,29 @@ public class PollingServiceTests : IAsyncLifetime
 
         Assert.Contains("msg-1", graphClient.MarkedAsRead);
         Assert.Empty(await CreateContext().ParseFailures.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RunTlsrptPollCycleAsync_ParsesCompressedReportAndStoresPolicyFailures()
+    {
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("tlsrpt-message", "TLS report", true));
+        graphClient.Attachments["tlsrpt-message"] =
+        [
+            new MailboxAttachment("logo.txt", "text/plain", "not a report"u8.ToArray()),
+            new MailboxAttachment("report.json.gz", "application/gzip", GzipOf(ValidTlsrptReportJson))
+        ];
+
+        using var context = CreateContext();
+        var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+        await service.RunTlsrptPollCycleAsync(graphClient, context, "tlsrpt@reports.example", CancellationToken.None);
+
+        using var verify = CreateContext();
+        var report = verify.TlsrptReports.Include(item => item.Domain).Include(item => item.Policies).ThenInclude(item => item.FailureDetails).Single();
+        Assert.Equal("contoso.io", report.Domain.Name);
+        Assert.Equal(42, report.Policies.Single().SuccessfulSessionCount);
+        Assert.Equal("certificate-expired", report.Policies.Single().FailureDetails.Single().ResultType);
+        Assert.Contains("tlsrpt-message", graphClient.MarkedAsRead);
     }
 
     [Fact]

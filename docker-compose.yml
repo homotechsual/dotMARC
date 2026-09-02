@@ -11,6 +11,7 @@ services:
       Graph__TenantId: ${GRAPH_TENANT_ID:?Set GRAPH_TENANT_ID}
       Graph__ClientSecret: ${GRAPH_CLIENT_SECRET:?Set GRAPH_CLIENT_SECRET}
       Graph__MailboxAddress: ${GRAPH_MAILBOX_ADDRESS:?Set GRAPH_MAILBOX_ADDRESS}
+      Graph__TlsrptMailboxAddress: ${GRAPH_TLSRPT_MAILBOX_ADDRESS:-}
       EntraId__TenantId: ${ENTRAID_TENANT_ID:?Set ENTRAID_TENANT_ID}
       EntraId__ClientId: ${ENTRAID_CLIENT_ID:?Set ENTRAID_CLIENT_ID}
       EntraId__ClientSecret: ${ENTRAID_CLIENT_SECRET:?Set ENTRAID_CLIENT_SECRET}

@@ -82,9 +82,20 @@ if (!demoOptions.Enabled)
     {
         client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
     });
+
+    builder.Services.AddHttpClient<ITlsrptGraphMailboxClient, TlsrptGraphMailboxClient>(client =>
+    {
+        client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
+    });
 }
 
 builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
+builder.Services.AddHttpClient<ITlsrptDnsChecker, TlsrptDnsChecker>(client =>
 {
     client.BaseAddress = new Uri("https://cloudflare-dns.com/");
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
@@ -144,6 +155,12 @@ builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.Dns
 });
 
 builder.Services.AddHttpClient<DotMarc.DnsPush.IDmarcTxtLookup, DotMarc.DnsPush.DmarcTxtLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
+builder.Services.AddHttpClient<DotMarc.DnsPush.ITlsrptTxtLookup, DotMarc.DnsPush.TlsrptTxtLookup>(client =>
 {
     client.BaseAddress = new Uri("https://cloudflare-dns.com/");
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
@@ -389,7 +406,7 @@ app.MapGet("/dns-push/{provider}/start", async (
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
     IAuthorizationService authorizationService) =>
 {
-    var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" => "DomainsEdit", _ => null };
+    var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" => "DomainsEdit", _ => null };
     if (requiredPolicy is null)
     {
         return Results.BadRequest();
@@ -417,7 +434,7 @@ app.MapGet("/dns-push/{provider}/start", async (
 app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
-    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup,
+    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
     IAuthorizationService authorizationService) =>
 {
@@ -432,7 +449,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     // whoever's browser lands HERE still holds the permission the push actually needs — re-run the
     // same target-to-policy check /start already made rather than relying solely on the app's
     // FallbackPolicy (any authenticated user).
-    var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" => "DomainsEdit", _ => null };
+    var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" => "DomainsEdit", _ => null };
     if (requiredPolicy is null)
     {
         return Results.Forbid();
@@ -467,7 +484,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         }
         change = new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null);
     }
-    else
+    else if (decodedState.PushTarget == "dmarc")
     {
         var existing = await dmarcTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
         var mailbox = graphOptions.Value.MailboxAddress;
@@ -483,6 +500,29 @@ app.MapGet("/dns-push/{provider}/callback", async (
                 return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
             }
             change = new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing);
+        }
+    }
+    else
+    {
+        var mailbox = graphOptions.Value.TlsrptMailboxAddress;
+        if (string.IsNullOrWhiteSpace(mailbox))
+        {
+            return Results.Redirect($"{returnPath}?dnsPush=error");
+        }
+
+        var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
+        if (existing is null)
+        {
+            change = new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null);
+        }
+        else
+        {
+            var merged = TlsrptRuaMerge.TryMerge(existing, mailbox);
+            if (merged is null)
+            {
+                return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
+            }
+            change = new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing);
         }
     }
 

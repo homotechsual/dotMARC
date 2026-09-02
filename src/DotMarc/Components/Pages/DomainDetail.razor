@@ -19,6 +19,7 @@
 @inject IDnsProviderDetector DnsProviderDetector
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
 @inject IDmarcTxtLookup DmarcTxtLookup
+@inject ITlsrptTxtLookup TlsrptTxtLookup
 @inject IOptions<GraphOptions> GraphOptions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -76,6 +77,37 @@ else
                     }
                 }
             </MudPaper>
+            @if (!string.IsNullOrWhiteSpace(GraphOptions.Value.TlsrptMailboxAddress))
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">TLS reporting record status</MudText>
+                    @if (_domain.TlsrptCheckStatus == TlsrptCheckStatus.NotChecked)
+                    {
+                        <MudText Typo="Typo.body2">Not checked yet.</MudText>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="@TlsrptStatusPresentation.GetColor(_domain.TlsrptCheckStatus)" Size="Size.Small">@TlsrptStatusPresentation.GetLabel(_domain.TlsrptCheckStatus)</MudChip>
+                        @if (_domain.TlsrptCheckedUtc is { } checkedUtc)
+                        {
+                            <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_domain.TlsrptCheckDetail))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-1">@_domain.TlsrptCheckDetail</MudText>
+                        }
+                        @if (_domain.TlsrptCheckStatus is TlsrptCheckStatus.MissingOwnRecord or TlsrptCheckStatus.Misconfigured)
+                        {
+                            <AuthorizeView Policy="DomainsEdit">
+                                <div class="mt-2">
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                               OnClick="PushTlsrptRecordAsync">Push via your DNS provider</MudButton>
+                                </div>
+                            </AuthorizeView>
+                        }
+                    }
+                </MudPaper>
+            }
         </MudTabPanel>
 
         <MudTabPanel Text="MTA-STS">
@@ -99,6 +131,34 @@ else
                     </div>
                 </MudPaper>
             </AuthorizeView>
+        </MudTabPanel>
+
+        <MudTabPanel Text="TLS reports">
+            @if (_tlsrptReports.Count == 0)
+            {
+                <MudText Class="my-4">No TLS reports received yet.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_tlsrptReports" Hover="true" T="TlsrptReport">
+                    <HeaderContent>
+                        <MudTh>From</MudTh>
+                        <MudTh>Date range</MudTh>
+                        <MudTh>Policy</MudTh>
+                        <MudTh>Successful sessions</MudTh>
+                        <MudTh>Failed sessions</MudTh>
+                        <MudTh>Failure details</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.ReportingOrg</MudTd>
+                        <MudTd>@context.DateRangeBeginUtc.ToString("d") - @context.DateRangeEndUtc.ToString("d")</MudTd>
+                        <MudTd>@string.Join(", ", context.Policies.Select(policy => $"{policy.PolicyType}: {policy.PolicyDomain}"))</MudTd>
+                        <MudTd>@context.Policies.Sum(policy => policy.SuccessfulSessionCount)</MudTd>
+                        <MudTd>@context.Policies.Sum(policy => policy.FailedSessionCount)</MudTd>
+                        <MudTd>@string.Join(", ", context.Policies.SelectMany(policy => policy.FailureDetails).Select(detail => $"{detail.ResultType} ({detail.FailedSessionCount})"))</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
         </MudTabPanel>
 
         <MudTabPanel Text="Sources">
@@ -150,7 +210,7 @@ else
 
 @code {
     private static readonly SemaphoreSlim EnrichmentThrottle = new(4);
-    private static readonly string[] TabSlugs = ["overview", "mta-sts", "sources", "raw-reports"];
+    private static readonly string[] TabSlugs = ["overview", "mta-sts", "tls-reports", "sources", "raw-reports"];
 
     [Parameter] public string DomainName { get; set; } = "";
     [Parameter] public string? Tab { get; set; }
@@ -158,6 +218,7 @@ else
     private int _activeTabIndex;
     private Domain? _domain;
     private List<Report> _reports = [];
+    private List<TlsrptReport> _tlsrptReports = [];
     private List<SourceRow> _sources = [];
     private double? _passRate;
     private int _totalVolume;
@@ -191,6 +252,9 @@ else
             .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
+            .Include(d => d.TlsrptReports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Policies)
+            .ThenInclude(policy => policy.FailureDetails)
             .Include(d => d.Groups)
             .SingleOrDefaultAsync(d => d.Name == DomainName);
 
@@ -213,6 +277,7 @@ else
         }
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
+        _tlsrptReports = _domain.TlsrptReports.OrderByDescending(report => report.ReceivedUtc).ToList();
 
         _totalVolume = DomainStatistics.GetTotalVolume(_domain.Reports);
         _sourceCount = _domain.Reports.SelectMany(r => r.Records).Select(r => r.SourceIp).Distinct().Count();
@@ -389,6 +454,25 @@ else
         {
             _isPushingDmarcRecord = false;
         }
+    }
+
+    private async Task PushTlsrptRecordAsync()
+    {
+        var detected = await DnsProviderDetector.DetectAsync(DomainName, CancellationToken.None);
+        var providerKey = detected switch
+        {
+            DetectedDnsProvider.Cloudflare => "cloudflare",
+            DetectedDnsProvider.AzureDns => "azure-dns",
+            _ => null
+        };
+        var pushProvider = providerKey is null ? null : DnsPushProviders.SingleOrDefault(provider => provider.ProviderKey == providerKey && provider.IsConfigured);
+        if (pushProvider is null)
+        {
+            Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+            return;
+        }
+
+        Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={_domain!.Id}&target=tlsrpt", forceLoad: true);
     }
 
     private void ShowDnsPushResultToast()

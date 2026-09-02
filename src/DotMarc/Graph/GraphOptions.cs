@@ -18,5 +18,7 @@ public sealed class GraphOptions
     [Required]
     public required string MailboxAddress { get; set; }
 
+    public string? TlsrptMailboxAddress { get; set; }
+
     public int PollIntervalSeconds { get; set; } = 300;
 }

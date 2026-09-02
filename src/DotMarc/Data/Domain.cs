@@ -15,6 +15,9 @@ public sealed class Domain
     public DmarcCheckStatus DmarcCheckStatus { get; set; }
     public DateTimeOffset? DmarcCheckedUtc { get; set; }
     public string? DmarcCheckDetail { get; set; }
+    public TlsrptCheckStatus TlsrptCheckStatus { get; set; }
+    public DateTimeOffset? TlsrptCheckedUtc { get; set; }
+    public string? TlsrptCheckDetail { get; set; }
 
     public bool MtaStsEnabled { get; set; }
     public MtaStsStatus MtaStsStatus { get; set; }
@@ -25,6 +28,7 @@ public sealed class Domain
     public List<string> MtaStsMxHosts { get; set; } = [];
 
     public List<Report> Reports { get; set; } = [];
+    public List<TlsrptReport> TlsrptReports { get; set; } = [];
     public List<Group> Groups { get; set; } = [];
     public List<Tag> Tags { get; set; } = [];
 }

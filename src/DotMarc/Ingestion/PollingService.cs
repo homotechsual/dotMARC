@@ -30,6 +30,10 @@ public sealed class PollingService : BackgroundService
     /// from the other two so this cycle runs under its own independent lock/timing.</summary>
     internal const long MtaStsCheckLeaderLockKey = 84_200_005;
 
+    internal const long TlsrptCheckLeaderLockKey = 84_200_007;
+
+    internal const long TlsrptPollingLeaderLockKey = 84_200_009;
+
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
     private readonly IGraphMailboxClient? _graphClient;
@@ -105,6 +109,31 @@ public sealed class PollingService : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "DMARC check cycle failed; will retry next interval.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(_options!.TlsrptMailboxAddress))
+                    {
+                        try
+                        {
+                            context.ChangeTracker.Clear();
+                            var tlsrptGraphClient = scope.ServiceProvider.GetRequiredService<ITlsrptGraphMailboxClient>();
+                            await RunTlsrptPollCycleAsync(tlsrptGraphClient, context, _options.TlsrptMailboxAddress, stoppingToken).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "TLSRPT mailbox poll cycle failed; will retry next interval.");
+                        }
+
+                        try
+                        {
+                            context.ChangeTracker.Clear();
+                            var tlsrptChecker = scope.ServiceProvider.GetRequiredService<ITlsrptDnsChecker>();
+                            await RunTlsrptCheckCycleAsync(context, tlsrptChecker, _options.TlsrptMailboxAddress, stoppingToken).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "TLSRPT check cycle failed; will retry next interval.");
+                        }
                     }
 
                     try
@@ -253,6 +282,146 @@ public sealed class PollingService : BackgroundService
             if (anyUpdated)
             {
                 await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    internal async Task RunTlsrptCheckCycleAsync(DotMarcDbContext context, ITlsrptDnsChecker tlsrptChecker, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", TlsrptCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the TLSRPT-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(domain => domain.TlsrptCheckedUtc == null || domain.TlsrptCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    var result = await tlsrptChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+                    domain.TlsrptCheckStatus = result.Status;
+                    domain.TlsrptCheckedUtc = DateTimeOffset.UtcNow;
+                    domain.TlsrptCheckDetail = result.Detail;
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "TLSRPT DNS check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    internal async Task RunTlsrptPollCycleAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction);
+        lockCommand.Parameters.AddWithValue("key", TlsrptPollingLeaderLockKey);
+        if (!(bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!)
+        {
+            _logger.LogDebug("Another instance already holds the TLSRPT polling lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            foreach (var message in await graphClient.GetUnreadMessagesAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (!message.HasAttachments)
+                {
+                    continue;
+                }
+
+                var messageKey = $"tlsrpt:{mailboxAddress}:{message.Id}";
+                if (await context.ProcessedMessages.AnyAsync(processed => processed.GraphMessageId == messageKey, cancellationToken).ConfigureAwait(false))
+                {
+                    await graphClient.MarkAsReadAsync(message.Id, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                try
+                {
+                    var attachments = await graphClient.GetAttachmentsAsync(message.Id, cancellationToken).ConfigureAwait(false);
+                    ParsedTlsrptReport? parsed = null;
+                    Exception? lastError = null;
+                    foreach (var attachment in attachments)
+                    {
+                        try
+                        {
+                            parsed = TlsrptReportParser.Parse(ReportDecompressor.Decompress(attachment.ContentBytes));
+                            break;
+                        }
+                        catch (Exception exception)
+                        {
+                            lastError = exception;
+                        }
+                    }
+
+                    if (parsed is null)
+                    {
+                        throw new InvalidDataException("Message has no TLSRPT report attachment.", lastError);
+                    }
+
+                    await StoreTlsrptReportAsync(context, parsed, cancellationToken).ConfigureAwait(false);
+                    await RecordProcessedMessageAsync(context, messageKey, cancellationToken).ConfigureAwait(false);
+
+                    if (_alertingService is not null)
+                    {
+                        await _alertingService.HandleTlsrptReportAsync(
+                            parsed.Domain,
+                            parsed.Policies.Sum(policy => policy.FailedSessionCount),
+                            parsed.Policies.SelectMany(policy => policy.FailureDetails).Select(detail => detail.ResultType).ToList(),
+                            cancellationToken).ConfigureAwait(false);
+                    }
+
+                    await graphClient.MarkAsReadAsync(message.Id, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    context.ChangeTracker.Clear();
+                    await RecordParseFailureAsync(context, messageKey, exception.Message, cancellationToken).ConfigureAwait(false);
+                    _logger.LogWarning(exception, "Failed to parse TLSRPT message {MessageId}; leaving unread for retry.", message.Id);
+                }
             }
         }
         finally
@@ -663,6 +832,51 @@ public sealed class PollingService : BackgroundService
         context.Reports.Add(report);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return domain;
+    }
+
+    private static async Task StoreTlsrptReportAsync(DotMarcDbContext context, ParsedTlsrptReport parsed, CancellationToken cancellationToken)
+    {
+        var domain = await context.Domains.SingleOrDefaultAsync(item => item.Name == parsed.Domain, cancellationToken).ConfigureAwait(false);
+        if (domain is null)
+        {
+            var nextSortOrder = (await context.Domains.MaxAsync(item => (int?)item.SortOrder, cancellationToken).ConfigureAwait(false) ?? -1) + 1;
+            domain = new Domain { Name = parsed.Domain, FirstSeenUtc = DateTimeOffset.UtcNow, SortOrder = nextSortOrder };
+            context.Domains.Add(domain);
+        }
+
+        var isDuplicate = domain.Id != 0 && await context.TlsrptReports.AnyAsync(report => report.DomainId == domain.Id && report.ReportingOrg == parsed.ReportingOrg && report.ReportId == parsed.ReportId, cancellationToken).ConfigureAwait(false);
+        if (isDuplicate)
+        {
+            return;
+        }
+
+        var report = new TlsrptReport
+        {
+            Domain = domain,
+            ReportingOrg = parsed.ReportingOrg,
+            ReportId = parsed.ReportId,
+            DateRangeBeginUtc = parsed.DateRangeBeginUtc,
+            DateRangeEndUtc = parsed.DateRangeEndUtc,
+            RawJson = System.Text.Json.JsonSerializer.Serialize(parsed),
+            ReceivedUtc = DateTimeOffset.UtcNow
+        };
+        foreach (var policy in parsed.Policies)
+        {
+            var storedPolicy = new TlsrptReportPolicy
+            {
+                PolicyType = policy.PolicyType,
+                PolicyDomain = policy.PolicyDomain,
+                SuccessfulSessionCount = policy.SuccessfulSessionCount,
+                FailedSessionCount = policy.FailedSessionCount
+            };
+            foreach (var failure in policy.FailureDetails)
+            {
+                storedPolicy.FailureDetails.Add(new TlsrptFailureDetail { ResultType = failure.ResultType, FailedSessionCount = failure.FailedSessionCount, ReceivingMxHostname = failure.ReceivingMxHostname, FailureReasonCode = failure.FailureReasonCode, AdditionalInformation = failure.AdditionalInformation });
+            }
+            report.Policies.Add(storedPolicy);
+        }
+        context.TlsrptReports.Add(report);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Records that a mailbox message has been successfully turned into a stored Report,

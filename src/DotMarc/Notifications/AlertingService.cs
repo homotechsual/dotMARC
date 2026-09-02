@@ -8,6 +8,7 @@ public interface IAlertingService
 {
     Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default);
     Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default);
+    Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default);
 }
 
 public sealed class AlertingService : IAlertingService
@@ -60,11 +61,33 @@ public sealed class AlertingService : IAlertingService
     }
 
     public async Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default)
+        => await ResolveAlertAsync(domainName, "MissedReport", cancellationToken).ConfigureAwait(false);
+
+    public async Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default)
+    {
+        if (failedSessionCount == 0)
+        {
+            await ResolveAlertAsync(domainName, "TlsrptFailure", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var settings = await NotificationSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
+        if (!settings.Enabled)
+        {
+            return;
+        }
+
+        var failureSummary = failureTypes.Count == 0 ? "no failure category supplied" : string.Join(", ", failureTypes.Distinct(StringComparer.OrdinalIgnoreCase));
+        await EnsureAlertAsync(db, settings, domainName, "TlsrptFailure", "Warning", "TLS delivery failures reported", $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.", cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ResolveAlertAsync(string domainName, string alertType, CancellationToken cancellationToken)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
 
         var activeAlert = await db.AlertEvents
-            .Where(e => e.DomainName == domainName && e.AlertType == "MissedReport" && !e.IsResolved)
+            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
             .OrderByDescending(e => e.CreatedUtc)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);

@@ -9,6 +9,7 @@
     "graphClientId": { "value": "REPLACE_ME" },
     "graphTenantId": { "value": "REPLACE_ME" },
     "graphMailboxAddress": { "value": "REPLACE_ME" },
+    "graphTlsrptMailboxAddress": { "value": "" },
     "entraIdTenantId": { "value": "REPLACE_ME" },
     "entraIdClientId": { "value": "REPLACE_ME" }
   }
