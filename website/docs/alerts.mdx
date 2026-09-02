@@ -1,0 +1,88 @@
+---
+sidebar_position: 7
+description: How dotMARC's alerting works, the alert types it raises, delivery channels, and the generic webhook payload schema.
+---
+
+# Alerts
+
+dotMARC raises an alert when something about a monitored domain needs attention, delivers it
+through Teams and/or a generic webhook, and shows the same event in the **Alerts** feed. An alert
+resolves itself automatically once the underlying condition clears, no manual dismissal needed.
+
+## Alert types
+
+| Type | Raised when | Resolves when |
+| --- | --- | --- |
+| `MissedReport` | A monitored domain hasn't received a DMARC report within the configured threshold. | A DMARC report is received for that domain. |
+| `TlsrptFailure` | A TLSRPT report for the domain contains one or more failed TLS delivery sessions. See [MTA-STS: TLS reporting](./mta-sts.mdx#tls-reporting). | A later TLSRPT report for the same domain has zero failed sessions. |
+
+Both alert types are currently raised at `Warning` severity.
+
+## Cooldown and re-firing
+
+Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for
+a domain, a new occurrence of the same condition is suppressed until the configured **cooldown**
+elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle.
+
+## The Alerts page
+
+**Alerts** (`/alerts`) is the event feed, every alert ever raised, most recent first, with its
+domain, type, severity, created/resolved timestamps, and message. It requires the `AlertsView`
+permission, which is part of the built-in Viewer role by default.
+
+## Alert settings
+
+**Alert settings** (`/alerts/settings`) configures delivery. It requires the `AlertsManage`
+permission, granted separately from `AlertsView`.
+
+| Setting | Description |
+| --- | --- |
+| Enable notifications | Master on/off switch. Disabled means no alerts are raised or delivered at all, not just silenced delivery. |
+| Delivery mode | `Teams`, `Generic`, or `Both`. |
+| Teams webhook URL | Required if delivery mode is `Teams` or `Both`. |
+| Generic webhook URL | Required if delivery mode is `Generic` or `Both`. |
+| Missing report threshold (days) | How many days without a report before `MissedReport` fires. Default `2`. |
+| Cooldown (minutes) | Minimum time between repeat firings of the same open alert. Default `180`. |
+| Monitor interval (seconds) | How often the background check for missed reports runs. Default `300`. |
+
+Both webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
+`https://user:pass@host/...`); anything else is rejected on save.
+
+## Delivery channels
+
+Delivery is best-effort: a failed webhook call is logged as a warning and does not stop the alert
+from being recorded or shown in the Alerts feed, and does not affect the rest of that check cycle.
+
+### Teams
+
+Sent as an Adaptive Card (`application/vnd.microsoft.card.adaptive`, schema version 1.5) via
+`POST` to the Teams webhook URL, with the domain, alert type, and message as a fact set under the
+alert title.
+
+### Generic webhook
+
+Sent as a `POST` with a JSON body to the generic webhook URL:
+
+```json
+{
+  "domainName": "contoso.io",
+  "alertType": "MissedReport",
+  "title": "Missing expected DMARC report",
+  "message": "The monitored domain 'contoso.io' has not received a DMARC report since 2026-08-30T00:00:00+00:00.",
+  "severity": "Warning",
+  "createdUtc": "2026-09-02T14:32:10.1234567+00:00"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `domainName` | string | The domain the alert is about. |
+| `alertType` | string | `MissedReport` or `TlsrptFailure` (see [Alert types](#alert-types) above). |
+| `title` | string | Short summary, e.g. "Missing expected DMARC report". |
+| `message` | string | Full human-readable detail, including the domain name and, where relevant, counts or timestamps. |
+| `severity` | string | Currently always `Warning`. |
+| `createdUtc` | string | ISO 8601 timestamp (UTC) of when the alert was raised. |
+
+There's no signature or shared secret on these requests, treat the webhook URL itself as the
+credential and keep it private. Your endpoint should return a 2xx status; a non-2xx or unreachable
+endpoint is logged and otherwise ignored.

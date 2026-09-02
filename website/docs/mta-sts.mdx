@@ -48,7 +48,7 @@ overwritten.
 When a received TLSRPT report contains failed TLS delivery sessions, dotMARC creates a warning in
 **Alerts** and sends it through the configured notification channel. Repeated reports are subject
 to the existing alert cooldown. A later TLSRPT report with no failed sessions resolves the alert
-automatically.
+automatically. See [Alerts](./alerts.mdx) for how delivery and the webhook payload work.
 
 If this deployment has DNS provider push configured (see [Getting
 Started](./getting-started.mdx#dns-provider-push-optional)), a small push button also appears in
