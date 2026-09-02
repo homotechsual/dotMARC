@@ -46,14 +46,16 @@ public sealed class AlertingService : IAlertingService
 
         foreach (var domain in domains)
         {
-            var lastReport = domain.LastReportReceivedUtc ?? DateTimeOffset.MinValue;
-            if (lastReport >= cutoffUtc)
+            if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
             {
                 await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
-            await EnsureAlertAsync(db, settings, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", $"The pinned domain '{domain.Name}' has not received a DMARC report since {lastReport:O}.", cancellationToken).ConfigureAwait(false);
+            var message = domain.LastReportReceivedUtc is { } receivedUtc
+                ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
+                : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
+            await EnsureAlertAsync(db, settings, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
         }
     }
 

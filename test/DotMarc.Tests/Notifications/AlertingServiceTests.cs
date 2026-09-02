@@ -97,6 +97,41 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         Assert.Equal(0, fakeNotifier.CallCount);
     }
 
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_ExplainsWhenAMonitoredDomainHasNeverReceivedAReport()
+    {
+        await SeedSettingsAsync();
+        await SeedMonitoredDomainAsync("contoso.io", lastReportReceivedUtc: null);
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verifyContext = CreateContext();
+        var alert = await verifyContext.AlertEvents.SingleAsync();
+        Assert.Equal("The monitored domain 'contoso.io' has not received a DMARC report yet.", alert.Message);
+    }
+
+    [Fact]
+    public async Task MonitorAdvisoryLock_IsGrantedToOnlyOneDatabaseSession()
+    {
+        await using var first = CreateContext();
+        await using var second = CreateContext();
+        await first.Database.OpenConnectionAsync();
+        await second.Database.OpenConnectionAsync();
+
+        Assert.True(await TryAcquireAdvisoryLockAsync(first));
+        Assert.False(await TryAcquireAdvisoryLockAsync(second));
+    }
+
+    private static async Task<bool> TryAcquireAdvisoryLockAsync(DotMarcDbContext context)
+    {
+        await using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT pg_try_advisory_lock(829384120733591644)";
+        return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
     private sealed class FakeAlertWebhookClient : IAlertWebhookClient
     {
         public int CallCount { get; private set; }

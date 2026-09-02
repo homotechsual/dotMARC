@@ -15,6 +15,9 @@ public static class NotificationSettingsService
 
     public static async Task SaveAsync(DotMarcDbContext context, NotificationSettings updated, CancellationToken cancellationToken = default)
     {
+        ValidateWebhookUrl(updated.TeamsWebhookUrl, "Teams webhook URL");
+        ValidateWebhookUrl(updated.GenericWebhookUrl, "Generic webhook URL");
+
         var existing = await context.NotificationSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
 
         existing.Enabled = updated.Enabled;
@@ -26,5 +29,20 @@ public static class NotificationSettingsService
         existing.MonitorIntervalSeconds = updated.MonitorIntervalSeconds;
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ValidateWebhookUrl(string? value, string settingName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            throw new ArgumentException($"{settingName} must be an absolute HTTPS URL without embedded credentials.", nameof(value));
+        }
     }
 }

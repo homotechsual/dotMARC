@@ -89,4 +89,22 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         Assert.True(stored.Enabled);
         Assert.Equal("Both", stored.DeliveryMode);
     }
+
+    [Theory]
+    [InlineData("http://example.test/webhook")]
+    [InlineData("not a URL")]
+    [InlineData("https://user:password@example.test/webhook")]
+    public async Task SaveAsync_RejectsUnsafeWebhookUrls(string webhookUrl)
+    {
+        await using var context = CreateContext();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            NotificationSettingsService.SaveAsync(context, new NotificationSettings
+            {
+                DeliveryMode = "Generic",
+                GenericWebhookUrl = webhookUrl
+            }, CancellationToken.None));
+
+        Assert.Contains("Generic webhook URL", exception.Message);
+    }
 }

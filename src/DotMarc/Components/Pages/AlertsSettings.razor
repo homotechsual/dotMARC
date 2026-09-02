@@ -65,8 +65,15 @@ else
 
     private async Task SaveAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        await NotificationSettingsService.SaveAsync(db, _settings!);
-        Snackbar.Add("Alert settings saved.", Severity.Success);
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await NotificationSettingsService.SaveAsync(db, _settings!);
+            Snackbar.Add("Alert settings saved.", Severity.Success);
+        }
+        catch (ArgumentException exception)
+        {
+            Snackbar.Add(exception.Message, Severity.Error);
+        }
     }
 }
