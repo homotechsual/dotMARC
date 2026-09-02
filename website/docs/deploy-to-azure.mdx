@@ -16,7 +16,18 @@ description: Deploy dotMARC to Azure Container Apps using the included Bicep tem
   `Key Vault Secrets User` role.
 * Optionally (`enableMtaStsHosting`), two narrowly-scoped custom RBAC roles letting the Container
   App manage its own custom domains and managed certificates, for [MTA-STS policy
-  hosting](./getting-started.mdx#mta-sts-policy-hosting-optional).
+  hosting](./getting-started.mdx#mta-sts-policy-hosting-optional). Exact permissions:
+
+  | Role | Scope | Actions |
+  | --- | --- | --- |
+  | Container App role | the Container App itself | `containerApps/read`, `containerApps/write` |
+  | Managed Environment role | the Container Apps environment | `managedEnvironments/read`, `managedEnvironments/join/action`, `managedEnvironments/managedCertificates/read`, `managedEnvironments/managedCertificates/write` |
+
+  `managedEnvironments/join/action` is easy to leave out and easy to miss when you do: Azure
+  requires it on *any* update to the Container App's ingress/custom-domain config, not just when
+  first attaching the app to the environment, and its own error
+  (`LinkedAuthorizationFailed`/`403`) reads like a Container-App-scoped permission problem rather
+  than pointing at the environment-scoped role that's actually missing it.
 
 Before deploying, complete the two Entra app registrations described in
 [Getting Started](./getting-started.mdx), the Bicep template takes the same non-secret client

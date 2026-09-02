@@ -257,12 +257,13 @@ resource mtaStsManagedEnvironmentRole 'Microsoft.Authorization/roleDefinitions@2
   name: guid(containerAppEnv.id, 'dotMARC MTA-STS Managed Environment Role')
   properties: {
     roleName: 'dotMARC MTA-STS Managed Environment Role (${baseName})'
-    description: 'Lets dotMARC create and read managed certificates on its own Container Apps environment, for MTA-STS custom domain hosting.'
+    description: 'Lets dotMARC create and read managed certificates on its own Container Apps environment, and join that environment when binding a custom domain, for MTA-STS custom domain hosting.'
     type: 'CustomRole'
     permissions: [
       {
         actions: [
           'Microsoft.App/managedEnvironments/read'
+          'Microsoft.App/managedEnvironments/join/action'
           'Microsoft.App/managedEnvironments/managedCertificates/read'
           'Microsoft.App/managedEnvironments/managedCertificates/write'
         ]
