@@ -1,0 +1,51 @@
+---
+slug: v0-3-0
+title: "dotMARC v0.3.0: alerting, TLS reporting, and one-click DNS"
+description: Pinned-domain alerting via Teams/webhook, SMTP TLS Reporting, and pushing DNS changes straight to Cloudflare or Azure DNS instead of copying them by hand.
+authors: [mikey]
+tags: [release]
+---
+
+Since [`v0.2.0`](/blog/v0-2-0), dotMARC picked up four things worth calling out: alerts when a
+domain goes quiet, a second report type alongside DMARC, a much faster way to make the DNS changes
+dotMARC asks for, and a way to tell us what you want next.
+
+{/* truncate */}
+
+## Know when a domain stops sending reports
+
+Pin any domain and dotMARC now watches its report cadence, not just its pass rate. If a pinned
+domain goes past its expected reporting interval, you get an alert, through a Teams adaptive card,
+a generic JSON webhook, or both, instead of noticing weeks later that a client's reports quietly
+stopped arriving. Alerts resolve themselves automatically the moment a report comes back in, and a
+cooldown keeps a genuinely down domain from paging you every cycle. Configure delivery from the new
+**Alert settings** page; the **Alerts** page itself is the feed.
+
+## TLS Reporting joins MTA-STS
+
+[SMTP TLS Reporting](https://www.rfc-editor.org/rfc/rfc8460) is MTA-STS's other half: where MTA-STS
+tells senders to require a secure connection, TLSRPT asks them to tell you when one failed. Point a
+mailbox at it, and dotMARC checks every domain's TLSRPT record daily, polls for the aggregate
+reports, and surfaces both DNS status and delivered reports on the domain's own page, including the
+specific failure reasons, not just a pass/fail count. A failed-session report raises an alert
+through the same pipeline as pinned-domain monitoring; a later clean report resolves it.
+
+## Push DNS changes instead of copying them by hand
+
+Every DNS record dotMARC asks you to add, the MTA-STS CNAME, a missing or misconfigured DMARC
+record, now a TLSRPT record too, can be pushed straight to Cloudflare or Azure DNS instead. Click
+push, authenticate through that provider's own consent screen, and it's done. Nothing about that
+authentication is ever stored: every push is its own fresh exchange, and a misconfigured record
+gets a before/after diff to confirm before anything is overwritten. If your DNS isn't on one of
+those two providers, or the deployment hasn't set either up, the manual instructions are still
+right there, this only ever adds an option, never removes one.
+
+## Tell us what to build next
+
+There's a new **Feedback & Feature Requests** page linked from the site nav, post an idea, vote on
+someone else's, or just see what's already planned.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.3.0) for
+everything that shipped between these two tags, including the usual pile of fixes.
