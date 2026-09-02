@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @using DotMarc.Demo
 @using Microsoft.Extensions.Options
@@ -13,40 +14,57 @@
 
 <MudLayout>
     <MudAppBar Elevation="1">
-        <div class="d-flex align-center" style="gap: 0.6rem;">
-            <a href="/">
+        <div class="d-flex align-center">
+            <a href="/dashboard">
                 <img src="logo.svg" alt="dotMARC Logo" height="48" />
             </a>
         </div>
+        <AuthorizeView>
+            <Authorized>
+                <MudButton Href="/dashboard" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Dashboard">Dashboard</MudButton>
+            </Authorized>
+        </AuthorizeView>
+        <AuthorizeView Policy="AlertsView">
+            <MudButton Href="/alerts" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Notifications">Alerts</MudButton>
+        </AuthorizeView>
+        <MudMenu Label="Manage" Color="Color.Inherit" EndIcon="@Icons.Material.Filled.ExpandMore">
+            <AuthorizeView Policy="DomainsWrite">
+                <MudMenuItem Href="/domains" Icon="@Icons.Material.Filled.Language">Domains</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="GroupsOrTagsWrite">
+                <MudMenuItem Href="/groups" Icon="@Icons.Material.Filled.GroupWork">Groups</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="MtaStsManage">
+                <MudMenuItem Href="/mta-sts" Icon="@Icons.Material.Filled.Security">MTA-STS</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="AlertsManage">
+                <MudMenuItem Href="/alerts/settings" Icon="@Icons.Material.Filled.NotificationsActive">Alert settings</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="AccessManage">
+                <MudMenuItem Href="/access" Icon="@Icons.Material.Filled.ManageAccounts">Access</MudMenuItem>
+            </AuthorizeView>
+        </MudMenu>
         @if (DemoOptions.Value.Enabled)
         {
             <AuthorizeView>
                 <Authorized>
-                    <MudChip T="string" Color="Color.Warning" Class="mr-2">Demo — viewing as @context.User.Identity?.Name</MudChip>
-                    <MudButton Href="/demo" Color="Color.Inherit">Switch persona</MudButton>
+                    <MudMenu Label="Demo" Color="Color.Warning" EndIcon="@Icons.Material.Filled.ExpandMore">
+                        <MudMenuItem Disabled="true">Viewing as @context.User.Identity?.Name</MudMenuItem>
+                        <MudMenuItem Href="/demo" Icon="@Icons.Material.Filled.SwitchAccount">Switch persona</MudMenuItem>
+                    </MudMenu>
                 </Authorized>
             </AuthorizeView>
         }
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                        Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="Toggle dark mode" />
-        <AuthorizeView Policy="AlertsView">
-            <MudButton Href="/alerts" Color="Color.Inherit">Alerts</MudButton>
-        </AuthorizeView>
-        <AuthorizeView Policy="DomainsWrite">
-            <MudButton Href="/domains" Color="Color.Inherit">Manage domains</MudButton>
-        </AuthorizeView>
-        <AuthorizeView Policy="GroupsOrTagsWrite">
-            <MudButton Href="/groups" Color="Color.Inherit">Manage groups</MudButton>
-        </AuthorizeView>
-        <AuthorizeView Policy="MtaStsManage">
-            <MudButton Href="/mta-sts" Color="Color.Inherit">Manage MTA-STS</MudButton>
-        </AuthorizeView>
-        <AuthorizeView Policy="AlertsManage">
-            <MudButton Href="/alerts/settings" Color="Color.Inherit">Alert settings</MudButton>
-        </AuthorizeView>
-        <AuthorizeView Policy="AccessManage">
-            <MudButton Href="/access" Color="Color.Inherit">Manage access</MudButton>
+        <AuthorizeView>
+            <Authorized>
+                <form method="post" action="/signout" class="d-inline">
+                    <AntiforgeryToken />
+                    <MudIconButton ButtonType="ButtonType.Submit" Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit" title="Sign out" />
+                </form>
+            </Authorized>
         </AuthorizeView>
     </MudAppBar>
     <MudMainContent>

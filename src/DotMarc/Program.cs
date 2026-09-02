@@ -276,6 +276,18 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
+app.MapPost("/signout", async (HttpContext httpContext) =>
+{
+    await httpContext.SignOutAsync(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme);
+
+    if (!demoOptions.Enabled)
+    {
+        await httpContext.SignOutAsync(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme);
+    }
+
+    return Results.Redirect("/");
+}).RequireAuthorization();
+
 if (demoOptions.Enabled)
 {
     app.MapPost("/demo/sign-in/{persona}", async (string persona, HttpContext httpContext) =>
