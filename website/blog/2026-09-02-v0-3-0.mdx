@@ -1,7 +1,7 @@
 ---
 slug: v0-3-0
 title: "dotMARC v0.3.0: alerting, TLS reporting, and one-click DNS"
-description: Pinned-domain alerting via Teams/webhook, SMTP TLS Reporting, and pushing DNS changes straight to Cloudflare or Azure DNS instead of copying them by hand.
+description: Alerting for monitored domains via Teams/webhook, SMTP TLS Reporting, and pushing DNS changes straight to Cloudflare or Azure DNS instead of copying them by hand.
 authors: [mikey]
 tags: [release]
 ---
@@ -14,9 +14,9 @@ dotMARC asks for, and a way to tell us what you want next.
 
 ## Know when a domain stops sending reports
 
-Pin any domain and dotMARC now watches its report cadence, not just its pass rate. If a pinned
-domain goes past its expected reporting interval, you get an alert, through a Teams adaptive card,
-a generic JSON webhook, or both, instead of noticing weeks later that a client's reports quietly
+dotMARC now watches every monitored domain's report cadence, not just its pass rate. If a domain
+goes past its expected reporting interval, you get an alert, through a Teams adaptive card, a
+generic JSON webhook, or both, instead of noticing weeks later that a client's reports quietly
 stopped arriving. Alerts resolve themselves automatically the moment a report comes back in, and a
 cooldown keeps a genuinely down domain from paging you every cycle. Configure delivery from the new
 **Alert settings** page; the **Alerts** page itself is the feed.
@@ -28,7 +28,7 @@ tells senders to require a secure connection, TLSRPT asks them to tell you when 
 mailbox at it, and dotMARC checks every domain's TLSRPT record daily, polls for the aggregate
 reports, and surfaces both DNS status and delivered reports on the domain's own page, including the
 specific failure reasons, not just a pass/fail count. A failed-session report raises an alert
-through the same pipeline as pinned-domain monitoring; a later clean report resolves it.
+through the same pipeline as monitored-domain alerting; a later clean report resolves it.
 
 ## Push DNS changes instead of copying them by hand
 
