@@ -1,5 +1,7 @@
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
+using System.Security.Cryptography;
+using System.Text;
 using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.DnsPush;
@@ -564,6 +566,40 @@ app.MapGet("/dns-push/{provider}/callback", async (
     };
     return Results.Redirect($"{returnPath}?dnsPush={resultFlag}");
 });
+
+// Unauthenticated by necessity — HaloPSA's own outbound webhook config isn't confirmed to support
+// custom headers, so the shared secret travels in the path instead. A non-matching secret returns
+// 404 rather than 401 so an unauthenticated caller can't even confirm this endpoint exists.
+app.MapPost("/integrations/halopsa/webhook/{secret}", async (
+    string secret, HaloWebhookTicketPayload payload, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var settings = await context.HaloPsaSettings.SingleAsync();
+
+    if (string.IsNullOrEmpty(settings.WebhookSecret) ||
+        !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(settings.WebhookSecret)))
+    {
+        return Results.NotFound();
+    }
+
+    if (!HaloWebhookStatusMatcher.IsClosedStatus(payload, settings))
+    {
+        return Results.Ok();
+    }
+
+    var ticketId = payload.TicketId.ToString();
+    var alert = await context.AlertEvents.FirstOrDefaultAsync(e =>
+        e.ExternalTicketProvider == "HaloPSA" && e.ExternalTicketId == ticketId && !e.IsResolved);
+
+    if (alert is not null)
+    {
+        alert.IsResolved = true;
+        alert.ResolvedUtc = DateTimeOffset.UtcNow;
+        await context.SaveChangesAsync();
+    }
+
+    return Results.Ok();
+}).AllowAnonymous();
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();
