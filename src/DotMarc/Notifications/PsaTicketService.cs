@@ -35,6 +35,21 @@ public sealed class PsaTicketService : IPsaTicketService
             return;
         }
 
+        // AlertingService's cooldown logic (pre-dating this feature) creates a new AlertEvent once
+        // the cooldown elapses for a still-unresolved condition, without resolving the earlier one
+        // — a domain that stays unhealthy would otherwise accumulate a fresh open Halo ticket every
+        // cooldown window indefinitely. If an earlier unresolved alert for this same domain+type
+        // already has an open ticket, skip creating another one for this occurrence; the AlertEvent
+        // row itself is still recorded as normal, only the ticket is deduplicated.
+        var ticketAlreadyOpen = await context.AlertEvents.AnyAsync(e =>
+                e.DomainName == alert.DomainName && e.AlertType == alert.AlertType && e.Id != alert.Id && !e.IsResolved && e.ExternalTicketId != null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (ticketAlreadyOpen)
+        {
+            return;
+        }
+
         var ticketId = await _haloPsaClient.CreateTicketAsync(settings, haloClientId.Value, alert.DomainName, alert.AlertType, alert.Title, alert.Message, cancellationToken).ConfigureAwait(false);
         alert.ExternalTicketProvider = ProviderName;
         alert.ExternalTicketId = ticketId;
