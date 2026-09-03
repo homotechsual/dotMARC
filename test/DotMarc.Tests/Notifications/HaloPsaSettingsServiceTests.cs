@@ -56,7 +56,8 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
             WebhookSecret = "webhook-secret"
         }, newClientSecret: null);
 
-        var saved = await HaloPsaSettingsService.GetAsync(context);
+        await using var verify = CreateContext();
+        var saved = await HaloPsaSettingsService.GetAsync(verify);
         Assert.True(saved.Enabled);
         Assert.Equal("contoso", saved.AccountName);
         Assert.False(saved.ClientSecretConfigured);
@@ -71,7 +72,8 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
 
         await HaloPsaSettingsService.SaveAsync(context, secretStore, new HaloPsaSettings { Enabled = true }, newClientSecret: "the-real-secret");
 
-        var saved = await HaloPsaSettingsService.GetAsync(context);
+        await using var verify = CreateContext();
+        var saved = await HaloPsaSettingsService.GetAsync(verify);
         Assert.True(saved.ClientSecretConfigured);
         Assert.Equal("the-real-secret", await secretStore.GetClientSecretAsync());
     }
@@ -87,5 +89,9 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
         await HaloPsaSettingsService.SaveAsync(secondContext, secretStore, new HaloPsaSettings { Enabled = false, AccountName = "changed" }, newClientSecret: null);
 
         Assert.Equal("first-secret", await secretStore.GetClientSecretAsync());
+
+        await using var verify = CreateContext();
+        var verified = await HaloPsaSettingsService.GetAsync(verify);
+        Assert.True(verified.ClientSecretConfigured);
     }
 }
