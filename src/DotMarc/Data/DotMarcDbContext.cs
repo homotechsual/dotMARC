@@ -28,6 +28,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
+    public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -189,5 +190,6 @@ public sealed class DotMarcDbContext : DbContext
         // there's no leader-election concern here: it's static seed data applied once by the
         // migration itself, not something computed per-deployment at startup.
         modelBuilder.Entity<NotificationSettings>().HasData(new NotificationSettings { Id = 1 });
+        modelBuilder.Entity<HaloPsaSettings>().HasData(new HaloPsaSettings { Id = 1 });
     }
 }

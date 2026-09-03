@@ -8,6 +8,8 @@ public sealed class AlertEvent
     public required string Severity { get; set; }
     public required string Title { get; set; }
     public required string Message { get; set; }
+    public string? ExternalTicketProvider { get; set; } // "HaloPSA" today; null if no ticket was created
+    public string? ExternalTicketId { get; set; }
     public bool IsResolved { get; set; }
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ResolvedUtc { get; set; }

@@ -8,5 +8,6 @@ public sealed class Group
 {
     public int Id { get; set; }
     public required string Name { get; set; }
+    public int? HaloClientId { get; set; }
     public List<Domain> Domains { get; set; } = [];
 }
