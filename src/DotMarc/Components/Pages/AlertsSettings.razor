@@ -95,9 +95,9 @@ else
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudSelect T="int?" Label="Default priority" @bind-Value="_haloSettings.DefaultPriorityId" Variant="Variant.Outlined">
-                    @foreach (var status in _haloStatuses)
+                    @foreach (var priority in _haloPriorities)
                     {
-                        <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                        <MudSelectItem T="int?" Value="@((int?)priority.Id)">@priority.Name</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -115,6 +115,10 @@ else
             </MudItem>
             <MudItem xs="12" Class="d-flex align-center" Style="gap: 0.5rem;">
                 <MudButton Variant="Variant.Outlined" OnClick="GenerateWebhookSecretAsync">Generate new webhook secret</MudButton>
+                @if (_webhookSecretJustGenerated)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Warning">Not saved yet — click Save PSA settings before copying this URL.</MudText>
+                }
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveHaloSettingsAsync">Save PSA settings</MudButton>
@@ -127,6 +131,8 @@ else
     private string? _newHaloClientSecret;
     private List<HaloTicketType> _haloTicketTypes = [];
     private List<HaloTicketStatus> _haloStatuses = [];
+    private List<HaloPriority> _haloPriorities = [];
+    private bool _webhookSecretJustGenerated;
 
     private string WebhookUrl => _haloSettings?.WebhookSecret is { Length: > 0 } secret
         ? $"{NavigationManager.BaseUri.TrimEnd('/')}/integrations/halopsa/webhook/{secret}"
@@ -164,7 +170,8 @@ else
         {
             _haloTicketTypes = (await HaloPsaClient.ListTicketTypesAsync(_haloSettings)).ToList();
             _haloStatuses = (await HaloPsaClient.ListStatusesAsync(_haloSettings)).ToList();
-            Snackbar.Add("Loaded ticket types and statuses from Halo.", Severity.Success);
+            _haloPriorities = (await HaloPsaClient.ListPrioritiesAsync(_haloSettings)).ToList();
+            Snackbar.Add("Loaded ticket types, priorities, and statuses from Halo.", Severity.Success);
         }
         catch (Exception)
         {
@@ -177,6 +184,7 @@ else
         if (_haloSettings is not null)
         {
             _haloSettings.WebhookSecret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+            _webhookSecretJustGenerated = true;
         }
         return Task.CompletedTask;
     }
@@ -193,6 +201,7 @@ else
             await using var db = await DbFactory.CreateDbContextAsync();
             await HaloPsaSettingsService.SaveAsync(db, SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
             _newHaloClientSecret = null;
+            _webhookSecretJustGenerated = false;
             Snackbar.Add("PSA settings saved.", Severity.Success);
 
             await using var reloadDb = await DbFactory.CreateDbContextAsync();
