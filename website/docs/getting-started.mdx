@@ -169,27 +169,29 @@ fresh through that provider's own consent screen, with nothing stored.
 
 **Cloudflare**: register a self-managed OAuth client (**Manage account** → **OAuth clients** in the
 Cloudflare dashboard), scoped to `Zone.DNS` edit, with a redirect URI of
-`https://<your-deployment-host>/dns-push/cloudflare/callback`. Set:
-
-| Variable | Description |
-| --- | --- |
-| `CloudflareDns__ClientId` | The OAuth client's ID |
-| `CloudflareDns__ClientSecret` | The OAuth client's secret |
+`https://<your-deployment-host>/dns-push/cloudflare/callback`. This needs `CloudflareDns__ClientId`
+(the OAuth client's ID) and `CloudflareDns__ClientSecret` (its secret).
 
 **Azure DNS**: register a *third*, separate Entra app registration (do not reuse the mailbox or
 dashboard app). Go to **App registrations** → **New registration**, then **Authentication** → add a
 **Web** redirect URI of `https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API
 permissions** → add the delegated **Azure Service Management** → `user_impersonation` permission.
-Set:
+This needs `AzureDns__TenantId` (your tenant ID), `AzureDns__ClientId` (this app registration's
+client ID), and `AzureDns__ClientSecret` (its secret).
 
-| Variable | Description |
-| --- | --- |
-| `AzureDns__TenantId` | Your tenant ID |
-| `AzureDns__ClientId` | This app registration's client ID |
-| `AzureDns__ClientSecret` | This app registration's client secret |
+Both providers are independently optional. Leave either unset and that provider's push button
+simply never appears, with no other effect on the app.
 
-Both are independently optional. Leave either unset and that provider's push button simply never
-appears, with no other effect on the app.
+How to actually set these depends on how you're running dotMARC:
+
+- **Docker Compose**: set the matching shell variable before `docker compose up`, the same way as
+  the required variables in [Run](#run) above: `CLOUDFLARE_DNS_CLIENT_ID`,
+  `CLOUDFLARE_DNS_CLIENT_SECRET`, `AZURE_DNS_TENANT_ID`, `AZURE_DNS_CLIENT_ID`,
+  `AZURE_DNS_CLIENT_SECRET` (or the equivalent lines in a `.env` file). `docker-compose.yml` only
+  forwards variables it explicitly lists into the container, so setting a `.NET`-style
+  `CloudflareDns__ClientId` directly in your shell has no effect, it's the
+  `CLOUDFLARE_DNS_CLIENT_ID`-style name compose maps from that matters.
+- **Azure**: see [Deploy to Azure](./deploy-to-azure.mdx#optional-dns-provider-push-secrets).
 
 Next: [Local Development](./local-development.mdx) to run and test the app from source, or
 [Deploy to Azure](./deploy-to-azure.mdx) to run it in production.

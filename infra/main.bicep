@@ -44,6 +44,13 @@ param enableMtaStsHosting bool = false
 @description('Hostname customers CNAME mta-sts.<their-domain> to. Only meaningful when enableMtaStsHosting is true. The Container App\'s own generated hostname isn\'t known until after a first deployment (see containerAppUrl output) — leave this blank on that first deployment, then set it on a follow-up update, same two-step pattern as the OIDC redirect URI below.')
 param mtaStsHostingHostname string = ''
 
+@description('Non-secret Cloudflare DNS push config (see getting-started.mdx#dns-provider-push-optional). Leave blank to leave this provider\'s push button off; the client secret is set into Key Vault after deployment like the other secrets below.')
+param cloudflareDnsClientId string = ''
+
+@description('Non-secret Azure DNS push config (see getting-started.mdx#dns-provider-push-optional). Leave blank to leave this provider\'s push button off; the client secret is set into Key Vault after deployment like the other secrets below.')
+param azureDnsTenantId string = ''
+param azureDnsClientId string = ''
+
 var postgresServerName = '${baseName}-pg-${uniqueString(resourceGroup().id)}'
 var keyVaultName = '${take(baseName, 7)}-kv-${uniqueString(resourceGroup().id)}'
 var logAnalyticsName = '${baseName}-logs'
@@ -148,6 +155,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/ConnectionStrings-DotMarc'
           identity: 'System'
         }
+        {
+          name: 'cloudflaredns-client-secret'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/CloudflareDns-ClientSecret'
+          identity: 'System'
+        }
+        {
+          name: 'azuredns-client-secret'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/AzureDns-ClientSecret'
+          identity: 'System'
+        }
       ]
     }
     template: {
@@ -175,9 +192,17 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MtaSts__AzureResourceGroupName', value: resourceGroup().name }
             { name: 'MtaSts__AzureContainerAppName', value: containerAppName }
             { name: 'MtaSts__AzureManagedEnvironmentName', value: containerAppEnvName }
+            // Harmless to always set, same as MtaSts__HostingHostname above: both DNS push
+            // providers are independently optional, and each one's push button simply never
+            // renders while its config is blank (see CloudflareDnsOptions/AzureDnsOptions).
+            { name: 'CloudflareDns__ClientId', value: cloudflareDnsClientId }
+            { name: 'AzureDns__TenantId', value: azureDnsTenantId }
+            { name: 'AzureDns__ClientId', value: azureDnsClientId }
             { name: 'Graph__ClientSecret', secretRef: 'graph-client-secret' }
             { name: 'EntraId__ClientSecret', secretRef: 'entraid-client-secret' }
             { name: 'ConnectionStrings__DotMarc', secretRef: 'connectionstrings-dotmarc' }
+            { name: 'CloudflareDns__ClientSecret', secretRef: 'cloudflaredns-client-secret' }
+            { name: 'AzureDns__ClientSecret', secretRef: 'azuredns-client-secret' }
           ]
         }
       ]
@@ -315,6 +340,26 @@ resource entraIdClientSecretRef 'Microsoft.KeyVault/vaults/secrets@2024-04-01-pr
 resource connectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
   parent: keyVault
   name: 'ConnectionStrings-DotMarc'
+  properties: {
+    value: ''
+  }
+}
+
+// Also provisioned empty, but optional: DNS provider push works with either, both, or neither
+// set — see deploy-to-azure.mdx's "Optional: DNS provider push secrets" section. Left unset,
+// CloudflareDns__ClientSecret/AzureDns__ClientSecret resolve to an empty string, and that
+// provider's push button simply never renders.
+resource cloudflareDnsClientSecretRef 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
+  parent: keyVault
+  name: 'CloudflareDns-ClientSecret'
+  properties: {
+    value: ''
+  }
+}
+
+resource azureDnsClientSecretRef 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
+  parent: keyVault
+  name: 'AzureDns-ClientSecret'
   properties: {
     value: ''
   }

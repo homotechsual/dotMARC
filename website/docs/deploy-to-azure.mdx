@@ -112,6 +112,26 @@ deployment's first startup, without it, the tightened authorization policy locks
 including you.
 :::
 
+### Optional: DNS provider push secrets
+
+[DNS provider push](./getting-started.mdx#dns-provider-push-optional) is independently optional
+per provider, skip either (or both) and that provider's push button simply never appears. The
+template already provisions `CloudflareDns-ClientSecret` and `AzureDns-ClientSecret` as empty Key
+Vault secrets and wires them to the container the same way as the three required secrets above,
+non-secret values (`cloudflareDnsClientId`, `azureDnsTenantId`, `azureDnsClientId`) are ordinary
+Bicep parameters, set them in `main.parameters.json` alongside the others in step 1, or pass them
+inline. Set whichever secret(s) you need after deployment:
+
+```powershell
+az keyvault secret set --vault-name $KV --name CloudflareDns-ClientSecret --value "<Cloudflare OAuth client secret>"
+az keyvault secret set --vault-name $KV --name AzureDns-ClientSecret --value "<Azure DNS app registration client secret>"
+
+az containerapp revision restart --resource-group $RG --name $APP --revision $REVISION
+```
+
+(`$KV`, `$APP`, and `$REVISION` are the same variables from step 4 above, re-run those lookups
+first if you're doing this in a fresh shell.)
+
 ## 5. Re-running the template later (e.g. to turn on MTA-STS hosting)
 
 `enableMtaStsHosting` is off by default, so enabling it (or making any other change) usually means

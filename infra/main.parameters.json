@@ -11,6 +11,9 @@
     "graphMailboxAddress": { "value": "REPLACE_ME" },
     "graphTlsrptMailboxAddress": { "value": "" },
     "entraIdTenantId": { "value": "REPLACE_ME" },
-    "entraIdClientId": { "value": "REPLACE_ME" }
+    "entraIdClientId": { "value": "REPLACE_ME" },
+    "cloudflareDnsClientId": { "value": "" },
+    "azureDnsTenantId": { "value": "" },
+    "azureDnsClientId": { "value": "" }
   }
 }
