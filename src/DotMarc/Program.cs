@@ -1,3 +1,5 @@
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.DnsPush;
@@ -117,6 +119,20 @@ builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.G
 builder.Services.AddHttpClient<ITeamsWebhookClient, TeamsWebhookClient>();
 builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
 builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();
+
+// KeyVault:VaultUri is only set by infra/main.bicep when enableHaloPsaKeyVaultWrite is true
+// (see KeyVault__VaultUri there); every other deployment — including local/Docker Compose —
+// leaves it unset and falls back to the Postgres-backed store from Task 2.
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrWhiteSpace(keyVaultUri))
+{
+    builder.Services.AddSingleton(new SecretClient(new Uri(keyVaultUri), new DefaultAzureCredential()));
+    builder.Services.AddSingleton<IHaloSecretStore, KeyVaultHaloSecretStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IHaloSecretStore, DatabaseHaloSecretStore>();
+}
 
 // Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
 // mailbox dependency), so it's just as meaningful against seeded demo data as against real
