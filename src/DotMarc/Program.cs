@@ -134,6 +134,9 @@ else
     builder.Services.AddSingleton<IHaloSecretStore, DatabaseHaloSecretStore>();
 }
 
+builder.Services.AddSingleton<HaloPsaTokenCache>();
+builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
+
 // Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
 // mailbox dependency), so it's just as meaningful against seeded demo data as against real
 // polled reports.
