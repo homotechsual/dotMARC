@@ -43,6 +43,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         public Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloClient>>([]);
         public Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketType>>([]);
         public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
+        public Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloPriority>>([]);
 
         public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
         {
@@ -88,6 +89,40 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         var saved = await context.AlertEvents.SingleAsync();
         Assert.Equal("HaloPSA", saved.ExternalTicketProvider);
         Assert.Equal("1000", saved.ExternalTicketId);
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_SkipsTicketCreation_WhenAnEarlierUnresolvedAlertForTheSameDomainAndTypeAlreadyHasAnOpenTicket()
+    {
+        await EnableHaloAsync();
+        await using var context = CreateContext();
+        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        context.Groups.Add(group);
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
+        context.Domains.Add(domain);
+
+        // An earlier alert for the same domain+type, still unresolved, already has an open Halo
+        // ticket — this is what a cooldown-driven re-fire of AlertingService.EnsureAlertAsync looks
+        // like for a domain that's stayed unhealthy across multiple cooldown windows.
+        var earlierAlert = new AlertEvent
+        {
+            DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m",
+            ExternalTicketProvider = "HaloPSA", ExternalTicketId = "1000"
+        };
+        context.AlertEvents.Add(earlierAlert);
+        var newAlert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
+        context.AlertEvents.Add(newAlert);
+        await context.SaveChangesAsync();
+
+        var fakeClient = new FakeHaloPsaClient();
+        var service = new PsaTicketService(fakeClient);
+        await service.CreateTicketAsync(context, newAlert);
+        await context.SaveChangesAsync();
+
+        Assert.Equal(0, fakeClient.CreateCallCount);
+        var saved = await context.AlertEvents.SingleAsync(a => a.Id == newAlert.Id);
+        Assert.Null(saved.ExternalTicketProvider);
+        Assert.Null(saved.ExternalTicketId);
     }
 
     [Fact]

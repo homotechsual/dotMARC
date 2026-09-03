@@ -16,11 +16,17 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
     /// <see cref="ResponseBody"/> for any further calls.</summary>
     public Queue<string> ResponseBodies { get; } = new();
 
+    /// <summary>When non-empty, each call dequeues the next status code in order — for testing a
+    /// sequence like 401-then-200 across a retry. Once drained, falls back to
+    /// <see cref="StatusCode"/> for any further calls.</summary>
+    public Queue<HttpStatusCode> StatusCodes { get; } = new();
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Requests.Add(request);
         var body = ResponseBodies.Count > 0 ? ResponseBodies.Dequeue() : ResponseBody;
-        var response = new HttpResponseMessage(StatusCode)
+        var statusCode = StatusCodes.Count > 0 ? StatusCodes.Dequeue() : StatusCode;
+        var response = new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };

@@ -1,4 +1,6 @@
 // src/DotMarc/Notifications/HaloPsaClient.cs
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
@@ -38,6 +40,13 @@ public sealed class HaloPsaClient : IHaloPsaClient
         return payload?.Select(e => new HaloTicketStatus(e.Id, e.Name)).ToList() ?? [];
     }
 
+    public async Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, settings, "Priority", null, cancellationToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<List<IdNameEntry>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return payload?.Select(e => new HaloPriority(e.Id, e.Name)).ToList() ?? [];
+    }
+
     public async Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
     {
         var body = new CreateTicketRequest(title, $"{message}\n\nDomain: {domainName}\nAlert type: {alertType}\nRaised automatically by dotMARC.", haloClientId, settings.TicketTypeId, settings.DefaultPriorityId);
@@ -57,18 +66,34 @@ public sealed class HaloPsaClient : IHaloPsaClient
     {
         var clientSecret = await _secretStore.GetClientSecretAsync(cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("HaloPSA client secret is not configured.");
+
+        var response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // The cached token may have been revoked early on Halo's side. Invalidate it and retry
+            // exactly once with a freshly-acquired token — never more, to avoid looping forever
+            // against a persistently-invalid credential.
+            response.Dispose();
+            await _tokenCache.InvalidateAsync(settings, cancellationToken).ConfigureAwait(false);
+            response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
+        }
+
+        response.EnsureSuccessStatusCode();
+        return response;
+    }
+
+    private async Task<HttpResponseMessage> SendOnceAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, string clientSecret, CancellationToken cancellationToken)
+    {
         var token = await _tokenCache.GetTokenAsync(_httpClient, settings, clientSecret, cancellationToken).ConfigureAwait(false);
 
         using var request = new HttpRequestMessage(method, $"{settings.ResourceServerUrl!.TrimEnd('/')}/{relativePath}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);
         }
 
-        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        return response;
+        return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     private sealed record IdNameEntry([property: JsonPropertyName("id")] int Id, [property: JsonPropertyName("name")] string Name);
