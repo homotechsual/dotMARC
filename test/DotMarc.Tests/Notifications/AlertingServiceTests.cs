@@ -67,7 +67,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await SeedMonitoredDomainAsync("contoso.io", DateTimeOffset.UtcNow.AddDays(-3));
 
         var fakeNotifier = new FakeAlertWebhookClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
 
         await service.CheckPinnedDomainsAsync();
         await service.CheckPinnedDomainsAsync();
@@ -88,7 +88,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await SeedMonitoredDomainAsync("contoso.io", DateTimeOffset.UtcNow.AddDays(-30));
 
         var fakeNotifier = new FakeAlertWebhookClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
 
         await service.CheckPinnedDomainsAsync();
 
@@ -104,7 +104,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await SeedMonitoredDomainAsync("contoso.io", lastReportReceivedUtc: null);
 
         var fakeNotifier = new FakeAlertWebhookClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
 
         await service.CheckPinnedDomainsAsync();
 
@@ -130,7 +130,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     {
         await SeedSettingsAsync();
         var notifier = new FakeAlertWebhookClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), notifier, NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), notifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
 
         await service.HandleTlsrptReportAsync("contoso.io", 3, ["certificate-expired"], CancellationToken.None);
         await service.HandleTlsrptReportAsync("contoso.io", 3, ["certificate-expired"], CancellationToken.None);
@@ -146,7 +146,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     public async Task HandleTlsrptReportAsync_ResolvesFailureAlertWhenALaterReportHasNoFailures()
     {
         await SeedSettingsAsync();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
         await service.HandleTlsrptReportAsync("contoso.io", 1, ["certificate-expired"], CancellationToken.None);
 
         await service.HandleTlsrptReportAsync("contoso.io", 0, [], CancellationToken.None);
@@ -173,5 +173,16 @@ public sealed class AlertingServiceTests : IAsyncLifetime
             CallCount++;
             return Task.CompletedTask;
         }
+    }
+
+    private static IPsaTicketService CreateNoOpPsaTicketService() => new PsaTicketService(new NoOpHaloPsaClient());
+
+    private sealed class NoOpHaloPsaClient : IHaloPsaClient
+    {
+        public Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloClient>>([]);
+        public Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketType>>([]);
+        public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
+        public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default) => Task.FromResult("unused");
+        public Task CloseTicketAsync(HaloPsaSettings settings, string ticketId, string note, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

@@ -15,12 +15,14 @@ public sealed class AlertingService : IAlertingService
 {
     private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
     private readonly IAlertWebhookClient _alertWebhookClient;
+    private readonly IPsaTicketService _psaTicketService;
     private readonly ILogger<AlertingService> _logger;
 
-    public AlertingService(IDbContextFactory<DotMarcDbContext> dbFactory, IAlertWebhookClient alertWebhookClient, ILogger<AlertingService> logger)
+    public AlertingService(IDbContextFactory<DotMarcDbContext> dbFactory, IAlertWebhookClient alertWebhookClient, IPsaTicketService psaTicketService, ILogger<AlertingService> logger)
     {
         _dbFactory = dbFactory;
         _alertWebhookClient = alertWebhookClient;
+        _psaTicketService = psaTicketService;
         _logger = logger;
     }
 
@@ -99,6 +101,16 @@ public sealed class AlertingService : IAlertingService
 
         activeAlert.IsResolved = true;
         activeAlert.ResolvedUtc = DateTimeOffset.UtcNow;
+
+        try
+        {
+            await _psaTicketService.CloseTicketAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to close PSA ticket for {DomainName} alert {AlertType}.", activeAlert.DomainName, activeAlert.AlertType);
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -139,6 +151,16 @@ public sealed class AlertingService : IAlertingService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send notification for {DomainName} alert {AlertType}.", domainName, alertType);
+        }
+
+        try
+        {
+            await _psaTicketService.CreateTicketAsync(context, alert, cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to create PSA ticket for {DomainName} alert {AlertType}.", domainName, alertType);
         }
     }
 }
