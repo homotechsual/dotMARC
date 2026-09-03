@@ -110,6 +110,43 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateTicketAsync_DoesNothing_WhenHaloIsDisabled()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        context.Groups.Add(group);
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
+        context.Domains.Add(domain);
+        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
+        context.AlertEvents.Add(alert);
+        await context.SaveChangesAsync();
+
+        var fakeClient = new FakeHaloPsaClient();
+        var service = new PsaTicketService(fakeClient);
+        await service.CreateTicketAsync(context, alert);
+
+        Assert.Equal(0, fakeClient.CreateCallCount);
+        Assert.Null((await context.AlertEvents.SingleAsync()).ExternalTicketId);
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_DoesNothing_WhenTheDomainDoesNotExist()
+    {
+        await EnableHaloAsync();
+        await using var context = CreateContext();
+        var alert = new AlertEvent { DomainName = "missing.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
+        context.AlertEvents.Add(alert);
+        await context.SaveChangesAsync();
+
+        var fakeClient = new FakeHaloPsaClient();
+        var service = new PsaTicketService(fakeClient);
+        await service.CreateTicketAsync(context, alert);
+
+        Assert.Equal(0, fakeClient.CreateCallCount);
+        Assert.Null((await context.AlertEvents.SingleAsync()).ExternalTicketId);
+    }
+
+    [Fact]
     public async Task CloseTicketAsync_ClosesTheTicket_WhenOneWasCreated()
     {
         await EnableHaloAsync();
