@@ -108,4 +108,20 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
         Assert.False((await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242")).IsResolved);
     }
+
+    [Fact]
+    public async Task MalformedBody_WithTheCorrectSecret_ReturnsOk_NotBadRequest()
+    {
+        using var client = _factory!.CreateClient();
+
+        using var content = new StringContent("this is not json", System.Text.Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/integrations/halopsa/webhook/the-webhook-secret", content);
+
+        // The secret was right, so the endpoint must never surface a parse failure as an error
+        // status — a wrong-looking response here could trigger a retry storm from Halo. It must
+        // also not crash the app; nothing throws past the handler.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
+        Assert.False((await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242")).IsResolved);
+    }
 }

@@ -2,6 +2,7 @@ using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.DnsPush;
@@ -570,8 +571,13 @@ app.MapGet("/dns-push/{provider}/callback", async (
 // Unauthenticated by necessity — HaloPSA's own outbound webhook config isn't confirmed to support
 // custom headers, so the shared secret travels in the path instead. A non-matching secret returns
 // 404 rather than 401 so an unauthenticated caller can't even confirm this endpoint exists.
+//
+// Binds the raw HttpRequest rather than a typed HaloWebhookTicketPayload parameter — a typed body
+// parameter is parsed by ASP.NET Core's model binder before the handler runs at all, which would
+// 400 a malformed body regardless of whether the secret is even right. The secret check has to
+// happen first, and body parsing happens only after it passes, inside the handler.
 app.MapPost("/integrations/halopsa/webhook/{secret}", async (
-    string secret, HaloWebhookTicketPayload payload, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, ILogger<Program> logger) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var settings = await context.HaloPsaSettings.SingleAsync();
@@ -580,6 +586,25 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
         !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(settings.WebhookSecret)))
     {
         return Results.NotFound();
+    }
+
+    HaloWebhookTicketPayload? payload;
+    try
+    {
+        payload = await JsonSerializer.DeserializeAsync<HaloWebhookTicketPayload>(request.Body, cancellationToken: request.HttpContext.RequestAborted);
+    }
+    catch (JsonException ex)
+    {
+        // Nothing a retry from Halo would fix — log it and 200 rather than surfacing a failure
+        // status that could trigger a retry storm.
+        logger.LogWarning(ex, "Received an unparseable HaloPSA webhook payload.");
+        return Results.Ok();
+    }
+
+    if (payload is null)
+    {
+        logger.LogWarning("Received an empty HaloPSA webhook payload.");
+        return Results.Ok();
     }
 
     if (!HaloWebhookStatusMatcher.IsClosedStatus(payload, settings))
