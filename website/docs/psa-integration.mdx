@@ -24,9 +24,10 @@ won't see it again, only whether one is configured). Click **Load ticket types /
 statuses from Halo** to populate the three dropdowns, pick the ticket type new tickets should use,
 the default priority, and which Halo status counts as "closed" for resolving the alert back.
 
-Click **Generate new webhook secret**, then copy the shown webhook URL into HaloPSA's own outbound
-webhook configuration, triggered on ticket status change. This is what lets a ticket closed
-directly in Halo resolve the dotMARC alert.
+Click **Generate new webhook secret**, click **Save PSA settings**, then copy the shown webhook URL
+into HaloPSA's own outbound webhook configuration, triggered on ticket status change. Save first -
+the secret only takes effect once it's persisted, so a URL copied before saving 404s until you do.
+This is what lets a ticket closed directly in Halo resolve the dotMARC alert.
 
 Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vault) depends on your
 deployment, see [Deploy to Azure](./deploy-to-azure.mdx#optional-halopsa-key-vault-storage) if
@@ -45,11 +46,25 @@ leaving the generic webhook URL blank, it isn't an error.
 
 ## What syncs, and what doesn't
 
-- Alert fires → ticket created, using the alert's title/message as the ticket's summary/details.
+- Alert fires → ticket created, using the alert's title/message as the ticket's summary/details,
+  filed under the configured ticket type and default priority.
 - Alert resolves in dotMARC (the report comes back, or a later TLSRPT report has no failures) →
   ticket closed in Halo automatically.
 - Ticket closed in Halo → alert resolved in dotMARC automatically, via the webhook above.
-- Nothing else syncs: no comments, no reassignment, no priority changes flow back from Halo. If
-  the underlying condition is still active after a ticket's closed early in Halo, the next check
-  cycle re-opens the alert (and a new ticket) once the cooldown allows - this is expected, not a
-  sync bug.
+- Nothing else syncs: no comments, and no changes made directly in Halo (priority, reassignment,
+  notes) flow back to dotMARC - only a status change to the configured "closed" status is read.
+  If the underlying condition is still active after a ticket's closed early in
+  Halo, the very next monitor cycle (not the cooldown window) re-opens the alert, since the
+  cooldown only gates re-creation while an alert is still unresolved - once resolved, the next
+  cycle sees no unresolved alert and creates a fresh one immediately. A new ticket for that fresh
+  alert is opened too, unless another ticket for the same domain and alert type is already open, in
+  which case ticket creation is skipped for that occurrence (dotMARC's own alert history still gets
+  the new row either way) - this is expected, not a sync bug.
+
+Two other things worth knowing:
+
+- The **Halo Client** column on Manage Groups/Manage Domains only appears once HaloPSA is both
+  enabled *and* has a saved client secret - enabling it alone isn't enough to see the column.
+- Ticket priority syncs from dotMARC to Halo once, on ticket creation (the configured default
+  priority). It does not sync afterwards in either direction: a priority change made later, in
+  dotMARC or in Halo, doesn't propagate to the other side.
