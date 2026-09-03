@@ -6,6 +6,9 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject IHaloPsaClient HaloPsaClient
+@inject IHaloSecretStore SecretStoreAccessor
+@inject NavigationManager NavigationManager
 
 <PageTitle>dotMARC - Alert Settings</PageTitle>
 <MudText Typo="Typo.h4" Class="mb-4">Alert settings</MudText>
@@ -55,13 +58,85 @@ else
     </MudPaper>
 }
 
+@if (_haloSettings is not null)
+{
+    <MudPaper Class="pa-4 mt-4">
+        <MudText Typo="Typo.h5" Class="mb-4">PSA integration (HaloPSA)</MudText>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSwitch @bind-Value="_haloSettings.Enabled" Color="Color.Primary" Label="Enable HaloPSA ticket sync" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Account name" @bind-Value="_haloSettings.AccountName" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Client ID" @bind-Value="_haloSettings.ClientId" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Auth server URL" @bind-Value="_haloSettings.AuthServerUrl" Placeholder="https://<account>.halopsa.com/auth" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Resource server URL" @bind-Value="_haloSettings.ResourceServerUrl" Placeholder="https://<account>.halopsa.com/api" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                              HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-center">
+                <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses from Halo</MudButton>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
+                    @foreach (var ticketType in _haloTicketTypes)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)ticketType.Id)">@ticketType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="int?" Label="Default priority" @bind-Value="_haloSettings.DefaultPriorityId" Variant="Variant.Outlined">
+                    @foreach (var status in _haloStatuses)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="int?" Label="Closed status" @bind-Value="_haloSettings.ClosedStatusId" Variant="Variant.Outlined">
+                    @foreach (var status in _haloStatuses)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField Label="Webhook URL" ReadOnly="true" Value="@WebhookUrl" Variant="Variant.Outlined"
+                              HelperText="Point HaloPSA's outbound webhook (on ticket status change) at this URL." />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex align-center" Style="gap: 0.5rem;">
+                <MudButton Variant="Variant.Outlined" OnClick="GenerateWebhookSecretAsync">Generate new webhook secret</MudButton>
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveHaloSettingsAsync">Save PSA settings</MudButton>
+    </MudPaper>
+}
+
 @code {
     private NotificationSettings? _settings;
+    private HaloPsaSettings? _haloSettings;
+    private string? _newHaloClientSecret;
+    private List<HaloTicketType> _haloTicketTypes = [];
+    private List<HaloTicketStatus> _haloStatuses = [];
+
+    private string WebhookUrl => _haloSettings?.WebhookSecret is { Length: > 0 } secret
+        ? $"{NavigationManager.BaseUri.TrimEnd('/')}/integrations/halopsa/webhook/{secret}"
+        : "Generate a webhook secret first.";
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await NotificationSettingsService.GetAsync(db);
+        _haloSettings = await HaloPsaSettingsService.GetAsync(db);
     }
 
     private async Task SaveAsync()
@@ -75,6 +150,57 @@ else
         catch (ArgumentException exception)
         {
             Snackbar.Add(exception.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoadHaloOptionsAsync()
+    {
+        if (_haloSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _haloTicketTypes = (await HaloPsaClient.ListTicketTypesAsync(_haloSettings)).ToList();
+            _haloStatuses = (await HaloPsaClient.ListStatusesAsync(_haloSettings)).ToList();
+            Snackbar.Add("Loaded ticket types and statuses from Halo.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Couldn't reach HaloPSA — save your account/credentials first, then try again.", Severity.Error);
+        }
+    }
+
+    private Task GenerateWebhookSecretAsync()
+    {
+        if (_haloSettings is not null)
+        {
+            _haloSettings.WebhookSecret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveHaloSettingsAsync()
+    {
+        if (_haloSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await HaloPsaSettingsService.SaveAsync(db, SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
+            _newHaloClientSecret = null;
+            Snackbar.Add("PSA settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _haloSettings = await HaloPsaSettingsService.GetAsync(reloadDb);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save PSA settings. Try again.", Severity.Error);
         }
     }
 }
