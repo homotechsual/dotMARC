@@ -92,4 +92,13 @@ public static class GroupManagementService
         domain.Groups = groups;
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Sets (or clears, with null) a Group's Halo client mapping, from the "Halo Client"
+    /// column on Manage Groups.</summary>
+    public static async Task SetHaloClientIdAsync(DotMarcDbContext context, int groupId, int? haloClientId, CancellationToken cancellationToken = default)
+    {
+        var group = await context.Groups.SingleAsync(g => g.Id == groupId, cancellationToken).ConfigureAwait(false);
+        group.HaloClientId = haloClientId;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
 }

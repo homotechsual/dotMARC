@@ -243,4 +243,18 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
 
         Assert.Equal(["apple.com", "mango.com", "zebra.com"], ordered);
     }
+
+    [Fact]
+    public async Task SetHaloClientIdAsync_UpdatesTheDomainsOverride()
+    {
+        await using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+
+        await DomainManagementService.SetHaloClientIdAsync(context, domain.Id, 7);
+
+        await using var verify = CreateContext();
+        Assert.Equal(7, (await verify.Domains.SingleAsync(d => d.Id == domain.Id)).HaloClientId);
+    }
 }

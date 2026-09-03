@@ -135,4 +135,32 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
         Assert.Single(updated.Groups);
         Assert.Equal("Client A", updated.Groups[0].Name);
     }
+
+    [Fact]
+    public async Task SetHaloClientIdAsync_UpdatesTheGroupsMapping()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Client A" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        await GroupManagementService.SetHaloClientIdAsync(context, group.Id, 42);
+
+        await using var verify = CreateContext();
+        Assert.Equal(42, (await verify.Groups.SingleAsync(g => g.Id == group.Id)).HaloClientId);
+    }
+
+    [Fact]
+    public async Task SetHaloClientIdAsync_ClearsTheMapping_WhenPassedNull()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Client A", HaloClientId = 42 };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        await GroupManagementService.SetHaloClientIdAsync(context, group.Id, null);
+
+        await using var verify = CreateContext();
+        Assert.Null((await verify.Groups.SingleAsync(g => g.Id == group.Id)).HaloClientId);
+    }
 }

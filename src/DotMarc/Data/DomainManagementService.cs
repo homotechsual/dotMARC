@@ -66,6 +66,14 @@ public static class DomainManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Sets (or clears, with null) a domain's Halo client override, from Manage Domains.</summary>
+    public static async Task SetHaloClientIdAsync(DotMarcDbContext context, int domainId, int? haloClientId, CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        domain.HaloClientId = haloClientId;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Saves a domain's MTA-STS hosting configuration from the domain detail page's MTA-STS
     /// tab. Enabling hosting for the first time (false -&gt; true) resets MtaStsStatus to PendingDns
     /// so PollingService's MTA-STS cycle picks it up on its next ~15 minute pass; disabling it
