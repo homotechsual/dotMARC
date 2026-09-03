@@ -3,12 +3,14 @@
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
+@using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IHaloPsaClient HaloPsaClient
 
 <PageTitle>dotMARC - Manage Groups</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -41,6 +43,10 @@
             <HeaderContent>
                 <MudTh>Name</MudTh>
                 <MudTh>Domains</MudTh>
+                @if (_haloConfigured)
+                {
+                    <MudTh>Halo Client</MudTh>
+                }
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -55,6 +61,29 @@
                     </AuthorizeView>
                 </MudTd>
                 <MudTd>@context.DomainCount</MudTd>
+                @if (_haloConfigured)
+                {
+                    <MudTd>
+                        <MudSelect T="int?" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true">
+                            @foreach (var haloClient in _haloClients)
+                            {
+                                <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        @{
+                            var suggestion = !context.HaloClientId.HasValue
+                                ? _haloClients.FirstOrDefault(c => string.Equals(c.Name, context.Name, StringComparison.OrdinalIgnoreCase))
+                                : null;
+                        }
+                        @if (suggestion is not null)
+                        {
+                            <MudText Typo="Typo.caption">
+                                Suggested match: @suggestion.Name.
+                                <MudLink OnClick="@(() => SetHaloClientIdAsync(context, suggestion.Id))">Use it</MudLink>
+                            </MudText>
+                        }
+                    </MudTd>
+                }
                 <MudTd>
                     <AuthorizeView Policy="GroupsDelete" Context="authState">
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
@@ -147,6 +176,8 @@
 @code {
     private List<GroupRow>? _groups;
     private List<TagRow>? _tags;
+    private List<HaloClient> _haloClients = [];
+    private bool _haloConfigured;
     private string _newGroupName = "";
     private string? _addGroupError;
     private string _newTagName = "";
@@ -161,13 +192,28 @@
         _groups = await db.Groups
             .AsNoTracking()
             .OrderBy(g => g.Name)
-            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count))
+            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.HaloClientId))
             .ToListAsync();
         _tags = await db.Tags
             .AsNoTracking()
             .OrderBy(t => t.Name)
             .Select(t => new TagRow(t.Id, t.Name, t.Color, t.Domains.Count))
             .ToListAsync();
+
+        await using var haloSettingsDb = await DbFactory.CreateDbContextAsync();
+        var haloSettings = await HaloPsaSettingsService.GetAsync(haloSettingsDb);
+        _haloConfigured = haloSettings.Enabled && haloSettings.ClientSecretConfigured;
+        if (_haloConfigured)
+        {
+            try
+            {
+                _haloClients = (await HaloPsaClient.ListClientsAsync(haloSettings)).ToList();
+            }
+            catch (Exception)
+            {
+                _haloClients = [];
+            }
+        }
     }
 
     private async Task AddGroupAsync()
@@ -331,6 +377,20 @@
         }
     }
 
-    private sealed record GroupRow(int Id, string Name, int DomainCount);
+    private async Task SetHaloClientIdAsync(GroupRow row, int? haloClientId)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await GroupManagementService.SetHaloClientIdAsync(db, row.Id, haloClientId, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}'s Halo client. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private sealed record GroupRow(int Id, string Name, int DomainCount, int? HaloClientId);
     private sealed record TagRow(int Id, string Name, Color Color, int DomainCount);
 }

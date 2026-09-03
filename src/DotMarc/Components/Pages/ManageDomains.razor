@@ -2,12 +2,14 @@
 @attribute [Authorize(Policy = "DomainsWrite")]
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
+@using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IHaloPsaClient HaloPsaClient
 
 <PageTitle>dotMARC - Manage Domains</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -40,6 +42,10 @@ else
             <MudTh>Domain</MudTh>
             <MudTh>Groups</MudTh>
             <MudTh>Tags</MudTh>
+            @if (_haloConfigured)
+            {
+                <MudTh>Halo Client override</MudTh>
+            }
             <MudTh>Monitored</MudTh>
             <MudTh>Reports</MudTh>
             <MudTh>Last report</MudTh>
@@ -104,6 +110,17 @@ else
                     </NotAuthorized>
                 </AuthorizeView>
             </MudTd>
+            @if (_haloConfigured)
+            {
+                <MudTd>
+                    <MudSelect T="int?" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true">
+                        @foreach (var haloClient in _haloClients)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTd>
+            }
             <MudTd>
                 <AuthorizeView Policy="DomainsEdit" Context="authState">
                     <Authorized>
@@ -129,6 +146,8 @@ else
     private List<DomainRow>? _domains;
     private List<Group> _allGroups = [];
     private List<Tag> _allTags = [];
+    private List<HaloClient> _haloClients = [];
+    private bool _haloConfigured;
     private string _newDomainName = "";
     private string? _addError;
 
@@ -144,8 +163,23 @@ else
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
             .Select(d => new DomainRow(d.Id, d.Name, d.IsMonitored, d.Reports.Count, d.LastReportReceivedUtc,
-                d.Groups.Select(g => g.Id).ToList(), d.Tags.Select(t => t.Id).ToList()))
+                d.Groups.Select(g => g.Id).ToList(), d.Tags.Select(t => t.Id).ToList(), d.HaloClientId))
             .ToListAsync();
+
+        await using var haloSettingsDb = await DbFactory.CreateDbContextAsync();
+        var haloSettings = await HaloPsaSettingsService.GetAsync(haloSettingsDb);
+        _haloConfigured = haloSettings.Enabled && haloSettings.ClientSecretConfigured;
+        if (_haloConfigured)
+        {
+            try
+            {
+                _haloClients = (await HaloPsaClient.ListClientsAsync(haloSettings)).ToList();
+            }
+            catch (Exception)
+            {
+                _haloClients = [];
+            }
+        }
     }
 
     private async Task AddDomainAsync()
@@ -284,5 +318,19 @@ else
         await LoadAsync();
     }
 
-    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc, List<int> GroupIds, List<int> TagIds);
+    private async Task SetHaloClientIdAsync(DomainRow row, int? haloClientId)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.SetHaloClientIdAsync(db, row.Id, haloClientId, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to update {row.Name}'s Halo client. Try again.", Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc, List<int> GroupIds, List<int> TagIds, int? HaloClientId);
 }
