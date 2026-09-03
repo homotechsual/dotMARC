@@ -53,6 +53,9 @@ Both webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
 Delivery is best-effort: a failed webhook call is logged as a warning and does not stop the alert
 from being recorded or shown in the Alerts feed, and does not affect the rest of that check cycle.
 
+For syncing alerts to a PSA instead of (or alongside) Teams/webhook delivery, see [PSA
+integration](./psa-integration.mdx).
+
 ### Teams
 
 Sent as an Adaptive Card (`application/vnd.microsoft.card.adaptive`, schema version 1.5) via

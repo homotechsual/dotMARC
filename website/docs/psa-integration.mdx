@@ -1,0 +1,55 @@
+---
+sidebar_position: 8
+description: Sync dotMARC alerts to HaloPSA tickets, opened and closed automatically in both directions.
+---
+
+# PSA integration (HaloPSA)
+
+dotMARC can open a HaloPSA ticket when an alert fires, close it automatically when the alert
+resolves, and resolve the alert back when a tech closes the ticket directly in Halo. See
+[Alerts](./alerts.mdx) for how alerting itself works - this page covers wiring it to HaloPSA
+specifically.
+
+## Set up the Halo API application
+
+In HaloPSA, go to **Configuration → Integrations → HaloPSA API** and create an application
+with these scopes: `edit:tickets`, `read:tickets`, `read:customers`, `read:teams`. Note its
+account name, auth server URL, resource server URL, client ID, and client secret.
+
+## Configure dotMARC
+
+From **Alert settings**, in the **PSA integration (HaloPSA)** section: enable it, fill in the
+account name/URLs/client ID, and paste in the client secret (it's write-only - once saved, you
+won't see it again, only whether one is configured). Click **Load ticket types / priorities /
+statuses from Halo** to populate the three dropdowns, pick the ticket type new tickets should use,
+the default priority, and which Halo status counts as "closed" for resolving the alert back.
+
+Click **Generate new webhook secret**, then copy the shown webhook URL into HaloPSA's own outbound
+webhook configuration, triggered on ticket status change. This is what lets a ticket closed
+directly in Halo resolve the dotMARC alert.
+
+Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vault) depends on your
+deployment, see [Deploy to Azure](./deploy-to-azure.mdx#optional-halopsa-key-vault-storage) if
+you're running on Azure and want it in Key Vault.
+
+## Route tickets to the right client
+
+Tickets need to land against the right Halo client (company). From **Manage groups**, each Group
+gets a **Halo Client** picker - set once per Group (typically once per MSP client), every domain
+in that Group routes there. If a Group's name matches a Halo client's name, a suggested match
+appears; review and click **Use it** rather than it being applied automatically. A domain that
+needs to route differently than its Group can be overridden individually from **Manage domains**.
+
+A domain with no mapping (no Group, or a Group with none set) simply doesn't get a ticket, same as
+leaving the generic webhook URL blank, it isn't an error.
+
+## What syncs, and what doesn't
+
+- Alert fires → ticket created, using the alert's title/message as the ticket's summary/details.
+- Alert resolves in dotMARC (the report comes back, or a later TLSRPT report has no failures) →
+  ticket closed in Halo automatically.
+- Ticket closed in Halo → alert resolved in dotMARC automatically, via the webhook above.
+- Nothing else syncs: no comments, no reassignment, no priority changes flow back from Halo. If
+  the underlying condition is still active after a ticket's closed early in Halo, the next check
+  cycle re-opens the alert (and a new ticket) once the cooldown allows - this is expected, not a
+  sync bug.

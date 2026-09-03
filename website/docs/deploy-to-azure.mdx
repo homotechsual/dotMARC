@@ -132,6 +132,16 @@ az containerapp revision restart --resource-group $RG --name $APP --revision $RE
 (`$KV`, `$APP`, and `$REVISION` are the same variables from step 4 above, re-run those lookups
 first if you're doing this in a fresh shell.)
 
+### Optional: HaloPSA Key Vault storage
+
+By default the HaloPSA API client secret entered through Alert settings is encrypted and stored
+in Postgres. To store it in this deployment's Key Vault instead, redeploy with
+`enableHaloPsaKeyVaultWrite` set to `true` - this grants the container app's managed identity a
+narrowly-scoped write role on the vault (see `infra/main.bicep`'s `haloPsaKeyVaultWriteRole`, it
+adds only `secrets/setSecret`, read is already covered by the existing `Key Vault Secrets User`
+assignment). No manual `az keyvault secret set` needed here, the app writes the secret itself the
+first time you save it from Alert settings.
+
 ## 5. Re-running the template later (e.g. to turn on MTA-STS hosting)
 
 `enableMtaStsHosting` is off by default, so enabling it (or making any other change) usually means
