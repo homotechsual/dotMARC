@@ -1,10 +1,11 @@
 using DotMarc.Notifications;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace DotMarc.Data;
 
-public sealed class DotMarcDbContext : DbContext
+public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
 {
     public DotMarcDbContext(DbContextOptions<DotMarcDbContext> options) : base(options)
     {
@@ -29,6 +30,7 @@ public sealed class DotMarcDbContext : DbContext
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

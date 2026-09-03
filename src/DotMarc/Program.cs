@@ -9,6 +9,7 @@ using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
@@ -52,6 +53,12 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // 'IDbContextFactory<DotMarcDbContext>'". Production skips that validation, which is why this
 // wasn't caught by a Docker smoke test alone.
 builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(connectionString));
+
+// Previously unconfigured — Data Protection fell back to its default (non-durable across
+// restarts/redeploys/replicas) key store, which DnsPushStateProtector tolerated only because its
+// state is minutes-lived. The HaloPSA client secret (see DatabaseHaloSecretStore) needs real
+// durability, the same argument that already moved NotificationSettings into Postgres.
+builder.Services.AddDataProtection().PersistKeysToDbContext<DotMarcDbContext>();
 
 // DemoDataResetService and the Razor components resolve IOptions<DemoOptions> from the
 // container, validated (ResetHourUtc must be 0-23) and checked on start here, same pattern as
