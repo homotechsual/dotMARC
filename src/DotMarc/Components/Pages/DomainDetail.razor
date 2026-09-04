@@ -407,8 +407,12 @@ else
                 return;
             }
 
+            // A CNAME-delegated record (existing.DelegatedToCname set) always gets a fresh
+            // create-style value, matching what the server actually pushes for this case — merging
+            // the third party's own policy content in wouldn't make sense once their delegation is
+            // being replaced entirely.
             string proposed;
-            if (existing.DirectValue is null)
+            if (existing.DelegatedToCname is not null || existing.DirectValue is null)
             {
                 proposed = $"v=DMARC1; p=none; rua=mailto:{GraphOptions.Value.MailboxAddress}";
             }
@@ -435,7 +439,7 @@ else
                 };
                 var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC record", parameters);
                 var result = await dialogRef.Result;
-                if (existing.DelegatedToCname is not null || result is null || result.Canceled)
+                if (result is null || result.Canceled)
                 {
                     return;
                 }
@@ -483,8 +487,10 @@ else
             return;
         }
 
+        // See PushDmarcRecordAsync's equivalent comment: a CNAME-delegated record always gets a
+        // fresh create-style value, matching what the server actually pushes for this case.
         string proposed;
-        if (existing.DirectValue is null)
+        if (existing.DelegatedToCname is not null || existing.DirectValue is null)
         {
             proposed = $"v=TLSRPTv1; rua=mailto:{mailbox}";
         }
@@ -511,7 +517,7 @@ else
             };
             var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push TLS reporting record", parameters);
             var result = await dialogRef.Result;
-            if (existing.DelegatedToCname is not null || result is null || result.Canceled)
+            if (result is null || result.Canceled)
             {
                 return;
             }

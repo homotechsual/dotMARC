@@ -544,7 +544,16 @@ app.MapGet("/dns-push/{provider}/callback", async (
     {
         var existing = await dmarcTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
         var mailbox = graphOptions.Value.MailboxAddress;
-        if (existing.DirectValue is null)
+        if (existing.DelegatedToCname is not null)
+        {
+            // The record is a CNAME delegated to a third party — DNS doesn't allow a CNAME to
+            // coexist with any other record type at the same name, so there's no in-place merge
+            // here, only delete-then-create. The confirm dialog makes this explicit before the
+            // user ever reaches this endpoint (DnsRecordPushDecision.NeedsConfirmation always
+            // returns true when DelegatedToCname is set).
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", existing.DelegatedToCname, domain.Name, ExistingRecordType: "CNAME")];
+        }
+        else if (existing.DirectValue is null)
         {
             changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null, domain.Name)];
         }
@@ -567,7 +576,11 @@ app.MapGet("/dns-push/{provider}/callback", async (
         }
 
         var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
-        if (existing.DirectValue is null)
+        if (existing.DelegatedToCname is not null)
+        {
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", existing.DelegatedToCname, domain.Name, ExistingRecordType: "CNAME")];
+        }
+        else if (existing.DirectValue is null)
         {
             changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null, domain.Name)];
         }

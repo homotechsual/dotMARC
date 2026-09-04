@@ -4,30 +4,27 @@
     <DialogContent>
         @if (DelegatedToCname is not null)
         {
-            <MudText Typo="Typo.body2" Class="mb-2">
+            <MudAlert Severity="Severity.Warning" Class="mb-3">
                 <code>@RecordName</code> is currently a CNAME delegated to <code>@DelegatedToCname</code> —
-                likely a third-party service managing this record. dotMARC can't safely replace a CNAME
-                automatically. Remove it manually at your DNS provider first, then try the push again.
-            </MudText>
+                likely a third-party service managing this record. DNS doesn't allow a CNAME to
+                coexist with any other record type, so proceeding will <b>delete that CNAME</b> and
+                create a plain record dotMARC manages instead. The third-party delegation will be
+                lost — this can't be undone automatically.
+            </MudAlert>
         }
         else
         {
             <MudText Typo="Typo.body2" Class="mb-2">Current value at <code>@RecordName</code>:</MudText>
             <MudText Typo="Typo.body2" Class="mb-4" Style="font-family: monospace; word-break: break-all;">@ExistingValue</MudText>
-            <MudText Typo="Typo.body2" Class="mb-2">Will be replaced with:</MudText>
-            <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">@ProposedValue</MudText>
         }
+        <MudText Typo="Typo.body2" Class="mb-2">Will be replaced with:</MudText>
+        <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">@ProposedValue</MudText>
     </DialogContent>
     <DialogActions>
-        @if (DelegatedToCname is not null)
-        {
-            <MudButton OnClick="Cancel">Close</MudButton>
-        }
-        else
-        {
-            <MudButton OnClick="Cancel">Cancel</MudButton>
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">Apply</MudButton>
-        }
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="@(DelegatedToCname is not null ? Color.Warning : Color.Primary)" Variant="Variant.Filled" OnClick="Confirm">
+            @(DelegatedToCname is not null ? "Delete CNAME & Replace" : "Apply")
+        </MudButton>
     </DialogActions>
 </MudDialog>
 

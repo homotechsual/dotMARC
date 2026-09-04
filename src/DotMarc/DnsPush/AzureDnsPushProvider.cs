@@ -138,6 +138,11 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         // "mta-sts.contoso.co.uk" under zone "contoso.co.uk" -> relative record name "mta-sts".
         var relativeName = change.Name[..^(zoneName.Length + 1)];
 
+        if (change.Kind == DnsRecordChangeKind.Replace)
+        {
+            return await ReplaceRecordAsync(zone, relativeName, change, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             if (string.Equals(change.RecordType, "CNAME", StringComparison.OrdinalIgnoreCase))
@@ -171,6 +176,53 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         catch (RequestFailedException ex)
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the record push: {ex.Message}");
+        }
+
+        return new DnsPushResult(DnsPushOutcome.Pushed, null);
+    }
+
+    /// <summary>Deletes whatever record of change.ExistingRecordType currently exists at
+    /// relativeName, then creates a change.RecordType record with change.DesiredValue in its
+    /// place. DNS doesn't allow a CNAME to coexist with any other record type at the same name, so
+    /// this is the only way to convert a third-party CNAME delegation into a record dotMARC
+    /// manages directly. If the delete succeeds but the create then fails, the name is left with
+    /// neither record; that failure is reported explicitly rather than attempting an automatic
+    /// rollback (see the design spec's failure-handling decision).</summary>
+    private static async Task<DnsPushResult> ReplaceRecordAsync(DnsZoneResource zone, string relativeName, DnsRecordChange change, CancellationToken cancellationToken)
+    {
+        var existingType = change.ExistingRecordType ?? change.RecordType;
+
+        try
+        {
+            if (string.Equals(existingType, "CNAME", StringComparison.OrdinalIgnoreCase))
+            {
+                var existingRecord = await zone.GetDnsCnameRecords().GetAsync(relativeName, cancellationToken).ConfigureAwait(false);
+                await existingRecord.Value.DeleteAsync(WaitUntil.Completed, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to delete an existing {existingType} record — only CNAME is supported for a replace.");
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"The {existingType} record at {change.Name} no longer exists at Azure DNS — it may have been removed since this page loaded.");
+        }
+        catch (RequestFailedException ex)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected deleting the existing {existingType} record: {ex.Message} — nothing was changed.");
+        }
+
+        try
+        {
+            var txtRecords = zone.GetDnsTxtRecords();
+            var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
+            data.DnsTxtRecords.Add(new DnsTxtRecordInfo { Values = { change.DesiredValue } });
+            await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (RequestFailedException ex)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed: {ex.Message} — this record needs manual attention now.");
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
