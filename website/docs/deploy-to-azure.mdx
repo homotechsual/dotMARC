@@ -112,35 +112,16 @@ deployment's first startup, without it, the tightened authorization policy locks
 including you.
 :::
 
-### Optional: DNS provider push secrets
+### Optional: Key Vault-backed secret storage
 
-[DNS provider push](./getting-started.mdx#dns-provider-push-optional) is independently optional
-per provider, skip either (or both) and that provider's push button simply never appears. The
-template already provisions `CloudflareDns-ClientSecret` and `AzureDns-ClientSecret` as empty Key
-Vault secrets and wires them to the container the same way as the three required secrets above,
-non-secret values (`cloudflareDnsClientId`, `azureDnsTenantId`, `azureDnsClientId`) are ordinary
-Bicep parameters, set them in `main.parameters.json` alongside the others in step 1, or pass them
-inline. Set whichever secret(s) you need after deployment:
-
-```powershell
-az keyvault secret set --vault-name $KV --name CloudflareDns-ClientSecret --value "<Cloudflare OAuth client secret>"
-az keyvault secret set --vault-name $KV --name AzureDns-ClientSecret --value "<Azure DNS app registration client secret>"
-
-az containerapp revision restart --resource-group $RG --name $APP --revision $REVISION
-```
-
-(`$KV`, `$APP`, and `$REVISION` are the same variables from step 4 above, re-run those lookups
-first if you're doing this in a fresh shell.)
-
-### Optional: HaloPSA Key Vault storage
-
-By default the HaloPSA API client secret entered through Alert settings is encrypted and stored
-in Postgres. To store it in this deployment's Key Vault instead, redeploy with
-`enableHaloPsaKeyVaultWrite` set to `true` - this grants the container app's managed identity a
-narrowly-scoped write role on the vault (see `infra/main.bicep`'s `haloPsaKeyVaultWriteRole`, it
-adds only `secrets/setSecret`, read is already covered by the existing `Key Vault Secrets User`
-assignment). No manual `az keyvault secret set` needed here, the app writes the secret itself the
-first time you save it from Alert settings.
+By default, runtime-editable secrets (the HaloPSA API client secret, Cloudflare/Azure DNS push
+OAuth client secrets — anything configured through an in-app settings page rather than a deployment
+parameter) are encrypted and stored in Postgres. To store them in this deployment's Key Vault
+instead, redeploy with `enableKeyVaultWrite` set to `true` — this grants the container app's
+managed identity a narrowly-scoped write role on the vault (see `infra/main.bicep`'s
+`keyVaultWriteRole`, it adds only `secrets/setSecret`, read is already covered by the existing
+`Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app
+writes each secret itself the first time you save it from the relevant settings page.
 
 ## 5. Re-running the template later (e.g. to turn on MTA-STS hosting)
 
