@@ -24,14 +24,12 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
     private readonly ISecretStore _secretStore;
     private readonly HttpClient _http;
-    private readonly ILogger<CloudflareDnsPushProvider> _logger;
 
-    public CloudflareDnsPushProvider(IDbContextFactory<DotMarcDbContext> dbFactory, ISecretStore secretStore, HttpClient http, ILogger<CloudflareDnsPushProvider> logger)
+    public CloudflareDnsPushProvider(IDbContextFactory<DotMarcDbContext> dbFactory, ISecretStore secretStore, HttpClient http)
     {
         _dbFactory = dbFactory;
         _secretStore = secretStore;
         _http = http;
-        _logger = logger;
     }
 
     public string ProviderKey => "cloudflare";
@@ -144,16 +142,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/zones?name={Uri.EscapeDataString(zoneName)}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        // TEMPORARY diagnostic logging while chasing an unexplained "zone not found" outcome —
-        // remove once resolved. The raw body carries zone metadata (names, IDs, plan info) but
-        // nothing secret — the bearer token itself is never logged.
-        _logger.LogWarning("Cloudflare zone lookup for {ZoneName}: status={StatusCode}, body={Body}", zoneName, (int)response.StatusCode, rawBody);
         if (!response.IsSuccessStatusCode)
         {
             return (null, (int)response.StatusCode);
         }
-        var zones = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<List<IdRecord>>>(rawBody);
+        var zones = await response.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
         return (zones?.Result?.FirstOrDefault()?.Id, null);
     }
 
@@ -165,11 +158,6 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        // TEMPORARY diagnostic logging while chasing an unexplained record-push failure — remove
-        // once resolved.
-        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        _logger.LogWarning("Cloudflare record create for {RecordType} {RecordName}: status={StatusCode}, body={Body}",
-            change.RecordType, change.Name, (int)response.StatusCode, rawBody);
         return response.IsSuccessStatusCode
             ? new DnsPushResult(DnsPushOutcome.Pushed, null)
             : new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record push ({(int)response.StatusCode}).");
@@ -181,16 +169,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             $"{ApiBase}/zones/{zoneId}/dns_records?type={change.RecordType}&name={Uri.EscapeDataString(change.Name)}");
         findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
-        var findRawBody = await findResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        // TEMPORARY diagnostic logging while chasing an unexplained "zone not found" outcome on
-        // the record-merge path specifically — remove once resolved.
-        _logger.LogWarning("Cloudflare existing-record lookup for {RecordType} {RecordName}: status={StatusCode}, body={Body}",
-            change.RecordType, change.Name, (int)findResponse.StatusCode, findRawBody);
         if (!findResponse.IsSuccessStatusCode)
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}).");
         }
-        var existing = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<List<IdRecord>>>(findRawBody);
+        var existing = await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
         var recordId = existing?.Result?.FirstOrDefault()?.Id;
         if (recordId is null)
         {
@@ -203,11 +186,6 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         };
         updateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var updateResponse = await _http.SendAsync(updateRequest, cancellationToken).ConfigureAwait(false);
-        // TEMPORARY diagnostic logging while chasing an unexplained record-push failure — remove
-        // once resolved.
-        var updateRawBody = await updateResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        _logger.LogWarning("Cloudflare record update for {RecordType} {RecordName}: status={StatusCode}, body={Body}",
-            change.RecordType, change.Name, (int)updateResponse.StatusCode, updateRawBody);
         return updateResponse.IsSuccessStatusCode
             ? new DnsPushResult(DnsPushOutcome.Pushed, null)
             : new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record update ({(int)updateResponse.StatusCode}).");
