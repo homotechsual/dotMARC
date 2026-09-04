@@ -15,7 +15,7 @@ public sealed class DnsPushProviderLookupTests
         public Task<string> BuildAuthorizationUrlAsync(string state, string codeChallenge, string redirectUri, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<DnsPushResult> ExchangeAndPushAsync(string code, string codeVerifier, string redirectUri, DnsRecordChange change, CancellationToken cancellationToken) =>
+        public Task<DnsPushResult> ExchangeAndPushAsync(string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken) =>
             throw new NotImplementedException();
     }
 

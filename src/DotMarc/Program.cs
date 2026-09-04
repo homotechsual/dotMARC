@@ -555,7 +555,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     }
 
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
-    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, change, CancellationToken.None);
+    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, [change], CancellationToken.None);
 
     var resultFlag = result.Outcome switch
     {

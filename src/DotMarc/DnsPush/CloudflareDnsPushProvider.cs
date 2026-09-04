@@ -57,7 +57,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, DnsRecordChange change, CancellationToken cancellationToken)
+        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(CloudflareDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
@@ -72,6 +72,20 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare rejected the authorization code exchange.");
         }
 
+        foreach (var change in changes)
+        {
+            var result = await PushOneChangeAsync(change, accessToken, cancellationToken).ConfigureAwait(false);
+            if (result.Outcome != DnsPushOutcome.Pushed)
+            {
+                return result;
+            }
+        }
+
+        return new DnsPushResult(DnsPushOutcome.Pushed, null);
+    }
+
+    private async Task<DnsPushResult> PushOneChangeAsync(DnsRecordChange change, string accessToken, CancellationToken cancellationToken)
+    {
         var zoneName = ZoneNameFor(change.Name);
         var (zoneId, zoneErrorStatus) = await FindZoneIdAsync(zoneName, accessToken, cancellationToken).ConfigureAwait(false);
         if (zoneErrorStatus.HasValue)

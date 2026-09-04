@@ -56,7 +56,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     }
 
     public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, DnsRecordChange change, CancellationToken cancellationToken)
+        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(AzureDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
@@ -87,6 +87,20 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
 
         var armClient = new ArmClient(new FixedTokenCredential(authResult.AccessToken, authResult.ExpiresOn));
 
+        foreach (var change in changes)
+        {
+            var result = await PushOneChangeAsync(armClient, change, cancellationToken).ConfigureAwait(false);
+            if (result.Outcome != DnsPushOutcome.Pushed)
+            {
+                return result;
+            }
+        }
+
+        return new DnsPushResult(DnsPushOutcome.Pushed, null);
+    }
+
+    private static async Task<DnsPushResult> PushOneChangeAsync(ArmClient armClient, DnsRecordChange change, CancellationToken cancellationToken)
+    {
         var zoneName = ZoneNameFor(change.Name);
         var zone = await FindZoneAsync(armClient, zoneName, cancellationToken).ConfigureAwait(false);
         if (zone is null)

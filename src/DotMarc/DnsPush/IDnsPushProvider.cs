@@ -23,6 +23,10 @@ public interface IDnsPushProvider
 
     Task<string> BuildAuthorizationUrlAsync(string state, string codeChallenge, string redirectUri, CancellationToken cancellationToken = default);
 
+    /// <summary>Pushes every change in order against one token exchange (the authorization code is
+    /// single-use, so all changes for one push action have to ride the same exchange). Stops at
+    /// the first change that doesn't return Pushed and returns that result — a change already
+    /// pushed before a later one fails is NOT rolled back.</summary>
     Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, DnsRecordChange change, CancellationToken cancellationToken);
+        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken);
 }
