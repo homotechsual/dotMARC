@@ -12,6 +12,7 @@
 @inject IOptions<MtaStsOptions> MtaStsOptions
 @inject IMxHostsLookup MxHostsLookup
 @inject IDnsProviderDetector DnsProviderDetector
+@inject IMtaStsHostProvisioner MtaStsHostProvisioner
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
 @inject NavigationManager Navigation
 
@@ -36,7 +37,13 @@
             <text> That's this deployment's raw Container App hostname, not a nicer custom domain,
             because Azure's free managed certificates refuse to issue through an intermediate CNAME
             like one. Each enabled domain adds its own custom domain and certificate to this app;
-            Azure doesn't publish a hard limit on either, so there's no cap to plan around here.</text>
+            Azure doesn't publish a hard limit on either, so there's no cap to plan around here.
+            @if (!string.IsNullOrEmpty(_domainVerificationId))
+            {
+                <text> Azure also requires a second record proving you control the domain, the same
+                value for every domain on this deployment:
+                <code>asuid.mta-sts.&lt;domain&gt; TXT @_domainVerificationId</code>.</text>
+            }</text>
         }</text>
     }
 </HelpAlert>
@@ -110,12 +117,18 @@ else
 
 @code {
     private List<MtaStsRow>? _domains;
+    private string? _domainVerificationId;
 
     private bool AnyUnsavedChanges => _domains?.Any(d => d.IsDirty) ?? false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+
+        if (string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
+        }
 
         if (RendererInfo.IsInteractive)
         {
