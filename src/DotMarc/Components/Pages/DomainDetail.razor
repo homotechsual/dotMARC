@@ -412,47 +412,52 @@ else
                 return;
             }
 
-            if (_domain!.DmarcCheckStatus != DmarcCheckStatus.Misconfigured)
-            {
-                await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "dmarc");
-                return;
-            }
-
-            string? existing;
+            DnsRecordLookupResult existing;
             try
             {
-                var dmarcLookup = await DmarcTxtLookup.LookupAsync(DomainName, CancellationToken.None);
-                existing = dmarcLookup.DirectValue;
+                existing = await DmarcTxtLookup.LookupAsync(DomainName, CancellationToken.None);
             }
             catch (Exception)
             {
-                // DmarcTxtLookup.LookupAsync mirrors MxHostsLookup.LookupAsync and doesn't catch
-                // internally, so its caller must — matches FetchMxHostsAsync in ManageMtaSts.razor.
-                // Left uncaught, an HttpRequestException here would escape a Blazor button-click
-                // event handler and take down the whole circuit instead of just this action.
                 Snackbar.Add($"Failed to look up {DomainName}'s current DMARC record. Try again.", Severity.Error);
                 return;
             }
 
-            var merged = existing is null ? null : DmarcRuaMerge.TryMerge(existing, GraphOptions.Value.MailboxAddress);
-            if (existing is null || merged is null)
+            string proposed;
+            if (existing.DirectValue is null)
             {
-                Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
-                return;
+                proposed = $"v=DMARC1; p=none; rua=mailto:{GraphOptions.Value.MailboxAddress}";
+            }
+            else
+            {
+                var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, GraphOptions.Value.MailboxAddress);
+                if (merged is null)
+                {
+                    Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                    return;
+                }
+                proposed = merged;
             }
 
-            var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
+            if (DnsRecordPushDecision.NeedsConfirmation(existing.DirectValue, existing.DelegatedToCname, proposed))
             {
-                { x => x.DomainName, DomainName },
-                { x => x.ExistingValue, existing },
-                { x => x.ProposedValue, merged }
-            };
-            var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC record fix", parameters);
-            var result = await dialogRef.Result;
-            if (result is { Canceled: false })
-            {
-                await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "dmarc");
+                var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
+                {
+                    { x => x.RecordDescription, "DMARC record" },
+                    { x => x.RecordName, $"_dmarc.{DomainName}" },
+                    { x => x.ExistingValue, existing.DirectValue ?? "" },
+                    { x => x.ProposedValue, proposed },
+                    { x => x.DelegatedToCname, existing.DelegatedToCname }
+                };
+                var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC record", parameters);
+                var result = await dialogRef.Result;
+                if (result is null || result.Canceled)
+                {
+                    return;
+                }
             }
+
+            await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "dmarc");
         }
         finally
         {
@@ -474,6 +479,52 @@ else
         {
             Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
             return;
+        }
+
+        DnsRecordLookupResult existing;
+        try
+        {
+            existing = await TlsrptTxtLookup.LookupAsync(DomainName, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to look up {DomainName}'s current TLS reporting record. Try again.", Severity.Error);
+            return;
+        }
+
+        var mailbox = GraphOptions.Value.TlsrptMailboxAddress;
+        string proposed;
+        if (existing.DirectValue is null)
+        {
+            proposed = $"v=TLSRPTv1; rua=mailto:{mailbox}";
+        }
+        else
+        {
+            var merged = TlsrptRuaMerge.TryMerge(existing.DirectValue, mailbox);
+            if (merged is null)
+            {
+                Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                return;
+            }
+            proposed = merged;
+        }
+
+        if (DnsRecordPushDecision.NeedsConfirmation(existing.DirectValue, existing.DelegatedToCname, proposed))
+        {
+            var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
+            {
+                { x => x.RecordDescription, "TLS reporting record" },
+                { x => x.RecordName, $"_smtp._tls.{DomainName}" },
+                { x => x.ExistingValue, existing.DirectValue ?? "" },
+                { x => x.ProposedValue, proposed },
+                { x => x.DelegatedToCname, existing.DelegatedToCname }
+            };
+            var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push TLS reporting record", parameters);
+            var result = await dialogRef.Result;
+            if (result is null || result.Canceled)
+            {
+                return;
+            }
         }
 
         await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "tlsrpt");
