@@ -9,10 +9,10 @@ namespace DotMarc.Notifications;
 public sealed class HaloPsaClient : IHaloPsaClient
 {
     private readonly HttpClient _httpClient;
-    private readonly IHaloSecretStore _secretStore;
+    private readonly ISecretStore _secretStore;
     private readonly HaloPsaTokenCache _tokenCache;
 
-    public HaloPsaClient(HttpClient httpClient, IHaloSecretStore secretStore, HaloPsaTokenCache tokenCache)
+    public HaloPsaClient(HttpClient httpClient, ISecretStore secretStore, HaloPsaTokenCache tokenCache)
     {
         _httpClient = httpClient;
         _secretStore = secretStore;
@@ -64,7 +64,7 @@ public sealed class HaloPsaClient : IHaloPsaClient
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, CancellationToken cancellationToken)
     {
-        var clientSecret = await _secretStore.GetClientSecretAsync(cancellationToken).ConfigureAwait(false)
+        var clientSecret = await _secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("HaloPSA client secret is not configured.");
 
         var response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);

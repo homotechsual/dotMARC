@@ -61,8 +61,8 @@ builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpg
 
 // Previously unconfigured — Data Protection fell back to its default (non-durable across
 // restarts/redeploys/replicas) key store, which DnsPushStateProtector tolerated only because its
-// state is minutes-lived. The HaloPSA client secret (see DatabaseHaloSecretStore) needs real
-// durability, the same argument that already moved NotificationSettings into Postgres.
+// state is minutes-lived. Secrets stored via DatabaseSecretStore need real durability, the same
+// argument that already moved NotificationSettings into Postgres.
 builder.Services.AddDataProtection().PersistKeysToDbContext<DotMarcDbContext>();
 
 // DemoDataResetService and the Razor components resolve IOptions<DemoOptions> from the
@@ -124,18 +124,18 @@ builder.Services.AddHttpClient<ITeamsWebhookClient, TeamsWebhookClient>();
 builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
 builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();
 
-// KeyVault:VaultUri is only set by infra/main.bicep when enableHaloPsaKeyVaultWrite is true
-// (see KeyVault__VaultUri there); every other deployment — including local/Docker Compose —
-// leaves it unset and falls back to the Postgres-backed store from Task 2.
+// KeyVault:VaultUri is only set by infra/main.bicep when enableKeyVaultWrite is true (see
+// KeyVault__VaultUri there); every other deployment — including local/Docker Compose — leaves it
+// unset and falls back to the Postgres-backed store.
 var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
 if (!string.IsNullOrWhiteSpace(keyVaultUri))
 {
     builder.Services.AddSingleton(new SecretClient(new Uri(keyVaultUri), new DefaultAzureCredential()));
-    builder.Services.AddSingleton<IHaloSecretStore, KeyVaultHaloSecretStore>();
+    builder.Services.AddSingleton<ISecretStore, KeyVaultSecretStore>();
 }
 else
 {
-    builder.Services.AddSingleton<IHaloSecretStore, DatabaseHaloSecretStore>();
+    builder.Services.AddSingleton<ISecretStore, DatabaseSecretStore>();
 }
 
 builder.Services.AddSingleton<HaloPsaTokenCache>();

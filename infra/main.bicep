@@ -51,8 +51,8 @@ param cloudflareDnsClientId string = ''
 param azureDnsTenantId string = ''
 param azureDnsClientId string = ''
 
-@description('Grant the container app write access to its own Key Vault, used to store the HaloPSA API client secret entered through Alert settings at runtime rather than in Postgres. Off by default, since it widens the managed identity beyond Key Vault Secrets User (read-only) — see deploy-to-azure.mdx.')
-param enableHaloPsaKeyVaultWrite bool = false
+@description('Grant the container app write access to its own Key Vault, used to store runtime-editable secrets (HaloPSA API client secret, Cloudflare/Azure DNS push OAuth client secrets) entered through their respective settings pages rather than in Postgres. Off by default, since it widens the managed identity beyond Key Vault Secrets User (read-only) — see deploy-to-azure.mdx.')
+param enableKeyVaultWrite bool = false
 
 var postgresServerName = '${baseName}-pg-${uniqueString(resourceGroup().id)}'
 var keyVaultName = '${take(baseName, 7)}-kv-${uniqueString(resourceGroup().id)}'
@@ -201,11 +201,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CloudflareDns__ClientId', value: cloudflareDnsClientId }
             { name: 'AzureDns__TenantId', value: azureDnsTenantId }
             { name: 'AzureDns__ClientId', value: azureDnsClientId }
-            // Harmless to always set, same pattern as the flags above: KeyVaultHaloSecretStore is
+            // Harmless to always set, same pattern as the flags above: KeyVaultSecretStore is
             // only selected in Program.cs when this is non-blank, which is only when
-            // enableHaloPsaKeyVaultWrite is true — otherwise the app falls back to
-            // DatabaseHaloSecretStore regardless of this value.
-            { name: 'KeyVault__VaultUri', value: enableHaloPsaKeyVaultWrite ? keyVault.properties.vaultUri : '' }
+            // enableKeyVaultWrite is true — otherwise the app falls back to
+            // DatabaseSecretStore regardless of this value.
+            { name: 'KeyVault__VaultUri', value: enableKeyVaultWrite ? keyVault.properties.vaultUri : '' }
             { name: 'Graph__ClientSecret', secretRef: 'graph-client-secret' }
             { name: 'EntraId__ClientSecret', secretRef: 'entraid-client-secret' }
             { name: 'ConnectionStrings__DotMarc', secretRef: 'connectionstrings-dotmarc' }
@@ -326,15 +326,15 @@ resource mtaStsManagedEnvironmentRoleAssignment 'Microsoft.Authorization/roleAss
 }
 
 // The container app can already read every secret in this vault (Key Vault Secrets User,
-// assigned above). Writing the HaloPSA client secret at runtime needs one narrow addition on top
-// of that — not a broader get+set role — matching the MTA-STS custom roles' precedent of the
-// smallest permission delta Azure's RBAC surface allows, gated off by default since it's a real
-// widening of what this identity can do.
-resource haloPsaKeyVaultWriteRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enableHaloPsaKeyVaultWrite) {
-  name: guid(keyVault.id, 'dotMARC HaloPSA Key Vault Write Role')
+// assigned above). Writing runtime secrets needs one narrow addition on top of that — not a
+// broader get+set role — matching the MTA-STS custom roles' precedent of the smallest permission
+// delta Azure's RBAC surface allows, gated off by default since it's a real widening of what this
+// identity can do.
+resource keyVaultWriteRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enableKeyVaultWrite) {
+  name: guid(keyVault.id, 'dotMARC Key Vault Write Role')
   properties: {
-    roleName: 'dotMARC HaloPSA Key Vault Write Role (${baseName})'
-    description: 'Lets dotMARC write its own HaloPSA API client secret into this Key Vault at runtime.'
+    roleName: 'dotMARC Key Vault Write Role (${baseName})'
+    description: 'Lets dotMARC write runtime secrets into this Key Vault at runtime.'
     type: 'CustomRole'
     permissions: [
       {
@@ -352,11 +352,11 @@ resource haloPsaKeyVaultWriteRole 'Microsoft.Authorization/roleDefinitions@2022-
   }
 }
 
-resource haloPsaKeyVaultWriteRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableHaloPsaKeyVaultWrite) {
-  name: guid(keyVault.id, containerApp.id, 'dotMARC HaloPSA Key Vault Write Role Assignment')
+resource keyVaultWriteRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableKeyVaultWrite) {
+  name: guid(keyVault.id, containerApp.id, 'dotMARC Key Vault Write Role Assignment')
   scope: keyVault
   properties: {
-    roleDefinitionId: haloPsaKeyVaultWriteRole.id
+    roleDefinitionId: keyVaultWriteRole.id
     principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
   }

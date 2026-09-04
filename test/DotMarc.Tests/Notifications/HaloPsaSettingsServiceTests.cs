@@ -34,7 +34,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
     private DotMarcDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
-    private DatabaseHaloSecretStore CreateSecretStore() =>
+    private DatabaseSecretStore CreateSecretStore() =>
         new(new FakeDbContextFactory(_connectionString), DataProtectionProvider.Create("DotMarc.Tests.HaloPsaSettingsService"));
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
         Assert.True(saved.Enabled);
         Assert.Equal("contoso", saved.AccountName);
         Assert.False(saved.ClientSecretConfigured);
-        Assert.Null(await secretStore.GetClientSecretAsync());
+        Assert.Null(await secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
         await using var verify = CreateContext();
         var saved = await HaloPsaSettingsService.GetAsync(verify);
         Assert.True(saved.ClientSecretConfigured);
-        Assert.Equal("the-real-secret", await secretStore.GetClientSecretAsync());
+        Assert.Equal("the-real-secret", await secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
         await using var secondContext = CreateContext();
         await HaloPsaSettingsService.SaveAsync(secondContext, secretStore, new HaloPsaSettings { Enabled = false, AccountName = "changed" }, newClientSecret: null);
 
-        Assert.Equal("first-secret", await secretStore.GetClientSecretAsync());
+        Assert.Equal("first-secret", await secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey));
 
         await using var verify = CreateContext();
         var verified = await HaloPsaSettingsService.GetAsync(verify);

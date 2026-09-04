@@ -4,14 +4,14 @@ using Microsoft.EntityFrameworkCore;
 namespace DotMarc.Notifications;
 
 /// <summary>Read/update the singleton HaloPsaSettings row. Follows NotificationSettingsService's
-/// convention exactly, plus the client secret's own write path via IHaloSecretStore — the secret
+/// convention exactly, plus the client secret's own write path via ISecretStore — the secret
 /// never travels through the HaloPsaSettings object this returns to a caller.</summary>
 public static class HaloPsaSettingsService
 {
     public static Task<HaloPsaSettings> GetAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) =>
         context.HaloPsaSettings.SingleAsync(cancellationToken);
 
-    public static async Task SaveAsync(DotMarcDbContext context, IHaloSecretStore secretStore, HaloPsaSettings updated, string? newClientSecret, CancellationToken cancellationToken = default)
+    public static async Task SaveAsync(DotMarcDbContext context, ISecretStore secretStore, HaloPsaSettings updated, string? newClientSecret, CancellationToken cancellationToken = default)
     {
         var existing = await context.HaloPsaSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
 
@@ -27,7 +27,7 @@ public static class HaloPsaSettingsService
 
         if (!string.IsNullOrWhiteSpace(newClientSecret))
         {
-            await secretStore.SetClientSecretAsync(newClientSecret, cancellationToken).ConfigureAwait(false);
+            await secretStore.SetSecretAsync(HaloPsaSettings.SecretStoreKey, newClientSecret, cancellationToken).ConfigureAwait(false);
             existing.ClientSecretConfigured = true;
         }
 

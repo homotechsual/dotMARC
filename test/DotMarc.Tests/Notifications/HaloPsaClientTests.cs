@@ -8,10 +8,10 @@ namespace DotMarc.Tests.Notifications;
 
 public sealed class HaloPsaClientTests
 {
-    private sealed class FixedHaloSecretStore(string secret) : IHaloSecretStore
+    private sealed class FixedSecretStore(string secret) : ISecretStore
     {
-        public Task SetClientSecretAsync(string clientSecret, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<string?> GetClientSecretAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(secret);
+        public Task SetSecretAsync(string key, string value, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<string?> GetSecretAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(secret);
     }
 
     private static HaloPsaSettings Settings => new()
@@ -28,7 +28,7 @@ public sealed class HaloPsaClientTests
     {
         var handler = new FakeHttpMessageHandler();
         var http = new HttpClient(handler);
-        var client = new HaloPsaClient(http, new FixedHaloSecretStore("the-secret"), new HaloPsaTokenCache());
+        var client = new HaloPsaClient(http, new FixedSecretStore("the-secret"), new HaloPsaTokenCache());
         return (client, handler);
     }
 
@@ -113,7 +113,7 @@ public sealed class HaloPsaClientTests
         // settings") isn't served the other credential's cached token.
         var handler = new FakeHttpMessageHandler();
         var sharedCache = new HaloPsaTokenCache();
-        var client = new HaloPsaClient(new HttpClient(handler), new FixedHaloSecretStore("the-secret"), sharedCache);
+        var client = new HaloPsaClient(new HttpClient(handler), new FixedSecretStore("the-secret"), sharedCache);
 
         var settingsA = new HaloPsaSettings { AccountName = "contoso", AuthServerUrl = "https://contoso.halopsa.com/auth", ResourceServerUrl = "https://contoso.halopsa.com/api", ClientId = "client-a", TicketTypeId = 5, DefaultPriorityId = 2 };
         var settingsB = new HaloPsaSettings { AccountName = "contoso", AuthServerUrl = "https://contoso.halopsa.com/auth", ResourceServerUrl = "https://contoso.halopsa.com/api", ClientId = "client-b", TicketTypeId = 5, DefaultPriorityId = 2 };

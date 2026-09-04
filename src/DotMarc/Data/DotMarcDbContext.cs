@@ -30,6 +30,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
+    public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -185,6 +186,11 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<AlertEvent>(entity =>
         {
             entity.HasIndex(e => new { e.DomainName, e.AlertType, e.CreatedUtc });
+        });
+
+        modelBuilder.Entity<EncryptedSecret>(entity =>
+        {
+            entity.HasKey(s => s.Key);
         });
 
         // Seeds the one row every reader relies on existing (see NotificationSettings's doc

@@ -15,6 +15,6 @@
     "cloudflareDnsClientId": { "value": "" },
     "azureDnsTenantId": { "value": "" },
     "azureDnsClientId": { "value": "" },
-    "enableHaloPsaKeyVaultWrite": { "value": false }
+    "enableKeyVaultWrite": { "value": false }
   }
 }
