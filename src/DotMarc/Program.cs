@@ -532,7 +532,11 @@ app.MapGet("/dns-push/{provider}/callback", async (
             var verificationId = await mtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
             if (!string.IsNullOrEmpty(verificationId))
             {
-                changes.Add(new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, null, domain.Name));
+                var existingAsuid = await mtaStsCnameLookup.LookupAsuidTxtAsync(domain.Name, CancellationToken.None);
+                var asuidChange = existingAsuid is null
+                    ? new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, null, domain.Name)
+                    : new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, existingAsuid, domain.Name);
+                changes.Add(asuidChange);
             }
         }
     }

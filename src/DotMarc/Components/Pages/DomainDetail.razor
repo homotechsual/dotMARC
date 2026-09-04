@@ -435,7 +435,7 @@ else
                 };
                 var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC record", parameters);
                 var result = await dialogRef.Result;
-                if (result is null || result.Canceled)
+                if (existing.DelegatedToCname is not null || result is null || result.Canceled)
                 {
                     return;
                 }
@@ -477,6 +477,12 @@ else
         }
 
         var mailbox = GraphOptions.Value.TlsrptMailboxAddress;
+        if (string.IsNullOrWhiteSpace(mailbox))
+        {
+            Snackbar.Add("TLS reporting isn't configured on this deployment.", Severity.Warning);
+            return;
+        }
+
         string proposed;
         if (existing.DirectValue is null)
         {
@@ -505,7 +511,7 @@ else
             };
             var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push TLS reporting record", parameters);
             var result = await dialogRef.Result;
-            if (result is null || result.Canceled)
+            if (existing.DelegatedToCname is not null || result is null || result.Canceled)
             {
                 return;
             }

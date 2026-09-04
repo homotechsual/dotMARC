@@ -27,6 +27,18 @@ public sealed class MtaStsCnameLookup : IMtaStsCnameLookup
         return answer?.Data.TrimEnd('.');
     }
 
+    public async Task<string?> LookupAsuidTxtAsync(string domainName, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString($"asuid.mta-sts.{domainName}")}&type=TXT");
+        request.Headers.Accept.ParseAdd("application/dns-json");
+        var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
+        var answer = parsed.Answer?.FirstOrDefault(a => a.Type == 16);
+        return answer is null ? null : string.Join("", answer.Data.Split("\" \"")).Trim('"');
+    }
+
     private sealed record DnsOverHttpsResponse([property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
     private sealed record DnsAnswer([property: JsonPropertyName("type")] int Type, [property: JsonPropertyName("data")] string Data);
 }

@@ -96,10 +96,9 @@ changing MX records. **MX hosts** should list every hostname mail for this domai
 delivered to, one per line. A receiving server rejects the connection if the live MX record
 points somewhere not on this list.
 
-The sync icon next to the MX hosts field looks up the domain's current MX records and fills the
-field in for you, ordered by preference. It's a starting point, not a save, review the result (and
-still hit **Save**) before it takes effect, since what's live in DNS right now might not match
-what you actually want published.
+MX hosts are fetched automatically from DNS the first time you enable MTA-STS for a domain, and
+prefilled into the field. Review the result and edit it if needed (then hit **Save**) before it
+takes effect, since what's live in DNS right now might not match what you actually want published.
 
 ## Status
 

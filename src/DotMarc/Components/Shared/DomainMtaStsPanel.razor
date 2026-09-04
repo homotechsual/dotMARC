@@ -11,12 +11,31 @@
 @inject IOptions<MtaStsOptions> MtaStsOptions
 @inject IMxHostsLookup MxHostsLookup
 @inject IMtaStsCnameLookup MtaStsCnameLookup
+@inject IMtaStsHostProvisioner MtaStsHostProvisioner
 @inject IDnsProviderDetector DnsProviderDetector
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4 my-2" Elevation="1">
+    @if (string.IsNullOrEmpty(MtaStsOptions.Value.HostingHostname))
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
+            MTA-STS hosting isn't configured on this deployment yet, so enabling this domain won't
+            progress past "Waiting for DNS."
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Add a CNAME: <code>mta-sts.@Domain.Name → @MtaStsOptions.Value.HostingHostname</code>.
+            @if (!string.IsNullOrEmpty(_domainVerificationId))
+            {
+                <text> Azure also requires a second record proving you control the domain:
+                <code>asuid.mta-sts.@Domain.Name TXT @_domainVerificationId</code>.</text>
+            }
+        </MudAlert>
+    }
     <MudText Typo="Typo.subtitle1" Class="mb-2">Policy hosting status</MudText>
     <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(Domain.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(Domain.MtaStsStatus)</MudChip>
     @if (Domain.MtaStsCheckedUtc is { } checkedUtc)
@@ -59,6 +78,7 @@
 
             <MudExpansionPanels Class="mt-3">
                 <MudExpansionPanel Text="Advanced">
+                    <MudSwitch T="bool" @bind-Value="_enabled" Label="Enabled" Color="Color.Primary" Class="mb-2" />
                     <MudSelect T="MtaStsMode" @bind-Value="_mode" Label="Mode">
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Testing">Testing</MudSelectItem>
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Enforce">Enforce</MudSelectItem>
@@ -83,18 +103,34 @@
     private string _mxHostsText = "";
     private bool _isEnabling;
     private bool _isPushing;
+    private int _syncedDomainId;
+    private string? _domainVerificationId;
 
     protected override void OnParametersSet()
     {
+        if (_syncedDomainId == Domain.Id)
+        {
+            return;
+        }
+        _syncedDomainId = Domain.Id;
         _enabled = Domain.MtaStsEnabled;
         _mode = Domain.MtaStsMode;
         _maxAgeSeconds = Domain.MtaStsMaxAgeSeconds;
         _mxHostsText = string.Join('\n', Domain.MtaStsMxHosts);
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        if (RendererInfo.IsInteractive && string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
+        }
+    }
+
     private async Task EnableAsync()
     {
         _isEnabling = true;
+        var enabledSuccessfully = false;
         try
         {
             var mxHosts = await MxHostsLookup.LookupAsync(Domain.Name, CancellationToken.None);
@@ -118,7 +154,7 @@
             Domain.MtaStsStatus = MtaStsStatus.PendingDns;
 
             Snackbar.Add($"MTA-STS enabled for {Domain.Name}.", Severity.Success);
-            await PushCnameAsync();
+            enabledSuccessfully = true;
         }
         catch (Exception)
         {
@@ -127,6 +163,11 @@
         finally
         {
             _isEnabling = false;
+        }
+
+        if (enabledSuccessfully)
+        {
+            await PushCnameAsync();
         }
     }
 
@@ -140,6 +181,7 @@
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             await DomainManagementService.SetMtaStsConfigAsync(db, Domain.Id, _enabled, _mode, mxHosts, _maxAgeSeconds, CancellationToken.None);
+            Domain.MtaStsEnabled = _enabled;
             Domain.MtaStsMode = _mode;
             Domain.MtaStsMaxAgeSeconds = _maxAgeSeconds;
             Domain.MtaStsMxHosts = mxHosts;
@@ -156,6 +198,13 @@
         _isPushing = true;
         try
         {
+            var hostingHostname = MtaStsOptions.Value.HostingHostname;
+            if (string.IsNullOrEmpty(hostingHostname))
+            {
+                Snackbar.Add("MTA-STS hosting isn't configured on this deployment.", Severity.Warning);
+                return;
+            }
+
             var detected = await DnsProviderDetector.DetectAsync(Domain.Name, CancellationToken.None);
             var providerKey = detected switch
             {
@@ -170,13 +219,6 @@
                 return;
             }
 
-            var hostingHostname = MtaStsOptions.Value.HostingHostname;
-            if (string.IsNullOrEmpty(hostingHostname))
-            {
-                Snackbar.Add("MTA-STS hosting isn't configured on this deployment.", Severity.Warning);
-                return;
-            }
-
             string? existing;
             try
             {
@@ -188,7 +230,10 @@
                 return;
             }
 
-            if (DnsRecordPushDecision.NeedsConfirmation(existing, delegatedToCname: null, hostingHostname))
+            var existingForComparison = existing is not null && string.Equals(existing, hostingHostname, StringComparison.OrdinalIgnoreCase)
+                ? hostingHostname
+                : existing;
+            if (DnsRecordPushDecision.NeedsConfirmation(existingForComparison, delegatedToCname: null, hostingHostname))
             {
                 var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
                 {
