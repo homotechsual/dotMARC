@@ -223,10 +223,18 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected deleting the existing {existingType} record: {ex.Message} — nothing was changed.");
         }
+        catch (TaskCanceledException)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Looking up or deleting the existing {existingType} record at {change.Name} timed out — nothing was changed; try again.");
+        }
 
         // The delete above succeeded — from here on, any failure means the name now has NO
         // record at all, which is why the remaining failure path returns ReplaceFailedAfterDelete
-        // instead of the generic ProviderError.
+        // instead of the generic ProviderError. Catching TaskCanceledException alongside
+        // RequestFailedException matters specifically here: a transport-level timeout on this call
+        // is an Azure.Core TaskCanceledException, not a RequestFailedException, and letting it
+        // escape unhandled would hit the generic exception handler with no postMessage ever firing
+        // — the same silent-failure gap this outcome exists to prevent.
         try
         {
             var txtRecords = zone.GetDnsTxtRecords();
@@ -234,7 +242,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             data.DnsTxtRecords.Add(new DnsTxtRecordInfo { Values = { change.DesiredValue } });
             await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
-        catch (RequestFailedException ex)
+        catch (Exception ex) when (ex is RequestFailedException or TaskCanceledException)
         {
             return new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed: {ex.Message} — this name now has no record and needs manual attention.");
         }
