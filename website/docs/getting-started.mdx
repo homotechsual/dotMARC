@@ -122,6 +122,23 @@ hostnames dotMARC doesn't know about until a customer enables it.
    mta-sts.<their-domain> CNAME <your MtaSts__HostingHostname value>
    ```
 
+4. **Running on Azure only:** Container Apps also requires a domain-ownership TXT record before
+   it will bind the custom domain, in addition to the CNAME above:
+
+   ```txt
+   asuid.mta-sts.<their-domain> TXT <this deployment's verification ID>
+   ```
+
+   The value is the same for every domain this deployment hosts — find it on the **Manage
+   MTA-STS** page once any domain is enabled, or look it up directly:
+
+   ```powershell
+   az containerapp show --name <container-app-name> --resource-group <resource-group> --query "properties.customDomainVerificationId" -o tsv
+   ```
+
+   Self-hosted (Caddy) deployments don't need this — Caddy's on-demand TLS never checks domain
+   ownership via DNS.
+
 **If something is already bound to port 443/80 on this host** (your own reverse proxy for this
 app's hostname, or anything else), the bundled `caddy` service will fail to start — two processes
 can't both bind the same port. Two ways to handle it:
