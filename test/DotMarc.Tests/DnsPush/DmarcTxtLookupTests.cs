@@ -35,7 +35,7 @@ public sealed class DmarcTxtLookupTests
 
         var result = await lookup.LookupAsync("contoso.io", CancellationToken.None);
 
-        Assert.Equal("v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk", result);
+        Assert.Equal("v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk", result.DirectValue);
     }
 
     [Fact]
@@ -48,6 +48,6 @@ public sealed class DmarcTxtLookupTests
 
         var result = await lookup.LookupAsync("contoso.io", CancellationToken.None);
 
-        Assert.Equal("v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk", result);
+        Assert.Equal("v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk", result.DirectValue);
     }
 }

@@ -421,7 +421,8 @@ else
             string? existing;
             try
             {
-                existing = await DmarcTxtLookup.LookupAsync(DomainName, CancellationToken.None);
+                var dmarcLookup = await DmarcTxtLookup.LookupAsync(DomainName, CancellationToken.None);
+                existing = dmarcLookup.DirectValue;
             }
             catch (Exception)
             {
