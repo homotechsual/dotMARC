@@ -17,11 +17,6 @@ services:
       EntraId__ClientSecret: ${ENTRAID_CLIENT_SECRET:?Set ENTRAID_CLIENT_SECRET}
       InitialAdmins__Emails: ${INITIAL_ADMIN_EMAILS:-}
       MtaSts__HostingHostname: ${MTA_STS_HOSTING_HOSTNAME:-}
-      CloudflareDns__ClientId: ${CLOUDFLARE_DNS_CLIENT_ID:-}
-      CloudflareDns__ClientSecret: ${CLOUDFLARE_DNS_CLIENT_SECRET:-}
-      AzureDns__TenantId: ${AZURE_DNS_TENANT_ID:-}
-      AzureDns__ClientId: ${AZURE_DNS_CLIENT_ID:-}
-      AzureDns__ClientSecret: ${AZURE_DNS_CLIENT_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
