@@ -31,6 +31,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
     public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
+    public DbSet<CloudflareDnsSettings> CloudflareDnsSettings => Set<CloudflareDnsSettings>();
+    public DbSet<AzureDnsSettings> AzureDnsSettings => Set<AzureDnsSettings>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -199,5 +201,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         // migration itself, not something computed per-deployment at startup.
         modelBuilder.Entity<NotificationSettings>().HasData(new NotificationSettings { Id = 1 });
         modelBuilder.Entity<HaloPsaSettings>().HasData(new HaloPsaSettings { Id = 1 });
+        modelBuilder.Entity<CloudflareDnsSettings>().HasData(new CloudflareDnsSettings { Id = 1 });
+        modelBuilder.Entity<AzureDnsSettings>().HasData(new AzureDnsSettings { Id = 1 });
     }
 }
