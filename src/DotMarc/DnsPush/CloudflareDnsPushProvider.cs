@@ -165,6 +165,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        // TEMPORARY diagnostic logging while chasing an unexplained record-push failure — remove
+        // once resolved.
+        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogWarning("Cloudflare record create for {RecordType} {RecordName}: status={StatusCode}, body={Body}",
+            change.RecordType, change.Name, (int)response.StatusCode, rawBody);
         return response.IsSuccessStatusCode
             ? new DnsPushResult(DnsPushOutcome.Pushed, null)
             : new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record push ({(int)response.StatusCode}).");
@@ -198,6 +203,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         };
         updateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var updateResponse = await _http.SendAsync(updateRequest, cancellationToken).ConfigureAwait(false);
+        // TEMPORARY diagnostic logging while chasing an unexplained record-push failure — remove
+        // once resolved.
+        var updateRawBody = await updateResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogWarning("Cloudflare record update for {RecordType} {RecordName}: status={StatusCode}, body={Body}",
+            change.RecordType, change.Name, (int)updateResponse.StatusCode, updateRawBody);
         return updateResponse.IsSuccessStatusCode
             ? new DnsPushResult(DnsPushOutcome.Pushed, null)
             : new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record update ({(int)updateResponse.StatusCode}).");
