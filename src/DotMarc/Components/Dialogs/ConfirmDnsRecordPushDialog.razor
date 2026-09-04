@@ -1,9 +1,20 @@
 @* src/DotMarc/Components/Dialogs/ConfirmDnsRecordPushDialog.razor *@
 <MudDialog>
-    <TitleContent>Push DMARC record fix</TitleContent>
+    <TitleContent>Push @RecordDescription</TitleContent>
     <DialogContent>
-        <MudText Typo="Typo.body2" Class="mb-2">Current value at <code>_dmarc.@DomainName</code>:</MudText>
-        <MudText Typo="Typo.body2" Class="mb-4" Style="font-family: monospace; word-break: break-all;">@ExistingValue</MudText>
+        @if (DelegatedToCname is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">
+                <code>@RecordName</code> is currently a CNAME delegated to <code>@DelegatedToCname</code> —
+                likely a third-party service managing this record. Proceeding replaces that CNAME and
+                removes the delegation.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">Current value at <code>@RecordName</code>:</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4" Style="font-family: monospace; word-break: break-all;">@ExistingValue</MudText>
+        }
         <MudText Typo="Typo.body2" Class="mb-2">Will be replaced with:</MudText>
         <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">@ProposedValue</MudText>
     </DialogContent>
@@ -15,9 +26,11 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
-    [Parameter] public string DomainName { get; set; } = "";
+    [Parameter] public string RecordDescription { get; set; } = "";
+    [Parameter] public string RecordName { get; set; } = "";
     [Parameter] public string ExistingValue { get; set; } = "";
     [Parameter] public string ProposedValue { get; set; } = "";
+    [Parameter] public string? DelegatedToCname { get; set; }
 
     private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
     private void Cancel() => MudDialog.Cancel();
