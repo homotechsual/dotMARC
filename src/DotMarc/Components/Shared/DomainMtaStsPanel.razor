@@ -1,0 +1,215 @@
+@using DotMarc.Components.Dialogs
+@using DotMarc.Data
+@using DotMarc.DnsPush
+@using DotMarc.MtaSts
+@using DotMarc.Reporting
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IOptions<MtaStsOptions> MtaStsOptions
+@inject IMxHostsLookup MxHostsLookup
+@inject IMtaStsCnameLookup MtaStsCnameLookup
+@inject IDnsProviderDetector DnsProviderDetector
+@inject IEnumerable<IDnsPushProvider> DnsPushProviders
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4 my-2" Elevation="1">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">Policy hosting status</MudText>
+    <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(Domain.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(Domain.MtaStsStatus)</MudChip>
+    @if (Domain.MtaStsCheckedUtc is { } checkedUtc)
+    {
+        <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+    }
+    @if (!string.IsNullOrWhiteSpace(Domain.MtaStsCheckDetail))
+    {
+        <MudText Typo="Typo.body2" Class="mt-1">@Domain.MtaStsCheckDetail</MudText>
+    }
+    <MudLink Href="https://dotmarc.app/docs/mta-sts#status" Target="_blank" Class="mt-2 d-block">What do these statuses mean?</MudLink>
+
+    <AuthorizeView Policy="MtaStsManage" Context="manageAuthState">
+        <div class="mt-3">
+            @if (!_enabled)
+            {
+                @if (_isEnabling)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableAsync">Enable MTA-STS</MudButton>
+                }
+            }
+            else
+            {
+                @if (Domain.MtaStsStatus == MtaStsStatus.PendingDns)
+                {
+                    @if (_isPushing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync" OnClick="PushCnameAsync">Push CNAME via your DNS provider</MudButton>
+                    }
+                }
+            }
+
+            <MudExpansionPanels Class="mt-3">
+                <MudExpansionPanel Text="Advanced">
+                    <MudSelect T="MtaStsMode" @bind-Value="_mode" Label="Mode">
+                        <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Testing">Testing</MudSelectItem>
+                        <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Enforce">Enforce</MudSelectItem>
+                        <MudSelectItem T="MtaStsMode" Value="MtaStsMode.None">None</MudSelectItem>
+                    </MudSelect>
+                    <MudNumericField T="int" @bind-Value="_maxAgeSeconds" Label="Max age (seconds)" Min="0" Class="mt-2" />
+                    <MudTextField @bind-Value="_mxHostsText" Label="MX hosts" Lines="3" HelperText="One per line, e.g. mail.example.com" Class="mt-2" />
+                    <MudButton Class="mt-2" OnClick="SaveAdvancedAsync">Save</MudButton>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </div>
+    </AuthorizeView>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Domain Domain { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<string, int, string, Task> OpenDnsPushPopup { get; set; } = default!;
+
+    private bool _enabled;
+    private MtaStsMode _mode;
+    private int _maxAgeSeconds;
+    private string _mxHostsText = "";
+    private bool _isEnabling;
+    private bool _isPushing;
+
+    protected override void OnParametersSet()
+    {
+        _enabled = Domain.MtaStsEnabled;
+        _mode = Domain.MtaStsMode;
+        _maxAgeSeconds = Domain.MtaStsMaxAgeSeconds;
+        _mxHostsText = string.Join('\n', Domain.MtaStsMxHosts);
+    }
+
+    private async Task EnableAsync()
+    {
+        _isEnabling = true;
+        try
+        {
+            var mxHosts = await MxHostsLookup.LookupAsync(Domain.Name, CancellationToken.None);
+            if (mxHosts.Count == 0)
+            {
+                Snackbar.Add($"No MX records found for {Domain.Name} — add them manually in Advanced before enabling.", Severity.Warning);
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.SetMtaStsConfigAsync(db, Domain.Id, enabled: true, MtaStsMode.Testing, mxHosts, 604_800, CancellationToken.None);
+
+            _enabled = true;
+            _mode = MtaStsMode.Testing;
+            _maxAgeSeconds = 604_800;
+            _mxHostsText = string.Join('\n', mxHosts);
+            Domain.MtaStsEnabled = true;
+            Domain.MtaStsMode = MtaStsMode.Testing;
+            Domain.MtaStsMaxAgeSeconds = 604_800;
+            Domain.MtaStsMxHosts = mxHosts;
+            Domain.MtaStsStatus = MtaStsStatus.PendingDns;
+
+            Snackbar.Add($"MTA-STS enabled for {Domain.Name}.", Severity.Success);
+            await PushCnameAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to enable MTA-STS for {Domain.Name}. Try again.", Severity.Error);
+        }
+        finally
+        {
+            _isEnabling = false;
+        }
+    }
+
+    private async Task SaveAdvancedAsync()
+    {
+        var mxHosts = _mxHostsText
+            .Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DomainManagementService.SetMtaStsConfigAsync(db, Domain.Id, _enabled, _mode, mxHosts, _maxAgeSeconds, CancellationToken.None);
+            Domain.MtaStsMode = _mode;
+            Domain.MtaStsMaxAgeSeconds = _maxAgeSeconds;
+            Domain.MtaStsMxHosts = mxHosts;
+            Snackbar.Add($"MTA-STS configuration saved for {Domain.Name}.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to save {Domain.Name}'s MTA-STS configuration. Try again.", Severity.Error);
+        }
+    }
+
+    private async Task PushCnameAsync()
+    {
+        _isPushing = true;
+        try
+        {
+            var detected = await DnsProviderDetector.DetectAsync(Domain.Name, CancellationToken.None);
+            var providerKey = detected switch
+            {
+                DetectedDnsProvider.Cloudflare => "cloudflare",
+                DetectedDnsProvider.AzureDns => "azure-dns",
+                _ => null
+            };
+            var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
+            if (pushProvider is null)
+            {
+                Snackbar.Add($"Couldn't find a configured DNS push option for {Domain.Name} — add the CNAME manually.", Severity.Warning);
+                return;
+            }
+
+            var hostingHostname = MtaStsOptions.Value.HostingHostname;
+            if (string.IsNullOrEmpty(hostingHostname))
+            {
+                Snackbar.Add("MTA-STS hosting isn't configured on this deployment.", Severity.Warning);
+                return;
+            }
+
+            string? existing;
+            try
+            {
+                existing = await MtaStsCnameLookup.LookupAsync(Domain.Name, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to look up {Domain.Name}'s current MTA-STS CNAME. Try again.", Severity.Error);
+                return;
+            }
+
+            if (DnsRecordPushDecision.NeedsConfirmation(existing, delegatedToCname: null, hostingHostname))
+            {
+                var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
+                {
+                    { x => x.RecordDescription, "MTA-STS CNAME" },
+                    { x => x.RecordName, $"mta-sts.{Domain.Name}" },
+                    { x => x.ExistingValue, existing ?? "" },
+                    { x => x.ProposedValue, hostingHostname }
+                };
+                var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push MTA-STS CNAME", parameters);
+                var result = await dialogRef.Result;
+                if (result is null || result.Canceled)
+                {
+                    return;
+                }
+            }
+
+            await OpenDnsPushPopup(pushProvider.ProviderKey, Domain.Id, "mta-sts");
+        }
+        finally
+        {
+            _isPushing = false;
+        }
+    }
+}
