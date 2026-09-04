@@ -674,10 +674,12 @@ A few lines below, find:
 
 ```csharp
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
-    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, change, CancellationToken.None);
+    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, [change], CancellationToken.None);
 ```
 
-Change `change` to `changes`:
+(Note: Task 4 already touched this exact line as a compile-fix for its own interface signature change — it wrapped the old `change` variable in a one-element collection expression, `[change]`, to keep the build green before this task's list-building logic existed. That's why the "find" text above shows `[change]` rather than the bare `change` an earlier read of this file might have shown.)
+
+Change `[change]` to `changes`:
 
 ```csharp
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
