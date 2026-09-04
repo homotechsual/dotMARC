@@ -11,6 +11,7 @@
 @using DotMarc.DnsPush
 @using DotMarc.Graph
 @using DotMarc.Components.Dialogs
+@using DotMarc.Components.Shared
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IIpInfoLookup IpLookup
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -114,24 +115,7 @@ else
 
         <MudTabPanel Text="MTA-STS">
             <AuthorizeView Policy="MtaStsView" Context="viewAuthState">
-                <MudPaper Class="pa-4 my-2" Elevation="1">
-                    <MudText Typo="Typo.subtitle1" Class="mb-2">Policy hosting status</MudText>
-                    <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(_domain.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(_domain.MtaStsStatus)</MudChip>
-                    @if (_domain.MtaStsCheckedUtc is { } checkedUtc)
-                    {
-                        <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(_domain.MtaStsCheckDetail))
-                    {
-                        <MudText Typo="Typo.body2" Class="mt-1">@_domain.MtaStsCheckDetail</MudText>
-                    }
-                    <div class="mt-3">
-                        <AuthorizeView Policy="MtaStsManage" Context="manageAuthState">
-                            <MudButton Href="/mta-sts" Variant="Variant.Text" Color="Color.Primary">Manage MTA-STS settings</MudButton>
-                        </AuthorizeView>
-                        <MudLink Href="https://dotmarc.app/docs/mta-sts#status" Target="_blank" Class="ml-2">What do these statuses mean?</MudLink>
-                    </div>
-                </MudPaper>
+                <DomainMtaStsPanel Domain="_domain" OpenDnsPushPopup="OpenDnsPushPopupAsync" />
             </AuthorizeView>
         </MudTabPanel>
 

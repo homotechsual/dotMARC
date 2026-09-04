@@ -470,7 +470,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
     IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
-    DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner,
+    DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner, DotMarc.MtaSts.IMtaStsCnameLookup mtaStsCnameLookup,
     IAuthorizationService authorizationService) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -515,7 +515,12 @@ app.MapGet("/dns-push/{provider}/callback", async (
         {
             return DnsPushPopupResult.Close("error");
         }
-        changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null, domain.Name)];
+
+        var existingCname = await mtaStsCnameLookup.LookupAsync(domain.Name, CancellationToken.None);
+        var cnameChange = existingCname is null
+            ? new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null, domain.Name)
+            : new DnsRecordChange(DnsRecordChangeKind.Merge, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, existingCname, domain.Name);
+        changes = [cnameChange];
 
         // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
         // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
