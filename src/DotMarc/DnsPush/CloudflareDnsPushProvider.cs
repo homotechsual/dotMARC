@@ -50,11 +50,13 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             ["response_type"] = "code",
             ["client_id"] = settings.ClientId!,
             ["redirect_uri"] = redirectUri,
-            // dns.write alone can edit records within a zone, but resolving a domain name to its
-            // zone ID (FindZoneIdAsync's GET /zones?name=... call) needs the separate, non-DNS-
-            // specific zone.read permission — Cloudflare's own docs confirm zone listing needs
-            // com.cloudflare.api.account.zone.list, distinct from any DNS-scoped permission.
-            ["scope"] = "zone.read dns.write",
+            // dns.write alone can create/update records once their ID is known, but two lookups
+            // need separate read scopes first: resolving a domain name to its zone ID
+            // (FindZoneIdAsync's GET /zones?name=...) needs zone.read, and finding an existing
+            // record's ID before updating it (UpdateExistingRecordAsync's GET .../dns_records)
+            // needs dns.read — confirmed live: zone.read alone fixed the zone lookup but the
+            // record-merge path still failed the same way, on the existing-record lookup.
+            ["scope"] = "zone.read dns.read dns.write",
             ["state"] = state,
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256"
@@ -174,11 +176,16 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             $"{ApiBase}/zones/{zoneId}/dns_records?type={change.RecordType}&name={Uri.EscapeDataString(change.Name)}");
         findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
+        var findRawBody = await findResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // TEMPORARY diagnostic logging while chasing an unexplained "zone not found" outcome on
+        // the record-merge path specifically — remove once resolved.
+        _logger.LogWarning("Cloudflare existing-record lookup for {RecordType} {RecordName}: status={StatusCode}, body={Body}",
+            change.RecordType, change.Name, (int)findResponse.StatusCode, findRawBody);
         if (!findResponse.IsSuccessStatusCode)
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}).");
         }
-        var existing = await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var existing = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<List<IdRecord>>>(findRawBody);
         var recordId = existing?.Result?.FirstOrDefault()?.Id;
         if (recordId is null)
         {
