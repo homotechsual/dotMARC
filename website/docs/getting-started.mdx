@@ -167,9 +167,24 @@ If a domain's DNS is hosted on Cloudflare or Azure DNS, dotMARC can push the MTA
 DMARC TXT record straight there instead of you copying it in by hand. Each push is authenticated
 fresh through that provider's own consent screen, with nothing about that authentication stored.
 
-**Cloudflare**: register a self-managed OAuth client (**Manage account** → **OAuth clients** in the
-Cloudflare dashboard), scoped to `Zone.DNS` edit, with a redirect URI of
-`https://<your-deployment-host>/dns-push/cloudflare/callback`.
+**Cloudflare**: register a self-managed OAuth client at **Manage account** → **OAuth clients** →
+**Create OAuth client** in the Cloudflare dashboard. dotMARC's push flow is a confidential,
+server-side exchange with PKCE as defense in depth, not a public/PKCE-only client, so two of the
+form's defaults need changing:
+
+| Field | Value |
+| --- | --- |
+| Client Name | Anything recognizable, e.g. `dotMARC` |
+| Response Type | **Code** (the form may default to `Token` — that's the implicit flow, not what dotMARC uses) |
+| Grant type | **Authorization Code** |
+| Token Authentication Method | **client_secret_post** (the form may default to `None (PKCE)`, for public clients with no secret — dotMARC's callback sends the client secret as a token-exchange body parameter, so it needs a secret-bearing method) |
+| Redirect (Callback) URLs | `https://<your-deployment-host>/dns-push/cloudflare/callback` |
+| Client URL | Leave blank — only required to make a client *public*; dotMARC's stays private |
+
+On the next step, select the **Zone → DNS → Edit** scope and leave it **Required** (not optional).
+Finish creating the client, then note its **Client ID** and **Client secret** — you'll enter both
+into dotMARC directly (see below), there's nothing to set as an environment variable or deployment
+parameter for this.
 
 **Azure DNS**: register a *third*, separate Entra app registration (do not reuse the mailbox or
 dashboard app). Go to **App registrations** → **New registration**, then **Authentication** → add a
