@@ -129,8 +129,8 @@ hostnames dotMARC doesn't know about until a customer enables it.
    asuid.mta-sts.<their-domain> TXT <this deployment's verification ID>
    ```
 
-   The value is the same for every domain this deployment hosts. Find it on the **Manage
-   MTA-STS** page, or look it up directly:
+   The value is the same for every domain this deployment hosts. Find it on a domain's **MTA-STS**
+   tab, or look it up directly:
 
    ```powershell
    az containerapp show --name <container-app-name> --resource-group <resource-group> --query "properties.customDomainVerificationId" -o tsv
