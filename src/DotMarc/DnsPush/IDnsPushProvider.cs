@@ -1,6 +1,12 @@
 namespace DotMarc.DnsPush;
 
-public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError }
+/// <summary>ReplaceFailedAfterDelete is distinct from ProviderError because it means something
+/// materially worse: for every other outcome, nothing changed if it wasn't Pushed, but this one
+/// means the old record was already deleted before the new one failed to create — the name now
+/// has NO record at all, which is worse than the state before the push was attempted. It gets its
+/// own outcome specifically so the UI can't collapse it into the same generic "try again" message
+/// every other failure gets.</summary>
+public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError, ReplaceFailedAfterDelete }
 
 public sealed record DnsPushResult(DnsPushOutcome Outcome, string? DetailMessage);
 

@@ -549,6 +549,16 @@ else
             case "unmergeable":
                 Snackbar.Add("Couldn't safely compute a fix for that record — it needs a manual look.", Severity.Warning);
                 break;
+            case "replace-failed":
+                // Distinct from the generic "error" case on purpose: this specific outcome means
+                // the old record was already deleted before the replacement failed to create, so
+                // the domain now has NO record at that name — worse than before the push, not just
+                // "nothing happened." RequireInteraction keeps it on screen instead of
+                // auto-dismissing like the other toasts.
+                Snackbar.Add(
+                    "The old record was deleted, but creating its replacement failed — this domain now has no record at that name and needs manual attention.",
+                    Severity.Error, config => config.RequireInteraction = true);
+                break;
             case "error":
                 Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
                 break;

@@ -192,27 +192,41 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     {
         var existingType = change.ExistingRecordType ?? change.RecordType;
 
+        if (!string.Equals(existingType, "CNAME", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to delete an existing {existingType} record — only CNAME is supported for a replace. Nothing was changed.");
+        }
+        if (!string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase))
+        {
+            // Mirrors the guard above: Replace is only ever built (in Program.cs) as CNAME-to-TXT
+            // today. Guarding this side too means a future record type added without updating this
+            // method fails loudly here instead of silently creating a TXT record under the wrong
+            // type's name, then reporting the wrong type back in the error message.
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to create a {change.RecordType} record for a replace — only TXT is supported. Nothing was changed.");
+        }
+
         try
         {
-            if (string.Equals(existingType, "CNAME", StringComparison.OrdinalIgnoreCase))
-            {
-                var existingRecord = await zone.GetDnsCnameRecords().GetAsync(relativeName, cancellationToken).ConfigureAwait(false);
-                await existingRecord.Value.DeleteAsync(WaitUntil.Completed, cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to delete an existing {existingType} record — only CNAME is supported for a replace.");
-            }
+            var existingRecord = await zone.GetDnsCnameRecords().GetAsync(relativeName, cancellationToken).ConfigureAwait(false);
+            await existingRecord.Value.DeleteAsync(WaitUntil.Completed, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
-            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"The {existingType} record at {change.Name} no longer exists at Azure DNS — it may have been removed since this page loaded.");
+            // Deliberately ProviderError, not ZoneNotFound — the zone WAS found; this specific
+            // record just isn't there anymore (most likely removed since this page loaded, a
+            // benign race a retry would clear). Reusing ZoneNotFound's "check the account you
+            // authorized" message here would send the admin chasing a permissions problem that
+            // doesn't exist.
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The {existingType} record at {change.Name} no longer exists at Azure DNS — it may have been removed since this page loaded. Nothing was changed; try again.");
         }
         catch (RequestFailedException ex)
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected deleting the existing {existingType} record: {ex.Message} — nothing was changed.");
         }
 
+        // The delete above succeeded — from here on, any failure means the name now has NO
+        // record at all, which is why the remaining failure path returns ReplaceFailedAfterDelete
+        // instead of the generic ProviderError.
         try
         {
             var txtRecords = zone.GetDnsTxtRecords();
@@ -222,7 +236,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
         catch (RequestFailedException ex)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed: {ex.Message} — this record needs manual attention now.");
+            return new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed: {ex.Message} — this name now has no record and needs manual attention.");
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);

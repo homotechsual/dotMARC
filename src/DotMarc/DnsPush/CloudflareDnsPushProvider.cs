@@ -205,38 +205,71 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     private async Task<DnsPushResult> ReplaceRecordAsync(string zoneId, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
     {
         var existingType = change.ExistingRecordType ?? change.RecordType;
-        using var findRequest = new HttpRequestMessage(HttpMethod.Get,
-            $"{ApiBase}/zones/{zoneId}/dns_records?type={existingType}&name={Uri.EscapeDataString(change.Name)}");
-        findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
-        if (!findResponse.IsSuccessStatusCode)
+        string? recordId;
+        try
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}).");
+            using var findRequest = new HttpRequestMessage(HttpMethod.Get,
+                $"{ApiBase}/zones/{zoneId}/dns_records?type={Uri.EscapeDataString(existingType)}&name={Uri.EscapeDataString(change.Name)}");
+            findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
+            if (!findResponse.IsSuccessStatusCode)
+            {
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}) — nothing was changed.");
+            }
+            var existing = await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            recordId = existing?.Result?.FirstOrDefault()?.Id;
         }
-        var existing = await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var recordId = existing?.Result?.FirstOrDefault()?.Id;
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // Nothing has been changed yet at this point, so this is a plain, safe-to-retry
+            // failure, not the "domain now has no record" case ReplaceFailedAfterDelete exists for.
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Couldn't reach Cloudflare to look up the existing {existingType} record: {ex.Message} — nothing was changed.");
+        }
+
         if (recordId is null)
         {
-            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"The {existingType} record at {change.Name} no longer exists at Cloudflare — it may have been removed since this page loaded.");
+            // Deliberately ProviderError, not ZoneNotFound — the zone WAS found; this specific
+            // record just isn't there anymore (most likely removed since this page loaded, a
+            // benign race a retry would clear). Reusing ZoneNotFound's "check the account you
+            // authorized" message here would send the admin chasing a permissions problem that
+            // doesn't exist.
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The {existingType} record at {change.Name} no longer exists at Cloudflare — it may have been removed since this page loaded. Nothing was changed; try again.");
         }
 
-        using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"{ApiBase}/zones/{zoneId}/dns_records/{recordId}");
-        deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
-        if (!deleteResponse.IsSuccessStatusCode)
+        try
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected deleting the existing {existingType} record ({(int)deleteResponse.StatusCode}) — nothing was changed.");
+            using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"{ApiBase}/zones/{zoneId}/dns_records/{recordId}");
+            deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
+            if (!deleteResponse.IsSuccessStatusCode)
+            {
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected deleting the existing {existingType} record ({(int)deleteResponse.StatusCode}) — nothing was changed.");
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Couldn't reach Cloudflare to delete the existing {existingType} record: {ex.Message} — nothing was changed.");
         }
 
-        using var createRequest = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/zones/{zoneId}/dns_records")
+        // The delete above succeeded — from here on, any failure means the name now has NO
+        // record at all, which is why every remaining failure path returns
+        // ReplaceFailedAfterDelete instead of the generic ProviderError.
+        try
         {
-            Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, change.DesiredValue))
-        };
-        createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var createResponse = await _http.SendAsync(createRequest, cancellationToken).ConfigureAwait(false);
-        return createResponse.IsSuccessStatusCode
-            ? new DnsPushResult(DnsPushOutcome.Pushed, null)
-            : new DnsPushResult(DnsPushOutcome.ProviderError, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed ({(int)createResponse.StatusCode}) — this record needs manual attention now.");
+            using var createRequest = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/zones/{zoneId}/dns_records")
+            {
+                Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, change.DesiredValue))
+            };
+            createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var createResponse = await _http.SendAsync(createRequest, cancellationToken).ConfigureAwait(false);
+            return createResponse.IsSuccessStatusCode
+                ? new DnsPushResult(DnsPushOutcome.Pushed, null)
+                : new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed ({(int)createResponse.StatusCode}) — this name now has no record and needs manual attention.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but Cloudflare couldn't be reached to create the new {change.RecordType} record: {ex.Message} — this name now has no record and needs manual attention.");
+        }
     }
 
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string? AccessToken);

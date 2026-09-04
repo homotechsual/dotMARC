@@ -471,7 +471,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
     DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner, DotMarc.MtaSts.IMtaStsCnameLookup mtaStsCnameLookup,
-    IAuthorizationService authorizationService) =>
+    IAuthorizationService authorizationService, ILogger<Program> logger) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
@@ -602,8 +602,20 @@ app.MapGet("/dns-push/{provider}/callback", async (
     {
         DnsPushOutcome.Pushed => "pushed",
         DnsPushOutcome.ZoneNotFound => "zone-not-found",
+        DnsPushOutcome.ReplaceFailedAfterDelete => "replace-failed",
         _ => "error"
     };
+
+    // The popup's postMessage carries only this coarse flag — DetailMessage never reaches the
+    // browser — so this is the only place the specific reason (status codes, provider error text)
+    // survives at all. Logged at Warning for every non-Pushed outcome, not just
+    // ReplaceFailedAfterDelete, since any of them can otherwise be silently undiagnosable.
+    if (result.Outcome != DnsPushOutcome.Pushed)
+    {
+        logger.LogWarning("DNS push for domain {DomainId}, target {PushTarget} did not succeed: outcome={Outcome}, detail={DetailMessage}",
+            decodedState.DomainId, decodedState.PushTarget, result.Outcome, result.DetailMessage);
+    }
+
     return DnsPushPopupResult.Close(resultFlag);
 });
 
