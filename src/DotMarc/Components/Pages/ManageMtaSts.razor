@@ -125,13 +125,13 @@ else
     {
         await LoadAsync();
 
-        if (string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
-        {
-            _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
-        }
-
         if (RendererInfo.IsInteractive)
         {
+            if (string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
+            {
+                _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
+            }
+
             ShowDnsPushResultToast();
         }
     }

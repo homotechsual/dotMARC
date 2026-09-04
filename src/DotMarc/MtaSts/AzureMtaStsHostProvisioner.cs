@@ -4,6 +4,7 @@ using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.AppContainers;
 using Azure.ResourceManager.AppContainers.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace DotMarc.MtaSts;
@@ -23,11 +24,13 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
 {
     private readonly MtaStsOptions _options;
     private readonly ArmClient _armClient;
+    private readonly ILogger<AzureMtaStsHostProvisioner> _logger;
 
-    public AzureMtaStsHostProvisioner(IOptions<MtaStsOptions> options)
+    public AzureMtaStsHostProvisioner(IOptions<MtaStsOptions> options, ILogger<AzureMtaStsHostProvisioner> logger)
     {
         _options = options.Value;
         _armClient = new ArmClient(new DefaultAzureCredential());
+        _logger = logger;
     }
 
     public async Task EnsureProvisionedAsync(string domainName, CancellationToken cancellationToken)
@@ -69,7 +72,7 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
                 // containerApp.Data, so no extra ARM call needed).
                 var verificationId = containerApp.Data.CustomDomainVerificationId;
                 throw new InvalidOperationException(
-                    $"Missing ownership verification record — add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.");
+                    $"Missing ownership verification record — add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.", ex);
             }
         }
 
@@ -109,8 +112,16 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
     /// infrequent, never from PollingService's poll loop.</summary>
     public async Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken)
     {
-        var containerApp = await GetContainerAppAsync(cancellationToken).ConfigureAwait(false);
-        return containerApp.Data.CustomDomainVerificationId;
+        try
+        {
+            var containerApp = await GetContainerAppAsync(cancellationToken).ConfigureAwait(false);
+            return containerApp.Data.CustomDomainVerificationId;
+        }
+        catch (Exception ex) when (ex is RequestFailedException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Failed to fetch this deployment's Azure Container Apps domain verification ID.");
+            return null;
+        }
     }
 
     private async Task<ResourceIdentifier> EnsureManagedCertificateAsync(string hostname, CancellationToken cancellationToken)

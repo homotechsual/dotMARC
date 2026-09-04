@@ -101,7 +101,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
 
     private static async Task<DnsPushResult> PushOneChangeAsync(ArmClient armClient, DnsRecordChange change, CancellationToken cancellationToken)
     {
-        var zoneName = ZoneNameFor(change.Name);
+        var zoneName = change.ZoneName;
         var zone = await FindZoneAsync(armClient, zoneName, cancellationToken).ConfigureAwait(false);
         if (zone is null)
         {
@@ -174,12 +174,6 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
-    }
-
-    private static string ZoneNameFor(string recordName)
-    {
-        var firstDot = recordName.IndexOf('.');
-        return firstDot < 0 ? recordName : recordName[(firstDot + 1)..];
     }
 
     /// <summary>Wraps an access token already obtained via the delegated authorization-code

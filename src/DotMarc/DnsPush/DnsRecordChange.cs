@@ -10,4 +10,5 @@ public sealed record DnsRecordChange(
     string RecordType,
     string Name,
     string DesiredValue,
-    string? ExistingValue);
+    string? ExistingValue,
+    string ZoneName);

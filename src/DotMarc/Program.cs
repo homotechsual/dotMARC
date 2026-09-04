@@ -166,7 +166,7 @@ builder.Services.AddScoped<DotMarc.MtaSts.IMtaStsHostProvisioner>(sp =>
 {
     var mtaStsOptions = sp.GetRequiredService<IOptions<DotMarc.MtaSts.MtaStsOptions>>();
     return string.Equals(mtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase)
-        ? new DotMarc.MtaSts.AzureMtaStsHostProvisioner(mtaStsOptions)
+        ? new DotMarc.MtaSts.AzureMtaStsHostProvisioner(mtaStsOptions, sp.GetRequiredService<ILogger<DotMarc.MtaSts.AzureMtaStsHostProvisioner>>())
         : new DotMarc.MtaSts.CaddyMtaStsHostProvisioner();
 });
 
@@ -511,7 +511,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         {
             return Results.Redirect($"{returnPath}?dnsPush=error");
         }
-        changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null)];
+        changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null, domain.Name)];
 
         // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
         // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
@@ -523,7 +523,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             var verificationId = await mtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
             if (!string.IsNullOrEmpty(verificationId))
             {
-                changes.Add(new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, null));
+                changes.Add(new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, null, domain.Name));
             }
         }
     }
@@ -533,7 +533,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var mailbox = graphOptions.Value.MailboxAddress;
         if (existing is null)
         {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null)];
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null, domain.Name)];
         }
         else
         {
@@ -542,7 +542,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             {
                 return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
             }
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing)];
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing, domain.Name)];
         }
     }
     else
@@ -556,7 +556,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
         if (existing is null)
         {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null)];
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null, domain.Name)];
         }
         else
         {
@@ -565,7 +565,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             {
                 return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
             }
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing)];
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing, domain.Name)];
         }
     }
 

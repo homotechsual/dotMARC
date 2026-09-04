@@ -86,7 +86,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
 
     private async Task<DnsPushResult> PushOneChangeAsync(DnsRecordChange change, string accessToken, CancellationToken cancellationToken)
     {
-        var zoneName = ZoneNameFor(change.Name);
+        var zoneName = change.ZoneName;
         var (zoneId, zoneErrorStatus) = await FindZoneIdAsync(zoneName, accessToken, cancellationToken).ConfigureAwait(false);
         if (zoneErrorStatus.HasValue)
         {
@@ -183,15 +183,6 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         return updateResponse.IsSuccessStatusCode
             ? new DnsPushResult(DnsPushOutcome.Pushed, null)
             : new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record update ({(int)updateResponse.StatusCode}).");
-    }
-
-    /// <summary>dotMARC only ever calls this with a name of the form "mta-sts.&lt;domain&gt;" or
-    /// "_dmarc.&lt;domain&gt;", so stripping the first label always yields the zone name — this
-    /// would not generalize to arbitrary multi-label zones, and doesn't need to.</summary>
-    private static string ZoneNameFor(string recordName)
-    {
-        var firstDot = recordName.IndexOf('.');
-        return firstDot < 0 ? recordName : recordName[(firstDot + 1)..];
     }
 
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string? AccessToken);

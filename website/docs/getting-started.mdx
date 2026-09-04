@@ -130,13 +130,13 @@ hostnames dotMARC doesn't know about until a customer enables it.
    ```
 
    The value is the same for every domain this deployment hosts. Find it on the **Manage
-   MTA-STS** page once any domain is enabled, or look it up directly:
+   MTA-STS** page, or look it up directly:
 
    ```powershell
    az containerapp show --name <container-app-name> --resource-group <resource-group> --query "properties.customDomainVerificationId" -o tsv
    ```
 
-   Self-hosted (Caddy) deployments don't need this — Caddy's on-demand TLS never checks domain
+   Self-hosted (Caddy) deployments don't need this. Caddy's on-demand TLS never checks domain
    ownership via DNS.
 
 **If something is already bound to port 443/80 on this host** (your own reverse proxy for this
