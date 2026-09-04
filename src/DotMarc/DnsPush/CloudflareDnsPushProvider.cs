@@ -48,7 +48,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             ["response_type"] = "code",
             ["client_id"] = settings.ClientId!,
             ["redirect_uri"] = redirectUri,
-            ["scope"] = "com.cloudflare.api.account.zone.dns-record",
+            ["scope"] = "dns.write",
             ["state"] = state,
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256"
