@@ -21,7 +21,8 @@ public sealed class DmarcTxtLookupTests
 
         var result = await lookup.LookupAsync("contoso.io", CancellationToken.None);
 
-        Assert.Null(result);
+        Assert.Null(result.DirectValue);
+        Assert.Null(result.DelegatedToCname);
         Assert.Contains("_dmarc.contoso.io", handler.Requests[0].RequestUri!.ToString());
     }
 
