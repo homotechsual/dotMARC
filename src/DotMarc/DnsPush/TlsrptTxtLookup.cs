@@ -10,7 +10,7 @@ public sealed class TlsrptTxtLookup : ITlsrptTxtLookup
 
     public TlsrptTxtLookup(HttpClient http) => _http = http;
 
-    public async Task<string?> LookupAsync(string domainName, CancellationToken cancellationToken)
+    public async Task<DnsRecordLookupResult> LookupAsync(string domainName, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString($"_smtp._tls.{domainName}")}&type=TXT");
         request.Headers.Accept.ParseAdd("application/dns-json");
@@ -18,8 +18,7 @@ public sealed class TlsrptTxtLookup : ITlsrptTxtLookup
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
-        var answer = parsed.Answer?.FirstOrDefault(item => item.Type == 16);
-        return answer is null ? null : string.Join("", answer.Data.Split("\" \"")).Trim('"');
+        return DnsRecordLookupParsing.ParseTxtWithCnameDetection(parsed.Answer?.Select(a => (a.Type, a.Data)));
     }
 
     private sealed record DnsOverHttpsResponse([property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);

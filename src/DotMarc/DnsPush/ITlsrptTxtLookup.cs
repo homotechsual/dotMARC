@@ -2,5 +2,5 @@ namespace DotMarc.DnsPush;
 
 public interface ITlsrptTxtLookup
 {
-    Task<string?> LookupAsync(string domainName, CancellationToken cancellationToken);
+    Task<DnsRecordLookupResult> LookupAsync(string domainName, CancellationToken cancellationToken);
 }

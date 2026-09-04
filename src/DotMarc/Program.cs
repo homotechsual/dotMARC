@@ -529,18 +529,18 @@ app.MapGet("/dns-push/{provider}/callback", async (
     {
         var existing = await dmarcTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
         var mailbox = graphOptions.Value.MailboxAddress;
-        if (existing is null)
+        if (existing.DirectValue is null)
         {
             changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null, domain.Name)];
         }
         else
         {
-            var merged = DmarcRuaMerge.TryMerge(existing, mailbox);
+            var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, mailbox);
             if (merged is null)
             {
                 return DnsPushPopupResult.Close("unmergeable");
             }
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing, domain.Name)];
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing.DirectValue, domain.Name)];
         }
     }
     else
@@ -552,18 +552,18 @@ app.MapGet("/dns-push/{provider}/callback", async (
         }
 
         var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
-        if (existing is null)
+        if (existing.DirectValue is null)
         {
             changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null, domain.Name)];
         }
         else
         {
-            var merged = TlsrptRuaMerge.TryMerge(existing, mailbox);
+            var merged = TlsrptRuaMerge.TryMerge(existing.DirectValue, mailbox);
             if (merged is null)
             {
                 return DnsPushPopupResult.Close("unmergeable");
             }
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing, domain.Name)];
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing.DirectValue, domain.Name)];
         }
     }
 
