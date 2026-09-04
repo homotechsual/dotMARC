@@ -432,7 +432,7 @@ app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContex
 app.MapGet("/dns-push/{provider}/start", async (
     string provider, int domainId, string target, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
-    IAuthorizationService authorizationService) =>
+    IAuthorizationService authorizationService, ILogger<Program> logger) =>
 {
     var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" => "DomainsEdit", _ => null };
     if (requiredPolicy is null)
@@ -456,7 +456,15 @@ app.MapGet("/dns-push/{provider}/start", async (
     var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow);
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
 
-    return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
+    var authorizationUrl = await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri);
+
+    // TEMPORARY diagnostic logging while chasing an unexplained Cloudflare push failure — remove
+    // once resolved. Nothing here is secret: client_id, redirect_uri, scope, and the PKCE
+    // challenge are all sent in plaintext on the wire to the provider anyway; state is an
+    // encrypted, single-use blob, not a shared secret.
+    logger.LogWarning("DNS push /start redirecting to: {AuthorizationUrl}", authorizationUrl);
+
+    return Results.Redirect(authorizationUrl);
 });
 
 app.MapGet("/dns-push/{provider}/callback", async (
@@ -465,8 +473,18 @@ app.MapGet("/dns-push/{provider}/callback", async (
     IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
     DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner,
-    IAuthorizationService authorizationService) =>
+    IAuthorizationService authorizationService, ILogger<Program> logger) =>
 {
+    // TEMPORARY diagnostic logging while chasing an unexplained Cloudflare push failure — remove
+    // once resolved. error_description/error_hint aren't in this endpoint's own signature since
+    // they were never needed before; read them straight off the query collection. Deliberately
+    // never logs the raw code or state values themselves (single-use secrets), only their
+    // presence and the full list of query keys the provider actually sent back.
+    logger.LogWarning(
+        "DNS push callback hit: provider={Provider}, hasCode={HasCode}, error={Error}, errorDescription={ErrorDescription}, errorHint={ErrorHint}, queryKeys={QueryKeys}",
+        provider, code is not null, error, httpContext.Request.Query["error_description"].ToString(),
+        httpContext.Request.Query["error_hint"].ToString(), string.Join(',', httpContext.Request.Query.Keys));
+
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
     if (pushProvider is null || decodedState is null)
