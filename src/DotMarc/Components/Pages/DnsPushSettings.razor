@@ -1,0 +1,110 @@
+@* src/DotMarc/Components/Pages/DnsPushSettings.razor *@
+@page "/dns-push/settings"
+@attribute [Authorize(Policy = "DnsPushManage")]
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISecretStore SecretStoreAccessor
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - DNS Push Settings</PageTitle>
+<MudText Typo="Typo.h4" Class="mb-4">DNS push settings</MudText>
+
+@if (_cloudflareSettings is not null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-4">Cloudflare</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Client ID" @bind-Value="_cloudflareSettings.ClientId" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Client secret" @bind-Value="_newCloudflareClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                              HelperText="@(_cloudflareSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveCloudflareAsync">Save Cloudflare settings</MudButton>
+    </MudPaper>
+}
+
+@if (_azureDnsSettings is not null)
+{
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h5" Class="mb-4">Azure DNS</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField Label="Tenant ID" @bind-Value="_azureDnsSettings.TenantId" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField Label="Client ID" @bind-Value="_azureDnsSettings.ClientId" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField Label="Client secret" @bind-Value="_newAzureDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                              HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAzureDnsAsync">Save Azure DNS settings</MudButton>
+    </MudPaper>
+}
+
+@code {
+    private CloudflareDnsSettings? _cloudflareSettings;
+    private AzureDnsSettings? _azureDnsSettings;
+    private string? _newCloudflareClientSecret;
+    private string? _newAzureDnsClientSecret;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _cloudflareSettings = await CloudflareDnsSettingsService.GetAsync(db);
+        _azureDnsSettings = await AzureDnsSettingsService.GetAsync(db);
+    }
+
+    private async Task SaveCloudflareAsync()
+    {
+        if (_cloudflareSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await CloudflareDnsSettingsService.SaveAsync(db, SecretStoreAccessor, _cloudflareSettings, string.IsNullOrWhiteSpace(_newCloudflareClientSecret) ? null : _newCloudflareClientSecret);
+            _newCloudflareClientSecret = null;
+            Snackbar.Add("Cloudflare settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _cloudflareSettings = await CloudflareDnsSettingsService.GetAsync(reloadDb);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save Cloudflare settings. Try again.", Severity.Error);
+        }
+    }
+
+    private async Task SaveAzureDnsAsync()
+    {
+        if (_azureDnsSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await AzureDnsSettingsService.SaveAsync(db, SecretStoreAccessor, _azureDnsSettings, string.IsNullOrWhiteSpace(_newAzureDnsClientSecret) ? null : _newAzureDnsClientSecret);
+            _newAzureDnsClientSecret = null;
+            Snackbar.Add("Azure DNS settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _azureDnsSettings = await AzureDnsSettingsService.GetAsync(reloadDb);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save Azure DNS settings. Try again.", Severity.Error);
+        }
+    }
+}

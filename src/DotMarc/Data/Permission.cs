@@ -22,5 +22,6 @@ public enum Permission
     MtaStsView,
     MtaStsManage,
     AlertsView,
-    AlertsManage
+    AlertsManage,
+    DnsPushManage
 }

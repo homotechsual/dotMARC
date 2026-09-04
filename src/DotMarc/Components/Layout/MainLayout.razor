@@ -37,6 +37,9 @@
             <AuthorizeView Policy="MtaStsManage">
                 <MudMenuItem Href="/mta-sts" Icon="@Icons.Material.Filled.Security">MTA-STS</MudMenuItem>
             </AuthorizeView>
+            <AuthorizeView Policy="DnsPushManage">
+                <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
+            </AuthorizeView>
             <AuthorizeView Policy="AlertsManage">
                 <MudMenuItem Href="/alerts/settings" Icon="@Icons.Material.Filled.NotificationsActive">Alert settings</MudMenuItem>
             </AuthorizeView>
