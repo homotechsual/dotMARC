@@ -16,8 +16,9 @@ public interface IDnsPushProvider
     /// /dns-push/{provider}/start|callback — "cloudflare" or "azure-dns".</summary>
     string ProviderKey { get; }
 
-    /// <summary>False when this provider's OAuth app isn't configured for this deployment — the
-    /// push button never renders in that case.</summary>
+    /// <summary>False when this provider's OAuth app isn't configured for this deployment — a
+    /// push attempt against this provider then fails with a "no configured option" message rather
+    /// than being attempted.</summary>
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
 
     Task<string> BuildAuthorizationUrlAsync(string state, string codeChallenge, string redirectUri, CancellationToken cancellationToken = default);

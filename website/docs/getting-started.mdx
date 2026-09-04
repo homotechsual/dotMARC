@@ -180,7 +180,8 @@ Both providers are independently optional and configured the same way regardless
 running dotMARC (Docker Compose or Azure): sign in with an account holding the `DnsPushManage`
 permission and go to **Manage → DNS push settings**, enter the OAuth client ID/secret (and, for
 Azure DNS, tenant ID) for whichever provider(s) you registered, and save. Leave either unconfigured
-and that provider's push button simply never appears, with no other effect on the app.
+and dotMARC simply reports it can't find a configured push option when you try to use it — the push
+action itself still appears, it just won't succeed for an unconfigured provider.
 
 Next: [Local Development](./local-development.mdx) to run and test the app from source, or
 [Deploy to Azure](./deploy-to-azure.mdx) to run it in production.
