@@ -24,12 +24,14 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
     private readonly ISecretStore _secretStore;
     private readonly HttpClient _http;
+    private readonly ILogger<CloudflareDnsPushProvider> _logger;
 
-    public CloudflareDnsPushProvider(IDbContextFactory<DotMarcDbContext> dbFactory, ISecretStore secretStore, HttpClient http)
+    public CloudflareDnsPushProvider(IDbContextFactory<DotMarcDbContext> dbFactory, ISecretStore secretStore, HttpClient http, ILogger<CloudflareDnsPushProvider> logger)
     {
         _dbFactory = dbFactory;
         _secretStore = secretStore;
         _http = http;
+        _logger = logger;
     }
 
     public string ProviderKey => "cloudflare";
@@ -140,11 +142,16 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/zones?name={Uri.EscapeDataString(zoneName)}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // TEMPORARY diagnostic logging while chasing an unexplained "zone not found" outcome —
+        // remove once resolved. The raw body carries zone metadata (names, IDs, plan info) but
+        // nothing secret — the bearer token itself is never logged.
+        _logger.LogWarning("Cloudflare zone lookup for {ZoneName}: status={StatusCode}, body={Body}", zoneName, (int)response.StatusCode, rawBody);
         if (!response.IsSuccessStatusCode)
         {
             return (null, (int)response.StatusCode);
         }
-        var zones = await response.Content.ReadFromJsonAsync<ApiResponse<List<IdRecord>>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var zones = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<List<IdRecord>>>(rawBody);
         return (zones?.Result?.FirstOrDefault()?.Id, null);
     }
 
