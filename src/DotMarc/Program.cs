@@ -464,6 +464,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
     IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
+    DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner,
     IAuthorizationService authorizationService) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -502,7 +503,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         return Results.Redirect($"{returnPath}?dnsPush=cancelled");
     }
 
-    DnsRecordChange change;
+    List<DnsRecordChange> changes;
     if (decodedState.PushTarget == "mta-sts")
     {
         var hostingHostname = mtaStsOptions.Value.HostingHostname;
@@ -510,7 +511,21 @@ app.MapGet("/dns-push/{provider}/callback", async (
         {
             return Results.Redirect($"{returnPath}?dnsPush=error");
         }
-        change = new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null);
+        changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null)];
+
+        // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
+        // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
+        // verification ID" section. Caddy has no such requirement, and a null/empty ID (the ARM
+        // call failed, or this deployment isn't actually Azure-provisioned) just means the push
+        // proceeds with the CNAME alone rather than failing outright.
+        if (string.Equals(mtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            var verificationId = await mtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
+            if (!string.IsNullOrEmpty(verificationId))
+            {
+                changes.Add(new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, null));
+            }
+        }
     }
     else if (decodedState.PushTarget == "dmarc")
     {
@@ -518,7 +533,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var mailbox = graphOptions.Value.MailboxAddress;
         if (existing is null)
         {
-            change = new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null);
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null)];
         }
         else
         {
@@ -527,7 +542,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             {
                 return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
             }
-            change = new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing);
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing)];
         }
     }
     else
@@ -541,7 +556,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
         if (existing is null)
         {
-            change = new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null);
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null)];
         }
         else
         {
@@ -550,12 +565,12 @@ app.MapGet("/dns-push/{provider}/callback", async (
             {
                 return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
             }
-            change = new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing);
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing)];
         }
     }
 
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
-    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, [change], CancellationToken.None);
+    var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, changes, CancellationToken.None);
 
     var resultFlag = result.Outcome switch
     {
