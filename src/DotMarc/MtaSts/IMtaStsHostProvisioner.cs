@@ -9,4 +9,10 @@ public interface IMtaStsHostProvisioner
 {
     Task EnsureProvisionedAsync(string domainName, CancellationToken cancellationToken);
     Task TeardownAsync(string domainName, CancellationToken cancellationToken);
+
+    /// <summary>The value Azure Container Apps needs at asuid.&lt;custom-domain&gt; TXT before it
+    /// will bind that custom domain — a property of the Container App resource itself, so it is
+    /// the same value for every domain this deployment hosts. Null on providers (Caddy) that have
+    /// no such concept.</summary>
+    Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken);
 }

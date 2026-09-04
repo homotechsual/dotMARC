@@ -23,4 +23,6 @@ internal sealed class FakeMtaStsHostProvisioner : IMtaStsHostProvisioner
         TornDownDomains.Add(domainName);
         return Task.CompletedTask;
     }
+
+    public Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 }

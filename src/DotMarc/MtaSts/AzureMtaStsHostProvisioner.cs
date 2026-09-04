@@ -56,7 +56,21 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
             // next cycle resumes from certificate creation instead of re-adding the binding or
             // giving up on it.
             containerApp.Data.Configuration.Ingress.CustomDomains.Add(new ContainerAppCustomDomain(hostname) { BindingType = ContainerAppCustomDomainBindingType.Disabled });
-            containerApp = (await containerApp.UpdateAsync(WaitUntil.Completed, containerApp.Data, cancellationToken).ConfigureAwait(false)).Value;
+            try
+            {
+                containerApp = (await containerApp.UpdateAsync(WaitUntil.Completed, containerApp.Data, cancellationToken).ConfigureAwait(false)).Value;
+            }
+            catch (RequestFailedException ex) when (string.Equals(ex.ErrorCode, "InvalidCustomHostNameValidation", StringComparison.Ordinal))
+            {
+                // Azure validates hostname ownership at exactly this call — this is the ARM error
+                // the user hits when the asuid.<hostname> TXT record isn't in place yet. Replace
+                // the raw error with the specific fix, using the same verification ID
+                // GetDomainVerificationIdAsync below would return (already loaded on this same
+                // containerApp.Data, so no extra ARM call needed).
+                var verificationId = containerApp.Data.CustomDomainVerificationId;
+                throw new InvalidOperationException(
+                    $"Missing ownership verification record — add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.");
+            }
         }
 
         var certificateId = await EnsureManagedCertificateAsync(hostname, cancellationToken).ConfigureAwait(false);
@@ -87,6 +101,16 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
         // managed-certificate issuance to DNS validation succeeding at creation time, and
         // recreating it on a later re-enable would mean waiting on that validation again for no
         // benefit — an orphaned, unbound certificate costs nothing to leave behind.
+    }
+
+    /// <summary>The Container App's own customDomainVerificationId — fixed for the life of the
+    /// resource, so the same value is correct for every domain this deployment hosts. Not cached:
+    /// this is only called from a page load or a DNS push callback, both human-triggered and
+    /// infrequent, never from PollingService's poll loop.</summary>
+    public async Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken)
+    {
+        var containerApp = await GetContainerAppAsync(cancellationToken).ConfigureAwait(false);
+        return containerApp.Data.CustomDomainVerificationId;
     }
 
     private async Task<ResourceIdentifier> EnsureManagedCertificateAsync(string hostname, CancellationToken cancellationToken)

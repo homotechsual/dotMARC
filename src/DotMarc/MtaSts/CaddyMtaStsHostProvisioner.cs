@@ -12,4 +12,8 @@ public sealed class CaddyMtaStsHostProvisioner : IMtaStsHostProvisioner
     public Task EnsureProvisionedAsync(string domainName, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task TeardownAsync(string domainName, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    // Caddy's on-demand TLS never does DNS-based domain-ownership verification — there is no
+    // per-deployment ID to surface here.
+    public Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 }
