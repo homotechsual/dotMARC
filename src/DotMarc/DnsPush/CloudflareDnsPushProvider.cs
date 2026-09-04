@@ -1,14 +1,19 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Options;
+using DotMarc.Data;
+using DotMarc.Notifications;
+using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Cloudflare, authenticated via a fresh OAuth 2.0
 /// Authorization Code + PKCE exchange each time — see the design spec's "Auth model" section for
-/// why nothing is ever persisted. Endpoints confirmed against Cloudflare's own OIDC discovery
-/// document (https://dash.cloudflare.com/.well-known/openid-configuration); the DNS API itself is
+/// why nothing about the end-user's push-time token is ever persisted. The app's own OAuth client
+/// credentials (registered once per deployment with Cloudflare) are DB-backed
+/// (CloudflareDnsSettings/ISecretStore), read fresh per call since they're admin-editable at
+/// runtime. Endpoints confirmed against Cloudflare's own OIDC discovery document
+/// (https://dash.cloudflare.com/.well-known/openid-configuration); the DNS API itself is
 /// documented at https://developers.cloudflare.com/api/resources/dns/subresources/records/.</summary>
 public sealed class CloudflareDnsPushProvider : IDnsPushProvider
 {
@@ -16,24 +21,32 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     private const string TokenEndpoint = "https://dash.cloudflare.com/oauth2/token";
     private const string ApiBase = "https://api.cloudflare.com/client/v4";
 
-    private readonly CloudflareDnsOptions _options;
+    private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
+    private readonly ISecretStore _secretStore;
     private readonly HttpClient _http;
 
-    public CloudflareDnsPushProvider(IOptions<CloudflareDnsOptions> options, HttpClient http)
+    public CloudflareDnsPushProvider(IDbContextFactory<DotMarcDbContext> dbFactory, ISecretStore secretStore, HttpClient http)
     {
-        _options = options.Value;
+        _dbFactory = dbFactory;
+        _secretStore = secretStore;
         _http = http;
     }
 
     public string ProviderKey => "cloudflare";
-    public bool IsConfigured => !string.IsNullOrEmpty(_options.ClientId) && !string.IsNullOrEmpty(_options.ClientSecret);
 
-    public string BuildAuthorizationUrl(string state, string codeChallenge, string redirectUri)
+    public async Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default)
     {
+        var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        return !string.IsNullOrEmpty(settings.ClientId) && settings.ClientSecretConfigured;
+    }
+
+    public async Task<string> BuildAuthorizationUrlAsync(string state, string codeChallenge, string redirectUri, CancellationToken cancellationToken = default)
+    {
+        var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var query = new Dictionary<string, string>
         {
             ["response_type"] = "code",
-            ["client_id"] = _options.ClientId!,
+            ["client_id"] = settings.ClientId!,
             ["redirect_uri"] = redirectUri,
             ["scope"] = "com.cloudflare.api.account.zone.dns",
             ["state"] = state,
@@ -46,7 +59,14 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     public async Task<DnsPushResult> ExchangeAndPushAsync(
         string code, string codeVerifier, string redirectUri, DnsRecordChange change, CancellationToken cancellationToken)
     {
-        var accessToken = await ExchangeCodeForTokenAsync(code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
+        var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        var clientSecret = await _secretStore.GetSecretAsync(CloudflareDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare push is not configured for this deployment.");
+        }
+
+        var accessToken = await ExchangeCodeForTokenAsync(settings.ClientId, clientSecret, code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
         if (accessToken is null)
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare rejected the authorization code exchange.");
@@ -68,7 +88,13 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             : await CreateRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<string?> ExchangeCodeForTokenAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
+    private async Task<CloudflareDnsSettings> GetSettingsAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await CloudflareDnsSettingsService.GetAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string?> ExchangeCodeForTokenAsync(string clientId, string clientSecret, string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint)
         {
@@ -77,8 +103,8 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
                 ["grant_type"] = "authorization_code",
                 ["code"] = code,
                 ["redirect_uri"] = redirectUri,
-                ["client_id"] = _options.ClientId!,
-                ["client_secret"] = _options.ClientSecret!,
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
                 ["code_verifier"] = codeVerifier
             })
         };

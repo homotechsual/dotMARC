@@ -185,7 +185,7 @@ else
                 DetectedDnsProvider.AzureDns => "azure-dns",
                 _ => null
             };
-            var pushProvider = providerKey is null ? null : DnsPushProviders.SingleOrDefault(p => p.ProviderKey == providerKey && p.IsConfigured);
+            var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
                 Snackbar.Add($"Couldn't find a configured DNS push option for {row.Name} — add the CNAME manually.", Severity.Warning);

@@ -170,11 +170,9 @@ builder.Services.AddScoped<DotMarc.MtaSts.IMtaStsHostProvisioner>(sp =>
         : new DotMarc.MtaSts.CaddyMtaStsHostProvisioner();
 });
 
-builder.Services.Configure<DotMarc.DnsPush.CloudflareDnsOptions>(builder.Configuration.GetSection(DotMarc.DnsPush.CloudflareDnsOptions.SectionName));
 builder.Services.AddHttpClient<DotMarc.DnsPush.CloudflareDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.CloudflareDnsPushProvider>());
 
-builder.Services.Configure<DotMarc.DnsPush.AzureDnsOptions>(builder.Configuration.GetSection(DotMarc.DnsPush.AzureDnsOptions.SectionName));
 builder.Services.AddSingleton<DotMarc.DnsPush.AzureDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.AzureDnsPushProvider>());
 
@@ -448,7 +446,7 @@ app.MapGet("/dns-push/{provider}/start", async (
         return Results.Forbid();
     }
 
-    var pushProvider = pushProviders.SingleOrDefault(p => p.ProviderKey == provider && p.IsConfigured);
+    var pushProvider = await pushProviders.FindConfiguredAsync(provider);
     if (pushProvider is null)
     {
         return Results.NotFound();
@@ -458,7 +456,7 @@ app.MapGet("/dns-push/{provider}/start", async (
     var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow);
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
 
-    return Results.Redirect(pushProvider.BuildAuthorizationUrl(state, codeChallenge, redirectUri));
+    return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
 });
 
 app.MapGet("/dns-push/{provider}/callback", async (
@@ -468,7 +466,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
     IAuthorizationService authorizationService) =>
 {
-    var pushProvider = pushProviders.SingleOrDefault(p => p.ProviderKey == provider && p.IsConfigured);
+    var pushProvider = await pushProviders.FindConfiguredAsync(provider);
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
     if (pushProvider is null || decodedState is null)
     {

@@ -3,32 +3,46 @@ using Azure.Core;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Dns;
 using Azure.ResourceManager.Dns.Models;
-using Microsoft.Extensions.Options;
+using DotMarc.Data;
+using DotMarc.Notifications;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Azure DNS via a delegated Entra ID authorization-code
 /// exchange — the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
-/// access on the target zone; dotMARC never holds a standing grant of its own. Same "nothing
-/// persisted" contract as CloudflareDnsPushProvider.</summary>
+/// access on the target zone; dotMARC never holds a standing grant of its own. Same "nothing about
+/// the end-user's push-time token is ever persisted" contract as CloudflareDnsPushProvider. The
+/// app's own OAuth client credentials are DB-backed (AzureDnsSettings/ISecretStore), read fresh
+/// per call.</summary>
 public sealed class AzureDnsPushProvider : IDnsPushProvider
 {
     private const string Scope = "https://management.azure.com/user_impersonation";
 
-    private readonly AzureDnsOptions _options;
+    private readonly IDbContextFactory<DotMarcDbContext> _dbFactory;
+    private readonly ISecretStore _secretStore;
 
-    public AzureDnsPushProvider(IOptions<AzureDnsOptions> options) => _options = options.Value;
+    public AzureDnsPushProvider(IDbContextFactory<DotMarcDbContext> dbFactory, ISecretStore secretStore)
+    {
+        _dbFactory = dbFactory;
+        _secretStore = secretStore;
+    }
 
     public string ProviderKey => "azure-dns";
-    public bool IsConfigured =>
-        !string.IsNullOrEmpty(_options.TenantId) && !string.IsNullOrEmpty(_options.ClientId) && !string.IsNullOrEmpty(_options.ClientSecret);
 
-    public string BuildAuthorizationUrl(string state, string codeChallenge, string redirectUri)
+    public async Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default)
     {
+        var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        return !string.IsNullOrEmpty(settings.TenantId) && !string.IsNullOrEmpty(settings.ClientId) && settings.ClientSecretConfigured;
+    }
+
+    public async Task<string> BuildAuthorizationUrlAsync(string state, string codeChallenge, string redirectUri, CancellationToken cancellationToken = default)
+    {
+        var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var query = new Dictionary<string, string>
         {
-            ["client_id"] = _options.ClientId!,
+            ["client_id"] = settings.ClientId!,
             ["response_type"] = "code",
             ["redirect_uri"] = redirectUri,
             ["response_mode"] = "query",
@@ -37,16 +51,23 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256"
         };
-        return $"https://login.microsoftonline.com/{_options.TenantId}/oauth2/v2.0/authorize?" +
+        return $"https://login.microsoftonline.com/{settings.TenantId}/oauth2/v2.0/authorize?" +
             string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
     public async Task<DnsPushResult> ExchangeAndPushAsync(
         string code, string codeVerifier, string redirectUri, DnsRecordChange change, CancellationToken cancellationToken)
     {
-        var confidentialClient = ConfidentialClientApplicationBuilder.Create(_options.ClientId)
-            .WithClientSecret(_options.ClientSecret)
-            .WithAuthority($"https://login.microsoftonline.com/{_options.TenantId}")
+        var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        var clientSecret = await _secretStore.GetSecretAsync(AzureDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(settings.TenantId) || string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "Azure DNS push is not configured for this deployment.");
+        }
+
+        var confidentialClient = ConfidentialClientApplicationBuilder.Create(settings.ClientId)
+            .WithClientSecret(clientSecret)
+            .WithAuthority($"https://login.microsoftonline.com/{settings.TenantId}")
             .WithRedirectUri(redirectUri)
             .Build();
 
@@ -75,6 +96,12 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
 
         return await PushRecordAsync(zone, zoneName, change, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AzureDnsSettings> GetSettingsAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await AzureDnsSettingsService.GetAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<DnsZoneResource?> FindZoneAsync(ArmClient armClient, string zoneName, CancellationToken cancellationToken)
