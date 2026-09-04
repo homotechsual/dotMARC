@@ -14,7 +14,8 @@
 @inject IDnsProviderDetector DnsProviderDetector
 @inject IMtaStsHostProvisioner MtaStsHostProvisioner
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
-@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <PageTitle>dotMARC - Manage MTA-STS</PageTitle>
 <UnsavedChangesGuard HasUnsavedChanges="AnyUnsavedChanges" />
@@ -118,6 +119,7 @@ else
 @code {
     private List<MtaStsRow>? _domains;
     private string? _domainVerificationId;
+    private DotNetObjectReference<ManageMtaSts>? _dotNetRef;
 
     private bool AnyUnsavedChanges => _domains?.Any(d => d.IsDirty) ?? false;
 
@@ -125,16 +127,13 @@ else
     {
         await LoadAsync();
 
-        if (RendererInfo.IsInteractive)
+        if (RendererInfo.IsInteractive && string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
         {
-            if (string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
-            {
-                _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
-            }
-
-            ShowDnsPushResultToast();
+            _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
         }
     }
+
+    public void Dispose() => _dotNetRef?.Dispose();
 
     private async Task LoadAsync()
     {
@@ -205,7 +204,9 @@ else
                 return;
             }
 
-            Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={row.Id}&target=mta-sts", forceLoad: true);
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("dotMarcOpenDnsPush",
+                $"/dns-push/{pushProvider.ProviderKey}/start?domainId={row.Id}&target=mta-sts", _dotNetRef);
         }
         finally
         {
@@ -213,10 +214,10 @@ else
         }
     }
 
-    private void ShowDnsPushResultToast()
+    [JSInvokable]
+    public void OnDnsPushResult(string outcome)
     {
-        var query = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
-        switch (query["dnsPush"])
+        switch (outcome)
         {
             case "pushed":
                 Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
@@ -234,6 +235,10 @@ else
                 break;
         }
     }
+
+    [JSInvokable]
+    public void OnDnsPushPopupBlocked() =>
+        Snackbar.Add("Your browser blocked the pop-up. Allow pop-ups for this site and try again, or add the record manually.", Severity.Warning);
 
     private async Task SaveAsync(MtaStsRow row)
     {

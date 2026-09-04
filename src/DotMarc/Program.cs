@@ -471,7 +471,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
     if (pushProvider is null || decodedState is null)
     {
-        return Results.Redirect("/dashboard?dnsPush=invalid");
+        return DnsPushPopupResult.Close("invalid");
     }
 
     // The signed state proves the /start redirect was legitimate, but says nothing about whether
@@ -481,26 +481,24 @@ app.MapGet("/dns-push/{provider}/callback", async (
     var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" => "DomainsEdit", _ => null };
     if (requiredPolicy is null)
     {
-        return Results.Forbid();
+        return DnsPushPopupResult.Close("invalid");
     }
     var authResult = await authorizationService.AuthorizeAsync(httpContext.User, requiredPolicy);
     if (!authResult.Succeeded)
     {
-        return Results.Forbid();
+        return DnsPushPopupResult.Close("invalid");
     }
 
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var domain = await context.Domains.AsNoTracking().SingleOrDefaultAsync(d => d.Id == decodedState.DomainId);
     if (domain is null)
     {
-        return Results.Redirect("/dashboard?dnsPush=invalid");
+        return DnsPushPopupResult.Close("invalid");
     }
-
-    var returnPath = decodedState.PushTarget == "mta-sts" ? "/mta-sts" : $"/domains/{domain.Name}";
 
     if (error is not null || code is null)
     {
-        return Results.Redirect($"{returnPath}?dnsPush=cancelled");
+        return DnsPushPopupResult.Close("cancelled");
     }
 
     List<DnsRecordChange> changes;
@@ -509,7 +507,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var hostingHostname = mtaStsOptions.Value.HostingHostname;
         if (string.IsNullOrEmpty(hostingHostname))
         {
-            return Results.Redirect($"{returnPath}?dnsPush=error");
+            return DnsPushPopupResult.Close("error");
         }
         changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null, domain.Name)];
 
@@ -540,7 +538,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             var merged = DmarcRuaMerge.TryMerge(existing, mailbox);
             if (merged is null)
             {
-                return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
+                return DnsPushPopupResult.Close("unmergeable");
             }
             changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing, domain.Name)];
         }
@@ -550,7 +548,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var mailbox = graphOptions.Value.TlsrptMailboxAddress;
         if (string.IsNullOrWhiteSpace(mailbox))
         {
-            return Results.Redirect($"{returnPath}?dnsPush=error");
+            return DnsPushPopupResult.Close("error");
         }
 
         var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
@@ -563,7 +561,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             var merged = TlsrptRuaMerge.TryMerge(existing, mailbox);
             if (merged is null)
             {
-                return Results.Redirect($"{returnPath}?dnsPush=unmergeable");
+                return DnsPushPopupResult.Close("unmergeable");
             }
             changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing, domain.Name)];
         }
@@ -578,7 +576,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         DnsPushOutcome.ZoneNotFound => "zone-not-found",
         _ => "error"
     };
-    return Results.Redirect($"{returnPath}?dnsPush={resultFlag}");
+    return DnsPushPopupResult.Close(resultFlag);
 });
 
 // Unauthenticated by necessity — HaloPSA's own outbound webhook config isn't confirmed to support

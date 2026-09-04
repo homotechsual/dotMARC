@@ -26,6 +26,47 @@
                 try { e.dataTransfer.setData('text/plain', ''); } catch { }
             }
         });
+
+        // Opens the DNS push OAuth round-trip in its own popup instead of navigating the current
+        // tab away. A same-tab forceLoad navigation is fragile: some browser extensions that hook
+        // page-lifecycle events (spelling/grammar checkers, translators) can interfere with a
+        // full-page redirect chain and silently cancel it before it ever reaches the provider. A
+        // popup sidesteps that entirely, and the /dns-push/{provider}/callback endpoint closes it
+        // itself once the OAuth round trip finishes, posting the outcome back via postMessage
+        // rather than redirecting (which would just navigate the popup, not this tab).
+        window.dotMarcOpenDnsPush = (url, dotNetRef) => {
+            const popup = window.open(url, 'dnsPush', 'width=520,height=680');
+            if (!popup) {
+                dotNetRef.invokeMethodAsync('OnDnsPushPopupBlocked');
+                return;
+            }
+
+            let settled = false;
+            const finish = outcome => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                window.removeEventListener('message', onMessage);
+                clearInterval(poll);
+                dotNetRef.invokeMethodAsync('OnDnsPushResult', outcome);
+            };
+            const onMessage = event => {
+                if (event.origin !== window.location.origin || !event.data || typeof event.data.dnsPush !== 'string') {
+                    return;
+                }
+                finish(event.data.dnsPush);
+                popup.close();
+            };
+            window.addEventListener('message', onMessage);
+            // Covers the popup closing without ever posting a message: the user closed it by
+            // hand, or something (an early /start failure, an extension) killed it mid-flow.
+            const poll = setInterval(() => {
+                if (popup.closed) {
+                    finish('cancelled');
+                }
+            }, 500);
+        };
     </script>
 </body>
 </html>

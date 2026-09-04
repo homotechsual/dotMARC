@@ -23,6 +23,8 @@
 @inject IOptions<GraphOptions> GraphOptions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -226,6 +228,9 @@ else
     private List<ChartSeries<double>> _series = [];
     private string[] _xAxisLabels = [];
     private bool _isPushingDmarcRecord;
+    private DotNetObjectReference<DomainDetail>? _dotNetRef;
+
+    public void Dispose() => _dotNetRef?.Dispose();
 
     protected override void OnParametersSet()
     {
@@ -328,8 +333,6 @@ else
                     _ = EnrichSourceInBackgroundAsync(source);
                 }
             }
-
-            ShowDnsPushResultToast();
         }
 
         // Bucket by day-received (of the report, not the record) rather than the record itself,
@@ -411,7 +414,7 @@ else
 
             if (_domain!.DmarcCheckStatus != DmarcCheckStatus.Misconfigured)
             {
-                Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={_domain.Id}&target=dmarc", forceLoad: true);
+                await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "dmarc");
                 return;
             }
 
@@ -447,7 +450,7 @@ else
             var result = await dialogRef.Result;
             if (result is { Canceled: false })
             {
-                Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={_domain.Id}&target=dmarc", forceLoad: true);
+                await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "dmarc");
             }
         }
         finally
@@ -472,13 +475,20 @@ else
             return;
         }
 
-        Navigation.NavigateTo($"/dns-push/{pushProvider.ProviderKey}/start?domainId={_domain!.Id}&target=tlsrpt", forceLoad: true);
+        await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "tlsrpt");
     }
 
-    private void ShowDnsPushResultToast()
+    private async Task OpenDnsPushPopupAsync(string providerKey, int domainId, string target)
     {
-        var query = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
-        switch (query["dnsPush"])
+        _dotNetRef ??= DotNetObjectReference.Create(this);
+        await JSRuntime.InvokeVoidAsync("dotMarcOpenDnsPush",
+            $"/dns-push/{providerKey}/start?domainId={domainId}&target={target}", _dotNetRef);
+    }
+
+    [JSInvokable]
+    public void OnDnsPushResult(string outcome)
+    {
+        switch (outcome)
         {
             case "pushed":
                 Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
@@ -496,6 +506,10 @@ else
                 break;
         }
     }
+
+    [JSInvokable]
+    public void OnDnsPushPopupBlocked() =>
+        Snackbar.Add("Your browser blocked the pop-up. Allow pop-ups for this site and try again, or add the record manually.", Severity.Warning);
 
     private sealed class SourceRow(string sourceIp, int volume, string spfResult, string dkimResult, string disposition)
     {
