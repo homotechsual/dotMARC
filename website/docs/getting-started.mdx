@@ -198,7 +198,10 @@ form's defaults need changing:
 | Redirect (Callback) URLs | `https://<your-deployment-host>/dns-push/cloudflare/callback` |
 | Client URL | Leave blank — only required to make a client *public*; dotMARC's stays private |
 
-On the next step, select the **Zone → DNS → Edit** scope and leave it **Required** (not optional).
+On the next step, select two scopes and leave both **Required** (not optional): **Zone → DNS →
+Edit**, and **Zone → Zone → Read**. The second one is easy to miss since it isn't DNS-specific, but
+dotMARC needs it to resolve a domain name to its Cloudflare zone ID before it can push anything —
+`dns.write` alone can edit records inside a zone once it knows the ID, but can't look that ID up.
 Finish creating the client, then note its **Client ID** and **Client secret** — you'll enter both
 into dotMARC directly (see below), there's nothing to set as an environment variable or deployment
 parameter for this.

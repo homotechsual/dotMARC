@@ -48,7 +48,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             ["response_type"] = "code",
             ["client_id"] = settings.ClientId!,
             ["redirect_uri"] = redirectUri,
-            ["scope"] = "dns.write",
+            // dns.write alone can edit records within a zone, but resolving a domain name to its
+            // zone ID (FindZoneIdAsync's GET /zones?name=... call) needs the separate, non-DNS-
+            // specific zone.read permission — Cloudflare's own docs confirm zone listing needs
+            // com.cloudflare.api.account.zone.list, distinct from any DNS-scoped permission.
+            ["scope"] = "zone.read dns.write",
             ["state"] = state,
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256"
