@@ -85,14 +85,20 @@ else
         </MudItem>
     </MudGrid>
 
-    <MudTable Items="_rows" Hover="true" T="DashboardDomainRow">
+    <MudTable Items="_rows" Hover="true" T="DashboardDomainRow" CustomHeader="true">
         <HeaderContent>
-            <MudTh>Domain</MudTh>
-            <MudTh>Report Status</MudTh>
-            <MudTh>Pass rate (30d)</MudTh>
-            <MudTh>Last report</MudTh>
-            <MudTh>Monitored</MudTh>
-            <MudTh>DNS Status</MudTh>
+            <tr>
+                <MudTh rowspan="2">Domain</MudTh>
+                <MudTh rowspan="2">Report Status</MudTh>
+                <MudTh rowspan="2">Pass rate (30d)</MudTh>
+                <MudTh rowspan="2">Last report</MudTh>
+                <MudTh rowspan="2">Monitored</MudTh>
+                <MudTh colspan="2" Style="text-align:center">DNS Status</MudTh>
+            </tr>
+            <tr>
+                <MudTh>DMARC</MudTh>
+                <MudTh>MTA-STS</MudTh>
+            </tr>
         </HeaderContent>
         <RowTemplate>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@context.Name</MudTd>
@@ -111,6 +117,9 @@ else
             </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
                 <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus)</MudChip>
+            </MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(context.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(context.MtaStsStatus)</MudChip>
             </MudTd>
         </RowTemplate>
     </MudTable>
