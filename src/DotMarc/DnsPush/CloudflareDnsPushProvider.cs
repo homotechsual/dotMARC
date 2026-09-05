@@ -157,7 +157,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/zones/{zoneId}/dns_records")
         {
-            Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, change.DesiredValue))
+            Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, BuildContent(change)))
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -185,7 +185,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
 
         using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/zones/{zoneId}/dns_records/{recordId}")
         {
-            Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, change.DesiredValue))
+            Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, BuildContent(change)))
         };
         updateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var updateResponse = await _http.SendAsync(updateRequest, cancellationToken).ConfigureAwait(false);
@@ -258,7 +258,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         {
             using var createRequest = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/zones/{zoneId}/dns_records")
             {
-                Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, change.DesiredValue))
+                Content = JsonContent.Create(new DnsRecordPayload(change.RecordType, change.Name, BuildContent(change)))
             };
             createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             var createResponse = await _http.SendAsync(createRequest, cancellationToken).ConfigureAwait(false);
@@ -271,6 +271,18 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
             return new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but Cloudflare couldn't be reached to create the new {change.RecordType} record: {ex.Message} — this name now has no record and needs manual attention.");
         }
     }
+
+    /// <summary>Cloudflare's own API treats an unquoted TXT content value as non-conformant — it
+    /// accepts it and normalizes on their side (functionally identical either way), but flags the
+    /// record with a validation warning in their dashboard. Wrapping it here avoids that warning and
+    /// matches Cloudflare's documented format. Every value this app pushes (DMARC/TLSRPT policy
+    /// text, the MTA-STS asuid verification token) is plain text with no embedded quotes, so the
+    /// escape only guards against a value that happens to contain one. CNAME (and any other
+    /// non-TXT type) content is never zone-file text and must NOT be quoted.</summary>
+    private static string BuildContent(DnsRecordChange change) =>
+        string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase)
+            ? $"\"{change.DesiredValue.Replace("\"", "\\\"")}\""
+            : change.DesiredValue;
 
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string? AccessToken);
     private sealed record ApiResponse<T>([property: JsonPropertyName("result")] T? Result);
