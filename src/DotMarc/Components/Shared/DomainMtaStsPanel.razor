@@ -1,6 +1,7 @@
 @using DotMarc.Components.Dialogs
 @using DotMarc.Data
 @using DotMarc.DnsPush
+@using DotMarc.Ingestion
 @using DotMarc.MtaSts
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
@@ -12,6 +13,8 @@
 @inject IMxHostsLookup MxHostsLookup
 @inject IMtaStsCnameLookup MtaStsCnameLookup
 @inject IMtaStsHostProvisioner MtaStsHostProvisioner
+@inject IMtaStsDnsVerifier MtaStsDnsVerifier
+@inject IMtaStsServingVerifier MtaStsServingVerifier
 @inject IDnsProviderDetector DnsProviderDetector
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
 @inject IDialogService DialogService
@@ -36,7 +39,24 @@
             }
         </MudAlert>
     }
-    <MudText Typo="Typo.subtitle1" Class="mb-2">Policy hosting status</MudText>
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.subtitle1">Policy hosting status</MudText>
+        @if (Domain.MtaStsEnabled)
+        {
+            <AuthorizeView Policy="MtaStsManage" Context="mtaStsRecheckAuthState">
+                <Authorized>
+                    @if (_isRechecking)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckAsync" title="Recheck now" />
+                    }
+                </Authorized>
+            </AuthorizeView>
+        }
+    </div>
     <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(Domain.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(Domain.MtaStsStatus)</MudChip>
     @if (Domain.MtaStsCheckedUtc is { } checkedUtc)
     {
@@ -103,6 +123,7 @@
     private string _mxHostsText = "";
     private bool _isEnabling;
     private bool _isPushing;
+    private bool _isRechecking;
     private int _syncedDomainId;
     private string? _domainVerificationId;
 
@@ -255,6 +276,48 @@
         finally
         {
             _isPushing = false;
+        }
+    }
+
+    /// <summary>Runs PollingService's own per-domain MTA-STS check on demand, outside its normal
+    /// 15-minute/24-hour schedule — for right after fixing a record, so status updates without
+    /// waiting for the next automatic pass. Calls the exact same per-domain state machine the
+    /// batch cycle runs (PollingService.RunSingleMtaStsCheckAsync) so this can never drift from
+    /// what the scheduled check actually does, including its own internal handling of a
+    /// provisioning failure (it sets Failed status and a detail message itself rather than
+    /// throwing) — only a DNS/serving-verifier failure can still throw here, hence the catch.</summary>
+    private async Task RecheckAsync()
+    {
+        var hostingHostname = MtaStsOptions.Value.HostingHostname;
+        if (string.IsNullOrEmpty(hostingHostname))
+        {
+            Snackbar.Add("MTA-STS hosting isn't configured on this deployment.", Severity.Warning);
+            return;
+        }
+
+        _isRechecking = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == Domain.Id);
+            try
+            {
+                await PollingService.RunSingleMtaStsCheckAsync(domain, MtaStsDnsVerifier, MtaStsServingVerifier, MtaStsHostProvisioner, hostingHostname, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {Domain.Name}'s MTA-STS status. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            Domain.MtaStsStatus = domain.MtaStsStatus;
+            Domain.MtaStsCheckedUtc = domain.MtaStsCheckedUtc;
+            Domain.MtaStsCheckDetail = domain.MtaStsCheckDetail;
+        }
+        finally
+        {
+            _isRechecking = false;
         }
     }
 }

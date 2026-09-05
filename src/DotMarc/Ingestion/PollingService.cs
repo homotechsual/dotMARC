@@ -262,21 +262,15 @@ public sealed class PollingService : BackgroundService
             var anyUpdated = false;
             foreach (var domain in staleDomains)
             {
-                DmarcCheckResult result;
                 try
                 {
-                    result = await dmarcChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+                    await RunSingleDmarcCheckAsync(domain, dmarcChecker, mailboxAddress, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "DMARC DNS check failed for {Domain}; will retry next cycle.", domain.Name);
-                    continue;
                 }
-
-                domain.DmarcCheckStatus = result.Status;
-                domain.DmarcCheckedUtc = DateTimeOffset.UtcNow;
-                domain.DmarcCheckDetail = result.Detail;
-                anyUpdated = true;
             }
 
             if (anyUpdated)
@@ -325,10 +319,7 @@ public sealed class PollingService : BackgroundService
             {
                 try
                 {
-                    var result = await tlsrptChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
-                    domain.TlsrptCheckStatus = result.Status;
-                    domain.TlsrptCheckedUtc = DateTimeOffset.UtcNow;
-                    domain.TlsrptCheckDetail = result.Detail;
+                    await RunSingleTlsrptCheckAsync(domain, tlsrptChecker, mailboxAddress, cancellationToken).ConfigureAwait(false);
                     anyUpdated = true;
                 }
                 catch (Exception ex)
@@ -346,6 +337,28 @@ public sealed class PollingService : BackgroundService
         {
             await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>One domain's DMARC DNS check — factored out of RunDmarcCheckCycleAsync's loop so
+    /// a manual "recheck now" action (DomainDetail.razor) can run the exact same check outside the
+    /// scheduled batch cycle, without duplicating the result-to-field mapping. Does not save; the
+    /// caller decides transaction/persistence scope (the batch cycle saves once for the whole
+    /// batch, a manual recheck saves immediately for just the one domain).</summary>
+    internal static async Task RunSingleDmarcCheckAsync(Domain domain, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var result = await dmarcChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+        domain.DmarcCheckStatus = result.Status;
+        domain.DmarcCheckedUtc = DateTimeOffset.UtcNow;
+        domain.DmarcCheckDetail = result.Detail;
+    }
+
+    /// <summary>TLSRPT counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    internal static async Task RunSingleTlsrptCheckAsync(Domain domain, ITlsrptDnsChecker tlsrptChecker, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var result = await tlsrptChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+        domain.TlsrptCheckStatus = result.Status;
+        domain.TlsrptCheckedUtc = DateTimeOffset.UtcNow;
+        domain.TlsrptCheckDetail = result.Detail;
     }
 
     internal async Task RunTlsrptPollCycleAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, string mailboxAddress, CancellationToken cancellationToken)
@@ -536,8 +549,11 @@ public sealed class PollingService : BackgroundService
     /// <summary>One domain's transition through the state machine described in the design spec.
     /// PendingDns only ever needs the DNS check; PendingCertificate/Active/Failed all funnel
     /// through the same provisioner-then-serving-check path, since that path is what both moves a
-    /// domain forward and detects a regression on one that was already Active.</summary>
-    private static async Task RunSingleMtaStsCheckAsync(
+    /// domain forward and detects a regression on one that was already Active. internal (not
+    /// private) so DomainMtaStsPanel.razor's manual "recheck now" action can call it directly — see
+    /// RunSingleDmarcCheckAsync's remarks for why a manual recheck reuses the batch cycle's exact
+    /// per-domain logic instead of duplicating it.</summary>
+    internal static async Task RunSingleMtaStsCheckAsync(
         Domain domain,
         IMtaStsDnsVerifier dnsVerifier,
         IMtaStsServingVerifier servingVerifier,

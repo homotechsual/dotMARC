@@ -9,7 +9,9 @@
 @using Microsoft.Extensions.Options
 @using DotMarc.IpEnrichment
 @using DotMarc.DnsPush
+@using DotMarc.Dns
 @using DotMarc.Graph
+@using DotMarc.Ingestion
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
@@ -21,6 +23,8 @@
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
 @inject IDmarcTxtLookup DmarcTxtLookup
 @inject ITlsrptTxtLookup TlsrptTxtLookup
+@inject IDmarcDnsChecker DmarcDnsChecker
+@inject ITlsrptDnsChecker TlsrptDnsChecker
 @inject IOptions<GraphOptions> GraphOptions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -46,7 +50,21 @@ else
             </MudGrid>
             <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
             <MudPaper Class="pa-4 mt-4" Elevation="1">
-                <MudText Typo="Typo.subtitle1" Class="mb-2">DMARC record status</MudText>
+                <div class="d-flex align-center justify-space-between mb-2">
+                    <MudText Typo="Typo.subtitle1">DMARC record status</MudText>
+                    <AuthorizeView Policy="DomainsEdit" Context="dmarcRecheckAuthState">
+                        <Authorized>
+                            @if (_isRecheckingDmarc)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAsync" title="Recheck now" />
+                            }
+                        </Authorized>
+                    </AuthorizeView>
+                </div>
                 @if (_domain.DmarcCheckStatus == DmarcCheckStatus.NotChecked)
                 {
                     <MudText Typo="Typo.body2">Not checked yet.</MudText>
@@ -83,7 +101,21 @@ else
             @if (!string.IsNullOrWhiteSpace(GraphOptions.Value.TlsrptMailboxAddress))
             {
                 <MudPaper Class="pa-4 mt-4" Elevation="1">
-                    <MudText Typo="Typo.subtitle1" Class="mb-2">TLS reporting record status</MudText>
+                    <div class="d-flex align-center justify-space-between mb-2">
+                        <MudText Typo="Typo.subtitle1">TLS reporting record status</MudText>
+                        <AuthorizeView Policy="DomainsEdit" Context="tlsrptRecheckAuthState">
+                            <Authorized>
+                                @if (_isRecheckingTlsrpt)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckTlsrptAsync" title="Recheck now" />
+                                }
+                            </Authorized>
+                        </AuthorizeView>
+                    </div>
                     @if (_domain.TlsrptCheckStatus == TlsrptCheckStatus.NotChecked)
                     {
                         <MudText Typo="Typo.body2">Not checked yet.</MudText>
@@ -212,6 +244,8 @@ else
     private List<ChartSeries<double>> _series = [];
     private string[] _xAxisLabels = [];
     private bool _isPushingDmarcRecord;
+    private bool _isRecheckingDmarc;
+    private bool _isRecheckingTlsrpt;
     private DotNetObjectReference<DomainDetail>? _dotNetRef;
 
     public void Dispose() => _dotNetRef?.Dispose();
@@ -524,6 +558,75 @@ else
         }
 
         await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "tlsrpt");
+    }
+
+    /// <summary>Runs PollingService's own per-domain DMARC check on demand, outside its ~24h
+    /// schedule — for right after fixing a record, so the status updates without waiting for the
+    /// next automatic pass. Reuses the exact same per-domain logic the batch cycle runs (see
+    /// PollingService.RunSingleDmarcCheckAsync's remarks) so this can never drift from what the
+    /// scheduled check actually does.</summary>
+    private async Task RecheckDmarcAsync()
+    {
+        _isRecheckingDmarc = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleDmarcCheckAsync(domain, DmarcDnsChecker, GraphOptions.Value.MailboxAddress, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s DMARC record. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.DmarcCheckStatus = domain.DmarcCheckStatus;
+            _domain.DmarcCheckedUtc = domain.DmarcCheckedUtc;
+            _domain.DmarcCheckDetail = domain.DmarcCheckDetail;
+        }
+        finally
+        {
+            _isRecheckingDmarc = false;
+        }
+    }
+
+    /// <summary>TLSRPT counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    private async Task RecheckTlsrptAsync()
+    {
+        var mailbox = GraphOptions.Value.TlsrptMailboxAddress;
+        if (string.IsNullOrWhiteSpace(mailbox))
+        {
+            Snackbar.Add("TLS reporting isn't configured on this deployment.", Severity.Warning);
+            return;
+        }
+
+        _isRecheckingTlsrpt = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleTlsrptCheckAsync(domain, TlsrptDnsChecker, mailbox, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s TLS reporting record. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.TlsrptCheckStatus = domain.TlsrptCheckStatus;
+            _domain.TlsrptCheckedUtc = domain.TlsrptCheckedUtc;
+            _domain.TlsrptCheckDetail = domain.TlsrptCheckDetail;
+        }
+        finally
+        {
+            _isRecheckingTlsrpt = false;
+        }
     }
 
     private async Task OpenDnsPushPopupAsync(string providerKey, int domainId, string target)
