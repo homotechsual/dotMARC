@@ -23,6 +23,7 @@
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
 @inject IDmarcTxtLookup DmarcTxtLookup
 @inject ITlsrptTxtLookup TlsrptTxtLookup
+@inject IDmarcAuthorizationTxtLookup DmarcAuthorizationTxtLookup
 @inject IDmarcDnsChecker DmarcDnsChecker
 @inject ITlsrptDnsChecker TlsrptDnsChecker
 @inject IOptions<GraphOptions> GraphOptions
@@ -92,6 +93,22 @@ else
                                 {
                                     <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
                                                OnClick="PushDmarcRecordAsync">Push via your DNS provider</MudButton>
+                                }
+                            </div>
+                        </AuthorizeView>
+                    }
+                    else if (_domain.DmarcCheckStatus == DmarcCheckStatus.MissingAuthorizationRecord)
+                    {
+                        <AuthorizeView Policy="DomainsEdit" Context="dmarcAuthPushAuthState">
+                            <div class="mt-2">
+                                @if (_isPushingDmarcAuthRecord)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                               OnClick="PushDmarcAuthorizationRecordAsync">Push authorization record via your DNS provider</MudButton>
                                 }
                             </div>
                         </AuthorizeView>
@@ -244,6 +261,7 @@ else
     private List<ChartSeries<double>> _series = [];
     private string[] _xAxisLabels = [];
     private bool _isPushingDmarcRecord;
+    private bool _isPushingDmarcAuthRecord;
     private bool _isRecheckingDmarc;
     private bool _isRecheckingTlsrpt;
     private DotNetObjectReference<DomainDetail>? _dotNetRef;
@@ -484,6 +502,73 @@ else
         finally
         {
             _isPushingDmarcRecord = false;
+        }
+    }
+
+    /// <summary>Pushes the RFC 7489 §7.1 authorization record proving the mailbox's own domain
+    /// accepts DMARC reports for this monitored domain. Unlike PushDmarcRecordAsync/
+    /// PushTlsrptRecordAsync, the record being pushed doesn't live in THIS domain's zone — it
+    /// lives in the mailbox's domain's zone (typically the MSP's own domain), so provider
+    /// detection and the push itself both target that domain instead of DomainName. See
+    /// Program.cs's "dmarc-auth" callback branch for the matching server-side half.</summary>
+    private async Task PushDmarcAuthorizationRecordAsync()
+    {
+        _isPushingDmarcAuthRecord = true;
+        try
+        {
+            var mailbox = GraphOptions.Value.MailboxAddress;
+            var mailboxDomain = mailbox[(mailbox.IndexOf('@') + 1)..];
+
+            var detected = await DnsProviderDetector.DetectAsync(mailboxDomain, CancellationToken.None);
+            var providerKey = detected switch
+            {
+                DetectedDnsProvider.Cloudflare => "cloudflare",
+                DetectedDnsProvider.AzureDns => "azure-dns",
+                _ => null
+            };
+            var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
+            if (pushProvider is null)
+            {
+                Snackbar.Add($"Couldn't find a configured DNS push option for {mailboxDomain} — add the record manually.", Severity.Warning);
+                return;
+            }
+
+            var authorizationName = $"{DomainName}._report._dmarc.{mailboxDomain}";
+            DnsRecordLookupResult existing;
+            try
+            {
+                existing = await DmarcAuthorizationTxtLookup.LookupAsync(authorizationName, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to look up {DomainName}'s DMARC authorization record. Try again.", Severity.Error);
+                return;
+            }
+
+            const string proposed = "v=DMARC1;";
+            if (DnsRecordPushDecision.NeedsConfirmation(existing.DirectValue, existing.DelegatedToCname, proposed))
+            {
+                var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
+                {
+                    { x => x.RecordDescription, "DMARC authorization record" },
+                    { x => x.RecordName, authorizationName },
+                    { x => x.ExistingValue, existing.DirectValue ?? "" },
+                    { x => x.ProposedValue, proposed },
+                    { x => x.DelegatedToCname, existing.DelegatedToCname }
+                };
+                var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC authorization record", parameters);
+                var result = await dialogRef.Result;
+                if (result is null || result.Canceled)
+                {
+                    return;
+                }
+            }
+
+            await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "dmarc-auth");
+        }
+        finally
+        {
+            _isPushingDmarcAuthRecord = false;
         }
     }
 

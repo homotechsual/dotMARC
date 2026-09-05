@@ -194,6 +194,12 @@ builder.Services.AddHttpClient<DotMarc.DnsPush.ITlsrptTxtLookup, DotMarc.DnsPush
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
+builder.Services.AddHttpClient<DotMarc.DnsPush.IDmarcAuthorizationTxtLookup, DotMarc.DnsPush.DmarcAuthorizationTxtLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts.MtaStsCnameLookup>(client =>
 {
     client.BaseAddress = new Uri("https://cloudflare-dns.com/");
@@ -440,7 +446,7 @@ app.MapGet("/dns-push/{provider}/start", async (
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
     IAuthorizationService authorizationService) =>
 {
-    var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" => "DomainsEdit", _ => null };
+    var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" or "dmarc-auth" => "DomainsEdit", _ => null };
     if (requiredPolicy is null)
     {
         return Results.BadRequest();
@@ -469,6 +475,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
     IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
+    IDmarcAuthorizationTxtLookup dmarcAuthorizationTxtLookup,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
     DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner, DotMarc.MtaSts.IMtaStsCnameLookup mtaStsCnameLookup,
     IAuthorizationService authorizationService, ILogger<Program> logger) =>
@@ -484,7 +491,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     // whoever's browser lands HERE still holds the permission the push actually needs — re-run the
     // same target-to-policy check /start already made rather than relying solely on the app's
     // FallbackPolicy (any authenticated user).
-    var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" => "DomainsEdit", _ => null };
+    var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" or "dmarc-auth" => "DomainsEdit", _ => null };
     if (requiredPolicy is null)
     {
         return DnsPushPopupResult.Close("invalid");
@@ -565,6 +572,39 @@ app.MapGet("/dns-push/{provider}/callback", async (
                 return DnsPushPopupResult.Close("unmergeable");
             }
             changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing.DirectValue, domain.Name)];
+        }
+    }
+    else if (decodedState.PushTarget == "dmarc-auth")
+    {
+        // RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being monitored
+        // (the normal MSP shape — a shared mailbox on the MSP's own domain, not each client's),
+        // that mailbox's domain must publish this record proving it accepts reports for the
+        // monitored domain. Unlike the "dmarc"/"tlsrpt" targets above, this record's zone is the
+        // MAILBOX's domain, not domain.Name — ZoneName below reflects that, which is what sends
+        // this push through whichever DNS provider hosts the deployment's own domain rather than
+        // the client's.
+        var mailbox = graphOptions.Value.MailboxAddress;
+        var mailboxDomain = mailbox[(mailbox.IndexOf('@') + 1)..];
+        var authorizationName = $"{domain.Name}._report._dmarc.{mailboxDomain}";
+        const string proposed = "v=DMARC1;";
+
+        var existing = await dmarcAuthorizationTxtLookup.LookupAsync(authorizationName, CancellationToken.None);
+        if (existing.DelegatedToCname is not null)
+        {
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", authorizationName, proposed, existing.DelegatedToCname, mailboxDomain, ExistingRecordType: "CNAME")];
+        }
+        else if (existing.DirectValue is null)
+        {
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", authorizationName, proposed, null, mailboxDomain)];
+        }
+        else
+        {
+            // No structured tags to preserve here (unlike DMARC/TLSRPT's rua= merge) — an
+            // authorization record's only job is to exist with v=DMARC1, so an unexpected
+            // existing value is simply overwritten once the confirm dialog (shown for any
+            // existing-differs-from-proposed case, per DnsRecordPushDecision.NeedsConfirmation)
+            // has been accepted.
+            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", authorizationName, proposed, existing.DirectValue, mailboxDomain)];
         }
     }
     else
