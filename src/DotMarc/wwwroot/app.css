@@ -9,3 +9,17 @@ html {
        through to the browser's default canvas fill instead of the theme background. */
     background-color: var(--mud-palette-background);
 }
+
+/* Contextual "?" docs link (see DocsLink.razor): muted until hovered/focused, so it reads as a
+   secondary affordance next to a heading rather than competing with the heading itself. */
+.docs-link {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    color: var(--mud-palette-text-secondary);
+}
+
+.docs-link:hover,
+.docs-link:focus-visible {
+    color: var(--mud-palette-primary);
+}

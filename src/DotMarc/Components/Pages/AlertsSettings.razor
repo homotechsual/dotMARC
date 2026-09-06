@@ -1,6 +1,7 @@
 @page "/alerts/settings"
 @attribute [Authorize(Policy = "AlertsManage")]
 @using DotMarc.Data
+@using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -11,7 +12,10 @@
 @inject NavigationManager NavigationManager
 
 <PageTitle>dotMARC - Alert Settings</PageTitle>
-<MudText Typo="Typo.h4" Class="mb-4">Alert settings</MudText>
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Alert settings</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to HaloPSA tickets" Class="ml-2" />
+</div>
 
 @if (_settings is null)
 {

@@ -12,12 +12,14 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>dotMARC - Dashboard</PageTitle>
-<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
-
-<HelpAlert DocsUrl="https://dotmarc.app/docs/getting-started">
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">Dashboard</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/getting-started" Text="What this page shows" Class="ml-2" />
+</div>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
     Pass rate, DNS status, and polling health for every domain you monitor, updated as reports
     come in. Filter by Group or Tag below, or open a domain for its full report history.
-</HelpAlert>
+</MudText>
 
 @if (_summary is null)
 {

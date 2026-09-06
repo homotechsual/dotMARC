@@ -37,7 +37,10 @@
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
-<MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">@DomainName</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/mta-sts" Text="MTA-STS statuses explained" Class="ml-2" />
+</div>
 
 @if (_domain is null)
 {

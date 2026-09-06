@@ -2,6 +2,7 @@
 @page "/dns-push/settings"
 @attribute [Authorize(Policy = "DnsPushManage")]
 @using DotMarc.Data
+@using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -10,7 +11,10 @@
 @inject ISnackbar Snackbar
 
 <PageTitle>dotMARC - DNS Push Settings</PageTitle>
-<MudText Typo="Typo.h4" Class="mb-4">DNS push settings</MudText>
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">DNS push settings</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/getting-started#dns-provider-push-optional" Text="Setting up Cloudflare and Azure DNS push" Class="ml-2" />
+</div>
 
 @if (_cloudflareSettings is not null)
 {

@@ -39,8 +39,10 @@
             }
         </MudAlert>
     }
-    <div class="d-flex align-center justify-space-between mb-2">
+    <div class="d-flex align-center mb-2">
         <MudText Typo="Typo.subtitle1">Policy hosting status</MudText>
+        <DocsLink Href="https://dotmarc.app/docs/mta-sts#status" Text="What do these statuses mean?" Class="ml-2" />
+        <MudSpacer />
         @if (Domain.MtaStsEnabled)
         {
             <AuthorizeView Policy="MtaStsManage" Context="mtaStsRecheckAuthState">
@@ -66,7 +68,6 @@
     {
         <MudText Typo="Typo.body2" Class="mt-1">@Domain.MtaStsCheckDetail</MudText>
     }
-    <MudLink Href="https://dotmarc.app/docs/mta-sts#status" Target="_blank" Class="mt-2 d-block">What do these statuses mean?</MudLink>
 
     <AuthorizeView Policy="MtaStsManage" Context="manageAuthState">
         <div class="mt-3">

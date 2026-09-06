@@ -1,7 +1,7 @@
-@* A small, consistent in-app help banner: a short explanation plus an optional link out to the
-   docs site for the fuller picture. Used at the top of pages where the UI alone doesn't explain
-   what to do next (e.g. an external DNS step) or a concept the page depends on (e.g. Groups vs
-   Tags). *@
+@* An in-app callout for information that actually needs attention right now (a required
+   external step, a state the admin should notice before proceeding). For "here's what this page
+   is/does" pointers to the docs site, use DocsLink instead — a callout box on every page for
+   routine background reading just trains admins to stop reading them. *@
 <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.Info" Dense="true">
     @ChildContent
     @if (!string.IsNullOrEmpty(DocsUrl))

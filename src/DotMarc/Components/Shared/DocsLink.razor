@@ -1,0 +1,20 @@
+@* A small "?" affordance placed next to a heading or field that links out to the fuller docs
+   page for background reading — not for anything the admin needs to act on right now. Callout
+   boxes (see HelpAlert) are reserved for information that actually demands attention; this is
+   for everything else, so it doesn't compete with them for visual weight. *@
+<MudTooltip Text="@Text" Arrow="true">
+    <MudLink Href="@Href" Target="_blank" Class="@($"docs-link {Class}")" aria-label="@Text">
+        <MudIcon Icon="@Icons.Material.Outlined.HelpOutline" Size="Size.Small" />
+    </MudLink>
+</MudTooltip>
+
+@code {
+    /// <summary>Absolute URL to the relevant docs.dotmarc.app page — external, so this always
+    /// opens in a new tab rather than navigating the admin away from what they're doing.</summary>
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+
+    /// <summary>Tooltip shown on hover/focus — what the linked page covers, not just "docs".</summary>
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+
+    [Parameter] public string Class { get; set; } = "";
+}

@@ -1,13 +1,17 @@
 @page "/alerts"
 @attribute [Authorize(Policy = "AlertsView")]
 @using DotMarc.Data
+@using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 
 <PageTitle>dotMARC - Alerts</PageTitle>
-<MudText Typo="Typo.h4" Class="mb-4">Alerts</MudText>
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Alerts</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/alerts" Text="Alert types and delivery channels" Class="ml-2" />
+</div>
 
 @if (_alerts is null)
 {

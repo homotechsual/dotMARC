@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "DomainsWrite")]
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
+@using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -13,7 +14,10 @@
 
 <PageTitle>dotMARC - Manage Domains</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
-<MudText Typo="Typo.h4" Class="mb-4">Manage domains</MudText>
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Manage domains</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/scope" Text="What dotMARC monitors for a domain" Class="ml-2" />
+</div>
 
 <AuthorizeView Policy="DomainsAdd">
     <MudPaper Class="pa-4 mb-4" Elevation="1">
