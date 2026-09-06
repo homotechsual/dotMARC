@@ -34,6 +34,22 @@ public sealed class PollingService : BackgroundService
 
     internal const long TlsrptPollingLeaderLockKey = 84_200_009;
 
+    /// <summary>Arbitrary fixed key for this service's DMARC-authorization-check advisory lock —
+    /// independent of DmarcCheckLeaderLockKey since the own-record check and the authorization
+    /// check are now two fully independent checks with their own staleness tracking.</summary>
+    internal const long DmarcAuthorizationCheckLeaderLockKey = 84_200_011;
+
+    internal const long SpfCheckLeaderLockKey = 84_200_013;
+
+    internal const long MxCheckLeaderLockKey = 84_200_015;
+
+    /// <summary>Arbitrary fixed key for this service's DKIM-check advisory lock. Runs on the same
+    /// schedule as every other check even though most domains will have no selectors configured
+    /// yet (RunSingleDkimCheckAsync short-circuits to NotConfigured in that case) — simpler than
+    /// trying to filter the staleness query by DkimSelectors.Count, which doesn't translate cleanly
+    /// through the List&lt;string&gt; value converter.</summary>
+    internal const long DkimCheckLeaderLockKey = 84_200_017;
+
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
     private readonly IGraphMailboxClient? _graphClient;
@@ -109,6 +125,50 @@ public sealed class PollingService : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "DMARC check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var dmarcChecker = scope.ServiceProvider.GetRequiredService<IDmarcDnsChecker>();
+                        await RunDmarcAuthorizationCheckCycleAsync(context, dmarcChecker, _options!.MailboxAddress, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "DMARC authorization check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var spfChecker = scope.ServiceProvider.GetRequiredService<ISpfDnsChecker>();
+                        await RunSpfCheckCycleAsync(context, spfChecker, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "SPF check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var mxChecker = scope.ServiceProvider.GetRequiredService<IMxDnsChecker>();
+                        await RunMxCheckCycleAsync(context, mxChecker, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "MX check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var dkimChecker = scope.ServiceProvider.GetRequiredService<IDkimDnsChecker>();
+                        await RunDkimCheckCycleAsync(context, dkimChecker, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "DKIM check cycle failed; will retry next interval.");
                     }
 
                     if (!string.IsNullOrWhiteSpace(_options!.TlsrptMailboxAddress))
@@ -359,6 +419,283 @@ public sealed class PollingService : BackgroundService
         domain.TlsrptCheckStatus = result.Status;
         domain.TlsrptCheckedUtc = DateTimeOffset.UtcNow;
         domain.TlsrptCheckDetail = result.Detail;
+    }
+
+    /// <summary>DMARC-authorization counterpart to RunSingleDmarcCheckAsync — see its remarks.
+    /// Always calls CheckAuthorizationAsync regardless of the (separate) own-record DMARC status,
+    /// so the two are independently accurate.</summary>
+    internal static async Task RunSingleDmarcAuthorizationCheckAsync(Domain domain, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var result = await dmarcChecker.CheckAuthorizationAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+        domain.DmarcAuthorizationCheckStatus = result.Status;
+        domain.DmarcAuthorizationCheckedUtc = DateTimeOffset.UtcNow;
+        domain.DmarcAuthorizationCheckDetail = result.Detail;
+    }
+
+    /// <summary>SPF counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    internal static async Task RunSingleSpfCheckAsync(Domain domain, ISpfDnsChecker spfChecker, CancellationToken cancellationToken)
+    {
+        var result = await spfChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+        domain.SpfCheckStatus = result.Status;
+        domain.SpfCheckedUtc = DateTimeOffset.UtcNow;
+        domain.SpfCheckDetail = result.Detail;
+    }
+
+    /// <summary>MX counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    internal static async Task RunSingleMxCheckAsync(Domain domain, IMxDnsChecker mxChecker, CancellationToken cancellationToken)
+    {
+        var result = await mxChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+        domain.MxCheckStatus = result.Status;
+        domain.MxCheckedUtc = DateTimeOffset.UtcNow;
+        domain.MxCheckDetail = result.Detail;
+    }
+
+    /// <summary>DKIM is opt-in: with no selectors configured, this short-circuits to NotConfigured
+    /// (a neutral default, not a failure) without calling the checker at all.</summary>
+    internal static async Task RunSingleDkimCheckAsync(Domain domain, IDkimDnsChecker dkimChecker, CancellationToken cancellationToken)
+    {
+        if (domain.DkimSelectors.Count == 0)
+        {
+            domain.DkimCheckStatus = DkimCheckStatus.NotConfigured;
+            domain.DkimCheckedUtc = DateTimeOffset.UtcNow;
+            domain.DkimCheckDetail = null;
+            return;
+        }
+
+        var result = await dkimChecker.CheckAsync(domain.Name, domain.DkimSelectors, cancellationToken).ConfigureAwait(false);
+        domain.DkimCheckStatus = result.Status;
+        domain.DkimCheckedUtc = DateTimeOffset.UtcNow;
+        domain.DkimCheckDetail = result.Detail;
+    }
+
+    /// <summary>Runs a DMARC authorization-record check for every domain whose last check
+    /// (DmarcAuthorizationCheckedUtc) is null or more than 24 hours old.</summary>
+    internal async Task RunDmarcAuthorizationCheckCycleAsync(DotMarcDbContext context, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", DmarcAuthorizationCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the DMARC-authorization-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(d => d.DmarcAuthorizationCheckedUtc == null || d.DmarcAuthorizationCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    await RunSingleDmarcAuthorizationCheckAsync(domain, dmarcChecker, mailboxAddress, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "DMARC authorization check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Runs an SPF check for every domain whose last check (SpfCheckedUtc) is null or more
+    /// than 24 hours old.</summary>
+    internal async Task RunSpfCheckCycleAsync(DotMarcDbContext context, ISpfDnsChecker spfChecker, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", SpfCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the SPF-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(d => d.SpfCheckedUtc == null || d.SpfCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    await RunSingleSpfCheckAsync(domain, spfChecker, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SPF check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Runs an MX check for every domain whose last check (MxCheckedUtc) is null or more
+    /// than 24 hours old.</summary>
+    internal async Task RunMxCheckCycleAsync(DotMarcDbContext context, IMxDnsChecker mxChecker, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", MxCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the MX-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(d => d.MxCheckedUtc == null || d.MxCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    await RunSingleMxCheckAsync(domain, mxChecker, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "MX check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Runs a DKIM check for every domain whose last check (DkimCheckedUtc) is null or
+    /// more than 24 hours old. Most domains have no selectors configured, so most iterations of
+    /// this loop are the cheap NotConfigured short-circuit inside RunSingleDkimCheckAsync, not an
+    /// actual DNS call.</summary>
+    internal async Task RunDkimCheckCycleAsync(DotMarcDbContext context, IDkimDnsChecker dkimChecker, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", DkimCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the DKIM-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(d => d.DkimCheckedUtc == null || d.DkimCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    await RunSingleDkimCheckAsync(domain, dkimChecker, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "DKIM check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     internal async Task RunTlsrptPollCycleAsync(IGraphMailboxClient graphClient, DotMarcDbContext context, string mailboxAddress, CancellationToken cancellationToken)
