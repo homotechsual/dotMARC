@@ -53,6 +53,19 @@ public sealed class SpfDnsCheckerTests
     }
 
     [Fact]
+    public async Task CheckAsync_ReturnsMisconfigured_WhenARecordLooksLikeSpfButHasTheWrongPrefix()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=spf2 include:_spf.google.com ~all\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(SpfCheckStatus.Misconfigured, result.Status);
+    }
+
+    [Fact]
     public async Task CheckAsync_ReturnsMultipleRecords_WhenTwoSpfRecordsExist()
     {
         var (checker, handler) = CreateChecker();

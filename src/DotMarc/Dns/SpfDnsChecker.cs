@@ -22,6 +22,15 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
 
         if (spfRecords.Count == 0)
         {
+            // A record that mentions "spf" but doesn't start with the required "v=spf1" prefix
+            // (a wrong/typo'd version tag such as "v=spf2", or a missing "v=") is a real,
+            // distinguishable misconfiguration — worth telling apart from "no SPF record was
+            // even attempted."
+            var nearMiss = allTxtRecords.FirstOrDefault(r => r.Contains("spf", StringComparison.OrdinalIgnoreCase));
+            if (nearMiss is not null)
+            {
+                return new SpfCheckResult(SpfCheckStatus.Misconfigured, $"{domainName} has a record that looks like SPF but doesn't start with v=spf1: {nearMiss}");
+            }
             return new SpfCheckResult(SpfCheckStatus.MissingRecord, $"No SPF (v=spf1) TXT record found at {domainName}");
         }
         if (spfRecords.Count > 1)

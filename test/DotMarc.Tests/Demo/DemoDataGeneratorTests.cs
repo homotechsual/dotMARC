@@ -93,7 +93,7 @@ public sealed class DemoDataGeneratorTests
     }
 
     [Fact]
-    public void DriftwoodMedia_HasAMissingAuthorizationRecordStatus()
+    public void DriftwoodMedia_HasDmarcOkButAuthorizationMissing()
     {
         var dataset = Generate();
         var domain = dataset.Domains.Single(d => d.Name == "driftwood-media.example");

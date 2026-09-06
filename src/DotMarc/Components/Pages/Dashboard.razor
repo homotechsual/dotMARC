@@ -116,7 +116,7 @@ else
                 </AuthorizeView>
             </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
-                <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus)</MudChip>
+                <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)</MudChip>
             </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
                 <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(context.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(context.MtaStsStatus)</MudChip>

@@ -33,6 +33,14 @@ public sealed class MxDnsChecker : IMxDnsChecker
         var unresolvable = new List<string>();
         foreach (var (_, exchange) in mxAnswers)
         {
+            if (exchange == ".")
+            {
+                // A null MX entry mixed in with real targets is RFC 7505-invalid to begin with
+                // (null MX must be the ONLY MX record) — skip it here rather than resolving an
+                // empty hostname; the mxAnswers.Count == 1 && exchange == "." branch above already
+                // handles the valid, standalone null-MX case.
+                continue;
+            }
             var host = exchange.TrimEnd('.');
             if (!await ResolvesAsync(host, cancellationToken).ConfigureAwait(false))
             {
@@ -53,14 +61,21 @@ public sealed class MxDnsChecker : IMxDnsChecker
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
-        return (parsed.Answer ?? [])
-            .Where(a => a.Type == 15)
-            .Select(a =>
+
+        // Malformed MX rdata (not "<preference> <exchange>", or a non-numeric preference) is
+        // skipped rather than thrown on — Cloudflare's DoH API is consistent in practice, but
+        // this is untrusted network response data and a thrown exception here would surface as
+        // an opaque warning instead of a clean, diagnosable check result.
+        var results = new List<(int Preference, string Exchange)>();
+        foreach (var answer in (parsed.Answer ?? []).Where(a => a.Type == 15))
+        {
+            var parts = answer.Data.Split(' ', 2);
+            if (parts.Length == 2 && int.TryParse(parts[0], out var preference))
             {
-                var parts = a.Data.Split(' ', 2);
-                return (Preference: int.Parse(parts[0]), Exchange: parts[1]);
-            })
-            .ToList();
+                results.Add((preference, parts[1]));
+            }
+        }
+        return results;
     }
 
     private async Task<bool> ResolvesAsync(string host, CancellationToken cancellationToken)
