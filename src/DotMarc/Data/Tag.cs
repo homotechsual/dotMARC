@@ -2,7 +2,7 @@ using MudBlazor;
 
 namespace DotMarc.Data;
 
-/// <summary>A curated, colored label a domain can carry (e.g. "primary") — many-to-many, used
+/// <summary>A curated, colored label a domain can carry (e.g. "primary") - many-to-many, used
 /// for filtering on the Dashboard rather than ownership. Unlike Group, a Tag never implies
 /// access to anything.</summary>
 public sealed class Tag

@@ -39,7 +39,7 @@ public static class DomainManagementService
             // The unique index on Domain.Name (DotMarcDbContext.cs) caught a race: another request
             // inserted the same domain between our AnyAsync check and this save. Same outcome as
             // the pre-check catching it, just reported the same way to the caller. Only the
-            // unique-violation SQL state ("23505") is treated this way — any other DbUpdateException
+            // unique-violation SQL state ("23505") is treated this way - any other DbUpdateException
             // (connection drop, disk full, permission failure) propagates instead of being
             // misreported as "already monitored", which would point the caller at the wrong problem.
             return AddDomainResult.AlreadyMonitored;
@@ -50,7 +50,7 @@ public static class DomainManagementService
 
     /// <summary>Permanently deletes a Domain row. DotMarcDbContext.cs configures cascade delete
     /// from Domain to Report and Report to ReportRecord, so this also removes all report history
-    /// for the domain — callers (ManageDomains.razor) confirm that with the user first when the
+    /// for the domain - callers (ManageDomains.razor) confirm that with the user first when the
     /// domain has any reports.</summary>
     public static async Task RemoveDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default)
     {
@@ -77,7 +77,7 @@ public static class DomainManagementService
     /// <summary>Saves a domain's MTA-STS hosting configuration from the domain detail page's MTA-STS
     /// tab. Enabling hosting for the first time (false -&gt; true) resets MtaStsStatus to PendingDns
     /// so PollingService's MTA-STS cycle picks it up on its next ~15 minute pass; disabling it
-    /// (true -&gt; false) is intentionally left alone here — that same cycle detects the flip and
+    /// (true -&gt; false) is intentionally left alone here - that same cycle detects the flip and
     /// runs IMtaStsHostProvisioner.TeardownAsync before resetting the status itself, since teardown
     /// is a network call this pure-DB service does not make.</summary>
     public static async Task SetMtaStsConfigAsync(
@@ -107,7 +107,7 @@ public static class DomainManagementService
     }
 
     /// <summary>Saves a domain's DKIM selector list from the domain detail page's "Configure DKIM
-    /// selectors" dialog. Does not itself trigger a recheck — the dialog's own save handler does
+    /// selectors" dialog. Does not itself trigger a recheck - the dialog's own save handler does
     /// that immediately afterward via PollingService.RunSingleDkimCheckAsync, matching the "enable
     /// MTA-STS" flow's immediate-check-after-save pattern.</summary>
     public static async Task SetDkimSelectorsAsync(DotMarcDbContext context, int domainId, List<string> selectors, CancellationToken cancellationToken = default)
@@ -118,10 +118,10 @@ public static class DomainManagementService
     }
 
     /// <summary>Persists a full custom display order: SortOrder is set to each domain's index in
-    /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme — simple, and
+    /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme - simple, and
     /// correct at the scale (a handful to a few dozen domains) this app is designed for. Two
     /// domains can end up with the same SortOrder if a manual add (AddDomainAsync) races a
-    /// report-driven one (PollingService.StoreReportAsync) — there's no uniqueness constraint on
+    /// report-driven one (PollingService.StoreReportAsync) - there's no uniqueness constraint on
     /// the column, and every ordering query breaks such ties with .ThenBy(d => d.Name), so this is
     /// tolerated by design rather than guarded against.</summary>
     public static async Task ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default)
@@ -134,7 +134,7 @@ public static class DomainManagementService
         for (var index = 0; index < orderedDomainIds.Count; index++)
         {
             // A domain deleted concurrently (between the caller building this list and this call)
-            // is simply skipped rather than throwing — the caller's next reload drops it from the
+            // is simply skipped rather than throwing - the caller's next reload drops it from the
             // displayed list anyway, so there's nothing left to assign an order to.
             if (domains.TryGetValue(orderedDomainIds[index], out var domain))
             {

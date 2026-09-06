@@ -27,7 +27,7 @@ public sealed class MxDnsChecker : IMxDnsChecker
         }
         if (mxAnswers.Count == 1 && mxAnswers[0].Exchange == ".")
         {
-            return new MxCheckResult(MxCheckStatus.Ok, "Explicit null MX (RFC 7505) — this domain intentionally does not accept mail.");
+            return new MxCheckResult(MxCheckStatus.Ok, "Explicit null MX (RFC 7505) - this domain intentionally does not accept mail.");
         }
 
         var unresolvable = new List<string>();
@@ -36,7 +36,7 @@ public sealed class MxDnsChecker : IMxDnsChecker
             if (exchange == ".")
             {
                 // A null MX entry mixed in with real targets is RFC 7505-invalid to begin with
-                // (null MX must be the ONLY MX record) — skip it here rather than resolving an
+                // (null MX must be the ONLY MX record) - skip it here rather than resolving an
                 // empty hostname; the mxAnswers.Count == 1 && exchange == "." branch above already
                 // handles the valid, standalone null-MX case.
                 continue;
@@ -63,7 +63,7 @@ public sealed class MxDnsChecker : IMxDnsChecker
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
 
         // Malformed MX rdata (not "<preference> <exchange>", or a non-numeric preference) is
-        // skipped rather than thrown on — Cloudflare's DoH API is consistent in practice, but
+        // skipped rather than thrown on - Cloudflare's DoH API is consistent in practice, but
         // this is untrusted network response data and a thrown exception here would surface as
         // an opaque warning instead of a clean, diagnosable check result.
         var results = new List<(int Preference, string Exchange)>();

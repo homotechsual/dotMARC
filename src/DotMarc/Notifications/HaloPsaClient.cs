@@ -71,7 +71,7 @@ public sealed class HaloPsaClient : IHaloPsaClient
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             // The cached token may have been revoked early on Halo's side. Invalidate it and retry
-            // exactly once with a freshly-acquired token — never more, to avoid looping forever
+            // exactly once with a freshly-acquired token - never more, to avoid looping forever
             // against a persistently-invalid credential.
             response.Dispose();
             await _tokenCache.InvalidateAsync(settings, cancellationToken).ConfigureAwait(false);

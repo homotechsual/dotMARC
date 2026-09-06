@@ -202,7 +202,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         var resolved = await UserAccessManagementService.ResolveAsync(context, "oid-123", "person-renamed@example.com", CancellationToken.None);
 
         Assert.NotNull(resolved);
-        Assert.Equal("person@example.com", resolved!.Email); // unchanged — lookup used the object ID, not the new email.
+        Assert.Equal("person@example.com", resolved!.Email); // unchanged - lookup used the object ID, not the new email.
     }
 
     [Fact]

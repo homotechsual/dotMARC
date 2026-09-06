@@ -194,7 +194,7 @@ fictional MSP is (re)written on every startup and again every night at `Demo__Re
 [docs/superpowers/specs/2026-08-28-demo-instance-design.md](docs/superpowers/specs/2026-08-28-demo-instance-design.md)
 for the full design and the narrative the generated data tells.
 
-No `Graph__*`/`EntraId__*`/`InitialAdmins__Emails` variables are needed in this mode — only
+No `Graph__*`/`EntraId__*`/`InitialAdmins__Emails` variables are needed in this mode - only
 `ConnectionStrings__DotMarc` and `Demo__Enabled`.
 
 ### Running the demo stack
@@ -211,7 +211,7 @@ POSTGRES_PASSWORD=<pick a password>
 ```
 
 The `dotmarc-demo` container joins an external Docker network named `proxy` and only `expose`s
-port 8080 — it does not publish a host port or run its own reverse proxy. Point your existing
+port 8080 - it does not publish a host port or run its own reverse proxy. Point your existing
 Caddy instance (on that same `proxy` network) at it, e.g.:
 
 ```
@@ -221,7 +221,7 @@ demo.dotmarc.app {
 ```
 
 Deployment to the demo VM is automated by `.github/workflows/demo-deploy.yml` on every push to
-`main` — see that workflow for the required repository secrets/variables.
+`main` - see that workflow for the required repository secrets/variables.
 
 ## Development
 

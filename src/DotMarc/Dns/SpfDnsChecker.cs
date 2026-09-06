@@ -5,9 +5,9 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>Checks SPF (RFC 7208) record health at the monitored domain's apex: presence, that
-/// exactly one v=spf1 TXT record exists (RFC 7208 requires exactly one — multiple is a common,
+/// exactly one v=spf1 TXT record exists (RFC 7208 requires exactly one - multiple is a common,
 /// real misconfiguration), and the v=spf1 prefix itself. Does not follow include:/redirect= chains
-/// or validate the 10-DNS-lookup limit — out of scope, see the design spec's Non-goals.</summary>
+/// or validate the 10-DNS-lookup limit - out of scope, see the design spec's Non-goals.</summary>
 public sealed class SpfDnsChecker : ISpfDnsChecker
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -24,7 +24,7 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
         {
             // A record that mentions "spf" but doesn't start with the required "v=spf1" prefix
             // (a wrong/typo'd version tag such as "v=spf2", or a missing "v=") is a real,
-            // distinguishable misconfiguration — worth telling apart from "no SPF record was
+            // distinguishable misconfiguration - worth telling apart from "no SPF record was
             // even attempted."
             var nearMiss = allTxtRecords.FirstOrDefault(r => r.Contains("spf", StringComparison.OrdinalIgnoreCase));
             if (nearMiss is not null)
@@ -35,13 +35,13 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
         }
         if (spfRecords.Count > 1)
         {
-            return new SpfCheckResult(SpfCheckStatus.MultipleRecords, $"{domainName} has {spfRecords.Count} SPF records — RFC 7208 requires exactly one");
+            return new SpfCheckResult(SpfCheckStatus.MultipleRecords, $"{domainName} has {spfRecords.Count} SPF records - RFC 7208 requires exactly one");
         }
         return new SpfCheckResult(SpfCheckStatus.Ok, null);
     }
 
     /// <summary>Unlike DmarcDnsChecker/TlsrptDnsChecker's QueryTxtAsync (which only returns the
-    /// first TXT answer), this returns every TXT record at the name — detecting "multiple SPF
+    /// first TXT answer), this returns every TXT record at the name - detecting "multiple SPF
     /// records" requires seeing all of them, not just the first.</summary>
     private async Task<List<string>> QueryAllTxtAsync(string name, CancellationToken cancellationToken)
     {

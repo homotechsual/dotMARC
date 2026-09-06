@@ -37,7 +37,7 @@ public sealed class PsaTicketService : IPsaTicketService
 
         // AlertingService's cooldown logic (pre-dating this feature) creates a new AlertEvent once
         // the cooldown elapses for a still-unresolved condition, without resolving the earlier one
-        // — a domain that stays unhealthy would otherwise accumulate a fresh open Halo ticket every
+        // - a domain that stays unhealthy would otherwise accumulate a fresh open Halo ticket every
         // cooldown window indefinitely. If an earlier unresolved alert for this same domain+type
         // already has an open ticket, skip creating another one for this occurrence; the AlertEvent
         // row itself is still recorded as normal, only the ticket is deduplicated.

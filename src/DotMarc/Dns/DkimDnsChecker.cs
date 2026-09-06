@@ -6,7 +6,7 @@ namespace DotMarc.Dns;
 
 /// <summary>Checks DKIM selector record(s) at &lt;selector&gt;._domainkey.&lt;domain&gt;. Unlike
 /// every other checker in this feature, this one is opt-in and takes the caller-supplied selector
-/// list directly — dotMARC has no way to discover a domain's DKIM selector(s) on its own (they are
+/// list directly - dotMARC has no way to discover a domain's DKIM selector(s) on its own (they are
 /// provider-specific strings with no DNS-discoverable convention), so this never guesses.</summary>
 public sealed class DkimDnsChecker : IDkimDnsChecker
 {

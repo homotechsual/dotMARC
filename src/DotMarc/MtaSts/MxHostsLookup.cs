@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace DotMarc.MtaSts;
 
 /// <summary>Looks up a domain's current MX records, for pre-filling the MX hosts field on Manage
-/// MTA-STS rather than requiring an admin to type them from memory — a receiving server rejects
+/// MTA-STS rather than requiring an admin to type them from memory - a receiving server rejects
 /// the MTA-STS-protected connection if the live MX record points somewhere not on that list, so
 /// getting it wrong silently breaks mail delivery. Queries Cloudflare's DNS-over-HTTPS JSON API,
 /// same approach and same reasoning as DmarcDnsChecker/MtaStsDnsVerifier.</summary>
@@ -28,7 +28,7 @@ public sealed class MxHostsLookup : IMxHostsLookup
         var mxAnswers = parsed.Answer?.Where(a => a.Type == 15) ?? [];
 
         // MX record data is "<preference> <exchange>" (e.g. "10 mail.contoso.io."), lower
-        // preference meaning higher priority — sorted so the primary server ends up first in the
+        // preference meaning higher priority - sorted so the primary server ends up first in the
         // populated field rather than in whatever order DNS happened to return them.
         return mxAnswers
             .Select(ParsePreferenceAndExchange)

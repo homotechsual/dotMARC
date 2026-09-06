@@ -1,6 +1,6 @@
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row — exactly one is guaranteed to exist via a migration seed
+/// <summary>Singleton settings row - exactly one is guaranteed to exist via a migration seed
 /// (DotMarcDbContext.OnModelCreating's HasData for Id 1), so every reader can use SingleAsync
 /// without a null/missing-row branch. Admin-editable via AlertsSettings.razor, replacing the
 /// original appsettings.json-backed NotificationOptions: a file rewrite doesn't survive an Azure

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move Cloudflare/Azure DNS push OAuth client credentials off deploy-time environment variables onto the same DB-backed, admin-editable pattern HaloPSA already uses — a new settings page, no redeploy needed to configure or rotate them — and generalize HaloPSA's secret-store code so it's shared across all three secrets instead of duplicated a second and third time.
+**Goal:** Move Cloudflare/Azure DNS push OAuth client credentials off deploy-time environment variables onto the same DB-backed, admin-editable pattern HaloPSA already uses - a new settings page, no redeploy needed to configure or rotate them - and generalize HaloPSA's secret-store code so it's shared across all three secrets instead of duplicated a second and third time.
 
-**Architecture:** `IHaloSecretStore` becomes a generic, keyed `ISecretStore` (`SetSecretAsync(key, value)` / `GetSecretAsync(key)`), backed by a new shared `EncryptedSecrets(Key, ProtectedValue)` table (Postgres + Data Protection, default) or `KeyVaultSecretStore` (Azure, opt-in via the renamed `enableKeyVaultWrite`) — one deployment-wide choice, not per-integration. Two new DB-backed settings entities (`CloudflareDnsSettings`, `AzureDnsSettings`) replace `CloudflareDnsOptions`/`AzureDnsOptions`. `CloudflareDnsPushProvider`/`AzureDnsPushProvider` read settings fresh per call instead of caching `IOptions<T>` at construction, which forces two `IDnsPushProvider` interface members from sync to async — a confirmed-safe change since neither is ever read from Razor markup.
+**Architecture:** `IHaloSecretStore` becomes a generic, keyed `ISecretStore` (`SetSecretAsync(key, value)` / `GetSecretAsync(key)`), backed by a new shared `EncryptedSecrets(Key, ProtectedValue)` table (Postgres + Data Protection, default) or `KeyVaultSecretStore` (Azure, opt-in via the renamed `enableKeyVaultWrite`) - one deployment-wide choice, not per-integration. Two new DB-backed settings entities (`CloudflareDnsSettings`, `AzureDnsSettings`) replace `CloudflareDnsOptions`/`AzureDnsOptions`. `CloudflareDnsPushProvider`/`AzureDnsPushProvider` read settings fresh per call instead of caching `IOptions<T>` at construction, which forces two `IDnsPushProvider` interface members from sync to async - a confirmed-safe change since neither is ever read from Razor markup.
 
 **Tech Stack:** ASP.NET Core 10 / Blazor Server, EF Core + Npgsql, MudBlazor, `Azure.Security.KeyVault.Secrets`, xUnit + `Testcontainers.PostgreSql`.
 
@@ -12,12 +12,12 @@
 
 ## Global Constraints
 
-- Clean break from `CloudflareDns__*`/`AzureDns__*` env vars — no read-as-seed fallback, no back-compat path.
-- The `ClientSecretConfigured`-set-if-and-only-if-a-new-secret-was-provided invariant applies to `CloudflareDnsSettings`/`AzureDnsSettings` exactly as it already does to `HaloPsaSettings` — get this right the first time (see Task 4 of the HaloPSA plan, which got it wrong on the first pass).
-- Round-trip tests for any settings service must read back via a **fresh** `DotMarcDbContext`, never the context that performed the write (EF Core's identity map otherwise makes the assertion pass even if persistence is broken — this exact bug was caught and fixed once already in this codebase).
+- Clean break from `CloudflareDns__*`/`AzureDns__*` env vars - no read-as-seed fallback, no back-compat path.
+- The `ClientSecretConfigured`-set-if-and-only-if-a-new-secret-was-provided invariant applies to `CloudflareDnsSettings`/`AzureDnsSettings` exactly as it already does to `HaloPsaSettings` - get this right the first time (see Task 4 of the HaloPSA plan, which got it wrong on the first pass).
+- Round-trip tests for any settings service must read back via a **fresh** `DotMarcDbContext`, never the context that performed the write (EF Core's identity map otherwise makes the assertion pass even if persistence is broken - this exact bug was caught and fixed once already in this codebase).
 - Follow this codebase's static-class-over-caller-supplied-`DotMarcDbContext` convention for any new CRUD service.
 - Migration commands: `dotnet ef migrations add <Name> --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`, run from the repo root.
-- No automated test coverage for Razor/Blazor component rendering, or for `CloudflareDnsPushProvider`/`AzureDnsPushProvider`'s live external I/O (OAuth exchange, Cloudflare/Azure API calls) — established, accepted gaps in this codebase; verified manually, not something to build new test infrastructure for.
+- No automated test coverage for Razor/Blazor component rendering, or for `CloudflareDnsPushProvider`/`AzureDnsPushProvider`'s live external I/O (OAuth exchange, Cloudflare/Azure API calls) - established, accepted gaps in this codebase; verified manually, not something to build new test infrastructure for.
 
 ---
 
@@ -50,7 +50,7 @@
 **Interfaces:**
 - Produces: `ISecretStore` (`SetSecretAsync(string key, string value, CancellationToken)`, `GetSecretAsync(string key, CancellationToken) -> string?`), `HaloPsaSettings.SecretStoreKey = "HaloPsa.ClientSecret"`. Consumed by Task 2 (`CloudflareDnsSettings`/`AzureDnsSettings` follow the same `SecretStoreKey` convention) and Task 3 (`CloudflareDnsPushProvider`/`AzureDnsPushProvider`).
 
-This is the largest task in this plan because it's a rename-and-rework of already-shipped, working code — every piece has to move together or the build breaks. There's no way to land it in smaller independently-buildable slices.
+This is the largest task in this plan because it's a rename-and-rework of already-shipped, working code - every piece has to move together or the build breaks. There's no way to land it in smaller independently-buildable slices.
 
 - [ ] **Step 1: Define `ISecretStore`**
 
@@ -60,7 +60,7 @@ namespace DotMarc.Notifications;
 
 /// <summary>Stores and retrieves an encrypted secret by key. Two implementations:
 /// DatabaseSecretStore (Postgres + Data Protection, the default/fallback) and KeyVaultSecretStore
-/// (Azure, opt-in) — selected in Program.cs on whether KeyVault:VaultUri is configured. Shared
+/// (Azure, opt-in) - selected in Program.cs on whether KeyVault:VaultUri is configured. Shared
 /// across every integration that needs a runtime-editable secret (HaloPSA, Cloudflare DNS push,
 /// Azure DNS push) rather than one near-identical store per integration. Keys are dot-namespaced
 /// business names (e.g. "HaloPsa.ClientSecret") defined as a SecretStoreKey constant on the
@@ -93,9 +93,9 @@ public sealed class EncryptedSecret
 // src/DotMarc/Notifications/HaloPsaSettings.cs
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row for the HaloPSA PSA integration — same "exactly one row,
+/// <summary>Singleton settings row for the HaloPSA PSA integration - same "exactly one row,
 /// seeded via migration HasData" pattern as NotificationSettings. The client secret itself lives
-/// in ISecretStore under SecretStoreKey, never on this entity — every reader of this entity should
+/// in ISecretStore under SecretStoreKey, never on this entity - every reader of this entity should
 /// treat ClientSecretConfigured as the only signal about the secret's presence.</summary>
 public sealed class HaloPsaSettings
 {
@@ -115,7 +115,7 @@ public sealed class HaloPsaSettings
 }
 ```
 
-(`ProtectedClientSecret` removed entirely — it's not renamed or kept, the value now lives in `EncryptedSecrets`.)
+(`ProtectedClientSecret` removed entirely - it's not renamed or kept, the value now lives in `EncryptedSecrets`.)
 
 - [ ] **Step 4: Register `EncryptedSecret` in `DotMarcDbContext`**
 
@@ -125,7 +125,7 @@ Add to the `DbSet` list, after `HaloPsaSettings`:
 public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
 ```
 
-Add to `OnModelCreating`, after the `AlertEvent` configuration block (`EncryptedSecret.Key` isn't named `Id`, so EF's default-PK convention won't pick it up — needs an explicit `HasKey`):
+Add to `OnModelCreating`, after the `AlertEvent` configuration block (`EncryptedSecret.Key` isn't named `Id`, so EF's default-PK convention won't pick it up - needs an explicit `HasKey`):
 
 ```csharp
 modelBuilder.Entity<EncryptedSecret>(entity =>
@@ -203,9 +203,9 @@ using Azure.Security.KeyVault.Secrets;
 namespace DotMarc.Notifications;
 
 /// <summary>Stores secrets in the Key Vault infra/main.bicep already provisions, one Key Vault
-/// secret per store key — dots aren't valid in Key Vault secret names, so "HaloPsa.ClientSecret"
+/// secret per store key - dots aren't valid in Key Vault secret names, so "HaloPsa.ClientSecret"
 /// becomes "HaloPsa-ClientSecret" (matching the name already in production use). Selected instead
-/// of DatabaseSecretStore when KeyVault:VaultUri is configured (see Program.cs) — requires the
+/// of DatabaseSecretStore when KeyVault:VaultUri is configured (see Program.cs) - requires the
 /// container's managed identity to hold the write role infra/main.bicep grants only when
 /// enableKeyVaultWrite is true. Values never touch Postgres.</summary>
 public sealed class KeyVaultSecretStore : ISecretStore
@@ -306,9 +306,9 @@ Change `@inject IHaloSecretStore SecretStoreAccessor` to `@inject ISecretStore S
 - [ ] **Step 11: Update `Program.cs`'s DI registration**
 
 ```csharp
-// src/DotMarc/Program.cs — replace the existing IHaloSecretStore block
+// src/DotMarc/Program.cs - replace the existing IHaloSecretStore block
 // KeyVault:VaultUri is only set by infra/main.bicep when enableKeyVaultWrite is true (see
-// KeyVault__VaultUri there); every other deployment — including local/Docker Compose — leaves it
+// KeyVault__VaultUri there); every other deployment - including local/Docker Compose - leaves it
 // unset and falls back to the Postgres-backed store.
 var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
 if (!string.IsNullOrWhiteSpace(keyVaultUri))
@@ -329,12 +329,12 @@ In `infra/main.bicep`:
 - Rename the param `enableHaloPsaKeyVaultWrite` → `enableKeyVaultWrite`, updating its description to no longer be Halo-specific:
 
 ```bicep
-@description('Grant the container app write access to its own Key Vault, used to store runtime-editable secrets (HaloPSA API client secret, Cloudflare/Azure DNS push OAuth client secrets) entered through their respective settings pages rather than in Postgres. Off by default, since it widens the managed identity beyond Key Vault Secrets User (read-only) — see deploy-to-azure.mdx.')
+@description('Grant the container app write access to its own Key Vault, used to store runtime-editable secrets (HaloPSA API client secret, Cloudflare/Azure DNS push OAuth client secrets) entered through their respective settings pages rather than in Postgres. Off by default, since it widens the managed identity beyond Key Vault Secrets User (read-only) - see deploy-to-azure.mdx.')
 param enableKeyVaultWrite bool = false
 ```
 
 - Rename every reference to `enableHaloPsaKeyVaultWrite` → `enableKeyVaultWrite` (the `KeyVault__VaultUri` env var's conditional, and the two role resources' `if` conditions).
-- Rename `haloPsaKeyVaultWriteRole` → `keyVaultWriteRole` and `haloPsaKeyVaultWriteRoleAssignment` → `keyVaultWriteRoleAssignment` (resource symbolic names, their `name:`/`roleName:` GUIDs and display strings, and the `description:` field — drop "HaloPSA" from the description, e.g. `'Lets dotMARC write runtime secrets into this Key Vault at runtime.'`). The permission itself (`dataActions: ['Microsoft.KeyVault/vaults/secrets/setSecret/action']`) is unchanged — it already covers arbitrary secret names.
+- Rename `haloPsaKeyVaultWriteRole` → `keyVaultWriteRole` and `haloPsaKeyVaultWriteRoleAssignment` → `keyVaultWriteRoleAssignment` (resource symbolic names, their `name:`/`roleName:` GUIDs and display strings, and the `description:` field - drop "HaloPSA" from the description, e.g. `'Lets dotMARC write runtime secrets into this Key Vault at runtime.'`). The permission itself (`dataActions: ['Microsoft.KeyVault/vaults/secrets/setSecret/action']`) is unchanged - it already covers arbitrary secret names.
 
 - [ ] **Step 13: Rename the parameter in `main.parameters.json`**
 
@@ -540,7 +540,7 @@ private DatabaseSecretStore CreateSecretStore() =>
     new(new FakeDbContextFactory(_connectionString), DataProtectionProvider.Create("DotMarc.Tests.HaloPsaSettingsService"));
 ```
 
-Then replace every `secretStore.GetClientSecretAsync()` call in this file with `secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey)` (three occurrences: one each in `SaveAsync_UpdatesNonSecretFields_AndLeavesSecretUnconfigured_WhenNoneProvided`, `SaveAsync_StoresTheSecretAndMarksItConfigured_WhenProvided`, `SaveAsync_LeavesAnExistingSecretInPlace_WhenNotReplaced`). No other changes — the three tests' structure, assertions, and fresh-context read-back pattern are otherwise unchanged.
+Then replace every `secretStore.GetClientSecretAsync()` call in this file with `secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey)` (three occurrences: one each in `SaveAsync_UpdatesNonSecretFields_AndLeavesSecretUnconfigured_WhenNoneProvided`, `SaveAsync_StoresTheSecretAndMarksItConfigured_WhenProvided`, `SaveAsync_LeavesAnExistingSecretInPlace_WhenNotReplaced`). No other changes - the three tests' structure, assertions, and fresh-context read-back pattern are otherwise unchanged.
 
 - [ ] **Step 21: Update `HaloPsaClientTests.cs`'s fake secret store**
 
@@ -564,7 +564,7 @@ private sealed class FixedSecretStore(string secret) : ISecretStore
 }
 ```
 
-Then update the two constructor call sites (`new FixedHaloSecretStore("the-secret")` → `new FixedSecretStore("the-secret")`) — one in `CreateClient()`'s helper, one in the token-caching test that constructs a client directly. No other changes to this file.
+Then update the two constructor call sites (`new FixedHaloSecretStore("the-secret")` → `new FixedSecretStore("the-secret")`) - one in `CreateClient()`'s helper, one in the token-caching test that constructs a client directly. No other changes to this file.
 
 - [ ] **Step 22: Run the full test suite**
 
@@ -574,7 +574,7 @@ Expected: PASS, no regressions (should be the same total count as before this ta
 - [ ] **Step 23: Build check**
 
 Run: `dotnet build dotMARC.sln`
-Expected: 0 warnings, 0 errors — confirms no other file in the solution still references `IHaloSecretStore`/`DatabaseHaloSecretStore`/`KeyVaultHaloSecretStore` (a `grep -rn IHaloSecretStore src/ test/` returning nothing is a good independent check before moving on).
+Expected: 0 warnings, 0 errors - confirms no other file in the solution still references `IHaloSecretStore`/`DatabaseHaloSecretStore`/`KeyVaultHaloSecretStore` (a `grep -rn IHaloSecretStore src/ test/` returning nothing is a good independent check before moving on).
 
 - [ ] **Step 24: Commit**
 
@@ -607,7 +607,7 @@ git commit -m "Generalize the HaloPSA secret store into a shared, keyed ISecretS
 // src/DotMarc/Notifications/CloudflareDnsSettings.cs
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row for Cloudflare DNS push, same pattern as HaloPsaSettings — the
+/// <summary>Singleton settings row for Cloudflare DNS push, same pattern as HaloPsaSettings - the
 /// client secret lives in ISecretStore under SecretStoreKey, never on this entity.</summary>
 public sealed class CloudflareDnsSettings
 {
@@ -625,7 +625,7 @@ public sealed class CloudflareDnsSettings
 // src/DotMarc/Notifications/AzureDnsSettings.cs
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row for Azure DNS push, same pattern as HaloPsaSettings — the
+/// <summary>Singleton settings row for Azure DNS push, same pattern as HaloPsaSettings - the
 /// client secret lives in ISecretStore under SecretStoreKey, never on this entity.</summary>
 public sealed class AzureDnsSettings
 {
@@ -749,7 +749,7 @@ public sealed class CloudflareDnsSettingsServiceTests : IAsyncLifetime
 - [ ] **Step 5: Run the tests to verify they fail**
 
 Run: `dotnet test dotMARC.sln --filter CloudflareDnsSettingsServiceTests`
-Expected: FAIL — `CloudflareDnsSettingsService` doesn't exist yet.
+Expected: FAIL - `CloudflareDnsSettingsService` doesn't exist yet.
 
 - [ ] **Step 6: Implement `CloudflareDnsSettingsService`**
 
@@ -882,7 +882,7 @@ public sealed class AzureDnsSettingsServiceTests : IAsyncLifetime
 - [ ] **Step 9: Run the tests to verify they fail**
 
 Run: `dotnet test dotMARC.sln --filter AzureDnsSettingsServiceTests`
-Expected: FAIL — `AzureDnsSettingsService` doesn't exist yet.
+Expected: FAIL - `AzureDnsSettingsService` doesn't exist yet.
 
 - [ ] **Step 10: Implement `AzureDnsSettingsService`**
 
@@ -956,7 +956,7 @@ git commit -m "Add CloudflareDnsSettings/AzureDnsSettings entities and services"
 - Consumes: `CloudflareDnsSettings`/`AzureDnsSettings`/their services (Task 2), `ISecretStore` (Task 1).
 - Produces: `IDnsPushProvider` with `IsConfiguredAsync`/`BuildAuthorizationUrlAsync` (both now `Task`-returning), and `DnsPushProviderLookup.FindConfiguredAsync` (a shared helper replacing five near-identical inline lookups). Consumed by `Program.cs`'s two `/dns-push/{provider}/*` endpoints, `DomainDetail.razor`, `ManageMtaSts.razor`.
 
-> **Why `IsConfigured` and `BuildAuthorizationUrl` can safely become async:** confirmed during design by grepping every call site before committing to this change. `IsConfigured` is never read from Razor markup directly — the "Push via your DNS provider" button always renders under the `DomainsEdit`/equivalent policy; the configured-provider check happens only inside an `async` click handler, falling back to a Snackbar warning if none match. All five call sites already live inside `async` methods.
+> **Why `IsConfigured` and `BuildAuthorizationUrl` can safely become async:** confirmed during design by grepping every call site before committing to this change. `IsConfigured` is never read from Razor markup directly - the "Push via your DNS provider" button always renders under the `DomainsEdit`/equivalent policy; the configured-provider check happens only inside an `async` click handler, falling back to a Snackbar warning if none match. All five call sites already live inside `async` methods.
 
 - [ ] **Step 1: Make `IDnsPushProvider` async**
 
@@ -970,17 +970,17 @@ public sealed record DnsPushResult(DnsPushOutcome Outcome, string? DetailMessage
 
 /// <summary>One implementation per supported DNS provider. The provider's own OAuth client
 /// credentials are DB-backed (CloudflareDnsSettings/AzureDnsSettings), read fresh per call rather
-/// than cached — IsConfiguredAsync/BuildAuthorizationUrlAsync need a DB round trip, which is why
+/// than cached - IsConfiguredAsync/BuildAuthorizationUrlAsync need a DB round trip, which is why
 /// both are async even though they're conceptually simple lookups. Everything about the end-user's
 /// own OAuth exchange stays exactly as stateless as before: nothing about the access token is ever
 /// persisted; it exists only as a local variable for the duration of ExchangeAndPushAsync.</summary>
 public interface IDnsPushProvider
 {
     /// <summary>Matches DetectedDnsProvider and the {provider} route segment in
-    /// /dns-push/{provider}/start|callback — "cloudflare" or "azure-dns".</summary>
+    /// /dns-push/{provider}/start|callback - "cloudflare" or "azure-dns".</summary>
     string ProviderKey { get; }
 
-    /// <summary>False when this provider's OAuth app isn't configured for this deployment — the
+    /// <summary>False when this provider's OAuth app isn't configured for this deployment - the
     /// push button never renders in that case.</summary>
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
 
@@ -993,7 +993,7 @@ public interface IDnsPushProvider
 
 - [ ] **Step 2: Add the shared `FindConfiguredAsync` lookup helper**
 
-Every one of the five call sites this task updates does the exact same "find the provider matching this key that's actually configured" lookup — extracting it once avoids five near-identical `foreach` blocks.
+Every one of the five call sites this task updates does the exact same "find the provider matching this key that's actually configured" lookup - extracting it once avoids five near-identical `foreach` blocks.
 
 ```csharp
 // src/DotMarc/DnsPush/DnsPushProviderLookup.cs
@@ -1002,7 +1002,7 @@ namespace DotMarc.DnsPush;
 public static class DnsPushProviderLookup
 {
     /// <summary>Returns the provider matching providerKey if (and only if) it's actually
-    /// configured for this deployment — null for an unknown key, a null key, or a matching but
+    /// configured for this deployment - null for an unknown key, a null key, or a matching but
     /// unconfigured provider (its push button/redirect never renders in that case).</summary>
     public static async Task<IDnsPushProvider?> FindConfiguredAsync(this IEnumerable<IDnsPushProvider> providers, string? providerKey, CancellationToken cancellationToken = default)
     {
@@ -1038,7 +1038,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Cloudflare, authenticated via a fresh OAuth 2.0
-/// Authorization Code + PKCE exchange each time — see the design spec's "Auth model" section for
+/// Authorization Code + PKCE exchange each time - see the design spec's "Auth model" section for
 /// why nothing about the end-user's push-time token is ever persisted. The app's own OAuth client
 /// credentials (registered once per deployment with Cloudflare) are DB-backed
 /// (CloudflareDnsSettings/ISecretStore), read fresh per call since they're admin-editable at
@@ -1187,7 +1187,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         var recordId = existing?.Result?.FirstOrDefault()?.Id;
         if (recordId is null)
         {
-            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"{change.Name} no longer exists at Cloudflare — it may have been removed since this page loaded.");
+            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"{change.Name} no longer exists at Cloudflare - it may have been removed since this page loaded.");
         }
 
         using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/zones/{zoneId}/dns_records/{recordId}")
@@ -1202,7 +1202,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>dotMARC only ever calls this with a name of the form "mta-sts.&lt;domain&gt;" or
-    /// "_dmarc.&lt;domain&gt;", so stripping the first label always yields the zone name — this
+    /// "_dmarc.&lt;domain&gt;", so stripping the first label always yields the zone name - this
     /// would not generalize to arbitrary multi-label zones, and doesn't need to.</summary>
     private static string ZoneNameFor(string recordName)
     {
@@ -1239,7 +1239,7 @@ using Microsoft.Identity.Client;
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Azure DNS via a delegated Entra ID authorization-code
-/// exchange — the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
+/// exchange - the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
 /// access on the target zone; dotMARC never holds a standing grant of its own. Same "nothing about
 /// the end-user's push-time token is ever persisted" contract as CloudflareDnsPushProvider. The
 /// app's own OAuth client credentials are DB-backed (AzureDnsSettings/ISecretStore), read fresh
@@ -1320,7 +1320,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         if (zone is null)
         {
             return new DnsPushResult(DnsPushOutcome.ZoneNotFound,
-                $"Couldn't find {zoneName} in any subscription you authorized — check you have DNS Zone Contributor rights on it.");
+                $"Couldn't find {zoneName} in any subscription you authorized - check you have DNS Zone Contributor rights on it.");
         }
 
         return await PushRecordAsync(zone, zoneName, change, cancellationToken).ConfigureAwait(false);
@@ -1361,7 +1361,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
                     && (await cnameRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
                 {
                     return new DnsPushResult(DnsPushOutcome.ProviderError,
-                        $"A DNS record already exists at {change.Name} — remove it or update it manually rather than risk overwriting it.");
+                        $"A DNS record already exists at {change.Name} - remove it or update it manually rather than risk overwriting it.");
                 }
 
                 var data = new DnsCnameRecordData { TtlInSeconds = 3600, Cname = change.DesiredValue };
@@ -1374,7 +1374,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
                     && (await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
                 {
                     return new DnsPushResult(DnsPushOutcome.ProviderError,
-                        $"A DNS record already exists at {change.Name} — remove it or update it manually rather than risk overwriting it.");
+                        $"A DNS record already exists at {change.Name} - remove it or update it manually rather than risk overwriting it.");
                 }
 
                 var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
@@ -1397,7 +1397,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>Wraps an access token already obtained via the delegated authorization-code
-    /// exchange above — ArmClient needs a TokenCredential, but there is nothing for it to actually
+    /// exchange above - ArmClient needs a TokenCredential, but there is nothing for it to actually
     /// fetch here; it already has the one token this whole operation is scoped to.</summary>
     private sealed class FixedTokenCredential : TokenCredential
     {
@@ -1449,7 +1449,7 @@ builder.Services.AddSingleton<DotMarc.DnsPush.AzureDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.AzureDnsPushProvider>());
 ```
 
-Both providers' constructors now take `IDbContextFactory<DotMarcDbContext>` and `ISecretStore` (both already registered elsewhere in this file) instead of `IOptions<T>` — no new registrations needed for those, DI resolves the new constructor parameters automatically since both dependencies are already in the container. `CloudflareDnsPushProvider` still additionally needs `HttpClient`, which `AddHttpClient<T>()` continues to supply.
+Both providers' constructors now take `IDbContextFactory<DotMarcDbContext>` and `ISecretStore` (both already registered elsewhere in this file) instead of `IOptions<T>` - no new registrations needed for those, DI resolves the new constructor parameters automatically since both dependencies are already in the container. `CloudflareDnsPushProvider` still additionally needs `HttpClient`, which `AddHttpClient<T>()` continues to supply.
 
 - [ ] **Step 7: Update `Program.cs`'s two `/dns-push/{provider}/*` endpoints**
 
@@ -1497,7 +1497,7 @@ with:
 var pushProvider = await pushProviders.FindConfiguredAsync(provider);
 ```
 
-(Nothing else in either endpoint changes — `ExchangeAndPushAsync`'s call and signature are untouched.)
+(Nothing else in either endpoint changes - `ExchangeAndPushAsync`'s call and signature are untouched.)
 
 - [ ] **Step 8: Update `DomainDetail.razor`'s two call sites**
 
@@ -1525,7 +1525,7 @@ with:
 var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
 ```
 
-`DomainDetail.razor` already has `@using DotMarc.DnsPush` (confirmed: line 11) — needed for the `FindConfiguredAsync` extension method to resolve, no `@using` addition required.
+`DomainDetail.razor` already has `@using DotMarc.DnsPush` (confirmed: line 11) - needed for the `FindConfiguredAsync` extension method to resolve, no `@using` addition required.
 
 - [ ] **Step 9: Update `ManageMtaSts.razor`'s one call site**
 
@@ -1541,22 +1541,22 @@ with:
 var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
 ```
 
-`ManageMtaSts.razor` already has `@using DotMarc.DnsPush` too (confirmed: line 5) — no `@using` addition required here either.
+`ManageMtaSts.razor` already has `@using DotMarc.DnsPush` too (confirmed: line 5) - no `@using` addition required here either.
 
 - [ ] **Step 10: Build and run the full test suite**
 
 Run: `dotnet build dotMARC.sln`
-Expected: 0 warnings, 0 errors — confirms no remaining synchronous `.IsConfigured`/`.BuildAuthorizationUrl` call sites anywhere (a `grep -rn "\.IsConfigured\b\|\.BuildAuthorizationUrl\b" src/` returning only the new async member names is a good independent check).
+Expected: 0 warnings, 0 errors - confirms no remaining synchronous `.IsConfigured`/`.BuildAuthorizationUrl` call sites anywhere (a `grep -rn "\.IsConfigured\b\|\.BuildAuthorizationUrl\b" src/` returning only the new async member names is a good independent check).
 
 Run: `dotnet test dotMARC.sln`
-Expected: PASS, no regressions (this task adds no new automated tests — see Global Constraints — so the count should be unchanged from Task 2's end state).
+Expected: PASS, no regressions (this task adds no new automated tests - see Global Constraints - so the count should be unchanged from Task 2's end state).
 
 - [ ] **Step 11: Manual smoke test**
 
 Bring up the app locally (same approach as prior manual-verification tasks in this codebase: fetch a live page over HTTP with a session cookie if no browser is available in the environment) and confirm:
 - `/domains` → a domain's detail page still loads and its "Push via your DNS provider" buttons still render (they're gated by `DomainsEdit`, not by provider configuration, so they should render exactly as before).
 - `/mta-sts` still loads and its per-domain rows still render.
-- With no Cloudflare/Azure DNS settings configured (the seeded default), clicking either push action still shows the existing "Couldn't find a configured DNS push option..." Snackbar warning rather than an exception or a blank page — this is the one behavior a broken async conversion would most likely break.
+- With no Cloudflare/Azure DNS settings configured (the seeded default), clicking either push action still shows the existing "Couldn't find a configured DNS push option..." Snackbar warning rather than an exception or a blank page - this is the one behavior a broken async conversion would most likely break.
 
 - [ ] **Step 12: Commit**
 
@@ -1578,12 +1578,12 @@ git commit -m "Make IDnsPushProvider read its OAuth client credentials from the 
 - Consumes: `CloudflareDnsSettingsService`/`AzureDnsSettingsService` (Task 2), `ISecretStore` (Task 1).
 - Produces: `Permission.DnsPushManage`, the `/dns-push/settings` page.
 
-No automated test for this task — Blazor component rendering has no test harness in this codebase (established gap, verified manually elsewhere, same as the HaloPSA integration's Alert settings/Manage Groups/Manage Domains UI tasks).
+No automated test for this task - Blazor component rendering has no test harness in this codebase (established gap, verified manually elsewhere, same as the HaloPSA integration's Alert settings/Manage Groups/Manage Domains UI tasks).
 
 - [ ] **Step 1: Add the `DnsPushManage` permission**
 
 ```csharp
-// src/DotMarc/Data/Permission.cs — add DnsPushManage after AlertsManage (the current last entry)
+// src/DotMarc/Data/Permission.cs - add DnsPushManage after AlertsManage (the current last entry)
 public enum Permission
 {
     DomainsView,
@@ -1608,7 +1608,7 @@ public enum Permission
 }
 ```
 
-No changes needed to `AccessBootstrapper.ViewerPermissions` — `DnsPushManage` has no corresponding `View` permission (a single Manage-only permission, matching `AccessManage`'s shape, since there's no separate read-only audience for OAuth client credentials), so it's never part of the default Viewer bundle, same as `MtaStsManage`/`AlertsManage` aren't either.
+No changes needed to `AccessBootstrapper.ViewerPermissions` - `DnsPushManage` has no corresponding `View` permission (a single Manage-only permission, matching `AccessManage`'s shape, since there's no separate read-only audience for OAuth client credentials), so it's never part of the default Viewer bundle, same as `MtaStsManage`/`AlertsManage` aren't either.
 
 - [ ] **Step 2: Create the settings page**
 
@@ -1637,7 +1637,7 @@ No changes needed to `AccessBootstrapper.ViewerPermissions` — `DnsPushManage` 
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField Label="Client secret" @bind-Value="_newCloudflareClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
-                              HelperText="@(_cloudflareSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+                              HelperText="@(_cloudflareSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveCloudflareAsync">Save Cloudflare settings</MudButton>
@@ -1657,7 +1657,7 @@ No changes needed to `AccessBootstrapper.ViewerPermissions` — `DnsPushManage` 
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudTextField Label="Client secret" @bind-Value="_newAzureDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
-                              HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+                              HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAzureDnsAsync">Save Azure DNS settings</MudButton>
@@ -1741,7 +1741,7 @@ In `src/DotMarc/Components/Layout/MainLayout.razor`, add a new `AuthorizeView` b
 </AuthorizeView>
 ```
 
-(Only the middle block is new — the `MtaStsManage` and `AlertsManage` blocks shown above are existing, unchanged context to locate the insertion point.)
+(Only the middle block is new - the `MtaStsManage` and `AlertsManage` blocks shown above are existing, unchanged context to locate the insertion point.)
 
 - [ ] **Step 4: Build and manual smoke test**
 
@@ -1766,11 +1766,11 @@ git commit -m "Add DnsPushManage permission and the DNS push settings page"
 - Modify: `infra/main.parameters.json`
 - Modify: `docker-compose.yml`
 
-**Interfaces:** None — infrastructure only. (Task 1 already renamed `enableHaloPsaKeyVaultWrite`/`haloPsaKeyVaultWriteRole` to their generic names; this task removes the now-obsolete DNS-provider-push deploy-time config entirely.)
+**Interfaces:** None - infrastructure only. (Task 1 already renamed `enableHaloPsaKeyVaultWrite`/`haloPsaKeyVaultWriteRole` to their generic names; this task removes the now-obsolete DNS-provider-push deploy-time config entirely.)
 
 - [ ] **Step 1: Remove the DNS push params from `infra/main.bicep`**
 
-Delete (note the real file escapes the apostrophes in these description strings as `\'` — match on that exact text, not a plain apostrophe):
+Delete (note the real file escapes the apostrophes in these description strings as `\'` - match on that exact text, not a plain apostrophe):
 
 ```bicep
 @description('Non-secret Cloudflare DNS push config (see getting-started.mdx#dns-provider-push-optional). Leave blank to leave this provider\'s push button off; the client secret is set into Key Vault after deployment like the other secrets below.')
@@ -1787,7 +1787,7 @@ Delete the two secret resources near the bottom of the file:
 
 ```bicep
 // Also provisioned empty, but optional: DNS provider push works with either, both, or neither
-// set — see deploy-to-azure.mdx's "Optional: DNS provider push secrets" section. Left unset,
+// set - see deploy-to-azure.mdx's "Optional: DNS provider push secrets" section. Left unset,
 // CloudflareDns__ClientSecret/AzureDns__ClientSecret resolve to an empty string, and that
 // provider's push button simply never renders.
 resource cloudflareDnsClientSecretRef 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
@@ -1853,7 +1853,7 @@ Delete the three entries:
 "azureDnsClientId": { "value": "" },
 ```
 
-(Confirm the remaining JSON is still valid — no trailing comma left behind on the preceding line.)
+(Confirm the remaining JSON is still valid - no trailing comma left behind on the preceding line.)
 
 - [ ] **Step 5: Remove the DNS push env vars from `docker-compose.yml`**
 
@@ -1883,11 +1883,11 @@ git commit -m "Remove deploy-time DNS push config now that credentials are DB-ba
 - Modify: `website/docs/deploy-to-azure.mdx`
 - Modify: `website/docs/permissions-and-access.mdx`
 
-**Interfaces:** None — documentation only.
+**Interfaces:** None - documentation only.
 
 - [ ] **Step 1: Rewrite the "DNS provider push (optional)" section in `getting-started.mdx`**
 
-The OAuth app registration walkthroughs (creating the Cloudflare OAuth client, registering the third Azure DNS Entra app) are unchanged — replace only the "how you tell dotMARC about it" part. Replace the entire section (from `### DNS provider push (optional)` to the end of the file, i.e. everything from that heading through the closing "Next:" line) with:
+The OAuth app registration walkthroughs (creating the Cloudflare OAuth client, registering the third Azure DNS Entra app) are unchanged - replace only the "how you tell dotMARC about it" part. Replace the entire section (from `### DNS provider push (optional)` to the end of the file, i.e. everything from that heading through the closing "Next:" line) with:
 
 ```mdx
 ### DNS provider push (optional)
@@ -1925,9 +1925,9 @@ Replace "### Optional: HaloPSA Key Vault storage" with:
 ### Optional: Key Vault-backed secret storage
 
 By default, runtime-editable secrets (the HaloPSA API client secret, Cloudflare/Azure DNS push
-OAuth client secrets — anything configured through an in-app settings page rather than a deployment
+OAuth client secrets - anything configured through an in-app settings page rather than a deployment
 parameter) are encrypted and stored in Postgres. To store them in this deployment's Key Vault
-instead, redeploy with `enableKeyVaultWrite` set to `true` — this grants the container app's
+instead, redeploy with `enableKeyVaultWrite` set to `true` - this grants the container app's
 managed identity a narrowly-scoped write role on the vault (see `infra/main.bicep`'s
 `keyVaultWriteRole`, it adds only `secrets/setSecret`, read is already covered by the existing
 `Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app
@@ -1961,7 +1961,7 @@ cd website
 npx docusaurus build --out-dir build-check
 ```
 
-Expected: build succeeds (a broken internal link fails the build — in particular this confirms `getting-started.mdx`'s own `#dns-provider-push-optional` anchor, referenced from `psa-integration.mdx` and elsewhere, still exists, since the heading itself is unchanged even though its content is rewritten). Remove `build-check` afterward.
+Expected: build succeeds (a broken internal link fails the build - in particular this confirms `getting-started.mdx`'s own `#dns-provider-push-optional` anchor, referenced from `psa-integration.mdx` and elsewhere, still exists, since the heading itself is unchanged even though its content is rewritten). Remove `build-check` afterward.
 
 - [ ] **Step 5: Commit**
 
@@ -1974,7 +1974,7 @@ git commit -m "Document DB-backed DNS push settings"
 
 ## Self-review notes
 
-- **Spec coverage:** every section of the spec (`2026-09-04-dns-push-secret-storage-design.md`) maps to a task — the generalized secret store → Task 1; settings entities/services → Task 2; provider interface changes → Task 3; the new settings page and permission → Task 4; the infra unwind → Task 5; docs → Task 6.
+- **Spec coverage:** every section of the spec (`2026-09-04-dns-push-secret-storage-design.md`) maps to a task - the generalized secret store → Task 1; settings entities/services → Task 2; provider interface changes → Task 3; the new settings page and permission → Task 4; the infra unwind → Task 5; docs → Task 6.
 - **Existing-code touch points confirmed exhaustively**, not assumed: every current reference to `IHaloSecretStore` (`Program.cs`, `AlertsSettings.razor`, `HaloPsaClient.cs`, `HaloPsaSettingsService.cs`, `KeyVaultHaloSecretStore.cs`, `DatabaseHaloSecretStore.cs`, `HaloPsaSettings.cs`, plus three test files) and every current reference to `.IsConfigured`/`.BuildAuthorizationUrl` (`Program.cs` ×2, `DomainDetail.razor` ×2, `ManageMtaSts.razor` ×1) was individually located and accounted for in Tasks 1 and 3 respectively, by reading the actual current file contents rather than working from the spec's description alone.
 - **Type consistency check:** `ISecretStore`, `HaloPsaSettings.SecretStoreKey`/`CloudflareDnsSettings.SecretStoreKey`/`AzureDnsSettings.SecretStoreKey`, `CloudflareDnsSettingsService`/`AzureDnsSettingsService`, `IDnsPushProvider`'s three async members, and `DnsPushProviderLookup.FindConfiguredAsync` all use the same signatures everywhere they're referenced across Tasks 1–4.
-- **Migration sequencing:** Task 1's migration (drop `HaloPsaSettings.ProtectedClientSecret`, add `EncryptedSecrets`) and Task 2's migration (add `CloudflareDnsSettings`/`AzureDnsSettings`) are independent — neither touches a table or column the other depends on — so their order relative to each other doesn't matter beyond Task 1 needing to land first per the task dependency chain (Task 2's settings services take `ISecretStore`, which only exists after Task 1).
+- **Migration sequencing:** Task 1's migration (drop `HaloPsaSettings.ProtectedClientSecret`, add `EncryptedSecrets`) and Task 2's migration (add `CloudflareDnsSettings`/`AzureDnsSettings`) are independent - neither touches a table or column the other depends on - so their order relative to each other doesn't matter beyond Task 1 needing to land first per the task dependency chain (Task 2's settings services take `ISecretStore`, which only exists after Task 1).

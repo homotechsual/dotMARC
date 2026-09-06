@@ -9,7 +9,7 @@ namespace DotMarc.Demo;
 
 /// <summary>Resets the demo dataset once a day at DemoOptions.ResetHourUtc. Registered only when
 /// Demo:Enabled is true (see Program.cs). The very first seed happens synchronously in
-/// Program.cs's own startup block, not here — this service only ever handles the recurring
+/// Program.cs's own startup block, not here - this service only ever handles the recurring
 /// reset, so there's no window where a visitor could sign in before any data exists.</summary>
 public sealed class DemoDataResetService : BackgroundService
 {
@@ -59,8 +59,7 @@ public sealed class DemoDataResetService : BackgroundService
     /// its own variation. internal so tests can verify it directly.</summary>
     internal static int SeedFor(DateTimeOffset nowUtc) => nowUtc.UtcDateTime.Date.GetHashCode();
 
-    /// <summary>internal so tests can verify the scheduling math without waiting on real time —
-    /// the only production caller is ExecuteAsync above.</summary>
+    /// <summary>internal so tests can verify the scheduling math without waiting on real time -     /// the only production caller is ExecuteAsync above.</summary>
     internal static TimeSpan GetDelayUntilNextReset(DateTimeOffset nowUtc, int resetHourUtc)
     {
         var todayReset = new DateTimeOffset(nowUtc.Year, nowUtc.Month, nowUtc.Day, resetHourUtc, 0, 0, TimeSpan.Zero);

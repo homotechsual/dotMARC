@@ -5,7 +5,7 @@ using DotMarc.Data;
 namespace DotMarc.IpEnrichment;
 
 /// <summary>Pure containment check: does a candidate IP fall within any previously cached
-/// IpRange? No I/O — matches this codebase's "pure core, thin I/O adapter" convention (see
+/// IpRange? No I/O - matches this codebase's "pure core, thin I/O adapter" convention (see
 /// RdapResponseParser). Comparison is done on IPAddress.GetAddressBytes(), which is big-endian
 /// (network byte order) for both address families, so lexicographic byte comparison directly
 /// matches numeric magnitude order within one family; a range and candidate from different

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Consolidate DMARC/TLSRPT/MTA-STS status and push controls onto each domain's own detail page, and generalize the existing-record confirm flow (today only DMARC has it, and only when cached status already flags a problem) to all three push targets with a live pre-push check — including detection of third-party CNAME delegation.
+**Goal:** Consolidate DMARC/TLSRPT/MTA-STS status and push controls onto each domain's own detail page, and generalize the existing-record confirm flow (today only DMARC has it, and only when cached status already flags a problem) to all three push targets with a live pre-push check - including detection of third-party CNAME delegation.
 
 **Architecture:** A small, pure `DnsRecordPushDecision.NeedsConfirmation` helper decides whether a live-checked existing value warrants a confirm dialog before any of the three push handlers proceed. `DmarcTxtLookup`/`TlsrptTxtLookup` gain CNAME-delegation detection via a new `DnsRecordLookupResult` return type; a new `MtaStsCnameLookup` mirrors their DNS-over-HTTPS pattern for MTA-STS. `ConfirmDnsRecordPushDialog` becomes record-type-agnostic. A new `DomainMtaStsPanel` component replaces the standalone Manage MTA-STS page, hosted in `DomainDetail.razor`'s MTA-STS tab and reusing that page's existing popup-push plumbing via a passed-down delegate. `Program.cs`'s MTA-STS callback branch gains the same create-vs-merge decision DMARC/TLSRPT already have.
 
@@ -13,10 +13,10 @@
 ## Global Constraints
 
 - No database schema changes.
-- No change to the OAuth/popup push mechanism itself (fixed and confirmed working earlier today) — only what happens before a push is initiated, and where the controls live.
-- `DnsRecordLookupResult`'s `DelegatedToCname` applies to DMARC/TLSRPT only — MTA-STS's own lookup has no delegation concept (a CNAME at `mta-sts.<domain>` is its own normal, expected record type).
-- No test scaffolding (HTTP-call mocking) for any of the DNS-over-HTTPS lookup classes (`DmarcTxtLookup`, `TlsrptTxtLookup`, `MtaStsCnameLookup`) — matches this codebase's existing, established convention for this exact class of code. Pure parsing/decision logic with no network dependency (the CNAME-detection parsing, the shared confirmation-decision helper) is testable and gets unit tests.
-- No Razor/Blazor component test harness exists in this repo — UI changes are verified manually, per this project's established convention.
+- No change to the OAuth/popup push mechanism itself (fixed and confirmed working earlier today) - only what happens before a push is initiated, and where the controls live.
+- `DnsRecordLookupResult`'s `DelegatedToCname` applies to DMARC/TLSRPT only - MTA-STS's own lookup has no delegation concept (a CNAME at `mta-sts.<domain>` is its own normal, expected record type).
+- No test scaffolding (HTTP-call mocking) for any of the DNS-over-HTTPS lookup classes (`DmarcTxtLookup`, `TlsrptTxtLookup`, `MtaStsCnameLookup`) - matches this codebase's existing, established convention for this exact class of code. Pure parsing/decision logic with no network dependency (the CNAME-detection parsing, the shared confirmation-decision helper) is testable and gets unit tests.
+- No Razor/Blazor component test harness exists in this repo - UI changes are verified manually, per this project's established convention.
 
 ---
 
@@ -41,9 +41,9 @@ Add a new file `src/DotMarc/DnsPush/DnsRecordLookupResult.cs`:
 namespace DotMarc.DnsPush;
 
 /// <summary>The result of looking up a record's current live DNS state. DirectValue is the final
-/// resolved value (same as today's plain string result) — non-null whenever something resolves,
+/// resolved value (same as today's plain string result) - non-null whenever something resolves,
 /// regardless of whether a CNAME hop happened first. DelegatedToCname is set only when the record
-/// at the expected name is itself a CNAME (not a direct TXT record) — e.g. a domain's _dmarc TXT
+/// at the expected name is itself a CNAME (not a direct TXT record) - e.g. a domain's _dmarc TXT
 /// delegated to a third-party DMARC monitoring service via CNAME. A plain TXT query transparently
 /// follows CNAMEs and would otherwise lose this distinction.</summary>
 public sealed record DnsRecordLookupResult(string? DirectValue, string? DelegatedToCname);
@@ -81,7 +81,7 @@ using System.Text.Json.Serialization;
 
 namespace DotMarc.DnsPush;
 
-/// <summary>Fetches the raw, currently-live _dmarc.&lt;domain&gt; TXT record value — used only by
+/// <summary>Fetches the raw, currently-live _dmarc.&lt;domain&gt; TXT record value - used only by
 /// the DMARC push flow, to decide Create vs. Merge and build the merged value against whatever's
 /// live right now. Mirrors DmarcDnsChecker's own TXT-fetching logic rather than sharing code with
 /// it, matching this codebase's existing MxHostsLookup/MtaStsDnsVerifier precedent of small,
@@ -147,7 +147,7 @@ public sealed class TlsrptTxtLookup : ITlsrptTxtLookup
 }
 ```
 
-Note: `DmarcTxtLookup`'s and `TlsrptTxtLookup`'s private `DnsAnswer`/`DnsOverHttpsResponse` records stay separate per file (each file's `Answer` list is `List<DnsAnswer>` using that file's own private nested type) — the shared parsing helper below is generic over a minimal shape both can produce.
+Note: `DmarcTxtLookup`'s and `TlsrptTxtLookup`'s private `DnsAnswer`/`DnsOverHttpsResponse` records stay separate per file (each file's `Answer` list is `List<DnsAnswer>` using that file's own private nested type) - the shared parsing helper below is generic over a minimal shape both can produce.
 
 - [ ] **Step 4: Write the shared parsing helper**
 
@@ -159,8 +159,7 @@ namespace DotMarc.DnsPush;
 /// <summary>Shared answer-chain parsing for DmarcTxtLookup/TlsrptTxtLookup: both query type=TXT
 /// against a name that might actually be a CNAME to somewhere else (e.g. a domain's _dmarc record
 /// delegated to a third-party DMARC monitoring service). A plain TXT query transparently follows
-/// CNAMEs, so the raw DNS-over-HTTPS answer array is the only place that hop is still visible —
-/// type 5 is CNAME, type 16 is TXT, per standard DNS RR type numbers.</summary>
+/// CNAMEs, so the raw DNS-over-HTTPS answer array is the only place that hop is still visible - /// type 5 is CNAME, type 16 is TXT, per standard DNS RR type numbers.</summary>
 public static class DnsRecordLookupParsing
 {
     public static DnsRecordLookupResult ParseTxtWithCnameDetection(IEnumerable<(int Type, string Data)>? answers)
@@ -179,7 +178,7 @@ public static class DnsRecordLookupParsing
 }
 ```
 
-Now go back and fix the two call sites in Step 2 and Step 3 — `parsed.Answer` is a `List<DnsAnswer>?` where `DnsAnswer` is each file's own private record with `Type`/`Data` properties, not the tuple shape `ParseTxtWithCnameDetection` takes. Change both call sites from:
+Now go back and fix the two call sites in Step 2 and Step 3 - `parsed.Answer` is a `List<DnsAnswer>?` where `DnsAnswer` is each file's own private record with `Type`/`Data` properties, not the tuple shape `ParseTxtWithCnameDetection` takes. Change both call sites from:
 
 ```csharp
 return DnsRecordLookupParsing.ParseTxtWithCnameDetection(parsed.Answer);
@@ -359,7 +358,7 @@ Replace it with:
 - [ ] **Step 7: Build and run the new tests**
 
 Run: `dotnet build DotMarc.sln && dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "FullyQualifiedName~DnsRecordLookupResultParsingTests"`
-Expected: Build succeeds (this task's signature change also breaks `DomainDetail.razor`'s two call sites — that's expected and out of scope for this task; Task 4 fixes them. `Program.cs` and the two lookup files are the only places this task touches that call `.LookupAsync`, so `dotnet build DotMarc.sln` will fail on `DomainDetail.razor` until Task 4 lands — **run `dotnet build src/DotMarc/DotMarc.csproj` scoped to just this project is not possible since DomainDetail.razor is in the same project; instead confirm only that `DnsRecordLookupParsing`, `DnsRecordLookupResult`, both lookup classes, and `Program.cs` compile correctly by reading them carefully — the full-solution build will go green once Task 4 lands, not before**). The 4 new tests pass, 4/4.
+Expected: Build succeeds (this task's signature change also breaks `DomainDetail.razor`'s two call sites - that's expected and out of scope for this task; Task 4 fixes them. `Program.cs` and the two lookup files are the only places this task touches that call `.LookupAsync`, so `dotnet build DotMarc.sln` will fail on `DomainDetail.razor` until Task 4 lands - **run `dotnet build src/DotMarc/DotMarc.csproj` scoped to just this project is not possible since DomainDetail.razor is in the same project; instead confirm only that `DnsRecordLookupParsing`, `DnsRecordLookupResult`, both lookup classes, and `Program.cs` compile correctly by reading them carefully - the full-solution build will go green once Task 4 lands, not before**). The 4 new tests pass, 4/4.
 
 - [ ] **Step 8: Commit**
 
@@ -378,7 +377,7 @@ git commit -m "Detect third-party CNAME delegation in DMARC/TLSRPT lookups"
 - Modify: `src/DotMarc/Program.cs`
 
 **Interfaces:**
-- Produces: `IMtaStsCnameLookup.LookupAsync(string domainName, CancellationToken) : Task<string?>` — the current live CNAME target at `mta-sts.<domain>`, or null. Consumed by Task 5 (`DomainMtaStsPanel`) and Task 6 (`Program.cs`'s merge path).
+- Produces: `IMtaStsCnameLookup.LookupAsync(string domainName, CancellationToken) : Task<string?>` - the current live CNAME target at `mta-sts.<domain>`, or null. Consumed by Task 5 (`DomainMtaStsPanel`) and Task 6 (`Program.cs`'s merge path).
 
 - [ ] **Step 1: Write the interface**
 
@@ -403,11 +402,11 @@ using System.Text.Json.Serialization;
 
 namespace DotMarc.MtaSts;
 
-/// <summary>Fetches the raw, currently-live mta-sts.&lt;domain&gt; CNAME target — used by the
+/// <summary>Fetches the raw, currently-live mta-sts.&lt;domain&gt; CNAME target - used by the
 /// MTA-STS push flow to decide Create vs. Merge before pushing, the same way
 /// DmarcTxtLookup/TlsrptTxtLookup already do for their record types. A CNAME here is MTA-STS's own
 /// normal, expected record type (unlike DMARC/TLSRPT, where finding one instead of a plain TXT
-/// record means third-party delegation) — there is no delegation concept for this lookup.</summary>
+/// record means third-party delegation) - there is no delegation concept for this lookup.</summary>
 public sealed class MtaStsCnameLookup : IMtaStsCnameLookup
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -447,7 +446,7 @@ builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts
 - [ ] **Step 4: Build**
 
 Run: `dotnet build DotMarc.sln`
-Expected: Build succeeds (this task adds new, unreferenced-so-far code plus one DI registration — no existing call sites change).
+Expected: Build succeeds (this task adds new, unreferenced-so-far code plus one DI registration - no existing call sites change).
 
 - [ ] **Step 5: Commit**
 
@@ -467,7 +466,7 @@ git commit -m "Add MTA-STS CNAME lookup for the live pre-push check"
 
 **Interfaces:**
 - Produces: `DnsRecordPushDecision.NeedsConfirmation(string? existingValue, string? delegatedToCname, string proposedValue) : bool`. Consumed by Task 4 and Task 5.
-- Produces: `ConfirmDnsRecordPushDialog`'s new parameter set — `RecordDescription`, `RecordName`, `ExistingValue`, `ProposedValue`, `DelegatedToCname` (all `string`, `DelegatedToCname` nullable). Consumed by Task 4 and Task 5.
+- Produces: `ConfirmDnsRecordPushDialog`'s new parameter set - `RecordDescription`, `RecordName`, `ExistingValue`, `ProposedValue`, `DelegatedToCname` (all `string`, `DelegatedToCname` nullable). Consumed by Task 4 and Task 5.
 
 - [ ] **Step 1: Write the decision helper**
 
@@ -478,7 +477,7 @@ namespace DotMarc.DnsPush;
 
 /// <summary>Shared "does this push need a confirm dialog first" decision, used identically by the
 /// MTA-STS, DMARC, and TLSRPT push handlers. Each caller computes its own existingValue/
-/// proposedValue first (the merge logic differs per record type — DmarcRuaMerge, TlsrptRuaMerge,
+/// proposedValue first (the merge logic differs per record type - DmarcRuaMerge, TlsrptRuaMerge,
 /// or MTA-STS's plain hosting-hostname target); this is only the generic "should I ask first"
 /// step.</summary>
 public static class DnsRecordPushDecision
@@ -558,8 +557,7 @@ Open `src/DotMarc/Components/Dialogs/ConfirmDnsRecordPushDialog.razor`. Replace 
         @if (DelegatedToCname is not null)
         {
             <MudText Typo="Typo.body2" Class="mb-2">
-                <code>@RecordName</code> is currently a CNAME delegated to <code>@DelegatedToCname</code> —
-                likely a third-party service managing this record. Proceeding replaces that CNAME and
+                <code>@RecordName</code> is currently a CNAME delegated to <code>@DelegatedToCname</code> -                 likely a third-party service managing this record. Proceeding replaces that CNAME and
                 removes the delegation.
             </MudText>
         }
@@ -592,7 +590,7 @@ Open `src/DotMarc/Components/Dialogs/ConfirmDnsRecordPushDialog.razor`. Replace 
 
 - [ ] **Step 4: Build and run the new tests**
 
-Run: `dotnet build src/DotMarc/DotMarc.csproj` — expect this to fail, because `DomainDetail.razor`'s existing call site still constructs `ConfirmDnsRecordPushDialog`'s old parameter names (`DomainName`). That call site is fixed in Task 4; this step is only to confirm the dialog file itself and the new helper compile with no syntax errors — read both files back over carefully instead of relying on a green full build here.
+Run: `dotnet build src/DotMarc/DotMarc.csproj` - expect this to fail, because `DomainDetail.razor`'s existing call site still constructs `ConfirmDnsRecordPushDialog`'s old parameter names (`DomainName`). That call site is fixed in Task 4; this step is only to confirm the dialog file itself and the new helper compile with no syntax errors - read both files back over carefully instead of relying on a green full build here.
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "FullyQualifiedName~DnsRecordPushDecisionTests"`
 Expected: 5/5 passing (this test project doesn't reference the Razor dialog, so it builds and runs independently of the `DomainDetail.razor` compile error above).
@@ -606,14 +604,14 @@ git commit -m "Generalize the DNS record push confirm dialog to all record types
 
 ---
 
-### Task 4: DomainDetail.razor — live-check before every DMARC/TLSRPT push
+### Task 4: DomainDetail.razor - live-check before every DMARC/TLSRPT push
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/DomainDetail.razor`
 
 **Interfaces:**
 - Consumes: `DnsRecordLookupResult` (Task 1), `IDmarcTxtLookup`/`ITlsrptTxtLookup`'s new return type (Task 1), `DnsRecordPushDecision.NeedsConfirmation` (Task 3), `ConfirmDnsRecordPushDialog`'s new parameters (Task 3).
-- Produces: `OpenDnsPushPopupAsync(string providerKey, int domainId, string target)` stays exactly as it is today (unchanged signature) — Task 5's `DomainMtaStsPanel` will be handed a reference to this exact method as a parameter.
+- Produces: `OpenDnsPushPopupAsync(string providerKey, int domainId, string target)` stays exactly as it is today (unchanged signature) - Task 5's `DomainMtaStsPanel` will be handed a reference to this exact method as a parameter.
 
 - [ ] **Step 1: Rewrite PushDmarcRecordAsync to always live-check**
 
@@ -635,7 +633,7 @@ Open `src/DotMarc/Components/Pages/DomainDetail.razor`. Find the `PushDmarcRecor
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
-                Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+                Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
                 return;
             }
 
@@ -660,7 +658,7 @@ Open `src/DotMarc/Components/Pages/DomainDetail.razor`. Find the `PushDmarcRecor
                 var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, GraphOptions.Value.MailboxAddress);
                 if (merged is null)
                 {
-                    Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                    Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
                     return;
                 }
                 proposed = merged;
@@ -710,7 +708,7 @@ Find the `PushTlsrptRecordAsync` method. Replace the whole method:
         var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
         if (pushProvider is null)
         {
-            Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+            Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
             return;
         }
 
@@ -736,7 +734,7 @@ Find the `PushTlsrptRecordAsync` method. Replace the whole method:
             var merged = TlsrptRuaMerge.TryMerge(existing.DirectValue, mailbox);
             if (merged is null)
             {
-                Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
                 return;
             }
             proposed = merged;
@@ -767,11 +765,11 @@ Find the `PushTlsrptRecordAsync` method. Replace the whole method:
 - [ ] **Step 3: Build**
 
 Run: `dotnet build DotMarc.sln`
-Expected: Build succeeds — this is the task that resolves the compile errors Tasks 1 and 3 left pending in this file.
+Expected: Build succeeds - this is the task that resolves the compile errors Tasks 1 and 3 left pending in this file.
 
 - [ ] **Step 4: Manually verify**
 
-There's no component test harness for Razor pages in this repo. If a reachable dev/demo environment is available, load a domain detail page whose DMARC status is Misconfigured and confirm: the confirm dialog now says "Push DMARC record" with the record name and delegation-or-diff content rendering correctly, Cancel doesn't push, Apply proceeds to the popup. If no environment is reachable, note that in your report as DONE_WITH_CONCERNS — final review will re-check the logic by reading the diff.
+There's no component test harness for Razor pages in this repo. If a reachable dev/demo environment is available, load a domain detail page whose DMARC status is Misconfigured and confirm: the confirm dialog now says "Push DMARC record" with the record name and delegation-or-diff content rendering correctly, Cancel doesn't push, Apply proceeds to the popup. If no environment is reachable, note that in your report as DONE_WITH_CONCERNS - final review will re-check the logic by reading the diff.
 
 - [ ] **Step 5: Commit**
 
@@ -789,7 +787,7 @@ git commit -m "Always live-check DMARC/TLSRPT before pushing, not just when cach
 
 **Interfaces:**
 - Consumes: `IMtaStsCnameLookup` (Task 2), `DnsRecordPushDecision.NeedsConfirmation` (Task 3), `ConfirmDnsRecordPushDialog` (Task 3), `DomainManagementService.SetMtaStsConfigAsync(DotMarcDbContext, int, bool, MtaStsMode, List<string>, int, CancellationToken)` (existing), `IMxHostsLookup.LookupAsync(string, CancellationToken)` (existing).
-- Produces: a `[Parameter] public Domain Domain { get; set; }` and `[Parameter] public Func<string, int, string, Task> OpenDnsPushPopup { get; set; }` contract — Task 6 wires this into `DomainDetail.razor`, passing its own `_domain` and `OpenDnsPushPopupAsync` method group.
+- Produces: a `[Parameter] public Domain Domain { get; set; }` and `[Parameter] public Func<string, int, string, Task> OpenDnsPushPopup { get; set; }` contract - Task 6 wires this into `DomainDetail.razor`, passing its own `_domain` and `OpenDnsPushPopupAsync` method group.
 
 - [ ] **Step 1: Write the component**
 
@@ -896,7 +894,7 @@ Create `src/DotMarc/Components/Shared/DomainMtaStsPanel.razor`:
             var mxHosts = await MxHostsLookup.LookupAsync(Domain.Name, CancellationToken.None);
             if (mxHosts.Count == 0)
             {
-                Snackbar.Add($"No MX records found for {Domain.Name} — add them manually in Advanced before enabling.", Severity.Warning);
+                Snackbar.Add($"No MX records found for {Domain.Name} - add them manually in Advanced before enabling.", Severity.Warning);
                 return;
             }
 
@@ -962,7 +960,7 @@ Create `src/DotMarc/Components/Shared/DomainMtaStsPanel.razor`:
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
-                Snackbar.Add($"Couldn't find a configured DNS push option for {Domain.Name} — add the CNAME manually.", Severity.Warning);
+                Snackbar.Add($"Couldn't find a configured DNS push option for {Domain.Name} - add the CNAME manually.", Severity.Warning);
                 return;
             }
 
@@ -1014,7 +1012,7 @@ Create `src/DotMarc/Components/Shared/DomainMtaStsPanel.razor`:
 - [ ] **Step 2: Build**
 
 Run: `dotnet build src/DotMarc/DotMarc.csproj`
-Expected: This file is not yet referenced anywhere, so it compiles standalone once its dependencies (Tasks 2 and 3) are in place — expect success. `MudExpansionPanels`/`MudExpansionPanel` (with a `Text` header parameter) are confirmed present in this project's installed MudBlazor 9.8.0.
+Expected: This file is not yet referenced anywhere, so it compiles standalone once its dependencies (Tasks 2 and 3) are in place - expect success. `MudExpansionPanels`/`MudExpansionPanel` (with a `Text` header parameter) are confirmed present in this project's installed MudBlazor 9.8.0.
 
 - [ ] **Step 3: Commit**
 
@@ -1073,7 +1071,7 @@ Replace it with:
         </MudTabPanel>
 ```
 
-Add `@using DotMarc.Components.Shared` to this file's existing `@using` block near the top if it isn't already present (check the existing `@using` lines first — this repo's other pages that reference `Components.Shared` types, like `UnsavedChangesGuard`, already carry this import; `ManageMtaSts.razor` has `@using DotMarc.Components.Shared` at its top as the precedent to match).
+Add `@using DotMarc.Components.Shared` to this file's existing `@using` block near the top if it isn't already present (check the existing `@using` lines first - this repo's other pages that reference `Components.Shared` types, like `UnsavedChangesGuard`, already carry this import; `ManageMtaSts.razor` has `@using DotMarc.Components.Shared` at its top as the precedent to match).
 
 - [ ] **Step 2: Give MTA-STS a real merge path in Program.cs**
 
@@ -1115,7 +1113,7 @@ Find the `mta-sts` branch:
         changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null, domain.Name)];
 
         // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
-        // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
+        // custom domain - see AzureMtaStsHostProvisioner and the design spec's "Fetching the
         // verification ID" section. Caddy has no such requirement, and a null/empty ID (the ARM
         // call failed, or this deployment isn't actually Azure-provisioned) just means the push
         // proceeds with the CNAME alone rather than failing outright.
@@ -1149,7 +1147,7 @@ Replace it with:
         changes = [cnameChange];
 
         // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
-        // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
+        // custom domain - see AzureMtaStsHostProvisioner and the design spec's "Fetching the
         // verification ID" section. Caddy has no such requirement, and a null/empty ID (the ARM
         // call failed, or this deployment isn't actually Azure-provisioned) just means the push
         // proceeds with the CNAME alone rather than failing outright.
@@ -1210,16 +1208,16 @@ Remove this block entirely (all 3 lines, including both `AuthorizeView` tags).
 
 - [ ] **Step 3: Update mta-sts.mdx**
 
-Open `website/docs/mta-sts.mdx`. Find the "Enabling a domain" section (reads roughly: "From **Manage MTA-STS**, toggle a domain on and add a CNAME for it..."). Read the file's current content around that section before editing — it was last touched earlier today (the asuid-record documentation work) and its exact current wording needs to be read fresh rather than assumed. Replace the reference to the standalone "Manage MTA-STS" page with a reference to the domain's own MTA-STS tab, e.g. "From a domain's **MTA-STS** tab, enable it and dotMARC will..." — keep the surrounding CNAME/asuid instructions intact, only the "where you go to do this" phrasing changes.
+Open `website/docs/mta-sts.mdx`. Find the "Enabling a domain" section (reads roughly: "From **Manage MTA-STS**, toggle a domain on and add a CNAME for it..."). Read the file's current content around that section before editing - it was last touched earlier today (the asuid-record documentation work) and its exact current wording needs to be read fresh rather than assumed. Replace the reference to the standalone "Manage MTA-STS" page with a reference to the domain's own MTA-STS tab, e.g. "From a domain's **MTA-STS** tab, enable it and dotMARC will..." - keep the surrounding CNAME/asuid instructions intact, only the "where you go to do this" phrasing changes.
 
 - [ ] **Step 4: Update getting-started.mdx**
 
-Open `website/docs/getting-started.mdx`. Search for any reference to "Manage MTA-STS" (the page name) — the MTA-STS section there describes server-side hosting setup (Caddy, `MtaSts__HostingHostname`), not the per-domain enable UI, so it likely doesn't reference the page by name at all; if a reference is found, update it to point at the domain's MTA-STS tab the same way as Step 3. If no reference exists, no change is needed in this file — note that in your report rather than editing something that doesn't need it.
+Open `website/docs/getting-started.mdx`. Search for any reference to "Manage MTA-STS" (the page name) - the MTA-STS section there describes server-side hosting setup (Caddy, `MtaSts__HostingHostname`), not the per-domain enable UI, so it likely doesn't reference the page by name at all; if a reference is found, update it to point at the domain's MTA-STS tab the same way as Step 3. If no reference exists, no change is needed in this file - note that in your report rather than editing something that doesn't need it.
 
 - [ ] **Step 5: Build and test**
 
 Run: `dotnet build DotMarc.sln && dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj`
-Expected: Build succeeds, all tests pass — confirms nothing else in the solution still references `ManageMtaSts` or routes to `/mta-sts`. Run `grep -rn "ManageMtaSts\|/mta-sts\b" src/DotMarc` first to double check no other file (e.g. a redirect, a breadcrumb) still references the removed page before considering this step done.
+Expected: Build succeeds, all tests pass - confirms nothing else in the solution still references `ManageMtaSts` or routes to `/mta-sts`. Run `grep -rn "ManageMtaSts\|/mta-sts\b" src/DotMarc` first to double check no other file (e.g. a redirect, a breadcrumb) still references the removed page before considering this step done.
 
 - [ ] **Step 6: Commit**
 

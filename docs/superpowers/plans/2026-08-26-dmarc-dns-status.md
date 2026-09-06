@@ -2,28 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Track, per domain, whether its DMARC DNS records are actually correctly in place — its own `_dmarc.<domain>` record and, when required, the RFC 7489 external-reporting authorization record at `<domain>._report._dmarc.<mailbox-domain>` — queried against Cloudflare, refreshed automatically, summarized on the Dashboard and detailed on the per-domain drilldown. Bundled: renaming `IsPinned` → `IsMonitored` throughout.
+**Goal:** Track, per domain, whether its DMARC DNS records are actually correctly in place - its own `_dmarc.<domain>` record and, when required, the RFC 7489 external-reporting authorization record at `<domain>._report._dmarc.<mailbox-domain>` - queried against Cloudflare, refreshed automatically, summarized on the Dashboard and detailed on the per-domain drilldown. Bundled: renaming `IsPinned` → `IsMonitored` throughout.
 
-**Architecture:** A waterfall check (`IDmarcDnsChecker`/`DmarcDnsChecker`, a typed `HttpClient` against Cloudflare's DNS-over-HTTPS JSON API, following the existing `IGraphMailboxClient`/`GraphMailboxClient` pattern) writes a `DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` triple onto `Domain`. A new, independently-locked cycle inside `PollingService` (`RunDmarcCheckCycleAsync`, its own advisory lock key, called from `ExecuteAsync` alongside the existing poll cycle — deliberately NOT added as parameters to the existing `RunPollCycleAsync`, to avoid touching its five existing test call sites) re-checks any domain whose `DmarcCheckedUtc` is null or more than 24 hours old. `Dashboard.razor` and `DomainDetail.razor` both display the result via a small shared presentation helper; `ManageDomains.razor` is untouched beyond the rename, since it's a configuration surface, not a status one.
+**Architecture:** A waterfall check (`IDmarcDnsChecker`/`DmarcDnsChecker`, a typed `HttpClient` against Cloudflare's DNS-over-HTTPS JSON API, following the existing `IGraphMailboxClient`/`GraphMailboxClient` pattern) writes a `DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` triple onto `Domain`. A new, independently-locked cycle inside `PollingService` (`RunDmarcCheckCycleAsync`, its own advisory lock key, called from `ExecuteAsync` alongside the existing poll cycle - deliberately NOT added as parameters to the existing `RunPollCycleAsync`, to avoid touching its five existing test call sites) re-checks any domain whose `DmarcCheckedUtc` is null or more than 24 hours old. `Dashboard.razor` and `DomainDetail.razor` both display the result via a small shared presentation helper; `ManageDomains.razor` is untouched beyond the rename, since it's a configuration surface, not a status one.
 
-**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack — no new dependency; DNS queries go over plain `HttpClient`, no DNS protocol library).
+**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack - no new dependency; DNS queries go over plain `HttpClient`, no DNS protocol library).
 
 ## Global Constraints
 
 - The check is a waterfall (own record → validity/rua match → same-domain exemption →
-  authorization record), not two independent lookups — a domain missing its own record costs one
+  authorization record), not two independent lookups - a domain missing its own record costs one
   DNS query, not two.
 - Cloudflare's DNS-over-HTTPS JSON API only (`https://cloudflare-dns.com/dns-query?name=...&type=TXT`,
-  header `Accept: application/dns-json`) — no raw UDP DNS, no other provider, no fallback provider.
+  header `Accept: application/dns-json`) - no raw UDP DNS, no other provider, no fallback provider.
 - A failed check (network error, non-2xx, etc.) for a domain leaves that domain's
-  `DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` completely unchanged — no partial write,
+  `DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` completely unchanged - no partial write,
   no distinct "error" status. It's simply retried next cycle.
 - The 24-hour re-check gate and the DMARC-check cycle itself must not require changes to
-  `PollingService.RunPollCycleAsync`'s signature or any of its five existing test call sites — see
+  `PollingService.RunPollCycleAsync`'s signature or any of its five existing test call sites - see
   Task 4.
-- `ManageDomains.razor` gets no DMARC status display of any kind — only the `IsMonitored` rename.
+- `ManageDomains.razor` gets no DMARC status display of any kind - only the `IsMonitored` rename.
 - Migrations are historical records; a rename is a new migration (`RenameColumn`), never an edit to
-  an old one. Task 1's migration specifically must preserve existing data — see that task's
+  an old one. Task 1's migration specifically must preserve existing data - see that task's
   migration step for why the default `dotnet ef migrations add` output can't be trusted blindly
   here the way it normally can for a brand-new column.
 
@@ -39,14 +39,14 @@
 - Modify: `test/DotMarc.Tests/Data/DomainManagementServiceTests.cs`
 - Modify: `test/DotMarc.Tests/Data/DotMarcDbContextTests.cs`
 - Modify: `test/DotMarc.Tests/Ingestion/PollingServiceTests.cs`
-- (generated) `src/DotMarc/Migrations/` — a new EF Core migration
+- (generated) `src/DotMarc/Migrations/` - a new EF Core migration
 
 **Interfaces:**
 - Produces: `Domain.IsMonitored` (replaces `IsPinned`), `DomainManagementService.SetMonitoredAsync`
-  (replaces `SetPinnedAsync`) — used everywhere the old names were used, and by every later task in
+  (replaces `SetPinnedAsync`) - used everywhere the old names were used, and by every later task in
   this plan that touches `Domain`.
 
-This is a pure rename with no behavior change — every step below is a mechanical find/replace at
+This is a pure rename with no behavior change - every step below is a mechanical find/replace at
 the named location. No new test content; existing tests are renamed in place and must still pass.
 
 - [ ] **Step 1: `src/DotMarc/Data/Domain.cs`**
@@ -55,7 +55,7 @@ Change:
 ```csharp
 /// <summary>A monitored domain. Rows are created automatically the first time a report arrives
 /// for a domain (auto-discovery); <see cref="IsPinned"/> is set explicitly via the dashboard and
-/// only affects whether a missing-report warning is shown for that domain — it does not change
+/// only affects whether a missing-report warning is shown for that domain - it does not change
 /// ingestion behavior.</summary>
 public sealed class Domain
 {
@@ -67,7 +67,7 @@ to:
 ```csharp
 /// <summary>A monitored domain. Rows are created automatically the first time a report arrives
 /// for a domain (auto-discovery); <see cref="IsMonitored"/> is set explicitly via the dashboard
-/// and only affects whether a missing-report warning is shown for that domain — it does not
+/// and only affects whether a missing-report warning is shown for that domain - it does not
 /// change ingestion behavior.</summary>
 public sealed class Domain
 {
@@ -276,7 +276,7 @@ to:
 - [ ] **Step 5: `test/DotMarc.Tests/Data/DomainManagementServiceTests.cs`**
 
 Change `Assert.True(domain.IsPinned);` to `Assert.True(domain.IsMonitored);` (the assertion inside
-`AddDomainAsync_CreatesAPinnedDomain_WithNormalizedName` — leave the test's own name as-is, it's
+`AddDomainAsync_CreatesAPinnedDomain_WithNormalizedName` - leave the test's own name as-is, it's
 about `AddDomainAsync`'s behavior, not specifically about this field's name).
 
 Change:
@@ -322,21 +322,21 @@ Change `Assert.True(domain.IsPinned);` to `Assert.True(domain.IsMonitored);` (in
 
 Run: `dotnet ef migrations add RenameIsPinnedToIsMonitored --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
 
-This is a rename of an existing column, not a new one — data loss matters here, since a live
+This is a rename of an existing column, not a new one - data loss matters here, since a live
 deployment has real `Domain` rows with real `IsPinned` values that must survive. Open the generated
 migration file and inspect its `Up()` method:
 
 - If it contains `migrationBuilder.RenameColumn(name: "IsPinned", newName: "IsMonitored", table: "Domains");` (or an equivalent `RenameColumn` call), EF's scaffolder correctly detected this as a
-  rename. Leave it exactly as generated — this is the expected, no-hand-editing case.
+  rename. Leave it exactly as generated - this is the expected, no-hand-editing case.
 - If it instead contains a `DropColumn(name: "IsPinned", table: "Domains")` paired with an
   `AddColumn<bool>(name: "IsMonitored", table: "Domains", ...)`, EF treated this as
-  remove-then-add rather than a rename — which would silently reset every existing domain's
+  remove-then-add rather than a rename - which would silently reset every existing domain's
   monitored flag to its default on a real deployment. Replace both calls in `Up()` with a single
   `migrationBuilder.RenameColumn(name: "IsPinned", newName: "IsMonitored", table: "Domains");`,
   and replace `Down()`'s corresponding calls with the reverse:
   `migrationBuilder.RenameColumn(name: "IsMonitored", newName: "IsPinned", table: "Domains");`.
   This is the one case in this project where hand-editing a generated migration is required, not
-  merely reviewed — say explicitly in your report which case you hit.
+  merely reviewed - say explicitly in your report which case you hit.
 
 - [ ] **Step 9: Run the full test suite to confirm no regressions**
 
@@ -359,12 +359,12 @@ git commit -m "Rename Domain.IsPinned to IsMonitored"
 - Modify: `src/DotMarc/Data/Domain.cs`
 - Modify: `src/DotMarc/Data/DotMarcDbContext.cs`
 - Modify: `test/DotMarc.Tests/Data/DotMarcDbContextTests.cs`
-- (generated) `src/DotMarc/Migrations/` — a new EF Core migration
+- (generated) `src/DotMarc/Migrations/` - a new EF Core migration
 
 **Interfaces:**
 - Produces: `DotMarc.Data.DmarcCheckStatus` enum (`NotChecked`, `Ok`, `MissingOwnRecord`,
-  `Misconfigured`, `MissingAuthorizationRecord` — in this order, so `NotChecked` is the C#/DB
-  default) and `Domain.DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` — used by Task 3
+  `Misconfigured`, `MissingAuthorizationRecord` - in this order, so `NotChecked` is the C#/DB
+  default) and `Domain.DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` - used by Task 3
   (the checker returns a `DmarcCheckStatus`), Task 4 (writes these fields), and Tasks 5-6 (read
   them for display).
 
@@ -417,7 +417,7 @@ Add to `test/DotMarc.Tests/Data/DotMarcDbContextTests.cs`, inside the existing
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "CanInsertAndQuery_DomainWithDmarcCheckFields|Domain_DmarcCheckStatus_DefaultsToNotChecked"`
-Expected: FAIL to build — `DmarcCheckStatus` and the three `Domain` fields don't exist yet.
+Expected: FAIL to build - `DmarcCheckStatus` and the three `Domain` fields don't exist yet.
 
 - [ ] **Step 3: Create the enum**
 
@@ -426,7 +426,7 @@ Create `src/DotMarc/Data/DmarcCheckStatus.cs`:
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>The result of the most recent DMARC DNS check for a Domain — see
+/// <summary>The result of the most recent DMARC DNS check for a Domain - see
 /// DotMarc.Dns.DmarcDnsChecker for how each value is determined. NotChecked is listed first so it
 /// is the enum's (and therefore the database column's) default value: an existing domain from
 /// before this feature, or a domain that hasn't been checked yet, is NotChecked without needing
@@ -472,7 +472,7 @@ to:
         });
 ```
 
-(Matches this project's existing convention for enum columns — see `ReportRecord`'s
+(Matches this project's existing convention for enum columns - see `ReportRecord`'s
 `Disposition`/`SpfResult`/`DkimResult` configuration a few lines below in the same file.)
 
 - [ ] **Step 6: Generate the migration**
@@ -480,8 +480,7 @@ to:
 Run: `dotnet ef migrations add AddDomainDmarcCheckFields --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
 
 Unlike Task 1, this is a brand-new column, so the usual "review, don't blindly trust" applies, not
-hand-editing: confirm `Up()` adds `DmarcCheckStatus` (as `character varying`/`text`, not `integer`
-— the string conversion from Step 5 must be reflected), `DmarcCheckedUtc` (nullable
+hand-editing: confirm `Up()` adds `DmarcCheckStatus` (as `character varying`/`text`, not `integer` - the string conversion from Step 5 must be reflected), `DmarcCheckedUtc` (nullable
 `timestamp with time zone`), and `DmarcCheckDetail` (nullable `text`) to the `Domains` table, with
 `DmarcCheckStatus`'s default matching the string form of `DmarcCheckStatus.NotChecked` (i.e.
 `"NotChecked"`) so existing rows come through correctly without a manual backfill.
@@ -515,10 +514,10 @@ git commit -m "Add Domain DMARC check status fields"
 
 **Interfaces:**
 - Consumes: `DotMarc.Data.DmarcCheckStatus` (Task 2).
-- Produces: `IDmarcDnsChecker.CheckAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken) : Task<DmarcCheckResult>` and `DmarcCheckResult(DmarcCheckStatus Status, string? Detail)` — used by Task 4.
+- Produces: `IDmarcDnsChecker.CheckAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken) : Task<DmarcCheckResult>` and `DmarcCheckResult(DmarcCheckStatus Status, string? Detail)` - used by Task 4.
 
 This task is fully self-contained: no DI registration yet (Task 4), no `PollingService`
-integration yet (Task 4) — just the checker itself, tested against a fake HTTP handler exactly the
+integration yet (Task 4) - just the checker itself, tested against a fake HTTP handler exactly the
 way `GraphMailboxClient` is tested against one in `test/DotMarc.Tests/Graph/GraphMailboxClientTests.cs`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -662,7 +661,7 @@ public class DmarcDnsCheckerTests
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DmarcDnsCheckerTests`
-Expected: FAIL to build — `IDmarcDnsChecker`/`DmarcDnsChecker`/`DmarcCheckResult` don't exist yet.
+Expected: FAIL to build - `IDmarcDnsChecker`/`DmarcDnsChecker`/`DmarcCheckResult` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -674,7 +673,7 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>The outcome of one DmarcDnsChecker.CheckAsync call. Detail is null exactly when Status
-/// is Ok — there's nothing to explain about a passing check.</summary>
+/// is Ok - there's nothing to explain about a passing check.</summary>
 public sealed record DmarcCheckResult(DmarcCheckStatus Status, string? Detail);
 ```
 
@@ -699,7 +698,7 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>Checks whether a domain's DMARC records are correctly in place, querying Cloudflare's
-/// DNS-over-HTTPS JSON API rather than whatever resolver the host happens to have configured — see
+/// DNS-over-HTTPS JSON API rather than whatever resolver the host happens to have configured - see
 /// docs/superpowers/specs/2026-08-26-dmarc-dns-status-design.md for why. A waterfall, not two
 /// independent lookups: each step only runs if the previous one passed, so a domain with no DMARC
 /// record at all costs one query, not two.</summary>
@@ -748,7 +747,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
 
     /// <summary>Returns the first TXT record's value (quotes stripped, multi-segment values
     /// joined), or null if the name doesn't resolve or has no TXT records (Cloudflare's JSON API
-    /// omits Answer entirely for both NXDOMAIN and NODATA — no need to branch on Status).</summary>
+    /// omits Answer entirely for both NXDOMAIN and NODATA - no need to branch on Status).</summary>
     private async Task<string?> QueryTxtAsync(string name, CancellationToken cancellationToken)
     {
         var response = await _http.GetAsync($"dns-query?name={Uri.EscapeDataString(name)}&type=TXT", cancellationToken).ConfigureAwait(false);
@@ -764,7 +763,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
 
         // Cloudflare's JSON API returns the TXT record's data as one or more double-quoted
         // segments (multiple only for a value over 255 bytes, split across DNS's own
-        // character-string length limit) — e.g. "\"v=DMARC1; p=quarantine\"" for a short record,
+        // character-string length limit) - e.g. "\"v=DMARC1; p=quarantine\"" for a short record,
         // or "\"first part\" \"second part\"" for a long one. Splitting on `" "` between quoted
         // segments and stripping the outer quotes from what's left reconstructs the original value.
         return string.Join("", answer.Data.Split("\" \"")).Trim('"');
@@ -825,7 +824,7 @@ git commit -m "Add IDmarcDnsChecker/DmarcDnsChecker"
 
 **Interfaces:**
 - Consumes: `IDmarcDnsChecker`/`DmarcCheckResult` (Task 3), `Domain.DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` (Task 2).
-- Produces: `PollingService.RunDmarcCheckCycleAsync(DotMarcDbContext context, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken) : Task` and `PollingService.DmarcCheckLeaderLockKey` (internal const) — a new, independently-testable method, deliberately **not** a change to `RunPollCycleAsync`'s signature (see Global Constraints — that method has five existing test call sites this task must not touch).
+- Produces: `PollingService.RunDmarcCheckCycleAsync(DotMarcDbContext context, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken) : Task` and `PollingService.DmarcCheckLeaderLockKey` (internal const) - a new, independently-testable method, deliberately **not** a change to `RunPollCycleAsync`'s signature (see Global Constraints - that method has five existing test call sites this task must not touch).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1014,7 +1013,7 @@ public sealed class DmarcCheckCycleTests : IAsyncLifetime
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DmarcCheckCycleTests`
-Expected: FAIL to build — `RunDmarcCheckCycleAsync`/`DmarcCheckLeaderLockKey` don't exist yet.
+Expected: FAIL to build - `RunDmarcCheckCycleAsync`/`DmarcCheckLeaderLockKey` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1027,7 +1026,7 @@ using DotMarc.Dns;
 Add a new lock-key constant after the existing `PollingLeaderLockKey`:
 
 ```csharp
-    /// <summary>Arbitrary fixed key for this service's DMARC-check advisory lock — distinct from
+    /// <summary>Arbitrary fixed key for this service's DMARC-check advisory lock - distinct from
     /// PollingLeaderLockKey so the mailbox-poll cycle and the DMARC DNS-check cycle run under
     /// independent locks rather than being forced to share the same leader/timing.</summary>
     internal const long DmarcCheckLeaderLockKey = 84_200_003;
@@ -1096,10 +1095,10 @@ Add the new method after `RunPollCycleAsync` (before `RecordPollCycleAsync`):
 
 ```csharp
     /// <summary>Runs a DMARC DNS status check for every domain whose last check (DmarcCheckedUtc)
-    /// is null or more than 24 hours old — independent of, and under a separate advisory lock from,
+    /// is null or more than 24 hours old - independent of, and under a separate advisory lock from,
     /// the mailbox poll cycle above, since the two concerns don't need to share timing or a leader.
     /// A domain whose check itself fails (network error, Cloudflare unreachable) is left with its
-    /// prior status/timestamp untouched and simply retried next cycle — matching this service's
+    /// prior status/timestamp untouched and simply retried next cycle - matching this service's
     /// existing "leave it, retry later" policy for other kinds of per-item failure.</summary>
     internal async Task RunDmarcCheckCycleAsync(DotMarcDbContext context, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
     {
@@ -1185,7 +1184,7 @@ Expected: PASS (5 tests).
 - [ ] **Step 5: Run the full test suite to confirm no regressions**
 
 Run: `dotnet test dotMARC.sln`
-Expected: PASS — critically, all five pre-existing `RunPollCycleAsync`-based tests in
+Expected: PASS - critically, all five pre-existing `RunPollCycleAsync`-based tests in
 `PollingServiceLeaderLockTests.cs` still pass unmodified, confirming this task didn't touch that
 method's signature.
 
@@ -1213,7 +1212,7 @@ git commit -m "Wire DMARC DNS checking into PollingService"
 
 **Interfaces:**
 - Consumes: `Domain.DmarcCheckStatus` (Task 2).
-- Produces: `DotMarc.Reporting.DmarcStatusPresentation.GetColor(DmarcCheckStatus) : MudBlazor.Color` and `.GetLabel(DmarcCheckStatus) : string` — used by this task and Task 6, following the same shared-presentation-logic precedent as `DomainStatistics` (see that class's own doc comment for why: two pages needing the same mapping is exactly the case it was extracted for).
+- Produces: `DotMarc.Reporting.DmarcStatusPresentation.GetColor(DmarcCheckStatus) : MudBlazor.Color` and `.GetLabel(DmarcCheckStatus) : string` - used by this task and Task 6, following the same shared-presentation-logic precedent as `DomainStatistics` (see that class's own doc comment for why: two pages needing the same mapping is exactly the case it was extracted for).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1246,7 +1245,7 @@ public sealed class DmarcStatusPresentationTests
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DmarcStatusPresentationTests`
-Expected: FAIL to build — `DmarcStatusPresentation` doesn't exist yet.
+Expected: FAIL to build - `DmarcStatusPresentation` doesn't exist yet.
 
 - [ ] **Step 3: Create the presentation helper**
 
@@ -1259,8 +1258,8 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps DmarcCheckStatus to the MudBlazor color/label pair used consistently everywhere
-/// it's displayed — Dashboard.razor's DNS Status column and DomainDetail.razor's DMARC record
-/// status panel — following the same shared-presentation-logic precedent as DomainStatistics.</summary>
+/// it's displayed - Dashboard.razor's DNS Status column and DomainDetail.razor's DMARC record
+/// status panel - following the same shared-presentation-logic precedent as DomainStatistics.</summary>
 public static class DmarcStatusPresentation
 {
     public static Color GetColor(DmarcCheckStatus status) => status switch
@@ -1346,7 +1345,7 @@ to:
 ```
 
 Add `@using DotMarc.Reporting` alongside the existing `@using` lines at the top of the file (check
-first — `DomainStatistics` already lives in `DotMarc.Reporting` and this file already calls it, so
+first - `DomainStatistics` already lives in `DotMarc.Reporting` and this file already calls it, so
 this using directive most likely already exists; only add it if it doesn't).
 
 Change:
@@ -1388,9 +1387,9 @@ Expected: PASS.
 If the environment allows running the app (`docker compose up postgres` plus `dotnet run --project src/DotMarc/DotMarc.csproj` with the Graph/EntraId env vars set, per the README's Development
 section) and signing in: confirm the Dashboard's domain table shows "Report Status" and "DNS
 Status" as separate columns, and a domain with no DMARC check yet shows "Not checked yet" in a
-neutral color. If the environment doesn't allow this (a known, previously-hit limitation — no
+neutral color. If the environment doesn't allow this (a known, previously-hit limitation - no
 local Postgres port available, no interactive Entra sign-in), report clearly in your report which
-steps you could and couldn't perform, and why — this is an acceptable, expected limitation, not a
+steps you could and couldn't perform, and why - this is an acceptable, expected limitation, not a
 blocker.
 
 - [ ] **Step 9: Commit**
@@ -1413,7 +1412,7 @@ git commit -m "Show DNS status on the Dashboard"
 
 No query changes needed: `OnInitializedAsync` already fetches the full `Domain` entity (not a
 projection), so the three new fields are already included in `_domain` once Task 2's migration has
-run — this task is markup-only. No automated tests, same reasoning as Task 5.
+run - this task is markup-only. No automated tests, same reasoning as Task 5.
 
 - [ ] **Step 1: Add the panel**
 
@@ -1443,7 +1442,7 @@ after the closing `</MudChart>` tag and before the closing `</MudTabPanel>` of t
 ```
 
 Add `@using DotMarc.Reporting` to the file's existing `@using` block if it isn't already there
-(check first — it may already be present from the existing `DomainStatistics` usage on this same
+(check first - it may already be present from the existing `DomainStatistics` usage on this same
 page).
 
 - [ ] **Step 2: Build to confirm it compiles**
@@ -1461,8 +1460,7 @@ Expected: PASS.
 If the environment allows it (same setup as Task 5's manual step): navigate to a domain's detail
 page (`/domains/<name>`) and confirm the Overview tab shows the "DMARC record status" panel with
 the correct status chip, last-checked time, and detail text (or "Not checked yet." for a domain
-with no check yet). If not possible in this environment, report which steps were skipped and why
-— expected, not a blocker.
+with no check yet). If not possible in this environment, report which steps were skipped and why - expected, not a blocker.
 
 - [ ] **Step 5: Commit**
 

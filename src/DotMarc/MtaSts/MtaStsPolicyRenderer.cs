@@ -3,7 +3,7 @@ using DotMarc.Data;
 namespace DotMarc.MtaSts;
 
 /// <summary>Renders a Domain's hosted MTA-STS policy as the plain-text body RFC 8461 §3.2
-/// requires — a pure function, independent of DNS/HTTP/the database, so it needs no fake
+/// requires - a pure function, independent of DNS/HTTP/the database, so it needs no fake
 /// anything to test.</summary>
 public static class MtaStsPolicyRenderer
 {

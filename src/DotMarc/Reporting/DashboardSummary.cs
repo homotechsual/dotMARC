@@ -6,7 +6,7 @@ namespace DotMarc.Reporting;
 /// <summary>Aggregate stats shown across the Dashboard's summary tiles, plus the per-domain table
 /// rows derived from the same data. <see cref="Build"/> takes a fully-loaded domain list (Reports
 /// already filtered to the report window by the caller's EF query) and a parse-failure count,
-/// keeping this calculation testable without EF or Blazor — same "pure core, thin I/O adapter"
+/// keeping this calculation testable without EF or Blazor - same "pure core, thin I/O adapter"
 /// split as <see cref="DomainStatistics"/>.</summary>
 public sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount, int SourceCount)
 {

@@ -26,7 +26,7 @@
 
         <MudPaper Class="pa-4" Elevation="1">
             <MudText Typo="Typo.h6">Demo Viewer</MudText>
-            <MudText Typo="Typo.body2" Class="mb-2">Scoped to Aurora Retail only — shows what a limited, client-scoped viewer sees.</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">Scoped to Aurora Retail only - shows what a limited, client-scoped viewer sees.</MudText>
             <form method="post" action="/demo/sign-in/viewer">
                 <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Secondary">Continue as Demo Viewer</MudButton>
             </form>
@@ -46,7 +46,7 @@ else
         // Defense in depth: this page (and the sign-in endpoint it posts to, which Program.cs
         // only maps when Demo:Enabled is true) only do anything in demo mode. Reachable in the
         // real app only if someone guesses the URL; redirect them away rather than showing a
-        // picker that leads nowhere. Done in OnInitialized rather than inline in markup — calling
+        // picker that leads nowhere. Done in OnInitialized rather than inline in markup - calling
         // NavigationManager.NavigateTo from within BuildRenderTree isn't reliable under
         // interactive server rendering (the mode this whole app uses).
         if (!DemoOptions.Value.Enabled)

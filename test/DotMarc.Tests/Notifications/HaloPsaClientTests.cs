@@ -59,7 +59,7 @@ public sealed class HaloPsaClientTests
         await client.CreateTicketAsync(Settings, 7, "a.example", "MissedReport", "t", "m");
         await client.CreateTicketAsync(Settings, 7, "b.example", "MissedReport", "t", "m");
 
-        // One token request, two ticket-creation requests — the second call reused the cached token.
+        // One token request, two ticket-creation requests - the second call reused the cached token.
         Assert.Equal(3, handler.Requests.Count);
         Assert.Equal(1, handler.Requests.Count(r => r.RequestUri!.ToString().EndsWith("/token")));
     }
@@ -108,7 +108,7 @@ public sealed class HaloPsaClientTests
     [Fact]
     public async Task DifferentSettings_WithDifferentClientIds_EachAcquireTheirOwnToken()
     {
-        // A shared token cache, as HaloPsaClient normally gets via DI — this is what proves a
+        // A shared token cache, as HaloPsaClient normally gets via DI - this is what proves a
         // credential change (a different ClientId, here standing in for "the admin edited Alert
         // settings") isn't served the other credential's cached token.
         var handler = new FakeHttpMessageHandler();
@@ -168,7 +168,7 @@ public sealed class HaloPsaClientTests
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             client.CloseTicketAsync(Settings, "4242", "Resolved automatically by dotMARC."));
 
-        // Exactly one retry: two token acquisitions, two ticket calls — never a third attempt.
+        // Exactly one retry: two token acquisitions, two ticket calls - never a third attempt.
         Assert.Equal(4, handler.Requests.Count);
     }
 }

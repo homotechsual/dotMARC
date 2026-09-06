@@ -2,19 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let a user register a domain for monitoring (and remove or pin/unpin one) before its first DMARC report arrives, so "missing expected report" detection covers a domain whose `rua=` DNS record was never configured correctly — not just one that stopped reporting.
+**Goal:** Let a user register a domain for monitoring (and remove or pin/unpin one) before its first DMARC report arrives, so "missing expected report" detection covers a domain whose `rua=` DNS record was never configured correctly - not just one that stopped reporting.
 
-**Architecture:** A pure `DomainNameValidator` (trim/lowercase/format-check) feeds a small `DomainManagementService` static class (add/remove/pin, operating on `DotMarcDbContext`, following the existing `DatabaseMigrator`/`PollingService` "thin adapter over the DbContext" pattern) that a new `/domains` Razor page calls. A `MudDialog` confirms destructive deletes. A single link in the shared `MudAppBar` is the only navigation change — this app currently has no nav menu at all.
+**Architecture:** A pure `DomainNameValidator` (trim/lowercase/format-check) feeds a small `DomainManagementService` static class (add/remove/pin, operating on `DotMarcDbContext`, following the existing `DatabaseMigrator`/`PollingService` "thin adapter over the DbContext" pattern) that a new `/domains` Razor page calls. A `MudDialog` confirms destructive deletes. A single link in the shared `MudAppBar` is the only navigation change - this app currently has no nav menu at all.
 
-**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing test stack — no new test dependency added).
+**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing test stack - no new test dependency added).
 
 ## Global Constraints
 
-- Domain names are normalized to trimmed, lowercase form before storage — `PollingService` matches incoming reports to `Domain` rows by exact-string equality on `Name` (`PollingService.cs:200`), and DMARC XML conventionally reports domains lowercase, so a mismatched case would silently create a duplicate row instead of matching.
+- Domain names are normalized to trimmed, lowercase form before storage - `PollingService` matches incoming reports to `Domain` rows by exact-string equality on `Name` (`PollingService.cs:200`), and DMARC XML conventionally reports domains lowercase, so a mismatched case would silently create a duplicate row instead of matching.
 - Validation: non-empty after trim, contains at least one `.`, no internal whitespace.
-- A domain added via this feature is pinned (`IsPinned = true`) immediately — the entire purpose of adding it here is missing-report monitoring.
-- Deleting a domain is allowed regardless of report history, gated behind a confirmation dialog that states the exact report count when it's non-zero (cascade delete already enforced at the DB level — `DotMarcDbContext.cs:28`).
-- No general navigation menu is introduced — only one link ("Manage domains") in the existing `MudAppBar`.
+- A domain added via this feature is pinned (`IsPinned = true`) immediately - the entire purpose of adding it here is missing-report monitoring.
+- Deleting a domain is allowed regardless of report history, gated behind a confirmation dialog that states the exact report count when it's non-zero (cascade delete already enforced at the DB level - `DotMarcDbContext.cs:28`).
+- No general navigation menu is introduced - only one link ("Manage domains") in the existing `MudAppBar`.
 - No new NuGet packages. No changes to `PollingService`'s matching logic.
 
 ---
@@ -26,7 +26,7 @@
 - Test: `test/DotMarc.Tests/Data/DomainNameValidatorTests.cs`
 
 **Interfaces:**
-- Produces: `DotMarc.Data.DomainNameValidator.TryNormalize(string input, out string normalized) : bool` — used by Task 2's `DomainManagementService.AddDomainAsync`.
+- Produces: `DotMarc.Data.DomainNameValidator.TryNormalize(string input, out string normalized) : bool` - used by Task 2's `DomainManagementService.AddDomainAsync`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -70,7 +70,7 @@ public sealed class DomainNameValidatorTests
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DomainNameValidatorTests`
-Expected: FAIL to build — `DomainNameValidator` does not exist yet.
+Expected: FAIL to build - `DomainNameValidator` does not exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -83,7 +83,7 @@ namespace DotMarc.Data;
 /// added for monitoring before any report has arrived for it (see DomainManagementService).
 /// Lowercasing here is not cosmetic: PollingService matches an incoming report's domain to a
 /// Domain row by exact string equality on Name (PollingService.cs:200), and DMARC aggregate report
-/// XML conventionally reports the domain in lowercase — a mixed-case Name stored here would
+/// XML conventionally reports the domain in lowercase - a mixed-case Name stored here would
 /// silently fail to match its first real report and produce a duplicate row instead.</summary>
 public static class DomainNameValidator
 {
@@ -118,7 +118,7 @@ git commit -m "Add DomainNameValidator for normalizing manually-added domain nam
 
 **Interfaces:**
 - Consumes: `DomainNameValidator.TryNormalize` (Task 1); `DotMarcDbContext.Domains` (`src/DotMarc/Data/DotMarcDbContext.cs`); `Domain` entity (`src/DotMarc/Data/Domain.cs`).
-- Produces: `DotMarc.Data.DomainManagementService.AddDomainResult` enum (`Added`, `InvalidName`, `AlreadyMonitored`) and `DomainManagementService.AddDomainAsync(DotMarcDbContext context, string rawName, CancellationToken cancellationToken) : Task<AddDomainResult>` — used by Task 4's `ManageDomains.razor`.
+- Produces: `DotMarc.Data.DomainManagementService.AddDomainResult` enum (`Added`, `InvalidName`, `AlreadyMonitored`) and `DomainManagementService.AddDomainAsync(DotMarcDbContext context, string rawName, CancellationToken cancellationToken) : Task<AddDomainResult>` - used by Task 4's `ManageDomains.razor`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -203,7 +203,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
 }
 ```
 
-Then add this regression test to the existing `test/DotMarc.Tests/Ingestion/PollingServiceTests.cs` (inside the `PollingServiceTests` class, alongside the other `[Fact]` methods — the file already has `using DotMarc.Data;` at the top):
+Then add this regression test to the existing `test/DotMarc.Tests/Ingestion/PollingServiceTests.cs` (inside the `PollingServiceTests` class, alongside the other `[Fact]` methods - the file already has `using DotMarc.Data;` at the top):
 
 ```csharp
     [Fact]
@@ -238,7 +238,7 @@ Then add this regression test to the existing `test/DotMarc.Tests/Ingestion/Poll
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "DomainManagementServiceTests|PollOnceAsync_MatchesAManuallyAddedDomain_InsteadOfCreatingADuplicate"`
-Expected: FAIL to build — `DomainManagementService` does not exist yet.
+Expected: FAIL to build - `DomainManagementService` does not exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -319,7 +319,7 @@ git commit -m "Add DomainManagementService.AddDomainAsync, with PollingService i
 
 **Interfaces:**
 - Consumes: `Report`, `ReportRecord`, `DispositionResult`, `AuthResult` entities (`src/DotMarc/Data/*.cs`).
-- Produces: `DomainManagementService.RemoveDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken) : Task` and `DomainManagementService.SetPinnedAsync(DotMarcDbContext context, int domainId, bool isPinned, CancellationToken cancellationToken) : Task` — used by Task 4's `ManageDomains.razor`.
+- Produces: `DomainManagementService.RemoveDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken) : Task` and `DomainManagementService.SetPinnedAsync(DotMarcDbContext context, int domainId, bool isPinned, CancellationToken cancellationToken) : Task` - used by Task 4's `ManageDomains.razor`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -391,7 +391,7 @@ Add to `test/DotMarc.Tests/Data/DomainManagementServiceTests.cs` (inside the exi
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "RemoveDomainAsync_DeletesDomainWithNoReports|RemoveDomainAsync_CascadesReportsAndRecords|SetPinnedAsync_TogglesIsPinned"`
-Expected: FAIL to build — `RemoveDomainAsync`/`SetPinnedAsync` don't exist yet.
+Expected: FAIL to build - `RemoveDomainAsync`/`SetPinnedAsync` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -400,7 +400,7 @@ Add to `src/DotMarc/Data/DomainManagementService.cs`, inside the `DomainManageme
 ```csharp
     /// <summary>Permanently deletes a Domain row. DotMarcDbContext.cs configures cascade delete
     /// from Domain to Report and Report to ReportRecord, so this also removes all report history
-    /// for the domain — callers (ManageDomains.razor) confirm that with the user first when the
+    /// for the domain - callers (ManageDomains.razor) confirm that with the user first when the
     /// domain has any reports.</summary>
     public static async Task RemoveDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default)
     {
@@ -443,10 +443,10 @@ git commit -m "Add DomainManagementService.RemoveDomainAsync and SetPinnedAsync"
 - Create: `src/DotMarc/Components/Dialogs/ConfirmDeleteDomainDialog.razor`
 
 **Interfaces:**
-- Consumes: `DomainManagementService.AddDomainAsync/RemoveDomainAsync/SetPinnedAsync` (Tasks 2–3); `IDbContextFactory<DotMarcDbContext>` (already registered in `Program.cs:48`, same injection pattern as `Dashboard.razor`/`DomainDetail.razor`); MudBlazor's `IDialogService`/`DialogParameters<T>`/`IMudDialogInstance` (already available — `MudDialogProvider` is registered in `MainLayout.razor`).
+- Consumes: `DomainManagementService.AddDomainAsync/RemoveDomainAsync/SetPinnedAsync` (Tasks 2–3); `IDbContextFactory<DotMarcDbContext>` (already registered in `Program.cs:48`, same injection pattern as `Dashboard.razor`/`DomainDetail.razor`); MudBlazor's `IDialogService`/`DialogParameters<T>`/`IMudDialogInstance` (already available - `MudDialogProvider` is registered in `MainLayout.razor`).
 - Produces: route `/domains`, consumed by Task 5's app-bar link.
 
-This task has no automated tests: the existing test suite (see `test/DotMarc.Tests/`) covers data/service logic only — there's no Blazor component-rendering test dependency (bUnit) anywhere in this project, and `Dashboard.razor`/`DomainDetail.razor`/`ParseFailures.razor` follow the same pattern of testing only the logic they call, not the markup itself. Verification here is a build check plus a manual run-through.
+This task has no automated tests: the existing test suite (see `test/DotMarc.Tests/`) covers data/service logic only - there's no Blazor component-rendering test dependency (bUnit) anywhere in this project, and `Dashboard.razor`/`DomainDetail.razor`/`ParseFailures.razor` follow the same pattern of testing only the logic they call, not the markup itself. Verification here is a build check plus a manual run-through.
 
 - [ ] **Step 1: Create the confirmation dialog**
 
@@ -604,7 +604,7 @@ else
             }
             catch (Exception)
             {
-                // Leave the row in place — don't optimistically remove it from _domains before
+                // Leave the row in place - don't optimistically remove it from _domains before
                 // the delete has actually succeeded.
                 Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
             }

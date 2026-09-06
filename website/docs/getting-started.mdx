@@ -101,15 +101,15 @@ Entra doesn't match the `https://` one registered on the dashboard app registrat
 ### MTA-STS policy hosting (optional)
 
 dotMARC can host an [MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) policy on a customer's
-behalf — serving `https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain they opt in to,
+behalf - serving `https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain they opt in to,
 so they don't have to host it themselves. This needs a small amount of extra infrastructure beyond
 the app container, since it means serving valid TLS for an open-ended, admin-growing set of
 hostnames dotMARC doesn't know about until a customer enables it.
 
-1. Set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to — typically the
+1. Set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to - typically the
    same hostname this dotMARC instance is already reachable at.
 2. Bring up the bundled [Caddy](https://caddyserver.com/) service, which handles on-demand TLS
-   issuance for `mta-sts.*` traffic specifically (it does not front this app's own hostname —
+   issuance for `mta-sts.*` traffic specifically (it does not front this app's own hostname - 
    that stays exactly as described above):
 
    ```powershell
@@ -140,16 +140,16 @@ hostnames dotMARC doesn't know about until a customer enables it.
    ownership via DNS.
 
 **If something is already bound to port 443/80 on this host** (your own reverse proxy for this
-app's hostname, or anything else), the bundled `caddy` service will fail to start — two processes
+app's hostname, or anything else), the bundled `caddy` service will fail to start - two processes
 can't both bind the same port. Two ways to handle it:
 
 - **It's already Caddy**: don't run the bundled service at all. Instead, merge this repo's
-  [`Caddyfile`](https://github.com/homotechsual/dotMARC/blob/main/Caddyfile) — the `on_demand_tls`
-  block and its `ask` directive — into your existing Caddy config, pointed at this app's internal
+  [`Caddyfile`](https://github.com/homotechsual/dotMARC/blob/main/Caddyfile) - the `on_demand_tls`
+  block and its `ask` directive - into your existing Caddy config, pointed at this app's internal
   address.
 - **It's something else** (nginx, Traefik, a cloud load balancer): route `mta-sts.*` traffic
   through to the bundled Caddy service on an internal port instead of 443/80 directly, or the
-  reverse — whichever fits how the rest of this host is set up.
+  reverse - whichever fits how the rest of this host is set up.
 
 Point each monitored domain's DMARC record's `rua=` tag at the same mailbox this app polls, e.g.:
 
@@ -192,17 +192,17 @@ form's defaults need changing:
 | Field | Value |
 | --- | --- |
 | Client Name | Anything recognizable, e.g. `dotMARC` |
-| Response Type | **Code** (the form may default to `Token` — that's the implicit flow, not what dotMARC uses) |
+| Response Type | **Code** (the form may default to `Token` - that's the implicit flow, not what dotMARC uses) |
 | Grant type | **Authorization Code** |
-| Token Authentication Method | **client_secret_post** (the form may default to `None (PKCE)`, for public clients with no secret — dotMARC's callback sends the client secret as a token-exchange body parameter, so it needs a secret-bearing method) |
+| Token Authentication Method | **client_secret_post** (the form may default to `None (PKCE)`, for public clients with no secret - dotMARC's callback sends the client secret as a token-exchange body parameter, so it needs a secret-bearing method) |
 | Redirect (Callback) URLs | `https://<your-deployment-host>/dns-push/cloudflare/callback` |
-| Client URL | Leave blank — only required to make a client *public*; dotMARC's stays private |
+| Client URL | Leave blank - only required to make a client *public*; dotMARC's stays private |
 
 On the next step, select two scopes and leave both **Required** (not optional): **Zone → DNS →
 Edit**, and **Zone → Zone → Read**. The second one is easy to miss since it isn't DNS-specific, but
-dotMARC needs it to resolve a domain name to its Cloudflare zone ID before it can push anything —
+dotMARC needs it to resolve a domain name to its Cloudflare zone ID before it can push anything - 
 `dns.write` alone can edit records inside a zone once it knows the ID, but can't look that ID up.
-Finish creating the client, then note its **Client ID** and **Client secret** — you'll enter both
+Finish creating the client, then note its **Client ID** and **Client secret** - you'll enter both
 into dotMARC directly (see below), there's nothing to set as an environment variable or deployment
 parameter for this.
 
@@ -215,7 +215,7 @@ Both providers are independently optional and configured the same way regardless
 running dotMARC (Docker Compose or Azure): sign in with an account holding the `DnsPushManage`
 permission and go to **Manage → DNS push settings**, enter the OAuth client ID/secret (and, for
 Azure DNS, tenant ID) for whichever provider(s) you registered, and save. Leave either unconfigured
-and dotMARC simply reports it can't find a configured push option when you try to use it — the push
+and dotMARC simply reports it can't find a configured push option when you try to use it - the push
 action itself still appears, it just won't succeed for an unconfigured provider.
 
 Next: [Local Development](./local-development.mdx) to run and test the app from source, or

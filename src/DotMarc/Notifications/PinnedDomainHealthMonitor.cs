@@ -25,7 +25,7 @@ public sealed class PinnedDomainHealthMonitor : BackgroundService
         {
             // Read live each iteration rather than binding once at startup: settings are editable
             // at any time from /alerts/settings, and MonitorIntervalSeconds itself is one of them
-            // — AlertingService.CheckPinnedDomainsAsync separately re-reads Enabled/threshold/
+            // - AlertingService.CheckPinnedDomainsAsync separately re-reads Enabled/threshold/
             // cooldown, so this fetch only needs Enabled and MonitorIntervalSeconds to drive this
             // loop, but there's no cheaper way to get just those two than reading the same row.
             int monitorIntervalSeconds;

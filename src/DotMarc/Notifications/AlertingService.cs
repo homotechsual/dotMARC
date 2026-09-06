@@ -32,7 +32,7 @@ public sealed class AlertingService : IAlertingService
 
         // Read live rather than once at startup: this is a singleton service, and settings are
         // now editable at any time from /alerts/settings (see NotificationSettings's doc
-        // comment) — a value bound once via IOptions would never pick up a later change without
+        // comment) - a value bound once via IOptions would never pick up a later change without
         // a restart.
         var settings = await NotificationSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
         if (!settings.Enabled)

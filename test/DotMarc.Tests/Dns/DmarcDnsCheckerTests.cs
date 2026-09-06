@@ -130,7 +130,7 @@ public class DmarcDnsCheckerTests
     {
         var (checker, handler) = CreateChecker();
         // A DMARC-hosting-provider setup: _dmarc.contoso.io is a CNAME (type 5) to a
-        // provider-managed name, and Cloudflare returns the full chain — CNAME first, TXT second.
+        // provider-managed name, and Cloudflare returns the full chain - CNAME first, TXT second.
         // The CNAME's data is not a valid DMARC string, so taking Answer[0] unfiltered would
         // misread this as Misconfigured.
         handler.ResponseBody = """

@@ -10,7 +10,7 @@ namespace DotMarc.Tests.Ingestion;
 
 /// <summary>Covers PollingService.RunPollCycleAsync's Postgres advisory-lock leader election:
 /// when multiple replicas run this service, only the one holding the lock for a given cycle
-/// should actually poll the mailbox — others must skip that cycle rather than racing it.</summary>
+/// should actually poll the mailbox - others must skip that cycle rather than racing it.</summary>
 [Collection("Postgres")]
 public sealed class PollingServiceLeaderLockTests : IAsyncLifetime
 {
@@ -196,7 +196,7 @@ public sealed class PollingServiceLeaderLockTests : IAsyncLifetime
         }
 
         using var verify = CreateContext();
-        Assert.Single(verify.PollCycles); // only the cycle this test just ran — the seeded stale row was rolled up and deleted
+        Assert.Single(verify.PollCycles); // only the cycle this test just ran - the seeded stale row was rolled up and deleted
         Assert.Single(verify.PollCycleDailySummaries);
     }
 }

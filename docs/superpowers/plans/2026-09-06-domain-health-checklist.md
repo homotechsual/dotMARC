@@ -12,17 +12,17 @@
 
 ## Global Constraints
 
-- Every new status enum's first member is its neutral/default value (`NotChecked` or, for DKIM, `NotConfigured`) — this is the enum's implicit default and therefore the new column's default for every existing row, requiring no data backfill. Follow `DmarcCheckStatus`'s existing doc-comment convention explaining why.
-- Every new DNS-over-HTTPS checker is its own small, independent class querying `https://cloudflare-dns.com/` directly — do not introduce a shared base class or generic DNS-checking abstraction. This mirrors `DmarcTxtLookup`'s own doc comment: "small, independent DNS-over-HTTPS callers over a shared abstraction."
+- Every new status enum's first member is its neutral/default value (`NotChecked` or, for DKIM, `NotConfigured`) - this is the enum's implicit default and therefore the new column's default for every existing row, requiring no data backfill. Follow `DmarcCheckStatus`'s existing doc-comment convention explaining why.
+- Every new DNS-over-HTTPS checker is its own small, independent class querying `https://cloudflare-dns.com/` directly - do not introduce a shared base class or generic DNS-checking abstraction. This mirrors `DmarcTxtLookup`'s own doc comment: "small, independent DNS-over-HTTPS callers over a shared abstraction."
 - No auto-push (no "Push via your DNS provider" button) for SPF or MX. Their correct values are domain-specific and dotMARC cannot compute them. Only DMARC record, DMARC authorization record, and TLSRPT keep push buttons.
 - All new `Domain` status/detail/checked-timestamp fields follow the exact existing three-field-per-check shape: `{Check}Status`, `{Check}CheckedUtc` (`DateTimeOffset?`), `{Check}CheckDetail` (`string?`).
-- Every new `internal static RunSingle*CheckAsync` method on `PollingService` must be directly callable from Blazor components in the same assembly (internal, not private) — this is what lets "recheck now" buttons reuse the exact scheduled-check logic, per the existing `RunSingleDmarcCheckAsync`/`RunSingleTlsrptCheckAsync`/`RunSingleMtaStsCheckAsync` precedent.
+- Every new `internal static RunSingle*CheckAsync` method on `PollingService` must be directly callable from Blazor components in the same assembly (internal, not private) - this is what lets "recheck now" buttons reuse the exact scheduled-check logic, per the existing `RunSingleDmarcCheckAsync`/`RunSingleTlsrptCheckAsync`/`RunSingleMtaStsCheckAsync` precedent.
 - Recheck buttons: `DomainsEdit` policy. Push buttons: `DomainsEdit` policy. DKIM's "Configure selectors" button: `DomainsEdit` policy. (All match existing gating already in `DomainDetail.razor`.)
-- No changes to `Dashboard.razor` or its grouped DNS Status column — out of scope per the spec's Non-goals.
+- No changes to `Dashboard.razor` or its grouped DNS Status column - out of scope per the spec's Non-goals.
 
 ---
 
-### Task 1: Data model — new enums, presentation helpers, Domain fields, migration
+### Task 1: Data model - new enums, presentation helpers, Domain fields, migration
 
 **Files:**
 - Create: `src/DotMarc/Data/DmarcAuthorizationCheckStatus.cs`
@@ -38,9 +38,9 @@
 - Create: EF Core migration (generated, not hand-written)
 
 **Interfaces:**
-- Produces: `DmarcAuthorizationCheckStatus { NotChecked, NotApplicable, Ok, Missing }`, `SpfCheckStatus { NotChecked, Ok, MissingRecord, MultipleRecords, Misconfigured }`, `MxCheckStatus { NotChecked, Ok, MissingRecord, UnresolvableTarget }`, `DkimCheckStatus { NotConfigured, Ok, Missing, Misconfigured }` — every later task's checker/UI code uses these exact enum names and member names.
+- Produces: `DmarcAuthorizationCheckStatus { NotChecked, NotApplicable, Ok, Missing }`, `SpfCheckStatus { NotChecked, Ok, MissingRecord, MultipleRecords, Misconfigured }`, `MxCheckStatus { NotChecked, Ok, MissingRecord, UnresolvableTarget }`, `DkimCheckStatus { NotConfigured, Ok, Missing, Misconfigured }` - every later task's checker/UI code uses these exact enum names and member names.
 - Produces: `Domain.DmarcAuthorizationCheckStatus`/`DmarcAuthorizationCheckedUtc`/`DmarcAuthorizationCheckDetail`, `Domain.SpfCheckStatus`/`SpfCheckedUtc`/`SpfCheckDetail`, `Domain.MxCheckStatus`/`MxCheckedUtc`/`MxCheckDetail`, `Domain.DkimSelectors` (`List<string>`, defaults to `[]`), `Domain.DkimCheckStatus`/`DkimCheckedUtc`/`DkimCheckDetail`.
-- Produces: `DmarcAuthorizationStatusPresentation.GetColor(DmarcAuthorizationCheckStatus)`/`GetLabel(...)`, `SpfStatusPresentation.GetColor(SpfCheckStatus)`/`GetLabel(...)`, `MxStatusPresentation.GetColor(MxCheckStatus)`/`GetLabel(...)`, `DkimStatusPresentation.GetColor(DkimCheckStatus)`/`GetLabel(...)` — every one a `public static class` with exactly these two `public static` methods, matching `DmarcStatusPresentation`'s existing shape.
+- Produces: `DmarcAuthorizationStatusPresentation.GetColor(DmarcAuthorizationCheckStatus)`/`GetLabel(...)`, `SpfStatusPresentation.GetColor(SpfCheckStatus)`/`GetLabel(...)`, `MxStatusPresentation.GetColor(MxCheckStatus)`/`GetLabel(...)`, `DkimStatusPresentation.GetColor(DkimCheckStatus)`/`GetLabel(...)` - every one a `public static class` with exactly these two `public static` methods, matching `DmarcStatusPresentation`'s existing shape.
 
 - [ ] **Step 1: Create the four new enum files**
 
@@ -49,7 +49,7 @@
 namespace DotMarc.Data;
 
 /// <summary>The result of the most recent RFC 7489 §7.1 DMARC authorization-record check for a
-/// Domain — see DotMarc.Dns.DmarcDnsChecker.CheckAuthorizationAsync. Split out from
+/// Domain - see DotMarc.Dns.DmarcDnsChecker.CheckAuthorizationAsync. Split out from
 /// DmarcCheckStatus so the own-record check and this one can be shown (and independently
 /// corrected) regardless of the other's state; the old DmarcCheckStatus.MissingAuthorizationRecord
 /// value stays defined for backward compatibility with existing rows but is never emitted again.
@@ -67,7 +67,7 @@ public enum DmarcAuthorizationCheckStatus
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>The result of the most recent SPF DNS check for a Domain — see
+/// <summary>The result of the most recent SPF DNS check for a Domain - see
 /// DotMarc.Dns.SpfDnsChecker. Only checks presence, record uniqueness, and the v=spf1 prefix; does
 /// not validate the 10-DNS-lookup limit (RFC 7208) or the mechanism chain. NotChecked is listed
 /// first so it is the enum's (and the database column's) default value.</summary>
@@ -85,8 +85,8 @@ public enum SpfCheckStatus
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>The result of the most recent MX DNS check for a Domain — see
-/// DotMarc.Dns.MxDnsChecker. An explicit RFC 7505 null MX ("0 .") counts as Ok — it's an
+/// <summary>The result of the most recent MX DNS check for a Domain - see
+/// DotMarc.Dns.MxDnsChecker. An explicit RFC 7505 null MX ("0 .") counts as Ok - it's an
 /// intentional "this domain sends but does not receive mail" policy, not a failure. NotChecked is
 /// listed first so it is the enum's (and the database column's) default value.</summary>
 public enum MxCheckStatus
@@ -102,11 +102,11 @@ public enum MxCheckStatus
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>The result of the most recent DKIM DNS check for a Domain — see
+/// <summary>The result of the most recent DKIM DNS check for a Domain - see
 /// DotMarc.Dns.DkimDnsChecker. Opt-in: dotMARC has no way to discover a domain's DKIM selector(s)
 /// on its own, so this only ever runs once an admin configures at least one selector
 /// (Domain.DkimSelectors). NotConfigured is listed first so it is the enum's (and the database
-/// column's) default value — every existing domain starts here, which is a neutral state, not a
+/// column's) default value - every existing domain starts here, which is a neutral state, not a
 /// failure.</summary>
 public enum DkimCheckStatus
 {
@@ -127,7 +127,7 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps DmarcAuthorizationCheckStatus to the MudBlazor color/label pair used on
-/// DomainDetail.razor's Overview health checklist — same shared-presentation-logic precedent as
+/// DomainDetail.razor's Overview health checklist - same shared-presentation-logic precedent as
 /// DmarcStatusPresentation.</summary>
 public static class DmarcAuthorizationStatusPresentation
 {
@@ -156,7 +156,7 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps SpfCheckStatus to the MudBlazor color/label pair used on DomainDetail.razor's
-/// Overview health checklist — same shared-presentation-logic precedent as
+/// Overview health checklist - same shared-presentation-logic precedent as
 /// DmarcStatusPresentation.</summary>
 public static class SpfStatusPresentation
 {
@@ -187,7 +187,7 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps MxCheckStatus to the MudBlazor color/label pair used on DomainDetail.razor's
-/// Overview health checklist — same shared-presentation-logic precedent as
+/// Overview health checklist - same shared-presentation-logic precedent as
 /// DmarcStatusPresentation.</summary>
 public static class MxStatusPresentation
 {
@@ -217,7 +217,7 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps DkimCheckStatus to the MudBlazor color/label pair used on DomainDetail.razor's
-/// Overview health checklist — same shared-presentation-logic precedent as
+/// Overview health checklist - same shared-presentation-logic precedent as
 /// DmarcStatusPresentation.</summary>
 public static class DkimStatusPresentation
 {
@@ -292,7 +292,7 @@ Run from `src/DotMarc/`:
 dotnet ef migrations add AddDomainHealthChecks
 ```
 
-Open the generated migration file and confirm it adds exactly these columns to the `Domains` table, all nullable except the four status columns and `DkimSelectors` (which get their type's default — `NotChecked`/`NotConfigured` as a string, and `{}` as an empty array — via EF's normal non-nullable-column defaulting, matching how `MtaStsStatus`/`MtaStsMxHosts` were added in their own migration): `DmarcAuthorizationCheckStatus` (text), `DmarcAuthorizationCheckedUtc` (timestamptz, nullable), `DmarcAuthorizationCheckDetail` (text, nullable), `SpfCheckStatus` (text), `SpfCheckedUtc` (timestamptz, nullable), `SpfCheckDetail` (text, nullable), `MxCheckStatus` (text), `MxCheckedUtc` (timestamptz, nullable), `MxCheckDetail` (text, nullable), `DkimSelectors` (text array), `DkimCheckStatus` (text), `DkimCheckedUtc` (timestamptz, nullable), `DkimCheckDetail` (text, nullable).
+Open the generated migration file and confirm it adds exactly these columns to the `Domains` table, all nullable except the four status columns and `DkimSelectors` (which get their type's default - `NotChecked`/`NotConfigured` as a string, and `{}` as an empty array - via EF's normal non-nullable-column defaulting, matching how `MtaStsStatus`/`MtaStsMxHosts` were added in their own migration): `DmarcAuthorizationCheckStatus` (text), `DmarcAuthorizationCheckedUtc` (timestamptz, nullable), `DmarcAuthorizationCheckDetail` (text, nullable), `SpfCheckStatus` (text), `SpfCheckedUtc` (timestamptz, nullable), `SpfCheckDetail` (text, nullable), `MxCheckStatus` (text), `MxCheckedUtc` (timestamptz, nullable), `MxCheckDetail` (text, nullable), `DkimSelectors` (text array), `DkimCheckStatus` (text), `DkimCheckedUtc` (timestamptz, nullable), `DkimCheckDetail` (text, nullable).
 
 - [ ] **Step 6: Build and run the full test suite**
 
@@ -323,7 +323,7 @@ git commit -m "Add data model for DMARC authorization, SPF, MX, and DKIM health 
 
 **Interfaces:**
 - Consumes: `DmarcAuthorizationCheckStatus` (Task 1).
-- Produces: `IDmarcDnsChecker.CheckAuthorizationAsync(string domainName, string mailboxAddress, CancellationToken) : Task<DmarcAuthorizationCheckResult>`, `DmarcAuthorizationCheckResult(DmarcAuthorizationCheckStatus Status, string? Detail)` — Task 6 (PollingService) calls this exact method.
+- Produces: `IDmarcDnsChecker.CheckAuthorizationAsync(string domainName, string mailboxAddress, CancellationToken) : Task<DmarcAuthorizationCheckResult>`, `DmarcAuthorizationCheckResult(DmarcAuthorizationCheckStatus Status, string? Detail)` - Task 6 (PollingService) calls this exact method.
 
 - [ ] **Step 1: Create the result record**
 
@@ -334,14 +334,14 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>The outcome of one DmarcDnsChecker.CheckAuthorizationAsync call. Detail is null exactly
-/// when Status is Ok or NotApplicable — there's nothing to explain about a passing or
+/// when Status is Ok or NotApplicable - there's nothing to explain about a passing or
 /// not-required check.</summary>
 public sealed record DmarcAuthorizationCheckResult(DmarcAuthorizationCheckStatus Status, string? Detail);
 ```
 
 - [ ] **Step 2: Update the two existing tests whose scenario moves to CheckAuthorizationAsync, and add the new tests**
 
-`test/DotMarc.Tests/Dns/DmarcDnsCheckerTests.cs` currently has two tests that exercise `CheckAsync`'s OLD behavior of making a second request for the authorization record. Both need to change because `CheckAsync` no longer makes that second request at all — that check is now entirely `CheckAuthorizationAsync`'s job.
+`test/DotMarc.Tests/Dns/DmarcDnsCheckerTests.cs` currently has two tests that exercise `CheckAsync`'s OLD behavior of making a second request for the authorization record. Both need to change because `CheckAsync` no longer makes that second request at all - that check is now entirely `CheckAuthorizationAsync`'s job.
 
 Replace this existing test (currently named `CheckAsync_ReturnsOk_WhenAuthorizationRecordIsPresent`, asserting `handler.Requests.Count == 2`):
 ```csharp
@@ -454,7 +454,7 @@ Then add these three new tests for `CheckAuthorizationAsync` (using the file's e
     }
 ```
 
-(`NxDomainResponse` is the file's existing `private const string` at the top — reused, not redefined.)
+(`NxDomainResponse` is the file's existing `private const string` at the top - reused, not redefined.)
 
 - [ ] **Step 3: Run the tests to verify they fail to compile**
 
@@ -502,7 +502,7 @@ Replace that entire block with:
 
     /// <summary>RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being
     /// monitored (the normal MSP shape), that mailbox's domain must publish this record proving it
-    /// accepts reports for the monitored domain. Independent of CheckAsync above — this always
+    /// accepts reports for the monitored domain. Independent of CheckAsync above - this always
     /// runs and always returns its own result, regardless of whether CheckAsync's own-record check
     /// passed or failed, so both can be shown (and separately corrected) at once.</summary>
     public async Task<DmarcAuthorizationCheckResult> CheckAuthorizationAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken)
@@ -525,7 +525,7 @@ Replace that entire block with:
 
 - [ ] **Step 6: Update FakeDmarcDnsChecker so the build doesn't break**
 
-`test/DotMarc.Tests/Internal/FakeDmarcDnsChecker.cs` implements `IDmarcDnsChecker` and is used by `test/DotMarc.Tests/Ingestion/DmarcCheckCycleTests.cs` (a PollingService-level test file, unrelated to this task otherwise). The moment Step 4 adds `CheckAuthorizationAsync` to the interface, this fake stops compiling — fix it now, in this same task, before running anything, or the whole test suite fails to build:
+`test/DotMarc.Tests/Internal/FakeDmarcDnsChecker.cs` implements `IDmarcDnsChecker` and is used by `test/DotMarc.Tests/Ingestion/DmarcCheckCycleTests.cs` (a PollingService-level test file, unrelated to this task otherwise). The moment Step 4 adds `CheckAuthorizationAsync` to the interface, this fake stops compiling - fix it now, in this same task, before running anything, or the whole test suite fails to build:
 
 ```csharp
 using DotMarc.Data;
@@ -565,14 +565,14 @@ internal sealed class FakeDmarcDnsChecker : IDmarcDnsChecker
 }
 ```
 
-(The new `Authorization*` members are additive and independent of the existing `Result`/`ShouldThrow`/`CheckedDomains` — every existing test that only ever calls `CheckAsync` keeps working unchanged. Task 6 configures and asserts on the new members.)
+(The new `Authorization*` members are additive and independent of the existing `Result`/`ShouldThrow`/`CheckedDomains` - every existing test that only ever calls `CheckAsync` keeps working unchanged. Task 6 configures and asserts on the new members.)
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
 ```bash
 dotnet test DotMarc.sln --filter "FullyQualifiedName~DmarcDnsCheckerTests"
 ```
-Expected: all pass — the three new `CheckAuthorizationAsync` tests, the two rewritten `CheckAsync` tests from Step 2, and every other pre-existing `CheckAsync` test unchanged.
+Expected: all pass - the three new `CheckAuthorizationAsync` tests, the two rewritten `CheckAsync` tests from Step 2, and every other pre-existing `CheckAsync` test unchanged.
 
 - [ ] **Step 8: Commit**
 
@@ -593,7 +593,7 @@ git commit -m "Split DMARC authorization record check into its own independent m
 
 **Interfaces:**
 - Consumes: `SpfCheckStatus` (Task 1).
-- Produces: `ISpfDnsChecker.CheckAsync(string domainName, CancellationToken) : Task<SpfCheckResult>`, `SpfCheckResult(SpfCheckStatus Status, string? Detail)` — Task 6 (PollingService) and Task 8 (DI registration) consume these exact names.
+- Produces: `ISpfDnsChecker.CheckAsync(string domainName, CancellationToken) : Task<SpfCheckResult>`, `SpfCheckResult(SpfCheckStatus Status, string? Detail)` - Task 6 (PollingService) and Task 8 (DI registration) consume these exact names.
 
 - [ ] **Step 1: Create the result record**
 
@@ -604,7 +604,7 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>The outcome of one SpfDnsChecker.CheckAsync call. Detail is null exactly when Status is
-/// Ok — there's nothing to explain about a passing check.</summary>
+/// Ok - there's nothing to explain about a passing check.</summary>
 public sealed record SpfCheckResult(SpfCheckStatus Status, string? Detail);
 ```
 
@@ -711,9 +711,9 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>Checks SPF (RFC 7208) record health at the monitored domain's apex: presence, that
-/// exactly one v=spf1 TXT record exists (RFC 7208 requires exactly one — multiple is a common,
+/// exactly one v=spf1 TXT record exists (RFC 7208 requires exactly one - multiple is a common,
 /// real misconfiguration), and the v=spf1 prefix itself. Does not follow include:/redirect= chains
-/// or validate the 10-DNS-lookup limit — out of scope, see the design spec's Non-goals.</summary>
+/// or validate the 10-DNS-lookup limit - out of scope, see the design spec's Non-goals.</summary>
 public sealed class SpfDnsChecker : ISpfDnsChecker
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -732,13 +732,13 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
         }
         if (spfRecords.Count > 1)
         {
-            return new SpfCheckResult(SpfCheckStatus.MultipleRecords, $"{domainName} has {spfRecords.Count} SPF records — RFC 7208 requires exactly one");
+            return new SpfCheckResult(SpfCheckStatus.MultipleRecords, $"{domainName} has {spfRecords.Count} SPF records - RFC 7208 requires exactly one");
         }
         return new SpfCheckResult(SpfCheckStatus.Ok, null);
     }
 
     /// <summary>Unlike DmarcDnsChecker/TlsrptDnsChecker's QueryTxtAsync (which only returns the
-    /// first TXT answer), this returns every TXT record at the name — detecting "multiple SPF
+    /// first TXT answer), this returns every TXT record at the name - detecting "multiple SPF
     /// records" requires seeing all of them, not just the first.</summary>
     private async Task<List<string>> QueryAllTxtAsync(string name, CancellationToken cancellationToken)
     {
@@ -785,7 +785,7 @@ git commit -m "Add SPF DNS health checker"
 
 **Interfaces:**
 - Consumes: `MxCheckStatus` (Task 1).
-- Produces: `IMxDnsChecker.CheckAsync(string domainName, CancellationToken) : Task<MxCheckResult>`, `MxCheckResult(MxCheckStatus Status, string? Detail)` — Task 6 and Task 8 consume these exact names.
+- Produces: `IMxDnsChecker.CheckAsync(string domainName, CancellationToken) : Task<MxCheckResult>`, `MxCheckResult(MxCheckStatus Status, string? Detail)` - Task 6 and Task 8 consume these exact names.
 
 - [ ] **Step 1: Create the result record**
 
@@ -796,7 +796,7 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>The outcome of one MxDnsChecker.CheckAsync call. Detail is null exactly when Status is
-/// Ok and it's a normal (non-null-MX) result — there's nothing to explain about a passing check.
+/// Ok and it's a normal (non-null-MX) result - there's nothing to explain about a passing check.
 /// An explicit null MX is Ok but still carries an explanatory Detail (see MxDnsChecker), since
 /// "no mail servers" reads as suspicious without the RFC 7505 context.</summary>
 public sealed record MxCheckResult(MxCheckStatus Status, string? Detail);
@@ -890,7 +890,7 @@ public sealed class MxDnsCheckerTests
 }
 ```
 
-`FakeHttpMessageHandler` (`test/DotMarc.Tests/Internal/FakeHttpMessageHandler.cs`) already supports this: its `ResponseBodies` is a `Queue<string>` — each request dequeues the next body in order, falling back to the fixed `ResponseBody` once drained. `MxDnsChecker.CheckAsync` makes the MX lookup first, then one A-record lookup per MX target in the order `QueryMxAsync` returns them, so enqueuing MX-response-then-A-response matches that exact call order. Do not invent a new mechanism on `FakeHttpMessageHandler` — this one already covers it.
+`FakeHttpMessageHandler` (`test/DotMarc.Tests/Internal/FakeHttpMessageHandler.cs`) already supports this: its `ResponseBodies` is a `Queue<string>` - each request dequeues the next body in order, falling back to the fixed `ResponseBody` once drained. `MxDnsChecker.CheckAsync` makes the MX lookup first, then one A-record lookup per MX target in the order `QueryMxAsync` returns them, so enqueuing MX-response-then-A-response matches that exact call order. Do not invent a new mechanism on `FakeHttpMessageHandler` - this one already covers it.
 
 - [ ] **Step 4: Run the tests to verify they fail**
 
@@ -932,7 +932,7 @@ public sealed class MxDnsChecker : IMxDnsChecker
         }
         if (mxAnswers.Count == 1 && mxAnswers[0].Exchange == ".")
         {
-            return new MxCheckResult(MxCheckStatus.Ok, "Explicit null MX (RFC 7505) — this domain intentionally does not accept mail.");
+            return new MxCheckResult(MxCheckStatus.Ok, "Explicit null MX (RFC 7505) - this domain intentionally does not accept mail.");
         }
 
         var unresolvable = new List<string>();
@@ -1010,7 +1010,7 @@ git commit -m "Add MX DNS health checker"
 
 **Interfaces:**
 - Consumes: `DkimCheckStatus` (Task 1).
-- Produces: `IDkimDnsChecker.CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken) : Task<DkimCheckResult>`, `DkimCheckResult(DkimCheckStatus Status, string? Detail)` — Task 6 and Task 8 consume these exact names. Note the extra `selectors` parameter, unlike every other checker in this plan.
+- Produces: `IDkimDnsChecker.CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken) : Task<DkimCheckResult>`, `DkimCheckResult(DkimCheckStatus Status, string? Detail)` - Task 6 and Task 8 consume these exact names. Note the extra `selectors` parameter, unlike every other checker in this plan.
 
 - [ ] **Step 1: Create the result record**
 
@@ -1021,7 +1021,7 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>The outcome of one DkimDnsChecker.CheckAsync call. Detail is null exactly when Status
-/// is Ok — there's nothing to explain about a passing check.</summary>
+/// is Ok - there's nothing to explain about a passing check.</summary>
 public sealed record DkimCheckResult(DkimCheckStatus Status, string? Detail);
 ```
 
@@ -1136,7 +1136,7 @@ namespace DotMarc.Dns;
 
 /// <summary>Checks DKIM selector record(s) at &lt;selector&gt;._domainkey.&lt;domain&gt;. Unlike
 /// every other checker in this feature, this one is opt-in and takes the caller-supplied selector
-/// list directly — dotMARC has no way to discover a domain's DKIM selector(s) on its own (they are
+/// list directly - dotMARC has no way to discover a domain's DKIM selector(s) on its own (they are
 /// provider-specific strings with no DNS-discoverable convention), so this never guesses.</summary>
 public sealed class DkimDnsChecker : IDkimDnsChecker
 {
@@ -1217,15 +1217,14 @@ git commit -m "Add DKIM DNS health checker"
 
 **Interfaces:**
 - Consumes: `IDmarcDnsChecker.CheckAuthorizationAsync` (Task 2), `ISpfDnsChecker.CheckAsync` (Task 3), `IMxDnsChecker.CheckAsync` (Task 4), `IDkimDnsChecker.CheckAsync` (Task 5), `Domain.DmarcAuthorizationCheckStatus`/`SpfCheckStatus`/`MxCheckStatus`/`DkimSelectors`/`DkimCheckStatus` and their paired `CheckedUtc`/`CheckDetail` fields (Task 1).
-- Produces: `PollingService.RunDmarcAuthorizationCheckCycleAsync`, `RunSpfCheckCycleAsync`, `RunMxCheckCycleAsync`, `RunDkimCheckCycleAsync` (all `internal async Task`, same signature shape as `RunDmarcCheckCycleAsync`/`RunTlsrptCheckCycleAsync`), and `RunSingleDmarcAuthorizationCheckAsync`, `RunSingleSpfCheckAsync`, `RunSingleMxCheckAsync`, `RunSingleDkimCheckAsync` (all `internal static async Task`) — Task 9 (UI) calls these four `RunSingle*` methods directly by these exact names.
+- Produces: `PollingService.RunDmarcAuthorizationCheckCycleAsync`, `RunSpfCheckCycleAsync`, `RunMxCheckCycleAsync`, `RunDkimCheckCycleAsync` (all `internal async Task`, same signature shape as `RunDmarcCheckCycleAsync`/`RunTlsrptCheckCycleAsync`), and `RunSingleDmarcAuthorizationCheckAsync`, `RunSingleSpfCheckAsync`, `RunSingleMxCheckAsync`, `RunSingleDkimCheckAsync` (all `internal static async Task`) - Task 9 (UI) calls these four `RunSingle*` methods directly by these exact names.
 
 - [ ] **Step 1: Add the four new lock key constants**
 
 In `src/DotMarc/Ingestion/PollingService.cs`, after the existing `internal const long TlsrptPollingLeaderLockKey = 84_200_009;` line, add:
 
 ```csharp
-    /// <summary>Arbitrary fixed key for this service's DMARC-authorization-check advisory lock —
-    /// independent of DmarcCheckLeaderLockKey since the own-record check and the authorization
+    /// <summary>Arbitrary fixed key for this service's DMARC-authorization-check advisory lock -     /// independent of DmarcCheckLeaderLockKey since the own-record check and the authorization
     /// check are now two fully independent checks with their own staleness tracking.</summary>
     internal const long DmarcAuthorizationCheckLeaderLockKey = 84_200_011;
 
@@ -1235,7 +1234,7 @@ In `src/DotMarc/Ingestion/PollingService.cs`, after the existing `internal const
 
     /// <summary>Arbitrary fixed key for this service's DKIM-check advisory lock. Runs on the same
     /// schedule as every other check even though most domains will have no selectors configured
-    /// yet (RunSingleDkimCheckAsync short-circuits to NotConfigured in that case) — simpler than
+    /// yet (RunSingleDkimCheckAsync short-circuits to NotConfigured in that case) - simpler than
     /// trying to filter the staleness query by DkimSelectors.Count, which doesn't translate cleanly
     /// through the List&lt;string&gt; value converter.</summary>
     internal const long DkimCheckLeaderLockKey = 84_200_017;
@@ -1243,10 +1242,10 @@ In `src/DotMarc/Ingestion/PollingService.cs`, after the existing `internal const
 
 - [ ] **Step 2: Add the four new single-domain check methods**
 
-Immediately after the existing `internal static async Task RunSingleTlsrptCheckAsync(...)` method (added in an earlier feature — it sits right before `internal async Task RunTlsrptPollCycleAsync(...)`), add:
+Immediately after the existing `internal static async Task RunSingleTlsrptCheckAsync(...)` method (added in an earlier feature - it sits right before `internal async Task RunTlsrptPollCycleAsync(...)`), add:
 
 ```csharp
-    /// <summary>DMARC-authorization counterpart to RunSingleDmarcCheckAsync — see its remarks.
+    /// <summary>DMARC-authorization counterpart to RunSingleDmarcCheckAsync - see its remarks.
     /// Always calls CheckAuthorizationAsync regardless of the (separate) own-record DMARC status,
     /// so the two are independently accurate.</summary>
     internal static async Task RunSingleDmarcAuthorizationCheckAsync(Domain domain, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
@@ -1257,7 +1256,7 @@ Immediately after the existing `internal static async Task RunSingleTlsrptCheckA
         domain.DmarcAuthorizationCheckDetail = result.Detail;
     }
 
-    /// <summary>SPF counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    /// <summary>SPF counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
     internal static async Task RunSingleSpfCheckAsync(Domain domain, ISpfDnsChecker spfChecker, CancellationToken cancellationToken)
     {
         var result = await spfChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
@@ -1266,7 +1265,7 @@ Immediately after the existing `internal static async Task RunSingleTlsrptCheckA
         domain.SpfCheckDetail = result.Detail;
     }
 
-    /// <summary>MX counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    /// <summary>MX counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
     internal static async Task RunSingleMxCheckAsync(Domain domain, IMxDnsChecker mxChecker, CancellationToken cancellationToken)
     {
         var result = await mxChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
@@ -1296,7 +1295,7 @@ Immediately after the existing `internal static async Task RunSingleTlsrptCheckA
 
 - [ ] **Step 3: Add the four new cycle methods**
 
-Immediately after the four methods added in Step 2, add (each mirrors `RunDmarcCheckCycleAsync`'s exact shape — its own advisory lock, a 24h staleness cutoff, a try/catch-continue loop, one save):
+Immediately after the four methods added in Step 2, add (each mirrors `RunDmarcCheckCycleAsync`'s exact shape - its own advisory lock, a 24h staleness cutoff, a try/catch-continue loop, one save):
 
 ```csharp
     /// <summary>Runs a DMARC authorization-record check for every domain whose last check
@@ -1604,9 +1603,9 @@ builder.Services.AddHttpClient<DotMarc.Dns.IDkimDnsChecker, DotMarc.Dns.DkimDnsC
 });
 ```
 
-(`IDmarcDnsChecker` is already registered elsewhere in `Program.cs` — it doesn't need a new registration, just gains a method.)
+(`IDmarcDnsChecker` is already registered elsewhere in `Program.cs` - it doesn't need a new registration, just gains a method.)
 
-**Note on test file targeting**: the existing DMARC/TLSRPT check-cycle tests do NOT live in `PollingServiceTests.cs` — they're in `test/DotMarc.Tests/Ingestion/DmarcCheckCycleTests.cs` (which, despite its name, covers both `RunDmarcCheckCycleAsync` and `RunTlsrptCheckCycleAsync`). MTA-STS's cycle has its own dedicated file, `MtaStsCheckCycleTests.cs`. Steps 6-8 below create one new dedicated test file per new cycle, matching the MTA-STS precedent, and two new fake checkers alongside the existing `FakeDmarcDnsChecker`/`FakeTlsrptDnsChecker`.
+**Note on test file targeting**: the existing DMARC/TLSRPT check-cycle tests do NOT live in `PollingServiceTests.cs` - they're in `test/DotMarc.Tests/Ingestion/DmarcCheckCycleTests.cs` (which, despite its name, covers both `RunDmarcCheckCycleAsync` and `RunTlsrptCheckCycleAsync`). MTA-STS's cycle has its own dedicated file, `MtaStsCheckCycleTests.cs`. Steps 6-8 below create one new dedicated test file per new cycle, matching the MTA-STS precedent, and two new fake checkers alongside the existing `FakeDmarcDnsChecker`/`FakeTlsrptDnsChecker`.
 
 - [ ] **Step 6: Create the three new fake checkers**
 
@@ -1950,9 +1949,9 @@ public sealed class SpfCheckCycleTests : IAsyncLifetime
 }
 ```
 
-`test/DotMarc.Tests/Ingestion/MxCheckCycleTests.cs` — identical in shape to `SpfCheckCycleTests.cs` above with every `Spf`/`SPF` replaced by `Mx`/`MX` (`FakeMxDnsChecker`, `MxCheckStatus.MissingRecord`, `Domain.MxCheckStatus`/`MxCheckedUtc`, `PollingService.MxCheckLeaderLockKey`, `RunMxCheckCycleAsync`). Write out all four test methods in full, following that exact substitution — do not abbreviate or reference "the same as SpfCheckCycleTests.cs" in the actual file.
+`test/DotMarc.Tests/Ingestion/MxCheckCycleTests.cs` - identical in shape to `SpfCheckCycleTests.cs` above with every `Spf`/`SPF` replaced by `Mx`/`MX` (`FakeMxDnsChecker`, `MxCheckStatus.MissingRecord`, `Domain.MxCheckStatus`/`MxCheckedUtc`, `PollingService.MxCheckLeaderLockKey`, `RunMxCheckCycleAsync`). Write out all four test methods in full, following that exact substitution - do not abbreviate or reference "the same as SpfCheckCycleTests.cs" in the actual file.
 
-`test/DotMarc.Tests/Ingestion/DkimCheckCycleTests.cs` — same shape as `SpfCheckCycleTests.cs` with `Spf`/`SPF` replaced by `Dkim`/`DKIM` (`FakeDkimDnsChecker`, `DkimCheckStatus.Missing` instead of `MissingRecord` since DKIM has no such member, `Domain.DkimCheckStatus`/`DkimCheckedUtc`, `PollingService.DkimCheckLeaderLockKey`, `RunDkimCheckCycleAsync`), plus one extra test for the opt-in short-circuit:
+`test/DotMarc.Tests/Ingestion/DkimCheckCycleTests.cs` - same shape as `SpfCheckCycleTests.cs` with `Spf`/`SPF` replaced by `Dkim`/`DKIM` (`FakeDkimDnsChecker`, `DkimCheckStatus.Missing` instead of `MissingRecord` since DKIM has no such member, `Domain.DkimCheckStatus`/`DkimCheckedUtc`, `PollingService.DkimCheckLeaderLockKey`, `RunDkimCheckCycleAsync`), plus one extra test for the opt-in short-circuit:
 
 ```csharp
     [Fact]
@@ -1973,7 +1972,7 @@ public sealed class SpfCheckCycleTests : IAsyncLifetime
     }
 ```
 
-Write out `MxCheckCycleTests.cs` and `DkimCheckCycleTests.cs` completely — every method body, every using directive — rather than leaving either as a reference to another file's content.
+Write out `MxCheckCycleTests.cs` and `DkimCheckCycleTests.cs` completely - every method body, every using directive - rather than leaving either as a reference to another file's content.
 
 - [ ] **Step 8: Run the new tests to verify they fail, then pass**
 
@@ -2007,7 +2006,7 @@ git commit -m "Wire DMARC authorization, SPF, MX, and DKIM checks into PollingSe
 
 **Interfaces:**
 - Consumes: `Domain.DkimSelectors` (Task 1).
-- Produces: `DomainManagementService.SetDkimSelectorsAsync(DotMarcDbContext context, int domainId, List<string> selectors, CancellationToken cancellationToken = default) : Task` — Task 9 (UI dialog) calls this exact signature.
+- Produces: `DomainManagementService.SetDkimSelectorsAsync(DotMarcDbContext context, int domainId, List<string> selectors, CancellationToken cancellationToken = default) : Task` - Task 9 (UI dialog) calls this exact signature.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2042,7 +2041,7 @@ In `src/DotMarc/Data/DomainManagementService.cs`, add after the existing `SetMta
 
 ```csharp
     /// <summary>Saves a domain's DKIM selector list from the domain detail page's "Configure DKIM
-    /// selectors" dialog. Does not itself trigger a recheck — the dialog's own save handler does
+    /// selectors" dialog. Does not itself trigger a recheck - the dialog's own save handler does
     /// that immediately afterward via PollingService.RunSingleDkimCheckAsync, matching the "enable
     /// MTA-STS" flow's immediate-check-after-save pattern.</summary>
     public static async Task SetDkimSelectorsAsync(DotMarcDbContext context, int domainId, List<string> selectors, CancellationToken cancellationToken = default)
@@ -2076,8 +2075,8 @@ git commit -m "Add DomainManagementService.SetDkimSelectorsAsync"
 - Create: `src/DotMarc/Components/Dialogs/ConfigureDkimSelectorsDialog.razor`
 
 **Interfaces:**
-- Produces: `DomainHealthCheckRow` component with parameters `Title` (`string`), `StatusColor` (`MudBlazor.Color`), `StatusLabel` (`string`), `CheckedUtc` (`DateTimeOffset?`), `Detail` (`string?`), and an `ActionContent` (`RenderFragment?`) child-content slot — Task 9 invokes this exact parameter set seven times.
-- Produces: `ConfigureDkimSelectorsDialog` — a `MudDialog`-hosted component taking `[Parameter] public List<string> CurrentSelectors { get; set; }`, closing with `DialogResult.Ok(List<string> newSelectors)` on save or `MudDialog.Cancel()` — Task 9 shows it via `IDialogService.ShowAsync<ConfigureDkimSelectorsDialog>` and reads the result.
+- Produces: `DomainHealthCheckRow` component with parameters `Title` (`string`), `StatusColor` (`MudBlazor.Color`), `StatusLabel` (`string`), `CheckedUtc` (`DateTimeOffset?`), `Detail` (`string?`), and an `ActionContent` (`RenderFragment?`) child-content slot - Task 9 invokes this exact parameter set seven times.
+- Produces: `ConfigureDkimSelectorsDialog` - a `MudDialog`-hosted component taking `[Parameter] public List<string> CurrentSelectors { get; set; }`, closing with `DialogResult.Ok(List<string> newSelectors)` on save or `MudDialog.Cancel()` - Task 9 shows it via `IDialogService.ShowAsync<ConfigureDkimSelectorsDialog>` and reads the result.
 
 - [ ] **Step 1: Create DomainHealthCheckRow.razor**
 
@@ -2086,7 +2085,7 @@ git commit -m "Add DomainManagementService.SetDkimSelectorsAsync"
 @* One row of the domain detail page's Overview "Domain health" checklist. A CSS grid, not a
    MudTable row: every check's action differs (push button, recheck button, tab link, configure
    button, or nothing), so a real MudTable's homogeneous RowTemplate would fight this more than
-   help — see the design spec's UI changes section. *@
+   help - see the design spec's UI changes section. *@
 <div class="dotmarc-health-row" style="display:grid; grid-template-columns: 220px 160px 180px 1fr; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--mud-palette-lines-default);">
     <MudText Typo="Typo.body1">@Title</MudText>
     <MudChip T="string" Color="@StatusColor" Size="Size.Small">@StatusLabel</MudChip>
@@ -2170,7 +2169,7 @@ git commit -m "Add DomainHealthCheckRow component and DKIM selector configuratio
 
 ---
 
-### Task 9: DomainDetail.razor — consolidated Overview health checklist
+### Task 9: DomainDetail.razor - consolidated Overview health checklist
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/DomainDetail.razor`
@@ -2395,7 +2394,7 @@ The MTA-STS row's "View details" link needs a way to jump to the MTA-STS tab. Ad
 Immediately after the existing `RecheckDmarcAsync` method, add:
 
 ```csharp
-    /// <summary>DMARC-authorization counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>DMARC-authorization counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckDmarcAuthorizationAsync()
     {
         _isRecheckingDmarcAuth = true;
@@ -2430,7 +2429,7 @@ Immediately after the existing `RecheckDmarcAsync` method, add:
 Immediately after `RecheckTlsrptAsync`, add:
 
 ```csharp
-    /// <summary>SPF counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>SPF counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckSpfAsync()
     {
         _isRecheckingSpf = true;
@@ -2459,7 +2458,7 @@ Immediately after `RecheckTlsrptAsync`, add:
         }
     }
 
-    /// <summary>MX counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>MX counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckMxAsync()
     {
         _isRecheckingMx = true;
@@ -2488,7 +2487,7 @@ Immediately after `RecheckTlsrptAsync`, add:
         }
     }
 
-    /// <summary>DKIM counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>DKIM counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckDkimAsync()
     {
         _isRecheckingDkim = true;
@@ -2600,7 +2599,7 @@ In `src/DotMarc/Demo/DemoDataset.cs`, add to the end of the `DemoDomainSeed` rec
     string? DkimCheckDetail = null);
 ```
 
-(Note the trailing `);` — these become the record's final parameters, all with defaults so every existing `new DemoDomainSeed(...)` call site — there are none outside `DemoDataGenerator.cs`, which Step 2 updates — keeps compiling. Positional-record parameters with defaults must come after all parameters without defaults, which they do here since they're appended at the end.)
+(Note the trailing `);` - these become the record's final parameters, all with defaults so every existing `new DemoDomainSeed(...)` call site - there are none outside `DemoDataGenerator.cs`, which Step 2 updates - keeps compiling. Positional-record parameters with defaults must come after all parameters without defaults, which they do here since they're appended at the end.)
 
 - [ ] **Step 2: Update DemoDataGenerator's BuildDomain to accept and pass through the new statuses**
 
@@ -2648,7 +2647,7 @@ Replace the `driftwood-media.example` entry (currently using `status: DmarcCheck
 Replace the `cobalt-freight.example` entry with one that also demonstrates the new SPF/MX/DKIM failure modes (add these arguments to its existing call, keeping everything else unchanged):
 ```csharp
                 spfCheckStatus: SpfCheckStatus.MultipleRecords,
-                spfCheckDetail: "cobalt-freight.example has 2 SPF records — RFC 7208 requires exactly one",
+                spfCheckDetail: "cobalt-freight.example has 2 SPF records - RFC 7208 requires exactly one",
                 mxCheckStatus: MxCheckStatus.UnresolvableTarget,
                 mxCheckDetail: "MX target(s) do not resolve: mail.cobalt-freight.example",
                 dkimSelectors: ["selector1"],
@@ -2662,11 +2661,11 @@ And give `brightline-legal.example` an SPF-missing example (add to its existing 
                 spfCheckDetail: "No SPF (v=spf1) TXT record found at brightline-legal.example"),
 ```
 
-Every other existing `BuildDomain(...)` call site is left unchanged — it picks up the new parameters' defaults (`DmarcAuthorizationCheckStatus.NotApplicable`, `SpfCheckStatus.Ok`, `MxCheckStatus.Ok`, `DkimCheckStatus.NotConfigured`), which is a reasonable "everything's fine" baseline for domains this feature isn't specifically illustrating.
+Every other existing `BuildDomain(...)` call site is left unchanged - it picks up the new parameters' defaults (`DmarcAuthorizationCheckStatus.NotApplicable`, `SpfCheckStatus.Ok`, `MxCheckStatus.Ok`, `DkimCheckStatus.NotConfigured`), which is a reasonable "everything's fine" baseline for domains this feature isn't specifically illustrating.
 
 - [ ] **Step 4: Seed the new fields in DemoDataSeeder**
 
-In `src/DotMarc/Demo/DemoDataSeeder.cs`, in the `Domain` object-initializer block that currently ends with `TlsrptCheckDetail = domainSeed.TlsrptCheckDetail`, add (before the closing `};` — check the exact current closing syntax and match it):
+In `src/DotMarc/Demo/DemoDataSeeder.cs`, in the `Domain` object-initializer block that currently ends with `TlsrptCheckDetail = domainSeed.TlsrptCheckDetail`, add (before the closing `};` - check the exact current closing syntax and match it):
 
 ```csharp
                 DmarcAuthorizationCheckStatus = domainSeed.DmarcAuthorizationCheckStatus,
@@ -2692,7 +2691,7 @@ In `src/DotMarc/Demo/DemoDataSeeder.cs`, in the `Domain` object-initializer bloc
 dotnet build DotMarc.sln
 dotnet test DotMarc.sln
 ```
-Expected: clean build. If `DemoDataGeneratorTests.cs` has a test asserting the exact shape/count of `DemoDomainSeed`'s fields or a specific domain's prior field values (e.g. asserting `driftwood-media.example`'s old `DmarcCheckStatus.MissingAuthorizationRecord`), update that specific assertion to match the new field split from Step 3 — read the test file first to find any such assertion before assuming none exist.
+Expected: clean build. If `DemoDataGeneratorTests.cs` has a test asserting the exact shape/count of `DemoDomainSeed`'s fields or a specific domain's prior field values (e.g. asserting `driftwood-media.example`'s old `DmarcCheckStatus.MissingAuthorizationRecord`), update that specific assertion to match the new field split from Step 3 - read the test file first to find any such assertion before assuming none exist.
 
 - [ ] **Step 6: Manual verification**
 

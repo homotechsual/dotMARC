@@ -51,7 +51,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<string> behind a value converter throws at runtime ("cannot be used as a
-            // primitive collection") the first time an entity with this property is tracked — see
+            // primitive collection") the first time an entity with this property is tracked - see
             // Role.Permissions below for the same pattern with a List<Permission>.
             entity.Property(d => d.MtaStsMxHosts)
                 .HasConversion(
@@ -81,7 +81,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
 
             // One row per (domain, reporting org, report id): a report is re-ingested if the
             // mailbox message that produced it gets re-processed (e.g. it was stored successfully
-            // but MarkAsReadAsync failed before the message could be marked read) — this index,
+            // but MarkAsReadAsync failed before the message could be marked read) - this index,
             // paired with PollingService's own pre-insert duplicate check, keeps that safe rather
             // than silently double-counting volume.
             entity.HasIndex(r => new { r.DomainId, r.ReportingOrg, r.ReportId }).IsUnique();
@@ -152,7 +152,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<TEnum> behind a value converter throws at runtime ("cannot be used as a
-            // primitive collection") the first time an entity with this property is tracked —
+            // primitive collection") the first time an entity with this property is tracked - 
             // it isn't just the cosmetic warning it looks like from the model-validation log.
             entity.Property(r => r.Permissions)
                 .HasConversion(
@@ -174,7 +174,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
 
             // Group has no reciprocal navigation back to UserAccess (unlike Domain.Groups /
             // Group.Domains, which are bidirectional), so EF Core's implicit many-to-many
-            // convention does not apply here — left unconfigured, EF instead infers a one-to-many
+            // convention does not apply here - left unconfigured, EF instead infers a one-to-many
             // and adds a UserAccessId column directly onto the existing Groups table, which is
             // both the wrong cardinality (a Group must be scopable by more than one UserAccess)
             // and an unwanted change to an existing table. Configuring it explicitly with its own
@@ -209,7 +209,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         });
 
         // Seeds the one row every reader relies on existing (see NotificationSettings's doc
-        // comment) — HasData rather than runtime bootstrap logic (cf. AccessBootstrapper) because
+        // comment) - HasData rather than runtime bootstrap logic (cf. AccessBootstrapper) because
         // there's no leader-election concern here: it's static seed data applied once by the
         // migration itself, not something computed per-deployment at startup.
         modelBuilder.Entity<NotificationSettings>().HasData(new NotificationSettings { Id = 1 });

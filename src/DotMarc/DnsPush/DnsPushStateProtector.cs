@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 namespace DotMarc.DnsPush;
 
 /// <summary>Encodes a DnsPushState into an opaque, tamper-proof string carried as the OAuth `state`
-/// parameter across the redirect to the provider and back — avoids needing any server-side session
+/// parameter across the redirect to the provider and back - avoids needing any server-side session
 /// between /dns-push/{provider}/start and .../callback. Short-lived (5 minutes): a state value used
 /// after that window is rejected, same reasoning as an OIDC nonce.</summary>
 public sealed class DnsPushStateProtector

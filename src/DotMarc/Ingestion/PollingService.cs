@@ -16,17 +16,17 @@ public sealed class PollingService : BackgroundService
 {
     /// <summary>Arbitrary fixed key for this service's Postgres advisory lock. Multiple replicas
     /// may run this service concurrently; only the one that acquires this transaction-scoped lock
-    /// for a given cycle actually polls the mailbox — others skip that cycle and try again next
+    /// for a given cycle actually polls the mailbox - others skip that cycle and try again next
     /// interval. Prevents duplicate Graph calls and duplicate-report races when scaled beyond one
     /// replica.</summary>
     internal const long PollingLeaderLockKey = 84_200_001;
 
-    /// <summary>Arbitrary fixed key for this service's DMARC-check advisory lock — distinct from
+    /// <summary>Arbitrary fixed key for this service's DMARC-check advisory lock - distinct from
     /// PollingLeaderLockKey so the mailbox-poll cycle and the DMARC DNS-check cycle run under
     /// independent locks rather than being forced to share the same leader/timing.</summary>
     internal const long DmarcCheckLeaderLockKey = 84_200_003;
 
-    /// <summary>Arbitrary fixed key for this service's MTA-STS-check advisory lock — distinct
+    /// <summary>Arbitrary fixed key for this service's MTA-STS-check advisory lock - distinct
     /// from the other two so this cycle runs under its own independent lock/timing.</summary>
     internal const long MtaStsCheckLeaderLockKey = 84_200_005;
 
@@ -34,7 +34,7 @@ public sealed class PollingService : BackgroundService
 
     internal const long TlsrptPollingLeaderLockKey = 84_200_009;
 
-    /// <summary>Arbitrary fixed key for this service's DMARC-authorization-check advisory lock —
+    /// <summary>Arbitrary fixed key for this service's DMARC-authorization-check advisory lock - 
     /// independent of DmarcCheckLeaderLockKey since the own-record check and the authorization
     /// check are now two fully independent checks with their own staleness tracking.</summary>
     internal const long DmarcAuthorizationCheckLeaderLockKey = 84_200_011;
@@ -45,7 +45,7 @@ public sealed class PollingService : BackgroundService
 
     /// <summary>Arbitrary fixed key for this service's DKIM-check advisory lock. Runs on the same
     /// schedule as every other check even though most domains will have no selectors configured
-    /// yet (RunSingleDkimCheckAsync short-circuits to NotConfigured in that case) — simpler than
+    /// yet (RunSingleDkimCheckAsync short-circuits to NotConfigured in that case) - simpler than
     /// trying to filter the staleness query by DkimSelectors.Count, which doesn't translate cleanly
     /// through the List&lt;string&gt; value converter.</summary>
     internal const long DkimCheckLeaderLockKey = 84_200_017;
@@ -284,10 +284,10 @@ public sealed class PollingService : BackgroundService
     }
 
     /// <summary>Runs a DMARC DNS status check for every domain whose last check (DmarcCheckedUtc)
-    /// is null or more than 24 hours old — independent of, and under a separate advisory lock from,
+    /// is null or more than 24 hours old - independent of, and under a separate advisory lock from,
     /// the mailbox poll cycle above, since the two concerns don't need to share timing or a leader.
     /// A domain whose check itself fails (network error, Cloudflare unreachable) is left with its
-    /// prior status/timestamp untouched and simply retried next cycle — matching this service's
+    /// prior status/timestamp untouched and simply retried next cycle - matching this service's
     /// existing "leave it, retry later" policy for other kinds of per-item failure.</summary>
     internal async Task RunDmarcCheckCycleAsync(DotMarcDbContext context, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
     {
@@ -399,7 +399,7 @@ public sealed class PollingService : BackgroundService
         }
     }
 
-    /// <summary>One domain's DMARC DNS check — factored out of RunDmarcCheckCycleAsync's loop so
+    /// <summary>One domain's DMARC DNS check - factored out of RunDmarcCheckCycleAsync's loop so
     /// a manual "recheck now" action (DomainDetail.razor) can run the exact same check outside the
     /// scheduled batch cycle, without duplicating the result-to-field mapping. Does not save; the
     /// caller decides transaction/persistence scope (the batch cycle saves once for the whole
@@ -412,7 +412,7 @@ public sealed class PollingService : BackgroundService
         domain.DmarcCheckDetail = result.Detail;
     }
 
-    /// <summary>TLSRPT counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    /// <summary>TLSRPT counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
     internal static async Task RunSingleTlsrptCheckAsync(Domain domain, ITlsrptDnsChecker tlsrptChecker, string mailboxAddress, CancellationToken cancellationToken)
     {
         var result = await tlsrptChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
@@ -421,7 +421,7 @@ public sealed class PollingService : BackgroundService
         domain.TlsrptCheckDetail = result.Detail;
     }
 
-    /// <summary>DMARC-authorization counterpart to RunSingleDmarcCheckAsync — see its remarks.
+    /// <summary>DMARC-authorization counterpart to RunSingleDmarcCheckAsync - see its remarks.
     /// Always calls CheckAuthorizationAsync regardless of the (separate) own-record DMARC status,
     /// so the two are independently accurate.</summary>
     internal static async Task RunSingleDmarcAuthorizationCheckAsync(Domain domain, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
@@ -432,7 +432,7 @@ public sealed class PollingService : BackgroundService
         domain.DmarcAuthorizationCheckDetail = result.Detail;
     }
 
-    /// <summary>SPF counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    /// <summary>SPF counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
     internal static async Task RunSingleSpfCheckAsync(Domain domain, ISpfDnsChecker spfChecker, CancellationToken cancellationToken)
     {
         var result = await spfChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
@@ -441,7 +441,7 @@ public sealed class PollingService : BackgroundService
         domain.SpfCheckDetail = result.Detail;
     }
 
-    /// <summary>MX counterpart to RunSingleDmarcCheckAsync — see its remarks.</summary>
+    /// <summary>MX counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
     internal static async Task RunSingleMxCheckAsync(Domain domain, IMxDnsChecker mxChecker, CancellationToken cancellationToken)
     {
         var result = await mxChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
@@ -781,11 +781,11 @@ public sealed class PollingService : BackgroundService
     }
 
     /// <summary>Runs MTA-STS DNS verification/provisioning checks for every enabled domain that's
-    /// due — a shorter ~15 minute window for anything not yet Active (a customer onboarding is
+    /// due - a shorter ~15 minute window for anything not yet Active (a customer onboarding is
     /// actively watching progress), a 24 hour window for already-Active domains (catches
     /// certificate renewal failures or an accidentally-removed CNAME, same cadence as the DMARC
     /// cycle). No-ops entirely, without acquiring the lock, if this deployment has no
-    /// MtaSts:HostingHostname configured — MTA-STS hosting is opt-in per deployment, not just per
+    /// MtaSts:HostingHostname configured - MTA-STS hosting is opt-in per deployment, not just per
     /// domain.</summary>
     internal async Task RunMtaStsCheckCycleAsync(
         DotMarcDbContext context,
@@ -826,7 +826,7 @@ public sealed class PollingService : BackgroundService
 
             // A domain disabled since the last cycle (MtaStsEnabled flipped false, e.g. from the
             // domain detail page) never matches the staleness query below, since that query only
-            // looks at enabled domains — without this pass, an Azure custom domain binding would
+            // looks at enabled domains - without this pass, an Azure custom domain binding would
             // stay orphaned forever once a customer turns hosting off.
             var disabledDomains = await context.Domains
                 .Where(d => !d.MtaStsEnabled && d.MtaStsStatus != MtaStsStatus.NotConfigured)
@@ -887,7 +887,7 @@ public sealed class PollingService : BackgroundService
     /// PendingDns only ever needs the DNS check; PendingCertificate/Active/Failed all funnel
     /// through the same provisioner-then-serving-check path, since that path is what both moves a
     /// domain forward and detects a regression on one that was already Active. internal (not
-    /// private) so DomainMtaStsPanel.razor's manual "recheck now" action can call it directly — see
+    /// private) so DomainMtaStsPanel.razor's manual "recheck now" action can call it directly - see
     /// RunSingleDmarcCheckAsync's remarks for why a manual recheck reuses the batch cycle's exact
     /// per-domain logic instead of duplicating it.</summary>
     internal static async Task RunSingleMtaStsCheckAsync(
@@ -908,7 +908,7 @@ public sealed class PollingService : BackgroundService
                     domain.MtaStsCheckDetail = null;
                     break;
                 case MtaStsDnsVerificationResult.PointsElsewhere:
-                    domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} resolves, but not to {hostingHostname} — check the CNAME's target.";
+                    domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} resolves, but not to {hostingHostname} - check the CNAME's target.";
                     break;
                 default:
                     domain.MtaStsCheckDetail = $"Waiting for mta-sts.{domain.Name} to resolve to {hostingHostname}.";
@@ -921,7 +921,7 @@ public sealed class PollingService : BackgroundService
 
         // PendingCertificate, Active, or Failed: ensure provisioning has been requested (a no-op
         // on Caddy, an ARM call on Azure), then run the one check that works identically on both
-        // targets — does the public URL actually serve the expected policy?
+        // targets - does the public URL actually serve the expected policy?
         try
         {
             await hostProvisioner.EnsureProvisionedAsync(domain.Name, cancellationToken).ConfigureAwait(false);
@@ -944,7 +944,7 @@ public sealed class PollingService : BackgroundService
         }
         else if (domain.MtaStsStatus == MtaStsStatus.Active)
         {
-            // Was working, isn't now — a regression, not an onboarding wait state.
+            // Was working, isn't now - a regression, not an onboarding wait state.
             domain.MtaStsStatus = MtaStsStatus.Failed;
             domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} stopped serving the expected policy.";
         }
@@ -958,8 +958,8 @@ public sealed class PollingService : BackgroundService
     }
 
     /// <summary>Writes one PollCycle row for a cycle that actually ran (never for one skipped due
-    /// to the leader lock — see RunPollCycleAsync). Rollup of stale rows happens here too, inline,
-    /// rather than as a separate scheduled job — see RollUpStalePollCyclesAsync.</summary>
+    /// to the leader lock - see RunPollCycleAsync). Rollup of stale rows happens here too, inline,
+    /// rather than as a separate scheduled job - see RollUpStalePollCyclesAsync.</summary>
     private static async Task RecordPollCycleAsync(DotMarcDbContext context, PollCycleCounts counts, bool succeeded, string? errorMessage, CancellationToken cancellationToken)
     {
         context.PollCycles.Add(new PollCycle
@@ -977,7 +977,7 @@ public sealed class PollingService : BackgroundService
 
     /// <summary>Folds any PollCycle row belonging to a UTC calendar day more than 7 days in the
     /// past into that day's PollCycleDailySummary, then deletes the raw rows. internal (not
-    /// private) so tests can call it directly against hand-seeded, backdated rows — the only
+    /// private) so tests can call it directly against hand-seeded, backdated rows - the only
     /// production caller, RecordPollCycleAsync, always writes PolledUtc as "now," so there's no
     /// other way to exercise the &gt;7-day-old path deterministically. Anchored to a calendar-day
     /// boundary rather than a rolling timestamp: a day is only eligible once every one of its rows
@@ -1040,7 +1040,7 @@ public sealed class PollingService : BackgroundService
             {
                 // Already turned into a Report on an earlier poll; Graph's isRead flag just hasn't
                 // caught up (e.g. a prior MarkAsReadAsync attempt failed). Retry only the cheap
-                // mark-as-read call — the ProcessedMessage row already proves re-fetching and
+                // mark-as-read call - the ProcessedMessage row already proves re-fetching and
                 // re-parsing the attachment would be wasted work.
                 try
                 {
@@ -1086,7 +1086,7 @@ public sealed class PollingService : BackgroundService
 
         // A message may carry more than one attachment; the first one that decompresses and
         // parses successfully is treated as the report. Any earlier attachment that fails is
-        // simply not the report (e.g. an inline logo image) — only the message as a whole failing
+        // simply not the report (e.g. an inline logo image) - only the message as a whole failing
         // to yield any valid report is a genuine ParseFailure.
         Exception? lastError = null;
         foreach (var attachment in attachments)
@@ -1103,10 +1103,10 @@ public sealed class PollingService : BackgroundService
                     await _alertingService.ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
                 }
 
-                // The report is safely committed and recorded as processed at this point — a
+                // The report is safely committed and recorded as processed at this point - a
                 // failure here won't cause re-fetching/re-parsing on the next poll (see
                 // PollOnceAsync's ProcessedMessages check), only a cheap mark-as-read retry. Marking
-                // the message read is a separate Graph call — a failure here is NOT an unparseable
+                // the message read is a separate Graph call - a failure here is NOT an unparseable
                 // message, so it must not fall into the ParseFailure path below.
                 try
                 {
@@ -1143,7 +1143,7 @@ public sealed class PollingService : BackgroundService
 
         // domain.Id is only non-zero for an already-persisted domain (EF Core leaves the CLR
         // property at its default until SaveChanges assigns the real value), so a brand-new
-        // domain can never already have a report — skip the lookup for that case.
+        // domain can never already have a report - skip the lookup for that case.
         var isDuplicate = domain.Id != 0 && await context.Reports.AnyAsync(
             r => r.DomainId == domain.Id && r.ReportingOrg == parsed.ReportingOrg && r.ReportId == parsed.ReportId,
             cancellationToken).ConfigureAwait(false);
@@ -1151,7 +1151,7 @@ public sealed class PollingService : BackgroundService
         if (isDuplicate)
         {
             // Same report already stored from an earlier attempt at this message (see the
-            // MarkAsReadAsync-failure handling in ProcessMessageAsync). Nothing to insert — the
+            // MarkAsReadAsync-failure handling in ProcessMessageAsync). Nothing to insert - the
             // caller still retries marking the message read.
             return domain;
         }
@@ -1235,7 +1235,7 @@ public sealed class PollingService : BackgroundService
     /// <summary>Records that a mailbox message has been successfully turned into a stored Report,
     /// so PollOnceAsync can skip re-fetching and re-parsing it on a later poll if Graph's isRead
     /// flag never got set (see <see cref="ProcessedMessage"/>). Also clears any ParseFailure row
-    /// left over from an earlier failed attempt at this same message — otherwise a message that
+    /// left over from an earlier failed attempt at this same message - otherwise a message that
     /// failed once and later succeeded would keep showing as "unparseable" on the Parse Failures
     /// page forever, even though it's since been stored correctly.</summary>
     private static async Task RecordProcessedMessageAsync(DotMarcDbContext context, string graphMessageId, CancellationToken cancellationToken)
@@ -1257,13 +1257,13 @@ public sealed class PollingService : BackgroundService
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
             // Another attempt at this same message (e.g. a retried poll racing this one) already
-            // recorded it first — same outcome either way, nothing further to do.
+            // recorded it first - same outcome either way, nothing further to do.
             context.ChangeTracker.Clear();
         }
     }
 
     /// <summary>Inserts a new ParseFailure row for a never-before-failed message, or updates the
-    /// existing row's attempt count/reason/timestamp for a repeat failure — keeps a permanently
+    /// existing row's attempt count/reason/timestamp for a repeat failure - keeps a permanently
     /// unparseable message from growing a new row every poll cycle forever (see
     /// <see cref="ParseFailure"/>). No auto-give-up policy here: the message is retried
     /// indefinitely, only the bookkeeping row is deduplicated.</summary>

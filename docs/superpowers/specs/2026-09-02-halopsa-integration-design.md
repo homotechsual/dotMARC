@@ -57,7 +57,7 @@ firing on ticket events including status changes, configurable from its own inte
 The exact JSON field names for ticket creation, the exact outbound webhook payload shape, and
 whether Halo's outbound webhook config supports custom headers are not fully confirmed from
 public documentation. This design does not depend on header support (the webhook secret travels
-in the URL path instead — see below), and the request/response shapes for `IHaloPsaClient` are
+in the URL path instead - see below), and the request/response shapes for `IHaloPsaClient` are
 specified in terms of what dotMARC needs, not Halo's literal wire format; mapping onto the real
 API is implementation work, verified against a live Halo tenant, the same acceptance this
 codebase already makes for `AzureMtaStsHostProvisioner` and the DNS-provider-push OAuth
@@ -98,7 +98,7 @@ public sealed class HaloPsaSettings
 ```
 
 `ClientSecretConfigured` is a UI-only flag ("a secret is set, click to replace"); the actual
-secret never lives in this row (or anywhere else the app can read back in plaintext) — see the
+secret never lives in this row (or anywhere else the app can read back in plaintext) - see the
 secret storage section below. `WebhookSecret` is stored plaintext, same trust level as
 `NotificationSettings.TeamsWebhookUrl`/`GenericWebhookUrl` today: a bearer-token-like value
 protected by being unguessable and sent only over HTTPS, not a credential granting broader access.
@@ -110,11 +110,11 @@ columns above, and (see below) the Data Protection keys table.
 
 The Halo API client secret is materially more sensitive than anything currently admin-configured
 at runtime in dotMARC (it grants API access across the whole PSA tenant), so it needs encryption
-at rest, and needs to survive restarts, redeploys, and multiple replicas — the same durability
+at rest, and needs to survive restarts, redeploys, and multiple replicas - the same durability
 argument that already moved `NotificationSettings` out of `appsettings.json` into Postgres.
 
 **`IHaloSecretStore`**, selected in `Program.cs` the same way `IMtaStsHostProvisioner` picks Caddy
-vs. Azure — on whether a Key Vault URI is configured:
+vs. Azure - on whether a Key Vault URI is configured:
 
 ```csharp
 public interface IHaloSecretStore
@@ -130,10 +130,10 @@ public interface IHaloSecretStore
 - **`DatabaseHaloSecretStore`** (default/fallback): protects the value with
   `IDataProtectionProvider.CreateProtector("HaloPsa.ClientSecret")` and stores the protected
   string in a new `HaloPsaSettings.ProtectedClientSecret` column (not shown above alongside the
-  UI-facing fields since it's never read back through the entity the UI binds to — modeled as a
+  UI-facing fields since it's never read back through the entity the UI binds to - modeled as a
   separate internal column/table the store alone touches).
 
-**Data Protection key persistence** (new — today there is none configured, so
+**Data Protection key persistence** (new - today there is none configured, so
 `DnsPushStateProtector`'s keys already don't survive a restart/redeploy/multi-replica, tolerated
 there only because that state is minutes-lived): `DotMarcDbContext` implements
 `IDataProtectionKeyContext` (adds a `DataProtectionKeys` `DbSet<DataProtectionKey>`), and
@@ -169,7 +169,7 @@ public interface IHaloPsaClient
 `HaloPsaClient` (typed `HttpClient`, registered `AddHttpClient<IHaloPsaClient, HaloPsaClient>()`)
 takes `HaloPsaSettings` as a parameter on every call, matching `ITeamsWebhookClient`'s/
 `IGenericWebhookClient`'s existing convention (the caller fetches settings once, no client makes
-its own redundant DB round trip) — the one exception is the client secret itself, which isn't on
+its own redundant DB round trip) - the one exception is the client secret itself, which isn't on
 `HaloPsaSettings` at all (by design, see above); `HaloPsaClient` depends on `IHaloSecretStore`
 directly to resolve it. It acquires and caches an OAuth2 token until shortly before expiry, and
 issues the actual REST calls. `ListClientsAsync`/`ListTicketTypesAsync`/`ListStatusesAsync` back
@@ -178,16 +178,16 @@ of them are on the hot alerting path.
 
 ## Client (company) mapping and ticket lifecycle
 
-**Resolution rule** — a domain can belong to more than one Group, and `Group`/`Domain` is an
+**Resolution rule** - a domain can belong to more than one Group, and `Group`/`Domain` is an
 implicit EF many-to-many with no order column, so "the domain's Groups" has no natural order to
 fall back on. The rule: `Domain.HaloClientId` wins if set; otherwise, of the domain's Groups that
 have a `HaloClientId` set, the one with the lowest `Group.Id` (oldest-created); otherwise no
-ticket is created for that alert, silently — same "unconfigured means off" behavior as an unset
+ticket is created for that alert, silently - same "unconfigured means off" behavior as an unset
 `GenericWebhookUrl` today.
 
 **Mapping UI**: Manage Groups gets a "Halo Client" column, populated from
 `IHaloPsaClient.ListClientsAsync()`, pre-filled with a suggested match by case-insensitive name
-equality against the Group's name — same pattern as the MTA-STS MX-hosts sync icon: a starting
+equality against the Group's name - same pattern as the MTA-STS MX-hosts sync icon: a starting
 point, not a save, reviewed then explicitly saved. Manage Domains gets the same field as an
 override, collapsed/secondary since it's the exception path, not the common one.
 
@@ -205,13 +205,13 @@ public interface IPsaTicketService
 
 Both take the caller's `DotMarcDbContext` (matching `NotificationSettingsService`'s existing
 caller-supplied-context convention) since both `EnsureAlertAsync` and `ResolveAlertAsync` already
-have one open when they'd call these — no extra `DbContextFactory` round trip inside the service.
+have one open when they'd call these - no extra `DbContextFactory` round trip inside the service.
 
 Wiring into `AlertingService`:
 
 - `EnsureAlertAsync`: right after the existing best-effort `_alertWebhookClient.SendAlertAsync`
   call, a new best-effort `_psaTicketService.CreateTicketAsync(context, alert, domain, ...)` call,
-  same try/catch-and-log shape — a PSA outage never blocks the alert itself being recorded.
+  same try/catch-and-log shape - a PSA outage never blocks the alert itself being recorded.
   Resolves the Halo client via the rule above; skips silently if none, or if `HaloPsaSettings` is
   not `Enabled`/fully configured. On success, writes `ExternalTicketProvider`/`ExternalTicketId`
   onto the `AlertEvent` before it's saved.
@@ -220,7 +220,7 @@ Wiring into `AlertingService`:
 
 ## Inbound webhook
 
-**`POST /integrations/halopsa/webhook/{secret}`** — a new minimal API endpoint in `Program.cs`,
+**`POST /integrations/halopsa/webhook/{secret}`** - a new minimal API endpoint in `Program.cs`,
 registered the same way as the existing `/.well-known/mta-sts*` endpoints, `.AllowAnonymous()`.
 The secret travels in the path (not a header) because Halo's outbound webhook config isn't
 confirmed to support custom headers. A non-matching secret returns 404, not 401, so an
@@ -228,13 +228,13 @@ unauthenticated caller can't confirm the endpoint exists at all.
 
 Handling: parses the ticket ID and status ID from the payload, compares the status ID against
 `HaloPsaSettings.ClosedStatusId`. If it matches and an unresolved `AlertEvent` exists with that
-`ExternalTicketId`, marks it resolved (`IsResolved = true`, `ResolvedUtc = now`) — without calling
+`ExternalTicketId`, marks it resolved (`IsResolved = true`, `ResolvedUtc = now`) - without calling
 `CloseTicketAsync` back, the ticket is already closed on Halo's side; calling again would be a
 pointless round trip. Any other status, an unknown ticket ID, or an already-resolved alert is a
 silent no-op.
 
 **Response is always 200** once the secret checks out, including no-ops and unparseable payloads
-(logged as a warning, not surfaced as an error) — there's nothing a retry from Halo would fix, and
+(logged as a warning, not surfaced as an error) - there's nothing a retry from Halo would fix, and
 a webhook Halo believes is failing risks a retry storm.
 
 ## Error handling
@@ -252,7 +252,7 @@ Name, Auth Server URL, Resource Server URL, Client ID, a write-only Client Secre
 "configured"/"not configured," never the value), Ticket Type / Default Priority / Closed Status
 dropdowns (populated live from `IHaloPsaClient`), and a generated webhook secret with the full
 callback URL shown for copying into Halo's own webhook config. Gated behind the existing
-`AlertsManage` permission — this is the same "how do alerts get delivered" concern as the
+`AlertsManage` permission - this is the same "how do alerts get delivered" concern as the
 Teams/generic webhook settings already there, not a new permission surface.
 
 ## Testing

@@ -35,7 +35,7 @@ public static class GroupManagementService
         {
             // The unique index on Group.Name caught a same-cased race. A concurrent
             // different-cased duplicate (e.g. "Client A" vs "client a") is not caught by the
-            // plain index — an accepted gap given group creation is a low-frequency manual
+            // plain index - an accepted gap given group creation is a low-frequency manual
             // action, not the high-concurrency path Domain auto-discovery is.
             return AddGroupResult.AlreadyExists;
         }
@@ -74,7 +74,7 @@ public static class GroupManagementService
 
     /// <summary>Permanently deletes a Group row. DotMarcDbContext.cs's implicit many-to-many
     /// skip navigation between Domain and Group means EF removes the join rows via the join
-    /// table's own cascade-delete foreign key — no Domain or Report data is touched.</summary>
+    /// table's own cascade-delete foreign key - no Domain or Report data is touched.</summary>
     public static async Task RemoveGroupAsync(DotMarcDbContext context, int groupId, CancellationToken cancellationToken = default)
     {
         var group = await context.Groups.SingleAsync(g => g.Id == groupId, cancellationToken).ConfigureAwait(false);
@@ -83,7 +83,7 @@ public static class GroupManagementService
     }
 
     /// <summary>Replaces a domain's full set of group memberships with exactly the given group
-    /// IDs — the multi-select on Manage Domains always submits the complete desired set, not an
+    /// IDs - the multi-select on Manage Domains always submits the complete desired set, not an
     /// incremental add/remove.</summary>
     public static async Task SetDomainGroupsAsync(DotMarcDbContext context, int domainId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
     {

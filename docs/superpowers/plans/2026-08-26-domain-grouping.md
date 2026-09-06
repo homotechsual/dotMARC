@@ -6,36 +6,35 @@
 
 **Architecture:** Two new entities (`Group`, `Tag`) in an EF Core implicit many-to-many with `Domain` (no hand-written join entities). Two small static management services follow this project's `DomainManagementService` convention. A new `/groups` page owns creating/renaming/deleting the curated lists; `ManageDomains.razor` gets multi-select columns for assignment (pure configuration, no status); `Dashboard.razor` gets two filter dropdowns that narrow the already-loaded domain list before `DashboardSummary.Build` runs, so summary tiles reflect the filtered set too.
 
-**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack — no new dependency).
+**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack - no new dependency).
 
 **Spec:** `docs/superpowers/specs/2026-08-26-domain-grouping-design.md`
 
 ## Global Constraints
 
 - A domain can belong to any number of Groups and any number of Tags
-  (many-to-many both ways) — not exactly one.
+  (many-to-many both ways) - not exactly one.
 - Groups and Tags are each a curated list (created/renamed/deleted on the
   new `/groups` page), never free text typed inline on Manage Domains.
 - Tag color is the `MudBlazor.Color` enum, stored via `HasConversion<string>()`
   (same pattern as `Domain.DmarcCheckStatus`). Only these five values are
-  offered: `Primary`, `Secondary`, `Tertiary`, `Info`, `Dark` — deliberately
+  offered: `Primary`, `Secondary`, `Tertiary`, `Info`, `Dark` - deliberately
   excluding `Success`/`Warning`/`Error`, which already carry pass/fail/status
   meaning on the Dashboard's Report Status and DNS Status chips.
 - `Group.Name` and `Tag.Name` uniqueness is case-insensitive at the
   application level (an `AnyAsync` pre-check comparing `.ToLower()`), backed
   by a plain (case-sensitive) unique DB index as a race guard. This does not
-  fully guarantee a same-instant "Client A" vs "client a" race is caught —
-  an accepted gap, since group/tag creation is a low-frequency manual action,
+  fully guarantee a same-instant "Client A" vs "client a" race is caught -   an accepted gap, since group/tag creation is a low-frequency manual action,
   not the high-concurrency path Domain auto-discovery is.
-- Manage Domains shows Groups/Tags assignment only — no status information
+- Manage Domains shows Groups/Tags assignment only - no status information
   of any kind, per this project's standing rule that Manage Domains is
   configuration-only.
 - Deleting a Group or Tag removes only its membership rows (EF's default
-  many-to-many cascade) — the Domain and its Reports are never touched. The
+  many-to-many cascade) - the Domain and its Reports are never touched. The
   confirm dialog states how many domains are currently members.
 - The Dashboard's Group and Tag filters are independent and combine with
   AND when both are set. Filtering happens on the loaded `List<Domain>`
-  before `DashboardSummary.Build` runs — `Build`'s signature does not
+  before `DashboardSummary.Build` runs - `Build`'s signature does not
   change, and its own tests are untouched by this plan.
 - Non-goals for this plan (do not build): tag-derived "smart groups" with
   computed membership; any permissions/access-control; bulk group/tag
@@ -57,7 +56,7 @@
 **Interfaces:**
 - Produces: `DotMarc.Data.Group { int Id, string Name, List<Domain> Domains }`,
   `DotMarc.Data.Tag { int Id, string Name, Color Color, List<Domain> Domains }`,
-  and `Domain.Groups`/`Domain.Tags` (`List<Group>`/`List<Tag>`) — used by
+  and `Domain.Groups`/`Domain.Tags` (`List<Group>`/`List<Tag>`) - used by
   every later task in this plan.
 
 - [ ] **Step 1: Write the failing tests**
@@ -150,7 +149,7 @@ existing `using` block if not already present):
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "CanInsertAndQuery_GroupWithMemberDomain|Group_Name_MustBeUnique|CanInsertAndQuery_TagWithColorAndMemberDomain|Tag_Name_MustBeUnique|Domain_CanBelongToMultipleGroupsAndTags"`
-Expected: FAIL to build — `Group`, `Tag`, `Domain.Groups`, `Domain.Tags` don't exist yet.
+Expected: FAIL to build - `Group`, `Tag`, `Domain.Groups`, `Domain.Tags` don't exist yet.
 
 - [ ] **Step 3: Create the entities**
 
@@ -159,7 +158,7 @@ Create `src/DotMarc/Data/Group.cs`:
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>A user-defined container a domain can belong to — typically a client/owner in the
+/// <summary>A user-defined container a domain can belong to - typically a client/owner in the
 /// MSP use case this app is designed for, though a domain can belong to more than one Group at
 /// once. Carries no access-control meaning on its own; that's the subject of a later design
 /// cycle, not this one.</summary>
@@ -178,7 +177,7 @@ using MudBlazor;
 
 namespace DotMarc.Data;
 
-/// <summary>A curated, colored label a domain can carry (e.g. "primary") — many-to-many, used
+/// <summary>A curated, colored label a domain can carry (e.g. "primary") - many-to-many, used
 /// for filtering on the Dashboard rather than ownership. Unlike Group, a Tag never implies
 /// access to anything.</summary>
 public sealed class Tag
@@ -211,7 +210,7 @@ alongside the existing ones:
 ```
 
 In `OnModelCreating`, add (implicit many-to-many skip navigations need no
-explicit join-entity configuration — EF Core infers the join tables
+explicit join-entity configuration - EF Core infers the join tables
 `GroupDomain`/`DomainTag` from `Domain.Groups`/`Group.Domains` and
 `Domain.Tags`/`Tag.Domains` automatically):
 
@@ -232,12 +231,11 @@ explicit join-entity configuration — EF Core infers the join tables
 
 Run: `dotnet ef migrations add AddGroupsAndTags --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
 
-Review the generated migration: confirm it creates four new tables total —
-`Groups`, `Tags`, and the two implicit join tables EF names for the
-Domain↔Group and Domain↔Tag many-to-many relationships — a unique index on
+Review the generated migration: confirm it creates four new tables total - `Groups`, `Tags`, and the two implicit join tables EF names for the
+Domain↔Group and Domain↔Tag many-to-many relationships - a unique index on
 `Groups.Name` and
 `Tags.Name`, and that `Tags.Color` is a `text`/`character varying` column
-(not `integer`) — confirming the string conversion took effect. This is a
+(not `integer`) - confirming the string conversion took effect. This is a
 brand-new set of tables (nothing existing is renamed or altered), so there
 is no data-loss risk to review for, unlike a column rename.
 
@@ -565,7 +563,7 @@ public sealed class TagManagementServiceTests : IAsyncLifetime
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "GroupManagementServiceTests|TagManagementServiceTests"`
-Expected: FAIL to build — `GroupManagementService`/`TagManagementService` don't exist yet.
+Expected: FAIL to build - `GroupManagementService`/`TagManagementService` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -609,7 +607,7 @@ public static class GroupManagementService
         {
             // The unique index on Group.Name caught a same-cased race. A concurrent
             // different-cased duplicate (e.g. "Client A" vs "client a") is not caught by the
-            // plain index — an accepted gap given group creation is a low-frequency manual
+            // plain index - an accepted gap given group creation is a low-frequency manual
             // action, not the high-concurrency path Domain auto-discovery is.
             return AddGroupResult.AlreadyExists;
         }
@@ -648,7 +646,7 @@ public static class GroupManagementService
 
     /// <summary>Permanently deletes a Group row. DotMarcDbContext.cs's implicit many-to-many
     /// skip navigation between Domain and Group means EF removes the join rows via the join
-    /// table's own cascade-delete foreign key — no Domain or Report data is touched.</summary>
+    /// table's own cascade-delete foreign key - no Domain or Report data is touched.</summary>
     public static async Task RemoveGroupAsync(DotMarcDbContext context, int groupId, CancellationToken cancellationToken = default)
     {
         var group = await context.Groups.SingleAsync(g => g.Id == groupId, cancellationToken).ConfigureAwait(false);
@@ -657,7 +655,7 @@ public static class GroupManagementService
     }
 
     /// <summary>Replaces a domain's full set of group memberships with exactly the given group
-    /// IDs — the multi-select on Manage Domains always submits the complete desired set, not an
+    /// IDs - the multi-select on Manage Domains always submits the complete desired set, not an
     /// incremental add/remove.</summary>
     public static async Task SetDomainGroupsAsync(DotMarcDbContext context, int domainId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
     {
@@ -745,7 +743,7 @@ public static class TagManagementService
     }
 
     /// <summary>Permanently deletes a Tag row. See GroupManagementService.RemoveGroupAsync's doc
-    /// comment — the same implicit many-to-many cascade behavior applies here.</summary>
+    /// comment - the same implicit many-to-many cascade behavior applies here.</summary>
     public static async Task RemoveTagAsync(DotMarcDbContext context, int tagId, CancellationToken cancellationToken = default)
     {
         var tag = await context.Tags.SingleAsync(t => t.Id == tagId, cancellationToken).ConfigureAwait(false);
@@ -753,8 +751,7 @@ public static class TagManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Replaces a domain's full set of tag memberships with exactly the given tag IDs —
-    /// see GroupManagementService.SetDomainGroupsAsync's doc comment for why this replaces
+    /// <summary>Replaces a domain's full set of tag memberships with exactly the given tag IDs -     /// see GroupManagementService.SetDomainGroupsAsync's doc comment for why this replaces
     /// rather than incrementally adds/removes.</summary>
     public static async Task SetDomainTagsAsync(DotMarcDbContext context, int domainId, IReadOnlyList<int> tagIds, CancellationToken cancellationToken = default)
     {
@@ -798,7 +795,7 @@ git commit -m "Add GroupManagementService and TagManagementService"
 - Produces: the `/groups` route. No new types other later tasks depend on.
 
 No automated test for this task's Razor UI, consistent with this project's
-established precedent (no Blazor component-rendering test framework) — the
+established precedent (no Blazor component-rendering test framework) - the
 service layer underneath is already fully tested by Task 2.
 
 - [ ] **Step 1: Create the shared confirm-delete dialog**
@@ -1007,7 +1004,7 @@ Create `src/DotMarc/Components/Pages/ManageGroups.razor`:
             var result = await GroupManagementService.RenameGroupAsync(db, row.Id, newName, CancellationToken.None);
             if (result != GroupManagementService.AddGroupResult.Added)
             {
-                Snackbar.Add("Failed to rename group — a group with that name may already exist.", Severity.Error);
+                Snackbar.Add("Failed to rename group - a group with that name may already exist.", Severity.Error);
             }
         }
         catch (Exception)
@@ -1081,7 +1078,7 @@ Create `src/DotMarc/Components/Pages/ManageGroups.razor`:
             var result = await TagManagementService.UpdateTagAsync(db, row.Id, newName, newColor, CancellationToken.None);
             if (result != TagManagementService.AddTagResult.Added)
             {
-                Snackbar.Add("Failed to update tag — a tag with that name may already exist.", Severity.Error);
+                Snackbar.Add("Failed to update tag - a tag with that name may already exist.", Severity.Error);
             }
         }
         catch (Exception)
@@ -1155,7 +1152,7 @@ in, navigate to `/groups`, add a group and a tag (with a color), confirm
 they appear in their respective lists with the right color, rename one
 inline, delete one and confirm the confirmation dialog's domain count is
 accurate (0 for a freshly-created group/tag). If the environment doesn't
-allow this, report which steps were skipped and why — expected, not a
+allow this, report which steps were skipped and why - expected, not a
 blocker, consistent with this project's precedent for UI-only tasks.
 
 - [ ] **Step 7: Commit**
@@ -1167,7 +1164,7 @@ git commit -m "Add Manage Groups page"
 
 ---
 
-### Task 4: Manage Domains — Groups/Tags assignment
+### Task 4: Manage Domains - Groups/Tags assignment
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/ManageDomains.razor`
@@ -1177,7 +1174,7 @@ git commit -m "Add Manage Groups page"
   `TagManagementService.SetDomainTagsAsync` (Task 2).
 
 No automated test for this task's Razor UI, consistent with this project's
-established precedent — the service layer underneath (`SetDomainGroupsAsync`/
+established precedent - the service layer underneath (`SetDomainGroupsAsync`/
 `SetDomainTagsAsync`) is already fully tested by Task 2.
 
 - [ ] **Step 1: Add the two new columns**
@@ -1211,7 +1208,7 @@ to:
         </HeaderContent>
 ```
 
-Change the `RowTemplate` — insert two new `<MudTd>` cells immediately after
+Change the `RowTemplate` - insert two new `<MudTd>` cells immediately after
 the existing domain-name cell (the one with the drag/drop `<div>` inside)
 and before the existing `Monitored` switch cell:
 
@@ -1241,7 +1238,7 @@ and before the existing `Monitored` switch cell:
 ```
 
 If `_allGroups`/`_allTags` is empty, the picker renders with no items and
-`Placeholder="None"` shows in its place — no separate empty-state markup
+`Placeholder="None"` shows in its place - no separate empty-state markup
 needed.
 
 - [ ] **Step 2: Extend `DomainRow` and load the group/tag data**
@@ -1361,7 +1358,7 @@ git commit -m "Add Groups/Tags assignment to Manage Domains"
 
 ---
 
-### Task 5: Dashboard — Group/Tag filtering
+### Task 5: Dashboard - Group/Tag filtering
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/Dashboard.razor`
@@ -1369,11 +1366,11 @@ git commit -m "Add Groups/Tags assignment to Manage Domains"
 **Interfaces:**
 - Consumes: `Group`, `Tag` (Task 1). Does NOT change
   `DashboardSummary.Build`'s signature (Task 5 of the earlier DMARC DNS
-  status plan) — filtering happens on the domain list before `Build` is
+  status plan) - filtering happens on the domain list before `Build` is
   called.
 
 No automated test for this task's Razor UI, consistent with this project's
-established precedent — `DashboardSummary.Build` (unchanged by this task)
+established precedent - `DashboardSummary.Build` (unchanged by this task)
 already has its own full test coverage, and this task's only new logic is a
 LINQ `.Where` over an already-loaded list, exercised the same way `Build`
 itself already is.
@@ -1406,7 +1403,7 @@ summary-tiles `MudGrid`:
 ```
 
 This goes above the existing `<MudGrid Class="mb-4">` that holds the six
-summary tiles — both grids render, filter dropdowns first.
+summary tiles - both grids render, filter dropdowns first.
 
 - [ ] **Step 2: Add the filter state and loading**
 
@@ -1481,7 +1478,7 @@ to:
 ```
 
 (the rest of `LoadAsync`, loading `_lastPoll`, stays unchanged below this
-point — only the section above `_lastPoll`'s load changes).
+point - only the section above `_lastPoll`'s load changes).
 
 - [ ] **Step 3: Add the two filter-change handlers**
 
@@ -1509,7 +1506,7 @@ Expected: Build succeeds with no errors.
 - [ ] **Step 5: Run the full test suite to confirm no regressions**
 
 Run: `dotnet test dotMARC.sln`
-Expected: PASS — critically, all existing `DashboardSummaryTests` still
+Expected: PASS - critically, all existing `DashboardSummaryTests` still
 pass unmodified, confirming this task didn't touch `DashboardSummary.Build`.
 
 - [ ] **Step 6: Manual verification**

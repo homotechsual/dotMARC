@@ -12,11 +12,11 @@
 
 ## Global Constraints
 
-* Zero behavior change to the app when `Demo__Enabled` is unset/false — every addition in this plan is additive and gated.
+* Zero behavior change to the app when `Demo__Enabled` is unset/false - every addition in this plan is additive and gated.
 * Demo personas: `demo-admin@nova-msp.example` (built-in `Admin` role) and `demo-viewer@nova-msp.example` (built-in `Viewer` role, scoped to the "Aurora Retail" group).
-* **Refinement from the spec:** the spec describes 60 days of history. Reading the actual UI code (`DomainDetail.razor:103`, `DomainStatistics.ReportWindow`) shows every page — Dashboard, DomainDetail, its chart, Sources — filters strictly to the last 30 days; nothing in the app ever displays data older than that (the README's own Scope section confirms a 12-month rollup is explicitly out of scope, and no shorter rollup beyond 30 days exists either). Generating 60 days would make 30 of them permanently invisible. This plan generates exactly `DomainStatistics.ReportWindow` (30 days) of history instead — same visible outcome the spec asked for (a domain visibly ramping up over the window a visitor can actually see), less wasted generation.
+* **Refinement from the spec:** the spec describes 60 days of history. Reading the actual UI code (`DomainDetail.razor:103`, `DomainStatistics.ReportWindow`) shows every page - Dashboard, DomainDetail, its chart, Sources - filters strictly to the last 30 days; nothing in the app ever displays data older than that (the README's own Scope section confirms a 12-month rollup is explicitly out of scope, and no shorter rollup beyond 30 days exists either). Generating 60 days would make 30 of them permanently invisible. This plan generates exactly `DomainStatistics.ReportWindow` (30 days) of history instead - same visible outcome the spec asked for (a domain visibly ramping up over the window a visitor can actually see), less wasted generation.
 * Follow this codebase's established "pure core, thin I/O adapter" split (see `DomainStatistics`, `DmarcReportParser`) and its convention of static classes operating on a caller-supplied `DotMarcDbContext` (see `DomainManagementService`, `AccessBootstrapper`).
-* The demo sign-in endpoint must not exist (404) when `Demo__Enabled` is false — this is a real auth-bypass surface if left reachable in the production app. Every task touching it must preserve/verify this.
+* The demo sign-in endpoint must not exist (404) when `Demo__Enabled` is false - this is a real auth-bypass surface if left reachable in the production app. Every task touching it must preserve/verify this.
 
 ---
 
@@ -24,7 +24,7 @@
 
 **Files:**
 - Create: `src/DotMarc/Demo/DemoOptions.cs`
-- Modify: `src/DotMarc/Program.cs` (add binding only — no branching behavior yet)
+- Modify: `src/DotMarc/Program.cs` (add binding only - no branching behavior yet)
 - Test: `test/DotMarc.Tests/Demo/DemoOptionsTests.cs`
 
 **Interfaces:**
@@ -55,7 +55,7 @@ public sealed class DemoOptionsTests
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoOptionsTests`
-Expected: FAIL (build error) — `DotMarc.Demo` namespace / `DemoOptions` type doesn't exist yet.
+Expected: FAIL (build error) - `DotMarc.Demo` namespace / `DemoOptions` type doesn't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -65,7 +65,7 @@ namespace DotMarc.Demo;
 
 /// <summary>Gates every demo-mode addition in this app. See
 /// docs/superpowers/specs/2026-08-28-demo-instance-design.md. When Enabled is false (the
-/// default), nothing in the DotMarc.Demo namespace runs — real Entra/Graph auth and ingestion
+/// default), nothing in the DotMarc.Demo namespace runs - real Entra/Graph auth and ingestion
 /// behave exactly as before this feature existed.</summary>
 public sealed class DemoOptions
 {
@@ -89,7 +89,7 @@ var demoOptions = new DotMarc.Demo.DemoOptions();
 builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
 ```
 
-`demoOptions` is a plain bound instance (not `IOptions<T>`) because later tasks need its value immediately, before `builder.Build()`, to decide which services to register — the `Configure<DemoOptions>` call alongside it is what makes `IOptions<DemoOptions>` injectable everywhere else (MainLayout, DemoDataResetService).
+`demoOptions` is a plain bound instance (not `IOptions<T>`) because later tasks need its value immediately, before `builder.Build()`, to decide which services to register - the `Configure<DemoOptions>` call alongside it is what makes `IOptions<DemoOptions>` injectable everywhere else (MainLayout, DemoDataResetService).
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -117,9 +117,9 @@ git commit -m "Add DemoOptions configuration flag (inert until wired up)"
 
 **Interfaces:**
 - Consumes: `DotMarc.Data.AuthResult`, `DotMarc.Data.DispositionResult`, `DotMarc.Data.DmarcCheckStatus` (existing enums).
-- Produces: `DemoDataset`, `DemoGroupSeed`, `DemoDomainSeed`, `DemoReportSeed`, `DemoRecordSeed`, `DemoPollCycleSeed`, `DemoPollCycleDailySummarySeed`, `DemoParseFailureSeed` — plain immutable records with no EF/DB dependency. Consumed by `DemoDataGenerator` (Task 3, produces these) and `DemoDataSeeder` (Task 4, consumes these).
+- Produces: `DemoDataset`, `DemoGroupSeed`, `DemoDomainSeed`, `DemoReportSeed`, `DemoRecordSeed`, `DemoPollCycleSeed`, `DemoPollCycleDailySummarySeed`, `DemoParseFailureSeed` - plain immutable records with no EF/DB dependency. Consumed by `DemoDataGenerator` (Task 3, produces these) and `DemoDataSeeder` (Task 4, consumes these).
 
-This task is data-shape-only (no logic), so there's no meaningful failing test to write first — it's exercised by Task 3's tests. Write it directly:
+This task is data-shape-only (no logic), so there's no meaningful failing test to write first - it's exercised by Task 3's tests. Write it directly:
 
 - [ ] **Step 1: Write the model types**
 
@@ -130,7 +130,7 @@ using DotMarc.Data;
 namespace DotMarc.Demo;
 
 /// <summary>Everything DemoDataSeeder needs to (re)populate the database for one reset cycle.
-/// Produced by the pure DemoDataGenerator — see that class for the narrative this data tells.</summary>
+/// Produced by the pure DemoDataGenerator - see that class for the narrative this data tells.</summary>
 public sealed record DemoDataset(
     List<DemoGroupSeed> Groups,
     List<DemoDomainSeed> Domains,
@@ -357,7 +357,7 @@ public sealed class DemoDataGeneratorTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoDataGeneratorTests`
-Expected: FAIL (build error) — `DemoDataGenerator` doesn't exist yet.
+Expected: FAIL (build error) - `DemoDataGenerator` doesn't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -368,11 +368,11 @@ using DotMarc.Reporting;
 
 namespace DotMarc.Demo;
 
-/// <summary>Pure generator for the "Nova MSP" demo dataset — see
+/// <summary>Pure generator for the "Nova MSP" demo dataset - see
 /// docs/superpowers/specs/2026-08-28-demo-instance-design.md for the narrative this implements,
 /// and this plan's Global Constraints for why it covers 30 days (DomainStatistics.ReportWindow),
 /// not the 60 the spec originally described. Takes no dependencies beyond a Random and the
-/// current time, so it's fully unit-testable without a database — same "pure core, thin I/O
+/// current time, so it's fully unit-testable without a database - same "pure core, thin I/O
 /// adapter" split as DomainStatistics/DmarcReportParser; DemoDataSeeder is the I/O adapter that
 /// writes this output.</summary>
 public static class DemoDataGenerator
@@ -502,8 +502,7 @@ public static class DemoDataGenerator
             cursor = cursor.AddMinutes(15);
         }
 
-        // Guarantee the injected failure exists even if the random roll above never hit it —
-        // the test suite (and a visitor looking at the poll status page) expects at least one,
+        // Guarantee the injected failure exists even if the random roll above never hit it -         // the test suite (and a visitor looking at the poll status page) expects at least one,
         // for texture, without depending on a low-probability random draw.
         if (!failureInjected && cycles.Count > 0)
         {
@@ -543,7 +542,7 @@ public static class DemoDataGenerator
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoDataGeneratorTests`
-Expected: PASS. If `CobaltFreight_FirstDomainReadsAsWarning...` or `BrightlineLegal_PassRateClimbsAcrossTheWindow` are flaky against the fixed seed (42), tune the fixed `passRateForDay` values above (0.87 for Cobalt Freight, 0.70→0.99 for Brightline) — the volumes are randomized per day so the exact resulting rate has small noise around the target; both assertions use headroom (`<0.95` vs target 0.87, `>=0.95` vs target 0.99) specifically to absorb that noise, but re-check with the real random draws if it fails.
+Expected: PASS. If `CobaltFreight_FirstDomainReadsAsWarning...` or `BrightlineLegal_PassRateClimbsAcrossTheWindow` are flaky against the fixed seed (42), tune the fixed `passRateForDay` values above (0.87 for Cobalt Freight, 0.70→0.99 for Brightline) - the volumes are randomized per day so the exact resulting rate has small noise around the target; both assertions use headroom (`<0.95` vs target 0.87, `>=0.95` vs target 0.99) specifically to absorb that noise, but re-check with the real random draws if it fails.
 
 - [ ] **Step 5: Commit**
 
@@ -677,7 +676,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoDataSeederTests`
-Expected: FAIL (build error) — `DemoDataSeeder` doesn't exist yet.
+Expected: FAIL (build error) - `DemoDataSeeder` doesn't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -688,7 +687,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.Demo;
 
-/// <summary>Wipes and rewrites every app-owned table from a DemoDataset — the same code path
+/// <summary>Wipes and rewrites every app-owned table from a DemoDataset - the same code path
 /// runs on first boot and on every scheduled reset (see DemoDataResetService), so there is only
 /// one seeding path, not two. Deliberately does not use AccessBootstrapper's advisory-lock
 /// pattern: this always runs against a single demo instance from either Program.cs's startup
@@ -853,7 +852,7 @@ git commit -m "Add demo data seeder (truncate + rewrite from a DemoDataset)"
 - Consumes: `DemoOptions` (Task 1), `DemoDataGenerator`/`DemoDataSeeder` (Tasks 3–4).
 - Produces: `DemoDataResetService` (a `BackgroundService`, registered only when `Demo:Enabled=true`), internal `DemoDataResetService.SeedFor(DateTimeOffset) : int` and `DemoDataResetService.GetDelayUntilNextReset(DateTimeOffset nowUtc, int resetHourUtc) : TimeSpan`. Consumed by Task 6's end-to-end tests (which rely on the app having already seeded demo data at startup).
 
-This is the task where `Demo__Enabled=true` actually changes app behavior: real Entra/Graph auth and `PollingService` are skipped entirely, cookie auth is used instead, and the dataset is seeded synchronously before the app starts serving traffic (every startup, including every redeploy — simpler and race-free compared to seeding from a background service, which could let a visitor sign in before the first seed completes).
+This is the task where `Demo__Enabled=true` actually changes app behavior: real Entra/Graph auth and `PollingService` are skipped entirely, cookie auth is used instead, and the dataset is seeded synchronously before the app starts serving traffic (every startup, including every redeploy - simpler and race-free compared to seeding from a background service, which could let a visitor sign in before the first seed completes).
 
 - [ ] **Step 1: Add the test project's new package reference**
 
@@ -910,7 +909,7 @@ public sealed class DemoDataResetServiceTests
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoDataResetServiceTests`
-Expected: FAIL (build error) — `DemoDataResetService` doesn't exist yet.
+Expected: FAIL (build error) - `DemoDataResetService` doesn't exist yet.
 
 - [ ] **Step 4: Write DemoDataResetService**
 
@@ -926,7 +925,7 @@ namespace DotMarc.Demo;
 
 /// <summary>Resets the demo dataset once a day at DemoOptions.ResetHourUtc. Registered only when
 /// Demo:Enabled is true (see Program.cs). The very first seed happens synchronously in
-/// Program.cs's own startup block, not here — this service only ever handles the recurring
+/// Program.cs's own startup block, not here - this service only ever handles the recurring
 /// reset, so there's no window where a visitor could sign in before any data exists.</summary>
 public sealed class DemoDataResetService : BackgroundService
 {
@@ -976,8 +975,7 @@ public sealed class DemoDataResetService : BackgroundService
     /// its own variation. internal so tests can verify it directly.</summary>
     internal static int SeedFor(DateTimeOffset nowUtc) => nowUtc.UtcDateTime.Date.GetHashCode();
 
-    /// <summary>internal so tests can verify the scheduling math without waiting on real time —
-    /// the only production caller is ExecuteAsync above.</summary>
+    /// <summary>internal so tests can verify the scheduling math without waiting on real time -     /// the only production caller is ExecuteAsync above.</summary>
     internal static TimeSpan GetDelayUntilNextReset(DateTimeOffset nowUtc, int resetHourUtc)
     {
         var todayReset = new DateTimeOffset(nowUtc.Year, nowUtc.Month, nowUtc.Day, resetHourUtc, 0, 0, TimeSpan.Zero);
@@ -994,9 +992,9 @@ Expected: PASS
 
 - [ ] **Step 6: Wire demo mode into Program.cs**
 
-In `src/DotMarc/Program.cs`, the registrations that need to become conditional are NOT one contiguous block — the existing `IDmarcDnsChecker` HTTP client registration sits in between two pieces that both need wrapping, and it must stay exactly where it is, unconditional. Make two separate edits:
+In `src/DotMarc/Program.cs`, the registrations that need to become conditional are NOT one contiguous block - the existing `IDmarcDnsChecker` HTTP client registration sits in between two pieces that both need wrapping, and it must stay exactly where it is, unconditional. Make two separate edits:
 
-**Edit A** — replace this existing block (`AddOptions<GraphOptions>()` through the `AddHttpClient<IGraphMailboxClient, ...>` call, i.e. everything from just after `AddDbContextFactory<DotMarcDbContext>` up to — but NOT including — the `AddHttpClient<IDmarcDnsChecker, ...>` call):
+**Edit A** - replace this existing block (`AddOptions<GraphOptions>()` through the `AddHttpClient<IGraphMailboxClient, ...>` call, i.e. everything from just after `AddDbContextFactory<DotMarcDbContext>` up to - but NOT including - the `AddHttpClient<IDmarcDnsChecker, ...>` call):
 
 ```csharp
 builder.Services.AddOptions<GraphOptions>()
@@ -1031,7 +1029,7 @@ if (!demoOptions.Enabled)
 }
 ```
 
-**Edit B** — leave the `AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(...)` call immediately after Edit A's block completely untouched (it's dead weight in demo mode — only `PollingService` ever calls it — but harmless, and leaving it registered keeps this diff smaller). Then replace the block that comes right after it (the `PollingService` comment plus its `AddHostedService<PollingService>` call):
+**Edit B** - leave the `AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(...)` call immediately after Edit A's block completely untouched (it's dead weight in demo mode - only `PollingService` ever calls it - but harmless, and leaving it registered keeps this diff smaller). Then replace the block that comes right after it (the `PollingService` comment plus its `AddHostedService<PollingService>` call):
 
 ```csharp
 // PollingService has two constructors (one for direct test construction, one for the real
@@ -1091,7 +1089,7 @@ else
 }
 ```
 
-Then, in the existing startup block (the `using (var scope = app.Services.CreateScope())` block, after `app.Build()`, that runs migrations and `AccessBootstrapper` — note its line numbers have shifted down by the few lines Task 1 inserted above it), add the synchronous initial/redeploy seed right after the `AccessBootstrapper.BootstrapWithLeaderLockAsync(...)` call, still inside the `using`:
+Then, in the existing startup block (the `using (var scope = app.Services.CreateScope())` block, after `app.Build()`, that runs migrations and `AccessBootstrapper` - note its line numbers have shifted down by the few lines Task 1 inserted above it), add the synchronous initial/redeploy seed right after the `AccessBootstrapper.BootstrapWithLeaderLockAsync(...)` call, still inside the `using`:
 
 ```csharp
     if (demoOptions.Enabled)
@@ -1102,7 +1100,7 @@ Then, in the existing startup block (the `using (var scope = app.Services.Create
     }
 ```
 
-Finally, add the demo sign-in endpoint mapping (Task 6 will fill in its body; for this task, map a stub so the "must 404 when disabled" test below has something meaningful to check once Task 6 lands — add this immediately before `app.MapRazorComponents<DotMarc.Components.App>()` near the end of the file):
+Finally, add the demo sign-in endpoint mapping (Task 6 will fill in its body; for this task, map a stub so the "must 404 when disabled" test below has something meaningful to check once Task 6 lands - add this immediately before `app.MapRazorComponents<DotMarc.Components.App>()` near the end of the file):
 
 ```csharp
 if (demoOptions.Enabled)
@@ -1178,8 +1176,7 @@ public sealed class DemoModeStartupTests : IAsyncLifetime
         await using var factory = CreateFactory(demoEnabled: false).WithWebHostBuilder(builder =>
         {
             // The real (non-demo) app requires Graph/EntraId config to start; provide the
-            // minimum placeholder values so the host builds far enough to route the request —
-            // ValidateOnStart only rejects missing values, not unreachable ones.
+            // minimum placeholder values so the host builds far enough to route the request -             // ValidateOnStart only rejects missing values, not unreachable ones.
             builder.UseSetting("Graph:ClientId", "placeholder");
             builder.UseSetting("Graph:TenantId", "placeholder");
             builder.UseSetting("Graph:ClientSecret", "placeholder");
@@ -1200,12 +1197,12 @@ public sealed class DemoModeStartupTests : IAsyncLifetime
 - [ ] **Step 8: Run tests to verify they pass**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoModeStartupTests`
-Expected: PASS. (`DemoSignInEndpoint_DoesNotExist_WhenDemoModeIsDisabled` currently passes trivially since the endpoint mapping itself is skipped when `demoOptions.Enabled` is false — this is the important guarantee, not an artifact of the stub body.)
+Expected: PASS. (`DemoSignInEndpoint_DoesNotExist_WhenDemoModeIsDisabled` currently passes trivially since the endpoint mapping itself is skipped when `demoOptions.Enabled` is false - this is the important guarantee, not an artifact of the stub body.)
 
 - [ ] **Step 9: Run the full test suite**
 
 Run: `dotnet build dotMARC.sln && dotnet test dotMARC.sln`
-Expected: all tests PASS, including every pre-existing test — confirms the non-demo path is unchanged.
+Expected: all tests PASS, including every pre-existing test - confirms the non-demo path is unchanged.
 
 - [ ] **Step 10: Commit**
 
@@ -1314,7 +1311,7 @@ public sealed class DemoSignInEndpointTests : IAsyncLifetime
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DemoSignInEndpointTests`
-Expected: FAIL — the endpoint currently always returns 404 (Task 5's stub).
+Expected: FAIL - the endpoint currently always returns 404 (Task 5's stub).
 
 - [ ] **Step 3: Replace the stub endpoint in Program.cs**
 
@@ -1351,7 +1348,7 @@ if (demoOptions.Enabled)
         }
 
         // No antiforgery token: the only effect of this endpoint is changing which fixed demo
-        // persona the calling browser's own session views as — there's no cross-user or
+        // persona the calling browser's own session views as - there's no cross-user or
         // cross-tenant side effect a forged request could cause, so skipping CSRF protection
         // here (unlike every other mutating endpoint in this app, which goes through Blazor's
         // own antiforgery-protected form handling) is a deliberate, low-risk simplification.
@@ -1403,7 +1400,7 @@ if (demoOptions.Enabled)
 
         <MudPaper Class="pa-4" Elevation="1">
             <MudText Typo="Typo.h6">Demo Viewer</MudText>
-            <MudText Typo="Typo.body2" Class="mb-2">Scoped to Aurora Retail only — shows what a limited, client-scoped viewer sees.</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">Scoped to Aurora Retail only - shows what a limited, client-scoped viewer sees.</MudText>
             <form method="post" action="/demo/sign-in/viewer">
                 <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Secondary">Continue as Demo Viewer</MudButton>
             </form>
@@ -1417,7 +1414,7 @@ if (demoOptions.Enabled)
         // Defense in depth: this page (and the sign-in endpoint it posts to, which Program.cs
         // only maps when Demo:Enabled is true) only do anything in demo mode. Reachable in the
         // real app only if someone guesses the URL; redirect them away rather than showing a
-        // picker that leads nowhere. Done in OnInitialized rather than inline in markup — calling
+        // picker that leads nowhere. Done in OnInitialized rather than inline in markup - calling
         // NavigationManager.NavigateTo from within BuildRenderTree isn't reliable under
         // interactive server rendering (the mode this whole app uses).
         if (!DemoOptions.Value.Enabled)
@@ -1450,7 +1447,7 @@ Then, inside `<MudAppBar Elevation="1">`, immediately before the existing `<MudS
 {
     <AuthorizeView>
         <Authorized>
-            <MudChip T="string" Color="Color.Warning" Class="mr-2">Demo — viewing as @context.User.Identity?.Name</MudChip>
+            <MudChip T="string" Color="Color.Warning" Class="mr-2">Demo - viewing as @context.User.Identity?.Name</MudChip>
             <MudButton Href="/demo" Color="Color.Inherit">Switch persona</MudButton>
         </Authorized>
     </AuthorizeView>
@@ -1477,7 +1474,7 @@ docker compose up postgres -d
 dotnet run --project src/DotMarc/DotMarc.csproj
 ```
 
-Open `http://localhost:8080` — expect a redirect to `/demo`. Click "Continue as Demo Admin" — expect the Dashboard showing 7 domains across 4 groups with the pass rates/statuses described in the spec. Click "Switch persona" → "Continue as Demo Viewer" — expect the Dashboard to show only the two Aurora Retail domains, and `/access` to redirect to `/AccessDenied`.
+Open `http://localhost:8080` - expect a redirect to `/demo`. Click "Continue as Demo Admin" - expect the Dashboard showing 7 domains across 4 groups with the pass rates/statuses described in the spec. Click "Switch persona" → "Continue as Demo Viewer" - expect the Dashboard to show only the two Aurora Retail domains, and `/access` to redirect to `/AccessDenied`.
 
 - [ ] **Step 9: Commit**
 
@@ -1494,7 +1491,7 @@ git commit -m "Add demo persona picker, sign-in endpoint, and banner"
 - Create: `docker-compose.demo.yml`
 - Modify: `README.md` (new "Demo instance" section)
 
-No automated test for this task — it's infrastructure configuration and documentation. Verification is a manual `docker compose config` syntax check plus (optionally) an actual local run.
+No automated test for this task - it's infrastructure configuration and documentation. Verification is a manual `docker compose config` syntax check plus (optionally) an actual local run.
 
 - [ ] **Step 1: Write docker-compose.demo.yml**
 
@@ -1541,7 +1538,7 @@ volumes:
 - [ ] **Step 2: Verify the compose file's syntax**
 
 Run: `docker compose -f docker-compose.demo.yml config`
-Expected: prints the fully-resolved config with no errors (`DOTMARC_IMAGE`/`POSTGRES_PASSWORD` will show as empty since they're not set in this shell — that's fine, this step only checks YAML/Compose syntax, not that it can actually run).
+Expected: prints the fully-resolved config with no errors (`DOTMARC_IMAGE`/`POSTGRES_PASSWORD` will show as empty since they're not set in this shell - that's fine, this step only checks YAML/Compose syntax, not that it can actually run).
 
 - [ ] **Step 3: Add the README section**
 
@@ -1558,7 +1555,7 @@ fictional MSP is (re)written on every startup and again every night at `Demo__Re
 [docs/superpowers/specs/2026-08-28-demo-instance-design.md](docs/superpowers/specs/2026-08-28-demo-instance-design.md)
 for the full design and the narrative the generated data tells.
 
-No `Graph__*`/`EntraId__*`/`InitialAdmins__Emails` variables are needed in this mode — only
+No `Graph__*`/`EntraId__*`/`InitialAdmins__Emails` variables are needed in this mode - only
 `ConnectionStrings__DotMarc` and `Demo__Enabled`.
 
 ### Running the demo stack
@@ -1575,7 +1572,7 @@ POSTGRES_PASSWORD=<pick a password>
 ```
 
 The `dotmarc-demo` container joins an external Docker network named `proxy` and only `expose`s
-port 8080 — it does not publish a host port or run its own reverse proxy. Point your existing
+port 8080 - it does not publish a host port or run its own reverse proxy. Point your existing
 Caddy instance (on that same `proxy` network) at it, e.g.:
 
 ```
@@ -1585,7 +1582,7 @@ demo.dotmarc.app {
 ```
 
 Deployment to the demo VM is automated by `.github/workflows/demo-deploy.yml` on every push to
-`main` — see that workflow for the required repository secrets/variables.
+`main` - see that workflow for the required repository secrets/variables.
 ```
 
 - [ ] **Step 4: Commit**
@@ -1602,7 +1599,7 @@ git commit -m "Add docker-compose.demo.yml and demo instance documentation"
 **Files:**
 - Create: `.github/workflows/demo-deploy.yml`
 
-No automated test — this is a CI workflow definition; it's validated by actually running (which requires the secrets set up below to exist first).
+No automated test - this is a CI workflow definition; it's validated by actually running (which requires the secrets set up below to exist first).
 
 - [ ] **Step 1: Write the workflow**
 
@@ -1709,7 +1706,7 @@ jobs:
 
 `DOTMARC_DEMO_DOMAIN` is fetched into the job's `env` for documentation/consistency with the
 Caddyfile snippet in the README, even though it isn't otherwise used in the deploy steps (Caddy
-config lives outside this repo, per this plan's Task 7) — it is intentionally a repository
+config lives outside this repo, per this plan's Task 7) - it is intentionally a repository
 **variable**, not a secret: see the reasoning already applied to `DOCKERHUB_USERNAME` in
 `release.yml` (a job output/log containing a secret's value gets silently masked/dropped by the
 Actions runner; a public hostname isn't sensitive and shouldn't risk that).
@@ -1726,7 +1723,7 @@ This workflow needs, on the `homotechsual/dotMARC` repository:
 | `DOTMARC_DEMO_POSTGRES_PASSWORD` | secret | a password for the demo's own Postgres instance (distinct from any other stack's) |
 | `DOTMARC_DEMO_DOMAIN` | **variable** | `demo.dotmarc.app` |
 
-These involve credential material this plan should not generate or guess — set them once, e.g.:
+These involve credential material this plan should not generate or guess - set them once, e.g.:
 
 ```bash
 gh variable set DOTMARC_DEMO_DOMAIN --repo homotechsual/dotMARC --body "demo.dotmarc.app"

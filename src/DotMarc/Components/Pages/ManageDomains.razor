@@ -60,8 +60,8 @@ else
                 <AuthorizeView Policy="DomainsReorder" Context="authState">
                     @* Drag/drop attributes live on plain <div>s, not MudTd itself: MudTd is a
                        MudBlazor component, and whether its attribute splatting forwards
-                       @ondragover:preventDefault correctly to the rendered <td> — with no paired
-                       @ondragover handler — isn't a guarantee Blazor makes for components the way it
+                       @ondragover:preventDefault correctly to the rendered <td> - with no paired
+                       @ondragover handler - isn't a guarantee Blazor makes for components the way it
                        does for elements. A native element sidesteps the question entirely. *@
                     <div draggable="true" @ondragstart="@(() => OnDragStart(context.Id))"
                          @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))"
@@ -277,7 +277,7 @@ else
             }
             catch (Exception)
             {
-                // Leave the row in place — don't optimistically remove it from _domains before
+                // Leave the row in place - don't optimistically remove it from _domains before
                 // the delete has actually succeeded.
                 Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
             }

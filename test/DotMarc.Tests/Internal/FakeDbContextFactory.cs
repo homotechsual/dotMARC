@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DotMarc.Tests.Internal;
 
 /// <summary>A minimal IDbContextFactory<DotMarcDbContext> that always points at the same test
-/// connection string — used where a real class under test (like
+/// connection string - used where a real class under test (like
 /// UserAccessClaimsTransformation) needs to create its own short-lived contexts rather than
 /// being handed one directly.</summary>
 internal sealed class FakeDbContextFactory(string connectionString) : IDbContextFactory<DotMarcDbContext>

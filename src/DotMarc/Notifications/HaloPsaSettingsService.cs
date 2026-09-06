@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DotMarc.Notifications;
 
 /// <summary>Read/update the singleton HaloPsaSettings row. Follows NotificationSettingsService's
-/// convention exactly, plus the client secret's own write path via ISecretStore — the secret
+/// convention exactly, plus the client secret's own write path via ISecretStore - the secret
 /// never travels through the HaloPsaSettings object this returns to a caller.</summary>
 public static class HaloPsaSettingsService
 {

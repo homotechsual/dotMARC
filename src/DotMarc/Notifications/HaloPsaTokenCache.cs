@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace DotMarc.Notifications;
 
 /// <summary>Caches the OAuth2 client_credentials token in memory for the lifetime of this
-/// singleton instance — safe even across multiple Container Apps replicas, since each replica
+/// singleton instance - safe even across multiple Container Apps replicas, since each replica
 /// just acquires its own token independently; no shared/distributed cache is needed at this call
 /// volume (alert-triggered, not a per-request hot path). Keyed on (AuthServerUrl, ClientId) so
 /// that changing the configured Halo credentials from Alert settings naturally misses the old
@@ -36,7 +36,7 @@ public sealed class HaloPsaTokenCache
         }
     }
 
-    /// <summary>Drops the cached token for this settings' credentials, e.g. after a 401 — the next
+    /// <summary>Drops the cached token for this settings' credentials, e.g. after a 401 - the next
     /// <see cref="GetTokenAsync"/> call for the same key acquires a fresh one instead of reusing a
     /// token Halo has already rejected.</summary>
     public async Task InvalidateAsync(HaloPsaSettings settings, CancellationToken cancellationToken)

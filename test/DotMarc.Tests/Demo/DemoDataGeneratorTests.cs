@@ -50,8 +50,8 @@ public sealed class DemoDataGeneratorTests
     }
 
     /// <summary>The Dashboard classifies a domain as "OK" only when DashboardSummary.Build's
-    /// DomainStatistics.GetPassRate — a volume-weighted average over the FULL 30-day window,
-    /// not just the most recent week — clears 0.95. driftwood-events.example (the ungrouped
+    /// DomainStatistics.GetPassRate - a volume-weighted average over the FULL 30-day window,
+    /// not just the most recent week - clears 0.95. driftwood-events.example (the ungrouped
     /// domain, meant only to demonstrate the "no group" dashboard case) and
     /// brightline-legal.example (meant to read as "ramped up and now healthy") both need to
     /// clear that bar across the whole window, not just at the end of it. This is the test that
@@ -118,7 +118,7 @@ public sealed class DemoDataGeneratorTests
 
     /// <summary>Dashboard.razor prominently shows the most recent poll cycle's status. When the
     /// random roll that normally injects a failure never fires, BuildPollCycles' fallback used
-    /// to rewrite cycles[^1] — the MOST RECENT cycle — as a guaranteed failure, making the
+    /// to rewrite cycles[^1] - the MOST RECENT cycle - as a guaranteed failure, making the
     /// demo's landing page show a failed "last poll" on whichever reset happened to miss that
     /// roll. It should rewrite a cycle in the middle of the window instead, so the most recent
     /// poll always reads as healthy. Checked across several seeds so this isn't a lucky draw
@@ -154,7 +154,7 @@ public sealed class DemoDataGeneratorTests
 
     /// <summary>Each domain's MTA-STS state is chosen to match its existing DMARC narrative rather
     /// than being arbitrary: the flagship healthy client is fully rolled out, the struggling
-    /// client's MTA-STS has regressed too, etc. — see DemoDataGenerator.BuildDomain's MTA-STS
+    /// client's MTA-STS has regressed too, etc. - see DemoDataGenerator.BuildDomain's MTA-STS
     /// parameters.</summary>
     [Theory]
     [InlineData("aurora-retail.example", true, MtaStsStatus.Active, MtaStsMode.Enforce)]
@@ -211,11 +211,11 @@ public sealed class DemoDataGeneratorTests
     }
 
     /// <summary>ProblemSourceIp used to derive its IP from domainName.GetHashCode(), which .NET
-    /// Core randomizes per process — a different IP on every container restart, contradicting
+    /// Core randomizes per process - a different IP on every container restart, contradicting
     /// this class's own reproducibility doc comment and the design spec's "a given day's dataset
     /// is reproducible if the container restarts without crossing a reset boundary." It's now
     /// derived from the domain's fixed sortOrder instead, which doesn't depend on Random at all
-    /// — so the same domain gets the same problem-source IP regardless of which seed generated
+    /// - so the same domain gets the same problem-source IP regardless of which seed generated
     /// the rest of that day's dataset.</summary>
     [Fact]
     public void ProblemSourceIp_IsTheSameForAGivenDomain_AcrossDifferentRandomSeeds()
@@ -228,7 +228,7 @@ public sealed class DemoDataGeneratorTests
 
         // Every failing record for this domain, across the whole 30-day window, uses the exact
         // same source IP within one generation (it's derived from the domain's fixed sortOrder,
-        // not from any random draw) — and that IP is identical across two entirely different
+        // not from any random draw) - and that IP is identical across two entirely different
         // seeds, proving it no longer depends on the per-process-randomized
         // string.GetHashCode() it used to.
         Assert.Single(firstIps);

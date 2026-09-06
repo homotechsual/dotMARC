@@ -9,7 +9,7 @@ namespace DotMarc.Data;
 /// completely empty, grants Admin to the emails configured via InitialAdmins:Emails. Guarded by
 /// the same Postgres advisory-lock pattern as DatabaseMigrator, so multiple replicas starting
 /// concurrently don't race each other. Called once at startup, right after migrations run and
-/// before the app serves any request — see Program.cs — so there's no window where the
+/// before the app serves any request - see Program.cs - so there's no window where the
 /// authorization fallback policy (tightened in a later task) is live before this has run.
 /// "Empty UserAccess table" covers both a genuinely fresh deployment and this app's own existing
 /// live deployment picking up the permissions feature for the first time: from the database's
@@ -24,7 +24,7 @@ public static class AccessBootstrapper
     /// changes. The Admin role's permission list is NOT similarly shared: both places derive it
     /// identically via <c>[.. Enum.GetValues&lt;Permission&gt;()]</c>, so there's no equivalent
     /// duplication risk there. It self-syncs when the enum grows because EnsureBuiltInRoleAsync
-    /// backfills a mismatched permission list onto an already-existing locked role (Admin) —
+    /// backfills a mismatched permission list onto an already-existing locked role (Admin) - 
     /// Viewer is excluded from that backfill since, unlike Admin, it's user-editable.</summary>
     public static readonly List<Permission> ViewerPermissions = [Permission.DomainsView, Permission.GroupsView, Permission.TagsView, Permission.AlertsView];
 
@@ -53,7 +53,7 @@ public static class AccessBootstrapper
             {
                 // Distinct (case-insensitively) before inserting: a duplicate or case-variant
                 // entry in InitialAdmins:Emails (e.g. "a@x.com,A@X.com") would otherwise throw on
-                // UserAccess's unique index on Email rather than being silently deduplicated —
+                // UserAccess's unique index on Email rather than being silently deduplicated - 
                 // crashing startup over what's obviously meant as one grant.
                 var emails = options.Value.Emails
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -73,14 +73,14 @@ public static class AccessBootstrapper
                     // The Critical-1-style lockout scenario: no existing grants AND nothing
                     // configured to seed. Every sign-in will be denied by the fallback policy
                     // until a grant is added, and only direct database access can add one at that
-                    // point — this line is what makes that state self-diagnosing from the logs
+                    // point - this line is what makes that state self-diagnosing from the logs
                     // instead of a silent 403 with no explanation.
-                    logger.LogWarning("No access grants exist and InitialAdmins:Emails is empty — every sign-in will be denied until an access grant is added, e.g. directly in the database.");
+                    logger.LogWarning("No access grants exist and InitialAdmins:Emails is empty - every sign-in will be denied until an access grant is added, e.g. directly in the database.");
                 }
             }
             else
             {
-                logger.LogInformation("Skipped seeding initial admins — access grants already exist.");
+                logger.LogInformation("Skipped seeding initial admins - access grants already exist.");
             }
         }
         finally
@@ -96,13 +96,13 @@ public static class AccessBootstrapper
         {
             // Only for a locked (non-UI-editable) role, e.g. Admin: its permission list is a
             // fixed invariant this codebase owns, not something an admin might have deliberately
-            // customized, so it's safe — and necessary — to backfill it back to the current
+            // customized, so it's safe - and necessary - to backfill it back to the current
             // canonical list here. A live deployment whose Admin role was created before a later
             // Permission enum value existed would otherwise stay stuck without it forever: this
             // method's own "only set permissions when creating the row" behavior, unlike what
             // this class's Permissions doc comment claims, does not self-sync an already-existing
             // row just because Enum.GetValues<Permission>() grows. Viewer (isLocked: false) is
-            // deliberately excluded — it's user-editable via ManageAccess.razor, and reconciling
+            // deliberately excluded - it's user-editable via ManageAccess.razor, and reconciling
             // it here on every startup would silently discard that customization.
             if (isLocked && !existing.Permissions.OrderBy(p => p).SequenceEqual(permissions.OrderBy(p => p)))
             {

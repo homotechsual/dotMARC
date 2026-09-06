@@ -194,7 +194,7 @@ public sealed class RdapResponseParserTests
     [Fact]
     public void ParseRange_ExtractsStartAndEndAddress_WhenPresent()
     {
-        // The real RIPE shape for 2a01:111:f403:c207::3 — the whole /31 this address falls
+        // The real RIPE shape for 2a01:111:f403:c207::3 - the whole /31 this address falls
         // within is one registry allocation, so every other address inside it should resolve
         // from the same cached range rather than triggering its own RDAP lookup.
         const string json = """
@@ -227,7 +227,7 @@ public sealed class RdapResponseParserTests
     [Fact]
     public void ParseRange_ReturnsNulls_WhenOnlyOneBoundIsPresent()
     {
-        // A partial/malformed response shouldn't produce a range with an open-ended bound —
+        // A partial/malformed response shouldn't produce a range with an open-ended bound - 
         // that would make the containment check (IpRangeMatcher) match everything above or
         // below it.
         const string json = """{ "objectClassName": "ip network", "startAddress": "203.0.113.0" }""";

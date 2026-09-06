@@ -26,7 +26,7 @@
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField Label="Client secret" @bind-Value="_newCloudflareClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
-                              HelperText="@(_cloudflareSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+                              HelperText="@(_cloudflareSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveCloudflareAsync">Save Cloudflare settings</MudButton>
@@ -46,7 +46,7 @@
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudTextField Label="Client secret" @bind-Value="_newAzureDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
-                              HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+                              HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAzureDnsAsync">Save Azure DNS settings</MudButton>

@@ -13,9 +13,9 @@
 ## Global Constraints
 
 - No new `MtaStsStatus` state and no change to existing state-machine transitions.
-- No caching layer for the verification ID — fetch it fresh on the infrequent paths that need it (page load, DNS push callback), never in `PollingService`'s poll loop.
-- No new `DnsPushOutcome` value — a partial multi-record push failure (one record lands, the other doesn't) returns the same failure outcome the failing record would have returned alone; no rollback of an already-pushed record.
-- Do not add unit test scaffolding (mocks/fakes for `ArmClient`, Cloudflare's `HttpClient`, or MSAL) for `AzureMtaStsHostProvisioner`, `CloudflareDnsPushProvider`, or `AzureDnsPushProvider` — none of the three have any today, and introducing a testing seam for them is out of scope for this fix. `CaddyMtaStsHostProvisioner`'s new method IS trivially testable with zero mocking and gets a test.
+- No caching layer for the verification ID - fetch it fresh on the infrequent paths that need it (page load, DNS push callback), never in `PollingService`'s poll loop.
+- No new `DnsPushOutcome` value - a partial multi-record push failure (one record lands, the other doesn't) returns the same failure outcome the failing record would have returned alone; no rollback of an already-pushed record.
+- Do not add unit test scaffolding (mocks/fakes for `ArmClient`, Cloudflare's `HttpClient`, or MSAL) for `AzureMtaStsHostProvisioner`, `CloudflareDnsPushProvider`, or `AzureDnsPushProvider` - none of the three have any today, and introducing a testing seam for them is out of scope for this fix. `CaddyMtaStsHostProvisioner`'s new method IS trivially testable with zero mocking and gets a test.
 - `IDnsPushProvider.ExchangeAndPushAsync`'s new parameter type is exactly `IReadOnlyList<DnsRecordChange> changes` (not `List<DnsRecordChange>`, not `params`).
 
 ---
@@ -29,7 +29,7 @@
 - Test: `test/DotMarc.Tests/MtaSts/CaddyMtaStsHostProvisionerTests.cs` (new)
 
 **Interfaces:**
-- Produces: `IMtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken cancellationToken)` returning `Task<string?>` — `null` on Caddy, the Container App's `CustomDomainVerificationId` on Azure. Tasks 2 and 5 both consume this.
+- Produces: `IMtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken cancellationToken)` returning `Task<string?>` - `null` on Caddy, the Container App's `CustomDomainVerificationId` on Azure. Tasks 2 and 5 both consume this.
 
 - [ ] **Step 1: Add the method to the interface**
 
@@ -40,7 +40,7 @@ namespace DotMarc.MtaSts;
 
 /// <summary>Provisions (or tears down) whatever the deployment target needs so that
 /// mta-sts.&lt;domain&gt; actually serves over valid TLS, once DNS has been verified. See
-/// CaddyMtaStsHostProvisioner (self-hosted, no-op — Caddy's own on-demand TLS does the work
+/// CaddyMtaStsHostProvisioner (self-hosted, no-op - Caddy's own on-demand TLS does the work
 /// implicitly) and AzureMtaStsHostProvisioner (Container Apps custom domain + managed
 /// certificate).</summary>
 public interface IMtaStsHostProvisioner
@@ -49,7 +49,7 @@ public interface IMtaStsHostProvisioner
     Task TeardownAsync(string domainName, CancellationToken cancellationToken);
 
     /// <summary>The value Azure Container Apps needs at asuid.&lt;custom-domain&gt; TXT before it
-    /// will bind that custom domain — a property of the Container App resource itself, so it is
+    /// will bind that custom domain - a property of the Container App resource itself, so it is
     /// the same value for every domain this deployment hosts. Null on providers (Caddy) that have
     /// no such concept.</summary>
     Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken);
@@ -66,7 +66,7 @@ namespace DotMarc.MtaSts;
 /// <summary>Self-hosted deployments: nothing for the app to actively push. Caddy's on-demand TLS
 /// (configured in the bundled Caddyfile) requests a certificate implicitly the first time a
 /// request for mta-sts.&lt;domain&gt; succeeds through its "ask" callback
-/// (GET /.well-known/mta-sts-ask) — which only returns success once DNS has already been verified
+/// (GET /.well-known/mta-sts-ask) - which only returns success once DNS has already been verified
 /// (see PollingService's MTA-STS cycle), so there's no separate provisioning step to trigger here.
 /// Teardown is equally implicit: once MtaStsEnabled is false, "ask" starts 404ing and Caddy simply
 /// stops renewing that certificate.</summary>
@@ -76,7 +76,7 @@ public sealed class CaddyMtaStsHostProvisioner : IMtaStsHostProvisioner
 
     public Task TeardownAsync(string domainName, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    // Caddy's on-demand TLS never does DNS-based domain-ownership verification — there is no
+    // Caddy's on-demand TLS never does DNS-based domain-ownership verification - there is no
     // per-deployment ID to surface here.
     public Task<string?> GetDomainVerificationIdAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 }
@@ -109,7 +109,7 @@ public sealed class CaddyMtaStsHostProvisionerTests
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "FullyQualifiedName~CaddyMtaStsHostProvisionerTests"`
-Expected: PASS (this is pure addition, nothing to fail against first — no red/green cycle needed for a one-line no-op method).
+Expected: PASS (this is pure addition, nothing to fail against first - no red/green cycle needed for a one-line no-op method).
 
 - [ ] **Step 5: Implement the verification-ID fetch on Azure, and wrap the failing bind call**
 
@@ -125,7 +125,7 @@ Open `src/DotMarc/MtaSts/AzureMtaStsHostProvisioner.cs`. Add `using Azure;` if n
             .FirstOrDefault(d => string.Equals(d.Name, hostname, StringComparison.OrdinalIgnoreCase));
         if (existingBinding is not null && existingBinding.BindingType == ContainerAppCustomDomainBindingType.SniEnabled)
         {
-            // Already fully bound from an earlier cycle — nothing further to do here. Whether the
+            // Already fully bound from an earlier cycle - nothing further to do here. Whether the
             // certificate has actually finished issuing is what the serving self-check
             // (IMtaStsServingVerifier) determines, not this provisioner.
             return;
@@ -135,7 +135,7 @@ Open `src/DotMarc/MtaSts/AzureMtaStsHostProvisioner.cs`. Add `using Azure;` if n
         {
             // Azure requires the hostname already registered as a custom domain on the container
             // app before it will create a managed certificate for it
-            // (RequireCustomHostnameInEnvironment) — so this binds it first with no certificate,
+            // (RequireCustomHostnameInEnvironment) - so this binds it first with no certificate,
             // then creates the certificate below, then rebinds with the certificate attached. A
             // crash between these two steps leaves the binding Disabled with no certificate; the
             // existingBinding check above only short-circuits once it's fully SniEnabled, so the
@@ -148,14 +148,14 @@ Open `src/DotMarc/MtaSts/AzureMtaStsHostProvisioner.cs`. Add `using Azure;` if n
             }
             catch (RequestFailedException ex) when (string.Equals(ex.ErrorCode, "InvalidCustomHostNameValidation", StringComparison.Ordinal))
             {
-                // Azure validates hostname ownership at exactly this call — this is the ARM error
+                // Azure validates hostname ownership at exactly this call - this is the ARM error
                 // the user hits when the asuid.<hostname> TXT record isn't in place yet. Replace
                 // the raw error with the specific fix, using the same verification ID
                 // GetDomainVerificationIdAsync below would return (already loaded on this same
                 // containerApp.Data, so no extra ARM call needed).
                 var verificationId = containerApp.Data.CustomDomainVerificationId;
                 throw new InvalidOperationException(
-                    $"Missing ownership verification record — add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.");
+                    $"Missing ownership verification record - add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.");
             }
         }
 
@@ -172,7 +172,7 @@ Open `src/DotMarc/MtaSts/AzureMtaStsHostProvisioner.cs`. Add `using Azure;` if n
 Then add the new interface method as a new public method anywhere in the class (after `TeardownAsync` is a natural spot):
 
 ```csharp
-    /// <summary>The Container App's own customDomainVerificationId — fixed for the life of the
+    /// <summary>The Container App's own customDomainVerificationId - fixed for the life of the
     /// resource, so the same value is correct for every domain this deployment hosts. Not cached:
     /// this is only called from a page load or a DNS push callback, both human-triggered and
     /// infrequent, never from PollingService's poll loop.</summary>
@@ -256,14 +256,14 @@ Find the existing Azure-only branch inside the `HelpAlert` block (the `@if (stri
         }
 ```
 
-This replaces only the inner `@if` block's contents — the surrounding structure (the outer `@if`/`<text>` for the Azure branch) stays as-is.
+This replaces only the inner `@if` block's contents - the surrounding structure (the outer `@if`/`<text>` for the Azure branch) stays as-is.
 
 - [ ] **Step 3: Build and manually verify**
 
 Run: `dotnet build src/DotMarc/DotMarc.csproj`
 Expected: Build succeeds.
 
-There is no component test harness in this project for Razor pages (checked: no `test/DotMarc.Tests/Components/` directory exists) — this step is manually verified instead, either now or as part of Task 1's manual Azure verification note in the spec. If you have a local `MtaSts__Provisioner=Azure` deployment or the demo/dev environment reachable, load `/mta-sts` and confirm the second record line renders with a real-looking GUID-shaped value; on a `Provisioner=Caddy` deployment (the Docker Compose default), confirm the HelpAlert shows only the CNAME line as before. If neither environment is reachable in this task, note that in your report as a DONE_WITH_CONCERNS — final review will re-check the rendered markup by reading the diff.
+There is no component test harness in this project for Razor pages (checked: no `test/DotMarc.Tests/Components/` directory exists) - this step is manually verified instead, either now or as part of Task 1's manual Azure verification note in the spec. If you have a local `MtaSts__Provisioner=Azure` deployment or the demo/dev environment reachable, load `/mta-sts` and confirm the second record line renders with a real-looking GUID-shaped value; on a `Provisioner=Caddy` deployment (the Docker Compose default), confirm the HelpAlert shows only the CNAME line as before. If neither environment is reachable in this task, note that in your report as a DONE_WITH_CONCERNS - final review will re-check the rendered markup by reading the diff.
 
 - [ ] **Step 4: Commit**
 
@@ -282,7 +282,7 @@ git commit -m "Show the required asuid verification TXT record on Manage MTA-STS
 
 - [ ] **Step 1: Update getting-started.mdx's MTA-STS section**
 
-Open `website/docs/getting-started.mdx`. Find step 3 in the "MTA-STS policy hosting (optional)" section (the one showing the CNAME customers add). Add a new step 4 after it (renumbering isn't needed — Docusaurus/MDX numbered lists don't require sequential literal numbers, but write it as `4.` for readability), just before the "**If something is already bound to port 443/80...**" paragraph:
+Open `website/docs/getting-started.mdx`. Find step 3 in the "MTA-STS policy hosting (optional)" section (the one showing the CNAME customers add). Add a new step 4 after it (renumbering isn't needed - Docusaurus/MDX numbered lists don't require sequential literal numbers, but write it as `4.` for readability), just before the "**If something is already bound to port 443/80...**" paragraph:
 
 ```markdown
 3. For each domain a customer wants hosted, they add one CNAME:
@@ -298,20 +298,20 @@ Open `website/docs/getting-started.mdx`. Find step 3 in the "MTA-STS policy host
    asuid.mta-sts.<their-domain> TXT <this deployment's verification ID>
    ```
 
-   The value is the same for every domain this deployment hosts — find it on the **Manage
+   The value is the same for every domain this deployment hosts - find it on the **Manage
    MTA-STS** page once any domain is enabled, or look it up directly:
 
    ```powershell
    az containerapp show --name <container-app-name> --resource-group <resource-group> --query "properties.customDomainVerificationId" -o tsv
    ```
 
-   Self-hosted (Caddy) deployments don't need this — Caddy's on-demand TLS never checks domain
+   Self-hosted (Caddy) deployments don't need this - Caddy's on-demand TLS never checks domain
    ownership via DNS.
 ```
 
 - [ ] **Step 2: Update mta-sts.mdx's "Enabling a domain" section**
 
-Open `website/docs/mta-sts.mdx`. Find the "Enabling a domain" section (currently reads "That CNAME is the only DNS change needed."). Replace that sentence — it's inaccurate for Azure-hosted instances — with:
+Open `website/docs/mta-sts.mdx`. Find the "Enabling a domain" section (currently reads "That CNAME is the only DNS change needed."). Replace that sentence - it's inaccurate for Azure-hosted instances - with:
 
 ```markdown
 ## Enabling a domain
@@ -324,7 +324,7 @@ mta-sts.<domain> CNAME <the hosting hostname shown on the Manage MTA-STS page>
 
 dotMARC verifies it, provisions a certificate, and starts serving the policy automatically once
 it resolves. If this deployment runs on Azure, one more record is needed before Azure will bind
-the custom domain — the Manage MTA-STS page shows its exact value once you're viewing it, right
+the custom domain - the Manage MTA-STS page shows its exact value once you're viewing it, right
 below the CNAME instructions. Self-hosted deployments need only the CNAME above.
 ```
 
@@ -346,7 +346,7 @@ git commit -m "Document the Azure-only asuid verification TXT record"
 - Modify: `test/DotMarc.Tests/DnsPush/DnsPushProviderLookupTests.cs`
 
 **Interfaces:**
-- Produces: `IDnsPushProvider.ExchangeAndPushAsync(string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)` — signature change from a single `DnsRecordChange change`. Task 5 consumes this.
+- Produces: `IDnsPushProvider.ExchangeAndPushAsync(string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)` - signature change from a single `DnsRecordChange change`. Task 5 consumes this.
 - Behavior: changes are pushed in list order against one token exchange; the first non-`Pushed` result short-circuits and is returned as-is; an empty or all-succeeding list returns `DnsPushResult(DnsPushOutcome.Pushed, null)`.
 
 - [ ] **Step 1: Change the interface signature**
@@ -362,17 +362,17 @@ public sealed record DnsPushResult(DnsPushOutcome Outcome, string? DetailMessage
 
 /// <summary>One implementation per supported DNS provider. The provider's own OAuth client
 /// credentials are DB-backed (CloudflareDnsSettings/AzureDnsSettings), read fresh per call rather
-/// than cached — IsConfiguredAsync/BuildAuthorizationUrlAsync need a DB round trip, which is why
+/// than cached - IsConfiguredAsync/BuildAuthorizationUrlAsync need a DB round trip, which is why
 /// both are async even though they're conceptually simple lookups. Everything about the end-user's
 /// own OAuth exchange stays exactly as stateless as before: nothing about the access token is ever
 /// persisted; it exists only as a local variable for the duration of ExchangeAndPushAsync.</summary>
 public interface IDnsPushProvider
 {
     /// <summary>Matches DetectedDnsProvider and the {provider} route segment in
-    /// /dns-push/{provider}/start|callback — "cloudflare" or "azure-dns".</summary>
+    /// /dns-push/{provider}/start|callback - "cloudflare" or "azure-dns".</summary>
     string ProviderKey { get; }
 
-    /// <summary>False when this provider's OAuth app isn't configured for this deployment — a
+    /// <summary>False when this provider's OAuth app isn't configured for this deployment - a
     /// push attempt against this provider then fails with a "no configured option" message rather
     /// than being attempted.</summary>
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
@@ -381,7 +381,7 @@ public interface IDnsPushProvider
 
     /// <summary>Pushes every change in order against one token exchange (the authorization code is
     /// single-use, so all changes for one push action have to ride the same exchange). Stops at
-    /// the first change that doesn't return Pushed and returns that result — a change already
+    /// the first change that doesn't return Pushed and returns that result - a change already
     /// pushed before a later one fails is NOT rolled back.</summary>
     Task<DnsPushResult> ExchangeAndPushAsync(
         string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken);
@@ -440,7 +440,7 @@ Open `src/DotMarc/DnsPush/CloudflareDnsPushProvider.cs`. Replace the `ExchangeAn
     }
 ```
 
-This replaces the old body of `ExchangeAndPushAsync`, which did the token exchange and then inlined what is now `PushOneChangeAsync`'s body for a single `change`. `CreateRecordAsync`, `UpdateExistingRecordAsync`, `FindZoneIdAsync`, `ExchangeCodeForTokenAsync`, `GetSettingsAsync`, and `ZoneNameFor` are unchanged — only the entry point changed shape.
+This replaces the old body of `ExchangeAndPushAsync`, which did the token exchange and then inlined what is now `PushOneChangeAsync`'s body for a single `change`. `CreateRecordAsync`, `UpdateExistingRecordAsync`, `FindZoneIdAsync`, `ExchangeCodeForTokenAsync`, `GetSettingsAsync`, and `ZoneNameFor` are unchanged - only the entry point changed shape.
 
 - [ ] **Step 3: Update AzureDnsPushProvider to loop over changes**
 
@@ -498,18 +498,18 @@ Open `src/DotMarc/DnsPush/AzureDnsPushProvider.cs`. Replace the `ExchangeAndPush
         if (zone is null)
         {
             return new DnsPushResult(DnsPushOutcome.ZoneNotFound,
-                $"Couldn't find {zoneName} in any subscription you authorized — check you have DNS Zone Contributor rights on it.");
+                $"Couldn't find {zoneName} in any subscription you authorized - check you have DNS Zone Contributor rights on it.");
         }
 
         return await PushRecordAsync(zone, zoneName, change, cancellationToken).ConfigureAwait(false);
     }
 ```
 
-This replaces the old body of `ExchangeAndPushAsync`, which did the MSAL exchange and then inlined what is now `PushOneChangeAsync`'s body for a single `change`. `FindZoneAsync`, `PushRecordAsync`, `ZoneNameFor`, `GetSettingsAsync`, and `FixedTokenCredential` are unchanged — only the entry point changed shape.
+This replaces the old body of `ExchangeAndPushAsync`, which did the MSAL exchange and then inlined what is now `PushOneChangeAsync`'s body for a single `change`. `FindZoneAsync`, `PushRecordAsync`, `ZoneNameFor`, `GetSettingsAsync`, and `FixedTokenCredential` are unchanged - only the entry point changed shape.
 
 - [ ] **Step 4: Update the test double's signature**
 
-Open `test/DotMarc.Tests/DnsPush/DnsPushProviderLookupTests.cs`. Change `FakeDnsPushProvider.ExchangeAndPushAsync`'s parameter from `DnsRecordChange change` to `IReadOnlyList<DnsRecordChange> changes` — it already throws `NotImplementedException` unconditionally, so this is a signature-only change:
+Open `test/DotMarc.Tests/DnsPush/DnsPushProviderLookupTests.cs`. Change `FakeDnsPushProvider.ExchangeAndPushAsync`'s parameter from `DnsRecordChange change` to `IReadOnlyList<DnsRecordChange> changes` - it already throws `NotImplementedException` unconditionally, so this is a signature-only change:
 
 ```csharp
         public Task<DnsPushResult> ExchangeAndPushAsync(string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken) =>
@@ -519,7 +519,7 @@ Open `test/DotMarc.Tests/DnsPush/DnsPushProviderLookupTests.cs`. Change `FakeDns
 - [ ] **Step 5: Build and run existing tests**
 
 Run: `dotnet build src/DotMarc/DotMarc.csproj && dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "FullyQualifiedName~DnsPush"`
-Expected: Build succeeds; all existing `DnsPush` tests pass unchanged (none of them exercise `ExchangeAndPushAsync` directly today, per the spec's testing section — this step confirms the signature change didn't break compilation or any test that does touch the interface, like `DnsPushProviderLookupTests`).
+Expected: Build succeeds; all existing `DnsPush` tests pass unchanged (none of them exercise `ExchangeAndPushAsync` directly today, per the spec's testing section - this step confirms the signature change didn't break compilation or any test that does touch the interface, like `DnsPushProviderLookupTests`).
 
 - [ ] **Step 6: Commit**
 
@@ -540,7 +540,7 @@ git commit -m "Let one DNS push exchange carry multiple record changes"
 
 - [ ] **Step 1: Inject IMtaStsHostProvisioner into the callback endpoint and build a list of changes**
 
-Open `src/DotMarc/Program.cs`. Find the `/dns-push/{provider}/callback` endpoint (starts at line 462). Add `DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner` to its parameter list (the lambda already takes several injected services — add it alongside `IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions`).
+Open `src/DotMarc/Program.cs`. Find the `/dns-push/{provider}/callback` endpoint (starts at line 462). Add `DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner` to its parameter list (the lambda already takes several injected services - add it alongside `IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions`).
 
 Then change the `DnsRecordChange change;` declaration and its three assignment branches to build a `List<DnsRecordChange>` instead. Replace this whole block:
 
@@ -612,7 +612,7 @@ with:
         changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null)];
 
         // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
-        // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
+        // custom domain - see AzureMtaStsHostProvisioner and the design spec's "Fetching the
         // verification ID" section. Caddy has no such requirement, and a null/empty ID (the ARM
         // call failed, or this deployment isn't actually Azure-provisioned) just means the push
         // proceeds with the CNAME alone rather than failing outright.
@@ -677,7 +677,7 @@ A few lines below, find:
     var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, [change], CancellationToken.None);
 ```
 
-(Note: Task 4 already touched this exact line as a compile-fix for its own interface signature change — it wrapped the old `change` variable in a one-element collection expression, `[change]`, to keep the build green before this task's list-building logic existed. That's why the "find" text above shows `[change]` rather than the bare `change` an earlier read of this file might have shown.)
+(Note: Task 4 already touched this exact line as a compile-fix for its own interface signature change - it wrapped the old `change` variable in a one-element collection expression, `[change]`, to keep the build green before this task's list-building logic existed. That's why the "find" text above shows `[change]` rather than the bare `change` an earlier read of this file might have shown.)
 
 Change `[change]` to `changes`:
 
@@ -689,7 +689,7 @@ Change `[change]` to `changes`:
 - [ ] **Step 3: Build**
 
 Run: `dotnet build src/DotMarc/DotMarc.csproj`
-Expected: Build succeeds — this endpoint has no dedicated unit tests today (it's a top-level `MapGet` lambda in `Program.cs`, exercised only through the full app), so a clean build plus Task 4's `DnsPush` test pass are the available verification for this task; final review should re-read the diff for correctness of the branch logic.
+Expected: Build succeeds - this endpoint has no dedicated unit tests today (it's a top-level `MapGet` lambda in `Program.cs`, exercised only through the full app), so a clean build plus Task 4's `DnsPush` test pass are the available verification for this task; final review should re-read the diff for correctness of the branch logic.
 
 - [ ] **Step 4: Commit**
 

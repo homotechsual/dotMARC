@@ -4,9 +4,9 @@ using Azure.Security.KeyVault.Secrets;
 namespace DotMarc.Notifications;
 
 /// <summary>Stores secrets in the Key Vault infra/main.bicep already provisions, one Key Vault
-/// secret per store key — dots aren't valid in Key Vault secret names, so "HaloPsa.ClientSecret"
+/// secret per store key - dots aren't valid in Key Vault secret names, so "HaloPsa.ClientSecret"
 /// becomes "HaloPsa-ClientSecret" (matching the name already in production use). Selected instead
-/// of DatabaseSecretStore when KeyVault:VaultUri is configured (see Program.cs) — requires the
+/// of DatabaseSecretStore when KeyVault:VaultUri is configured (see Program.cs) - requires the
 /// container's managed identity to hold the write role infra/main.bicep grants only when
 /// enableKeyVaultWrite is true. Values never touch Postgres.</summary>
 public sealed class KeyVaultSecretStore : ISecretStore

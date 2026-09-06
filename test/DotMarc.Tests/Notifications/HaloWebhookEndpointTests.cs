@@ -39,7 +39,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         });
 
         // Booting the host with Demo:Enabled=true runs DemoDataSeeder.ResetAsync at startup (see
-        // Program.cs), which truncates and reseeds AlertEvents with its own demo dataset — wiping
+        // Program.cs), which truncates and reseeds AlertEvents with its own demo dataset - wiping
         // out any AlertEvent added before the host boots. Forcing that boot now (CreateClient
         // triggers it) before seeding the alert this test actually exercises keeps the demo reset
         // from wiping it out from under the test.
@@ -118,7 +118,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         var response = await client.PostAsync("/integrations/halopsa/webhook/the-webhook-secret", content);
 
         // The secret was right, so the endpoint must never surface a parse failure as an error
-        // status — a wrong-looking response here could trigger a retry storm from Halo. It must
+        // status - a wrong-looking response here could trigger a retry storm from Halo. It must
         // also not crash the app; nothing throws past the handler.
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);

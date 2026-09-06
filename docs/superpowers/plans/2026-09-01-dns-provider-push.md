@@ -8,7 +8,7 @@ persisted.
 
 **Architecture:** A provider-agnostic core (`DnsRecordChange`, `IDnsProviderDetector`,
 `DmarcRuaMerge`) that's pure and unit-tested, feeding two `IDnsPushProvider` implementations
-(Cloudflare, Azure DNS) that do the actual OAuth exchange and API call — verified live, not mocked,
+(Cloudflare, Azure DNS) that do the actual OAuth exchange and API call - verified live, not mocked,
 same acceptance already made for `AzureMtaStsHostProvisioner`/`MxHostsLookup`. Two new minimal-API
 endpoints in `Program.cs` (`/dns-push/{provider}/start` and `.../callback`) carry a signed,
 short-lived `state` parameter so no server-side session is needed across the redirect.
@@ -21,23 +21,22 @@ short-lived `state` parameter so no server-side session is needed across the red
 ## Global Constraints
 
 - No provider credential, access token, or refresh token is ever written to the database, a cache,
-  or disk — every push re-authenticates from scratch (spec, Non-goals).
+  or disk - every push re-authenticates from scratch (spec, Non-goals).
 - Cloudflare OAuth: authorization endpoint `https://dash.cloudflare.com/oauth2/auth`, token endpoint
   `https://dash.cloudflare.com/oauth2/token`, PKCE `S256`, no `offline_access` scope requested
   (spec, Auth model).
 - Azure DNS: a *third*, separate Entra app registration from the existing mailbox and dashboard
-  apps — never reuse one (spec, Auth model; matches the existing precedent in
+  apps - never reuse one (spec, Auth model; matches the existing precedent in
   `website/docs/getting-started.mdx`).
 - Cloudflare NS suffix → `.ns.cloudflare.com`. Azure DNS NS suffixes → `.azure-dns.com`,
   `.azure-dns.net`, `.azure-dns.org`, `.azure-dns.info` (spec, Provider detection).
-- A misconfigured `_dmarc` TXT record is never overwritten silently — always a before/after diff
+- A misconfigured `_dmarc` TXT record is never overwritten silently - always a before/after diff
   with explicit confirmation (spec, Goals).
 - Where detection fails, the provider isn't Cloudflare/Azure DNS, or that provider's OAuth app
   isn't configured: no push button renders, today's manual instructions are unchanged (spec,
   Non-goals).
 - TDD throughout: RED (failing test) → GREEN (minimal implementation) → commit, for every task that
-  has pure/testable logic. OAuth exchange and provider API calls are the one documented exception —
-  verified live after implementation, not unit-tested (spec, Testing).
+  has pure/testable logic. OAuth exchange and provider API calls are the one documented exception -   verified live after implementation, not unit-tested (spec, Testing).
 
 ---
 
@@ -81,9 +80,9 @@ git commit -m "Add Azure.ResourceManager.Dns package reference"
 **Interfaces:**
 - Produces: `DnsRecordChangeKind` (enum: `Create`, `Merge`), `DnsRecordChange` record with
   properties `Kind`, `RecordType` (string), `Name` (string), `DesiredValue` (string),
-  `ExistingValue` (string?) — consumed by every later task that builds or pushes a record change.
+  `ExistingValue` (string?) - consumed by every later task that builds or pushes a record change.
 
-This is a plain data model with no behavior, so there's no test to write — just create the file.
+This is a plain data model with no behavior, so there's no test to write - just create the file.
 
 - [ ] **Step 1: Create the file**
 
@@ -94,7 +93,7 @@ public enum DnsRecordChangeKind { Create, Merge }
 
 /// <summary>One DNS record change to push, independent of which provider ends up handling it.
 /// ExistingValue is set only for Kind == Merge, where the pushed value replaces (not appends to)
-/// whatever's currently live — see DmarcRuaMerge for how that value is actually built.</summary>
+/// whatever's currently live - see DmarcRuaMerge for how that value is actually built.</summary>
 public sealed record DnsRecordChange(
     DnsRecordChangeKind Kind,
     string RecordType,
@@ -125,8 +124,7 @@ git commit -m "Add DnsRecordChange model"
 
 **Interfaces:**
 - Consumes: nothing (pure function).
-- Produces: `DmarcRuaMerge.TryMerge(string existingValue, string mailboxAddress) : string?` —
-  consumed by Task 11 (DomainDetail.razor's diff dialog) and the callback endpoint in Task 10.
+- Produces: `DmarcRuaMerge.TryMerge(string existingValue, string mailboxAddress) : string?` -   consumed by Task 11 (DomainDetail.razor's diff dialog) and the callback endpoint in Task 10.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -176,7 +174,7 @@ public sealed class DmarcRuaMergeTests
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DmarcRuaMergeTests`
-Expected: FAIL — `DmarcRuaMerge` does not exist.
+Expected: FAIL - `DmarcRuaMerge` does not exist.
 
 - [ ] **Step 3: Implement**
 
@@ -185,12 +183,12 @@ Expected: FAIL — `DmarcRuaMerge` does not exist.
 namespace DotMarc.DnsPush;
 
 /// <summary>Replaces (or appends) the rua= tag in an existing _dmarc TXT record's value, leaving
-/// every other tag untouched — pushing a fix for DmarcCheckStatus.Misconfigured must not silently
+/// every other tag untouched - pushing a fix for DmarcCheckStatus.Misconfigured must not silently
 /// discard tags (sp=, pct=, adkim=, etc.) a customer set on purpose.</summary>
 public static class DmarcRuaMerge
 {
     /// <summary>Returns the merged value, or null if <paramref name="existingValue"/> doesn't even
-    /// start with "v=DMARC1" — not safe to merge into; the caller should offer a full-replacement
+    /// start with "v=DMARC1" - not safe to merge into; the caller should offer a full-replacement
     /// warning instead.</summary>
     public static string? TryMerge(string existingValue, string mailboxAddress)
     {
@@ -245,7 +243,7 @@ git commit -m "Add DmarcRuaMerge for surgical rua= tag repair"
 - Consumes: `HttpClient` (constructor-injected, same shape as `MxHostsLookup`/`MtaStsDnsVerifier`).
 - Produces: `DetectedDnsProvider` (enum: `Unknown`, `Cloudflare`, `AzureDns`),
   `IDnsProviderDetector.DetectAsync(string domainName, CancellationToken) : Task<DetectedDnsProvider>`
-  — consumed by Task 10 (ManageMtaSts.razor) and Task 11 (DomainDetail.razor).
+  - consumed by Task 10 (ManageMtaSts.razor) and Task 11 (DomainDetail.razor).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -337,7 +335,7 @@ public sealed class DnsProviderDetectorTests
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DnsProviderDetectorTests`
-Expected: FAIL — `DnsProviderDetector` does not exist.
+Expected: FAIL - `DnsProviderDetector` does not exist.
 
 - [ ] **Step 3: Implement**
 
@@ -438,12 +436,11 @@ git commit -m "Add DNS provider detection via NS record pattern matching"
 
 **Interfaces:**
 - Consumes: `HttpClient`.
-- Produces: `IDmarcTxtLookup.LookupAsync(string domainName, CancellationToken) : Task<string?>` —
-  the raw, live `_dmarc.<domain>` TXT value, or null if none exists. Consumed by the callback
+- Produces: `IDmarcTxtLookup.LookupAsync(string domainName, CancellationToken) : Task<string?>` -   the raw, live `_dmarc.<domain>` TXT value, or null if none exists. Consumed by the callback
   endpoint (Task 10) and DomainDetail.razor's diff preview (Task 11).
 
 Fetches the record fresh at push time rather than trusting whatever was true when a button
-rendered — if the record changed in between, the merge happens against what's actually live.
+rendered - if the record changed in between, the merge happens against what's actually live.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -507,7 +504,7 @@ public sealed class DmarcTxtLookupTests
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DmarcTxtLookupTests`
-Expected: FAIL — `DmarcTxtLookup` does not exist.
+Expected: FAIL - `DmarcTxtLookup` does not exist.
 
 - [ ] **Step 3: Implement**
 
@@ -528,7 +525,7 @@ using System.Text.Json.Serialization;
 
 namespace DotMarc.DnsPush;
 
-/// <summary>Fetches the raw, currently-live _dmarc.&lt;domain&gt; TXT record value — used only by
+/// <summary>Fetches the raw, currently-live _dmarc.&lt;domain&gt; TXT record value - used only by
 /// the DMARC push flow, to decide Create vs. Merge and build the merged value against whatever's
 /// live right now. Mirrors DmarcDnsChecker's own TXT-fetching logic rather than sharing code with
 /// it, matching this codebase's existing MxHostsLookup/MtaStsDnsVerifier precedent of small,
@@ -591,7 +588,7 @@ git commit -m "Add DmarcTxtLookup for fetching the live _dmarc TXT value"
   `ExpiresAtUtc` DateTimeOffset); `DnsPushStateProtector.Protect(int domainId, string pushTarget,
   string codeVerifier, DateTimeOffset nowUtc) : string` and
   `DnsPushStateProtector.Unprotect(string protectedState, DateTimeOffset nowUtc) : DnsPushState?`
-  — consumed by the two minimal-API endpoints in Task 10.
+  - consumed by the two minimal-API endpoints in Task 10.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -652,7 +649,7 @@ public sealed class DnsPushStateProtectorTests
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter DnsPushStateProtectorTests`
-Expected: FAIL — `DnsPushStateProtector` does not exist.
+Expected: FAIL - `DnsPushStateProtector` does not exist.
 
 - [ ] **Step 3: Implement**
 
@@ -664,7 +661,7 @@ using System.Text;
 namespace DotMarc.DnsPush;
 
 /// <summary>Generates a PKCE code_verifier/code_challenge pair (RFC 7636, S256 method) for the
-/// OAuth authorization-code exchange — used even for these confidential/server-side clients as
+/// OAuth authorization-code exchange - used even for these confidential/server-side clients as
 /// defense in depth on the code exchange, per the design spec.</summary>
 public static class PkceGenerator
 {
@@ -688,7 +685,7 @@ public static class PkceGenerator
 // src/DotMarc/DnsPush/DnsPushState.cs
 namespace DotMarc.DnsPush;
 
-/// <summary>PushTarget is "mta-sts" or "dmarc" — which record kind this push is for. Deliberately
+/// <summary>PushTarget is "mta-sts" or "dmarc" - which record kind this push is for. Deliberately
 /// carries no record VALUE: the callback endpoint re-derives what to push at push time (see
 /// DmarcTxtLookup's doc comment for why), so this only needs enough to know which domain and which
 /// flow, plus the PKCE verifier the /start step generated.</summary>
@@ -708,7 +705,7 @@ using Microsoft.AspNetCore.DataProtection;
 namespace DotMarc.DnsPush;
 
 /// <summary>Encodes a DnsPushState into an opaque, tamper-proof string carried as the OAuth `state`
-/// parameter across the redirect to the provider and back — avoids needing any server-side session
+/// parameter across the redirect to the provider and back - avoids needing any server-side session
 /// between /dns-push/{provider}/start and .../callback. Short-lived (5 minutes): a state value used
 /// after that window is rejected, same reasoning as an OIDC nonce.</summary>
 public sealed class DnsPushStateProtector
@@ -769,12 +766,11 @@ git commit -m "Add PKCE generation and signed DNS push state round-tripping"
   record (`Outcome`, `DetailMessage` string?), `IDnsPushProvider` interface (`ProviderKey` string,
   `IsConfigured` bool, `BuildAuthorizationUrl(string state, string codeChallenge, string
   redirectUri) : string`, `ExchangeAndPushAsync(string code, string codeVerifier, string
-  redirectUri, DnsRecordChange change, CancellationToken) : Task<DnsPushResult>`) —
-  `CloudflareDnsPushProvider` (Task 8) and `AzureDnsPushProvider` (Task 9) implement this.
+  redirectUri, DnsRecordChange change, CancellationToken) : Task<DnsPushResult>`) -   `CloudflareDnsPushProvider` (Task 8) and `AzureDnsPushProvider` (Task 9) implement this.
   `CloudflareDnsOptions` (`ClientId` string?, `ClientSecret` string?) is bound from config in
   Task 10.
 
-No test here — this is an interface and a plain options class, same as `MtaStsOptions`.
+No test here - this is an interface and a plain options class, same as `MtaStsOptions`.
 
 - [ ] **Step 1: Create the files**
 
@@ -787,15 +783,15 @@ public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError }
 public sealed record DnsPushResult(DnsPushOutcome Outcome, string? DetailMessage);
 
 /// <summary>One implementation per supported DNS provider. Every method is stateless from
-/// dotMARC's own perspective — nothing about the OAuth exchange is ever persisted; the access token
+/// dotMARC's own perspective - nothing about the OAuth exchange is ever persisted; the access token
 /// exists only as a local variable for the duration of ExchangeAndPushAsync.</summary>
 public interface IDnsPushProvider
 {
     /// <summary>Matches DetectedDnsProvider and the {provider} route segment in
-    /// /dns-push/{provider}/start|callback — "cloudflare" or "azure-dns".</summary>
+    /// /dns-push/{provider}/start|callback - "cloudflare" or "azure-dns".</summary>
     string ProviderKey { get; }
 
-    /// <summary>False when this provider's OAuth app isn't configured for this deployment — the
+    /// <summary>False when this provider's OAuth app isn't configured for this deployment - the
     /// push button never renders in that case.</summary>
     bool IsConfigured { get; }
 
@@ -810,7 +806,7 @@ public interface IDnsPushProvider
 // src/DotMarc/DnsPush/CloudflareDnsOptions.cs
 namespace DotMarc.DnsPush;
 
-/// <summary>Optional — a deployment that never registers a Cloudflare OAuth client simply never
+/// <summary>Optional - a deployment that never registers a Cloudflare OAuth client simply never
 /// shows the "Push via Cloudflare" button (see CloudflareDnsPushProvider.IsConfigured).</summary>
 public sealed class CloudflareDnsOptions
 {
@@ -842,8 +838,8 @@ git commit -m "Add IDnsPushProvider abstraction and CloudflareDnsOptions"
 
 **Interfaces:**
 - Consumes: `IOptions<CloudflareDnsOptions>`, `HttpClient` (constructor-injected, no fixed
-  `BaseAddress` — it calls both `dash.cloudflare.com` and `api.cloudflare.com`).
-- Produces: `CloudflareDnsPushProvider : IDnsPushProvider` — registered in Task 10.
+  `BaseAddress` - it calls both `dash.cloudflare.com` and `api.cloudflare.com`).
+- Produces: `CloudflareDnsPushProvider : IDnsPushProvider` - registered in Task 10.
 
 No automated test for this task: the OAuth exchange and Cloudflare API calls are exactly the kind
 of external I/O this codebase already accepts as live-verified-only (see
@@ -862,7 +858,7 @@ using Microsoft.Extensions.Options;
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Cloudflare, authenticated via a fresh OAuth 2.0
-/// Authorization Code + PKCE exchange each time — see the design spec's "Auth model" section for
+/// Authorization Code + PKCE exchange each time - see the design spec's "Auth model" section for
 /// why nothing is ever persisted. Endpoints confirmed against Cloudflare's own OIDC discovery
 /// document (https://dash.cloudflare.com/.well-known/openid-configuration); the DNS API itself is
 /// documented at https://developers.cloudflare.com/api/resources/dns/subresources/records/.</summary>
@@ -975,7 +971,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         var recordId = existing?.Result?.FirstOrDefault()?.Id;
         if (recordId is null)
         {
-            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"{change.Name} no longer exists at Cloudflare — it may have been removed since this page loaded.");
+            return new DnsPushResult(DnsPushOutcome.ZoneNotFound, $"{change.Name} no longer exists at Cloudflare - it may have been removed since this page loaded.");
         }
 
         using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/zones/{zoneId}/dns_records/{recordId}")
@@ -990,7 +986,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>dotMARC only ever calls this with a name of the form "mta-sts.&lt;domain&gt;" or
-    /// "_dmarc.&lt;domain&gt;", so stripping the first label always yields the zone name — this
+    /// "_dmarc.&lt;domain&gt;", so stripping the first label always yields the zone name - this
     /// would not generalize to arbitrary multi-label zones, and doesn't need to.</summary>
     private static string ZoneNameFor(string recordName)
     {
@@ -1030,14 +1026,14 @@ git commit -m "Add CloudflareDnsPushProvider"
 
 **Interfaces:**
 - Consumes: `IOptions<AzureDnsOptions>`.
-- Produces: `AzureDnsPushProvider : IDnsPushProvider` — registered in Task 10.
+- Produces: `AzureDnsPushProvider : IDnsPushProvider` - registered in Task 10.
 
 Same live-verification acceptance as Task 8. **Note before starting:** this task uses
 `Azure.ResourceManager.Dns`'s record-set model types (`DnsCnameRecordData`, `DnsTxtRecordData`, and
 their access via `DnsZoneResource`) from memory of the SDK's usual shape, the same way
 `AzureMtaStsHostProvisioner` was written against `Azure.ResourceManager.AppContainers` earlier in
 this project. If a type or member name doesn't match what `Azure.ResourceManager.Dns` 1.1.1 (added
-in Task 1) actually exposes, `dotnet build`'s error will name the real one — adjust to match rather
+in Task 1) actually exposes, `dotnet build`'s error will name the real one - adjust to match rather
 than treating this as a blocker; this is expected, normal iteration against a real SDK, not a
 design problem.
 
@@ -1047,9 +1043,9 @@ design problem.
 // src/DotMarc/DnsPush/AzureDnsOptions.cs
 namespace DotMarc.DnsPush;
 
-/// <summary>Optional — a deployment that never registers this Entra app simply never shows the
+/// <summary>Optional - a deployment that never registers this Entra app simply never shows the
 /// "Push via Azure DNS" button. A THIRD, separate app registration from the existing mailbox and
-/// dashboard ones (see getting-started.mdx) — never reuse an app registration across purposes.</summary>
+/// dashboard ones (see getting-started.mdx) - never reuse an app registration across purposes.</summary>
 public sealed class AzureDnsOptions
 {
     public const string SectionName = "AzureDns";
@@ -1072,7 +1068,7 @@ using Microsoft.Identity.Client;
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Azure DNS via a delegated Entra ID authorization-code
-/// exchange — the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
+/// exchange - the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
 /// access on the target zone; dotMARC never holds a standing grant of its own. Same "nothing
 /// persisted" contract as CloudflareDnsPushProvider.</summary>
 public sealed class AzureDnsPushProvider : IDnsPushProvider
@@ -1132,7 +1128,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         if (zone is null)
         {
             return new DnsPushResult(DnsPushOutcome.ZoneNotFound,
-                $"Couldn't find {zoneName} in any subscription you authorized — check you have DNS Zone Contributor rights on it.");
+                $"Couldn't find {zoneName} in any subscription you authorized - check you have DNS Zone Contributor rights on it.");
         }
 
         return await PushRecordAsync(zone, zoneName, change, cancellationToken).ConfigureAwait(false);
@@ -1187,7 +1183,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>Wraps an access token already obtained via the delegated authorization-code
-    /// exchange above — ArmClient needs a TokenCredential, but there is nothing for it to actually
+    /// exchange above - ArmClient needs a TokenCredential, but there is nothing for it to actually
     /// fetch here; it already has the one token this whole operation is scoped to.</summary>
     private sealed class FixedTokenCredential : TokenCredential
     {
@@ -1231,11 +1227,11 @@ git commit -m "Add AzureDnsPushProvider"
 
 **Interfaces:**
 - Consumes: every type from Tasks 2–9.
-- Produces: `GET /dns-push/{provider}/start`, `GET /dns-push/{provider}/callback` — consumed by
+- Produces: `GET /dns-push/{provider}/start`, `GET /dns-push/{provider}/callback` - consumed by
   Task 11 and Task 12's UI buttons (`Navigation.NavigateTo($"/dns-push/{providerKey}/start?...",
   forceLoad: true)`).
 
-No automated test — this is DI wiring plus two minimal-API endpoints exercising real OAuth/HTTP
+No automated test - this is DI wiring plus two minimal-API endpoints exercising real OAuth/HTTP
 that can't run in CI, same acceptance as the existing `/.well-known/mta-sts*` endpoints.
 
 - [ ] **Step 1: Register the DNS push services**
@@ -1283,7 +1279,7 @@ Immediately after the existing `/.well-known/mta-sts.txt` endpoint block (right 
 
 ```csharp
 // Unlike the two /.well-known/mta-sts* endpoints above, these run under this app's own hostname
-// and DO require the caller to already be signed in — a push is a write action gated by the same
+// and DO require the caller to already be signed in - a push is a write action gated by the same
 // permission its target already needs (MtaStsManage for the CNAME, DomainsEdit for the DMARC TXT
 // record), checked explicitly below since /start doesn't yet know which target it's for from route
 // data alone.
@@ -1405,7 +1401,7 @@ git commit -m "Wire DNS push providers and add the start/callback endpoints"
 
 ---
 
-## Task 11: ManageMtaSts.razor — push button
+## Task 11: ManageMtaSts.razor - push button
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/ManageMtaSts.razor`
@@ -1413,7 +1409,7 @@ git commit -m "Wire DNS push providers and add the start/callback endpoints"
 **Interfaces:**
 - Consumes: `IDnsProviderDetector.DetectAsync`, `IEnumerable<IDnsPushProvider>`.
 
-No automated test — Razor UI in this codebase is verified manually (established precedent
+No automated test - Razor UI in this codebase is verified manually (established precedent
 throughout this project, e.g. the unsaved-changes guard, the MX-hosts sync button).
 
 - [ ] **Step 1: Add the needed injections and using**
@@ -1486,7 +1482,7 @@ private async Task PushCnameAsync(MtaStsRow row)
         var pushProvider = providerKey is null ? null : DnsPushProviders.SingleOrDefault(p => p.ProviderKey == providerKey && p.IsConfigured);
         if (pushProvider is null)
         {
-            Snackbar.Add($"Couldn't find a configured DNS push option for {row.Name} — add the CNAME manually.", Severity.Warning);
+            Snackbar.Add($"Couldn't find a configured DNS push option for {row.Name} - add the CNAME manually.", Severity.Warning);
             return;
         }
 
@@ -1522,12 +1518,12 @@ private void ShowDnsPushResultToast()
             Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
             break;
         case "cancelled":
-            break; // user backed out of the provider's consent screen — no need to say anything
+            break; // user backed out of the provider's consent screen - no need to say anything
         case "zone-not-found":
             Snackbar.Add("Couldn't find that domain in the account you authorized.", Severity.Warning);
             break;
         case "unmergeable":
-            Snackbar.Add("Couldn't safely compute a fix for that record — it needs a manual look.", Severity.Warning);
+            Snackbar.Add("Couldn't safely compute a fix for that record - it needs a manual look.", Severity.Warning);
             break;
         case "error":
             Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
@@ -1556,7 +1552,7 @@ git commit -m "Add DNS push button to Manage MTA-STS"
 
 ---
 
-## Task 12: DomainDetail.razor — push button and diff dialog
+## Task 12: DomainDetail.razor - push button and diff dialog
 
 **Files:**
 - Create: `src/DotMarc/Components/Dialogs/ConfirmDnsRecordPushDialog.razor`
@@ -1612,7 +1608,7 @@ Alongside the existing `@using`/`@inject` lines:
 @inject ISnackbar Snackbar
 ```
 
-(`IDialogService` and `ISnackbar` may already be present from earlier work this session — check
+(`IDialogService` and `ISnackbar` may already be present from earlier work this session - check
 before adding a duplicate `@inject` line.)
 
 - [ ] **Step 3: Add the push button next to `DmarcCheckDetail`**
@@ -1659,7 +1655,7 @@ private async Task PushDmarcRecordAsync()
         var pushProvider = providerKey is null ? null : DnsPushProviders.SingleOrDefault(p => p.ProviderKey == providerKey && p.IsConfigured);
         if (pushProvider is null)
         {
-            Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+            Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
             return;
         }
 
@@ -1673,7 +1669,7 @@ private async Task PushDmarcRecordAsync()
         var merged = existing is null ? null : DmarcRuaMerge.TryMerge(existing, GraphOptions.Value.MailboxAddress);
         if (existing is null || merged is null)
         {
-            Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+            Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
             return;
         }
 
@@ -1735,7 +1731,7 @@ git commit -m "Add DNS push button and diff-confirm dialog to the domain detail 
 - Modify: `website/docs/getting-started.mdx`
 - Modify: `website/docs/mta-sts.mdx`
 
-No test — documentation only.
+No test - documentation only.
 
 - [ ] **Step 1: Add a new getting-started.mdx section**
 
@@ -1745,7 +1741,7 @@ After the existing `### MTA-STS policy hosting (optional)` subsection (under `##
 ### DNS provider push (optional)
 
 If a domain's DNS is hosted on Cloudflare or Azure DNS, dotMARC can push the MTA-STS CNAME or the
-DMARC TXT record straight there instead of you copying it in by hand — authenticated fresh each
+DMARC TXT record straight there instead of you copying it in by hand - authenticated fresh each
 time through that provider's own consent screen, nothing stored.
 
 **Cloudflare**: register a self-managed OAuth client (**Manage account** → **OAuth clients** in the
@@ -1758,7 +1754,7 @@ Cloudflare dashboard), scoped to `Zone.DNS` edit, with a redirect URI of
 | `CloudflareDns__ClientSecret` | The OAuth client's secret |
 
 **Azure DNS**: register a *third*, separate Entra app registration (do not reuse the mailbox or
-dashboard app) — **App registrations** → **New registration**, then **Authentication** → add a
+dashboard app) - **App registrations** → **New registration**, then **Authentication** → add a
 **Web** redirect URI of `https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API
 permissions** → add the delegated **Azure Service Management** → `user_impersonation` permission.
 Set:
@@ -1769,7 +1765,7 @@ Set:
 | `AzureDns__ClientId` | This app registration's client ID |
 | `AzureDns__ClientSecret` | This app registration's client secret |
 
-Both are independently optional — leave either unset and that provider's push button simply never
+Both are independently optional - leave either unset and that provider's push button simply never
 appears, with no other effect on the app.
 ```
 
@@ -1780,7 +1776,7 @@ In the "Enabling a domain" section, after the paragraph describing the CNAME req
 ```markdown
 If this deployment has DNS provider push configured (see [Getting
 Started](./getting-started.mdx#dns-provider-push-optional)) and the domain's DNS is hosted on
-Cloudflare or Azure DNS, a push button appears next to the CNAME instructions instead — it pushes
+Cloudflare or Azure DNS, a push button appears next to the CNAME instructions instead - it pushes
 the record for you via that provider's own consent screen, with nothing stored.
 ```
 

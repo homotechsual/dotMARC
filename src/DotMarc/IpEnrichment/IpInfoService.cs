@@ -12,7 +12,7 @@ namespace DotMarc.IpEnrichment;
 public static class IpInfoService
 {
     /// <summary>How long a NotFound/LookupFailed result is trusted before being retried. An Ok
-    /// result has no expiry — IP block ownership changes rarely enough that re-querying on a
+    /// result has no expiry - IP block ownership changes rarely enough that re-querying on a
     /// schedule isn't worth it, unlike the DMARC DNS check, which re-checks every 24h because DNS
     /// records genuinely do change often.</summary>
     public static readonly TimeSpan FailureRetryWindow = TimeSpan.FromHours(24);
@@ -63,7 +63,7 @@ public static class IpInfoService
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
             // Another concurrent lookup for the same IP (a different domain's Sources tab, or a
-            // different visitor, viewed at the same moment) already inserted this row first —
+            // different visitor, viewed at the same moment) already inserted this row first - 
             // matches this codebase's existing race-handling convention (see
             // PollingService.RecordProcessedMessageAsync). Reload its result rather than throwing.
             context.ChangeTracker.Clear();
@@ -81,7 +81,7 @@ public static class IpInfoService
     /// <summary>Caches the whole allocation block a successful lookup's IP falls within, so
     /// every other IP in that same block resolves from IpRangeMatcher instead of triggering its
     /// own RDAP lookup. Only ever called with an Ok result's bounds (see RdapResponseParser.
-    /// ParseRange) — a NotFound/LookupFailed result has no reliable bounds to cache.</summary>
+    /// ParseRange) - a NotFound/LookupFailed result has no reliable bounds to cache.</summary>
     private static async Task UpsertRangeAsync(DotMarcDbContext context, IpLookupResult result, CancellationToken cancellationToken)
     {
         var existingRange = await context.IpRanges
@@ -108,7 +108,7 @@ public static class IpInfoService
             // different IPs that happen to fall in the same not-yet-cached range (e.g. two of a
             // domain's Sources tab rows viewed in the same page load, each triggering its own
             // background EnrichAsync). Whichever inserted first wins; this one just needs to not
-            // throw — the row it would have written is already there.
+            // throw - the row it would have written is already there.
             context.ChangeTracker.Clear();
         }
     }

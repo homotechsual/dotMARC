@@ -2,7 +2,7 @@ namespace DotMarc.DnsPush;
 
 /// <summary>Shared "does this push need a confirm dialog first" decision, used identically by the
 /// MTA-STS, DMARC, and TLSRPT push handlers. Each caller computes its own existingValue/
-/// proposedValue first (the merge logic differs per record type — DmarcRuaMerge, TlsrptRuaMerge,
+/// proposedValue first (the merge logic differs per record type - DmarcRuaMerge, TlsrptRuaMerge,
 /// or MTA-STS's plain hosting-hostname target); this is only the generic "should I ask first"
 /// step.</summary>
 public static class DnsRecordPushDecision

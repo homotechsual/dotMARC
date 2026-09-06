@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace DotMarc.DnsPush;
 
-/// <summary>Fetches the raw, currently-live value at a DMARC authorization record's name — used
+/// <summary>Fetches the raw, currently-live value at a DMARC authorization record's name - used
 /// only by the "push authorization record" flow, to decide Create vs. Merge/Replace before pushing.
 /// Mirrors DmarcTxtLookup/TlsrptTxtLookup's own DNS-over-HTTPS querying, just against a
 /// caller-supplied name instead of a domain-plus-fixed-prefix (see IDmarcAuthorizationTxtLookup's

@@ -4,18 +4,18 @@
 
 **Goal:** Let a user drag domains into a custom order on the Manage Domains page, with the Dashboard reflecting that same saved order.
 
-**Architecture:** A new `Domain.SortOrder` column, defaulted to `0` for existing rows (no data backfill — every query adds `.ThenBy(d => d.Name)` so ties reproduce today's alphabetical order until something is actually reordered). `DomainManagementService.ReorderAsync` persists a full resequence from a given ID order. Both domain-creation paths (manual add, auto-discovery) append new domains at `max(SortOrder) + 1` rather than `0`. `ManageDomains.razor` gets native HTML5 drag-and-drop on its existing `MudTable` rows (no MudBlazor drop-zone components — those would mean replacing the table with a custom list layout); `Dashboard.razor` just sorts by the same column, read-only.
+**Architecture:** A new `Domain.SortOrder` column, defaulted to `0` for existing rows (no data backfill - every query adds `.ThenBy(d => d.Name)` so ties reproduce today's alphabetical order until something is actually reordered). `DomainManagementService.ReorderAsync` persists a full resequence from a given ID order. Both domain-creation paths (manual add, auto-discovery) append new domains at `max(SortOrder) + 1` rather than `0`. `ManageDomains.razor` gets native HTML5 drag-and-drop on its existing `MudTable` rows (no MudBlazor drop-zone components - those would mean replacing the table with a custom list layout); `Dashboard.razor` just sorts by the same column, read-only.
 
-**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack — no new dependency).
+**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack - no new dependency).
 
 ## Global Constraints
 
-- `Domain.SortOrder` (`int`) is the new column. No data-backfill migration — rely on the DB default (`0`) plus `.ThenBy(d => d.Name)` everywhere `SortOrder` is used for ordering.
-- A domain gets `SortOrder = (max existing SortOrder) + 1` at creation, in both `DomainManagementService.AddDomainAsync` and `PollingService.StoreReportAsync` — never `0`, which would jump it to the front of an existing custom order.
-- `DomainManagementService.ReorderAsync` takes the *full* ordered list of domain IDs and resequences all of them in one save — not a partial/gap-based scheme.
-- No MudBlazor `MudDropContainer`/`MudDropZone` — drag-and-drop is native HTML5 drag events on the existing `MudTable`'s cells, keeping the table's current columns/headers/hover unchanged.
-- Dashboard has no drag capability — it displays whatever order Manage Domains set.
-- No automated test for `ManageDomains.razor`'s drag markup/event wiring or for `Dashboard.razor`'s display — matches this project's established precedent (no Blazor component-rendering test framework anywhere in the suite).
+- `Domain.SortOrder` (`int`) is the new column. No data-backfill migration - rely on the DB default (`0`) plus `.ThenBy(d => d.Name)` everywhere `SortOrder` is used for ordering.
+- A domain gets `SortOrder = (max existing SortOrder) + 1` at creation, in both `DomainManagementService.AddDomainAsync` and `PollingService.StoreReportAsync` - never `0`, which would jump it to the front of an existing custom order.
+- `DomainManagementService.ReorderAsync` takes the *full* ordered list of domain IDs and resequences all of them in one save - not a partial/gap-based scheme.
+- No MudBlazor `MudDropContainer`/`MudDropZone` - drag-and-drop is native HTML5 drag events on the existing `MudTable`'s cells, keeping the table's current columns/headers/hover unchanged.
+- Dashboard has no drag capability - it displays whatever order Manage Domains set.
+- No automated test for `ManageDomains.razor`'s drag markup/event wiring or for `Dashboard.razor`'s display - matches this project's established precedent (no Blazor component-rendering test framework anywhere in the suite).
 
 ---
 
@@ -25,10 +25,10 @@
 - Modify: `src/DotMarc/Data/Domain.cs`
 - Modify: `src/DotMarc/Data/DomainManagementService.cs`
 - Modify: `test/DotMarc.Tests/Data/DomainManagementServiceTests.cs`
-- (generated) `src/DotMarc/Migrations/` — a new EF Core migration
+- (generated) `src/DotMarc/Migrations/` - a new EF Core migration
 
 **Interfaces:**
-- Produces: `Domain.SortOrder : int` and `DomainManagementService.ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default) : Task` — used by Task 3 (`ManageDomains.razor`). `AddDomainAsync`'s append-at-end behavior — used implicitly by Task 4 (nothing calls it directly, but Dashboard's sort depends on it being correct).
+- Produces: `Domain.SortOrder : int` and `DomainManagementService.ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default) : Task` - used by Task 3 (`ManageDomains.razor`). `AddDomainAsync`'s append-at-end behavior - used implicitly by Task 4 (nothing calls it directly, but Dashboard's sort depends on it being correct).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -76,7 +76,7 @@ Add to `test/DotMarc.Tests/Data/DomainManagementServiceTests.cs`, inside the exi
     {
         // Regression coverage for "existing installs don't need a data-backfill migration": rows
         // created directly (bypassing AddDomainAsync's append-at-end logic), the way every domain
-        // that predates this feature exists today, are left at SortOrder's default of 0 — tied.
+        // that predates this feature exists today, are left at SortOrder's default of 0 - tied.
         // The ordering query's secondary key must still produce a sensible, predictable order.
         using var context = CreateContext();
         context.Domains.Add(new Domain { Name = "zebra.com", FirstSeenUtc = DateTimeOffset.UtcNow });
@@ -93,7 +93,7 @@ Add to `test/DotMarc.Tests/Data/DomainManagementServiceTests.cs`, inside the exi
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "ReorderAsync_SetsSortOrderToMatchTheGivenSequence|AddDomainAsync_AppendsToTheEnd_WhenOtherDomainsAlreadyHaveDistinctSortOrder"`
-Expected: FAIL to build — `Domain.SortOrder` and `DomainManagementService.ReorderAsync` don't exist yet.
+Expected: FAIL to build - `Domain.SortOrder` and `DomainManagementService.ReorderAsync` don't exist yet.
 
 - [ ] **Step 3: Add the `SortOrder` field**
 
@@ -118,7 +118,7 @@ to:
         context.Domains.Add(new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsPinned = true, SortOrder = nextSortOrder });
 ```
 
-(The nullable `int?` projection is required for `MaxAsync` to return `null`, rather than throw, when there are no domains yet — `?? -1` then makes the very first domain land at `SortOrder = 0`.)
+(The nullable `int?` projection is required for `MaxAsync` to return `null`, rather than throw, when there are no domains yet - `?? -1` then makes the very first domain land at `SortOrder = 0`.)
 
 - [ ] **Step 5: Add `ReorderAsync`**
 
@@ -126,7 +126,7 @@ In `src/DotMarc/Data/DomainManagementService.cs`, add this method after `SetPinn
 
 ```csharp
     /// <summary>Persists a full custom display order: SortOrder is set to each domain's index in
-    /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme — simple, and
+    /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme - simple, and
     /// correct at the scale (a handful to a few dozen domains) this app is designed for.</summary>
     public static async Task ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default)
     {
@@ -147,7 +147,7 @@ In `src/DotMarc/Data/DomainManagementService.cs`, add this method after `SetPinn
 - [ ] **Step 6: Generate the EF Core migration**
 
 Run: `dotnet ef migrations add AddDomainSortOrder --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
-Expected: creates a new migration under `src/DotMarc/Migrations/` adding the `SortOrder` column (`integer NOT NULL DEFAULT 0`) to the `Domains` table, plus an updated `DotMarcDbContextModelSnapshot.cs`. Review the generated `Up`/`Down` methods to confirm — do not hand-edit the generated files unless something is actually wrong.
+Expected: creates a new migration under `src/DotMarc/Migrations/` adding the `SortOrder` column (`integer NOT NULL DEFAULT 0`) to the `Domains` table, plus an updated `DotMarcDbContextModelSnapshot.cs`. Review the generated `Up`/`Down` methods to confirm - do not hand-edit the generated files unless something is actually wrong.
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
@@ -176,7 +176,7 @@ git commit -m "Add Domain.SortOrder and DomainManagementService.ReorderAsync"
 
 **Interfaces:**
 - Consumes: `Domain.SortOrder` (Task 1).
-- Produces: nothing new — this closes the second (of two) domain-creation path from Global Constraints' append-at-end rule.
+- Produces: nothing new - this closes the second (of two) domain-creation path from Global Constraints' append-at-end rule.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -213,7 +213,7 @@ Add to `test/DotMarc.Tests/Ingestion/PollingServiceTests.cs`, inside the existin
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter PollOnceAsync_AppendsNewlyDiscoveredDomain_AfterExistingCustomOrder`
-Expected: FAIL — the newly-created domain's `SortOrder` is `0` (the field's default), not `2`.
+Expected: FAIL - the newly-created domain's `SortOrder` is `0` (the field's default), not `2`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -358,7 +358,7 @@ to:
         </RowTemplate>
 ```
 
-(`@ondragover:preventDefault="true"` works standalone in Blazor without needing a paired `@ondragover` handler — the browser only allows a drop on an element whose `dragover` default was prevented, so this is required on any cell that should accept a drop. The handle cell and the name cell both accept drops, giving a reasonably-sized target without repeating the two attributes across all six columns.)
+(`@ondragover:preventDefault="true"` works standalone in Blazor without needing a paired `@ondragover` handler - the browser only allows a drop on an element whose `dragover` default was prevented, so this is required on any cell that should accept a drop. The handle cell and the name cell both accept drops, giving a reasonably-sized target without repeating the two attributes across all six columns.)
 
 - [ ] **Step 3: Add the drag handlers**
 
@@ -404,7 +404,7 @@ In the `@code` block, add these two methods and one field, near the other handle
     }
 ```
 
-(`LoadAsync` always runs afterward, success or failure — matching this file's existing `SetPinnedAsync` pattern — so what's on screen always ends up matching what's actually persisted, rather than trusting the client-side reorder alone if the save silently failed.)
+(`LoadAsync` always runs afterward, success or failure - matching this file's existing `SetPinnedAsync` pattern - so what's on screen always ends up matching what's actually persisted, rather than trusting the client-side reorder alone if the save silently failed.)
 
 - [ ] **Step 4: Build to confirm it compiles**
 
@@ -413,7 +413,7 @@ Expected: Build succeeds with no errors.
 
 - [ ] **Step 5: Manual verification**
 
-If the environment allows running the app (`docker compose up postgres` plus `dotnet run --project src/DotMarc/DotMarc.csproj` with the Graph/EntraId env vars set, per the README's Development section) and signing in: on `/domains` with at least three domains, confirm dragging a row by its handle to a new position moves it, that reloading the page keeps the new order, and that `/dashboard` shows domains in that same order. If the environment doesn't allow this (a known, previously-hit limitation in this project's sandboxed environments — no local Postgres port available, no interactive Entra sign-in), report clearly in your report which steps you could and couldn't perform, and why — this is an acceptable, expected limitation, not a blocker.
+If the environment allows running the app (`docker compose up postgres` plus `dotnet run --project src/DotMarc/DotMarc.csproj` with the Graph/EntraId env vars set, per the README's Development section) and signing in: on `/domains` with at least three domains, confirm dragging a row by its handle to a new position moves it, that reloading the page keeps the new order, and that `/dashboard` shows domains in that same order. If the environment doesn't allow this (a known, previously-hit limitation in this project's sandboxed environments - no local Postgres port available, no interactive Entra sign-in), report clearly in your report which steps you could and couldn't perform, and why - this is an acceptable, expected limitation, not a blocker.
 
 - [ ] **Step 6: Commit**
 
@@ -478,7 +478,7 @@ Expected: Build succeeds with no errors.
 
 - [ ] **Step 3: Manual verification**
 
-If the environment allows it (same setup as Task 3's manual step): after reordering domains on `/domains`, confirm `/dashboard`'s table shows them in that same order. If not possible in this environment, report which steps were skipped and why — expected, not a blocker.
+If the environment allows it (same setup as Task 3's manual step): after reordering domains on `/domains`, confirm `/dashboard`'s table shows them in that same order. If not possible in this environment, report which steps were skipped and why - expected, not a blocker.
 
 - [ ] **Step 4: Commit**
 

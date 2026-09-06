@@ -18,8 +18,8 @@
     <script>
         // Firefox refuses to start a drag on an element that isn't natively draggable (e.g. a
         // <td>) unless dataTransfer carries a payload set during dragstart. Blazor Server can't
-        // set this from the C# handler — by the time the server round-trip returns, dragstart has
-        // already finished and dataTransfer is no longer writable — so it has to happen here.
+        // set this from the C# handler - by the time the server round-trip returns, dragstart has
+        // already finished and dataTransfer is no longer writable - so it has to happen here.
         // Guarded on types.length === 0 so it never overwrites a payload something else already set.
         document.addEventListener('dragstart', e => {
             if (e.dataTransfer && e.dataTransfer.types.length === 0) {

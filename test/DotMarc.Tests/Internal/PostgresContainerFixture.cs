@@ -5,8 +5,8 @@ using Xunit;
 namespace DotMarc.Tests.Internal;
 
 /// <summary>One Postgres container shared across the whole test run (starting it is the expensive
-/// part — several seconds), with each test getting its own freshly-created, freshly-migrated
-/// database on that shared container (cheap — a CREATE DATABASE against an already-running server).
+/// part - several seconds), with each test getting its own freshly-created, freshly-migrated
+/// database on that shared container (cheap - a CREATE DATABASE against an already-running server).
 /// This matches the isolation the project's previous per-test temp-file SQLite database gave,
 /// without paying container startup cost per test. Verified during planning: container start,
 /// connect, create/connect-to/query a fresh database, drop it, and dispose the container all
@@ -42,7 +42,7 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
             await using var connection = new NpgsqlConnection(adminConnectionString);
             await connection.OpenAsync();
 
-            // Postgres refuses to drop a database with active connections — terminate any first.
+            // Postgres refuses to drop a database with active connections - terminate any first.
             await using (var terminate = new NpgsqlCommand(
                 $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{databaseName}' AND pid <> pg_backend_pid()", connection))
             {

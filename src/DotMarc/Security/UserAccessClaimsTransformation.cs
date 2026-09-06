@@ -7,10 +7,10 @@ using Microsoft.Identity.Web;
 namespace DotMarc.Security;
 
 /// <summary>Enriches the signed-in user's ClaimsPrincipal with dotMARC-specific authorization
-/// data — one claim per granted Permission, plus one claim per accessible Group ID when the
-/// grant is scoped — looked up via UserAccessManagementService.ResolveAsync. ASP.NET Core
+/// data - one claim per granted Permission, plus one claim per accessible Group ID when the
+/// grant is scoped - looked up via UserAccessManagementService.ResolveAsync. ASP.NET Core
 /// invokes IClaimsTransformation as part of the authentication middleware, once per sign-in,
-/// before the Blazor Server circuit starts — not on every render — so this doesn't add a
+/// before the Blazor Server circuit starts - not on every render - so this doesn't add a
 /// database round-trip to normal page navigation.</summary>
 public sealed class UserAccessClaimsTransformation : IClaimsTransformation
 {
@@ -21,7 +21,7 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
     // many (if any) PermissionClaimType/ScopedGroupClaimType claims that resolution produced. A
     // scopable Role with an empty Permissions list resolves to zero permission claims but N
     // group claims, so the idempotency guard can't infer "already transformed" from
-    // PermissionClaimType's presence alone — that under-counts and lets a second invocation
+    // PermissionClaimType's presence alone - that under-counts and lets a second invocation
     // re-add the group claims, duplicating them.
     private const string ResolvedClaimType = "dotmarc:access-resolved";
 
@@ -38,14 +38,14 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
             return principal;
         }
 
-        // GetObjectId() is Microsoft.Identity.Web's own accessor for the Entra object ID claim —
+        // GetObjectId() is Microsoft.Identity.Web's own accessor for the Entra object ID claim - 
         // preferred over reading a raw claim type string, since it's resilient to the exact
         // claim-type mapping in effect for a given token version/configuration.
         var objectId = principal.GetObjectId();
 
         // Which claim actually carries the signed-in user's email can't be verified without a
         // live Entra sign-in (none available in this environment), and getting it wrong would
-        // silently lock out every user forever — ResolveAsync's email fallback path would never
+        // silently lock out every user forever - ResolveAsync's email fallback path would never
         // match a granted UserAccess row. preferred_username is correct for the common
         // v2.0-token/delegated-flow case this app uses, but this fallback chain reduces the blast
         // radius of that specific claim being absent or empty for some tenant/token

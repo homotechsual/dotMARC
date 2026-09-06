@@ -4,11 +4,11 @@ using DotMarc.Reporting;
 
 namespace DotMarc.Demo;
 
-/// <summary>Pure generator for the "Nova MSP" demo dataset — see
+/// <summary>Pure generator for the "Nova MSP" demo dataset - see
 /// docs/superpowers/specs/2026-08-28-demo-instance-design.md for the narrative this implements,
 /// and this plan's Global Constraints for why it covers 30 days (DomainStatistics.ReportWindow),
 /// not the 60 the spec originally described. Takes no dependencies beyond a Random and the
-/// current time, so it's fully unit-testable without a database — same "pure core, thin I/O
+/// current time, so it's fully unit-testable without a database - same "pure core, thin I/O
 /// adapter" split as DomainStatistics/DmarcReportParser; DemoDataSeeder is the I/O adapter that
 /// writes this output.</summary>
 public static class DemoDataGenerator
@@ -58,7 +58,7 @@ public static class DemoDataGenerator
                 tlsrptCheckDetail: "_smtp._tls.cobalt-freight.example's rua= does not point at the configured mailbox",
                 tlsrptDailyFailedSessions: [12, 15, 9, 18, 14],
                 spfCheckStatus: SpfCheckStatus.MultipleRecords,
-                spfCheckDetail: "cobalt-freight.example has 2 SPF records — RFC 7208 requires exactly one",
+                spfCheckDetail: "cobalt-freight.example has 2 SPF records - RFC 7208 requires exactly one",
                 mxCheckStatus: MxCheckStatus.UnresolvableTarget,
                 mxCheckDetail: "MX target(s) do not resolve: mail.cobalt-freight.example",
                 dkimSelectors: ["selector1"],
@@ -164,7 +164,7 @@ public static class DemoDataGenerator
 
     /// <summary>One report per entry in dailyFailedSessions, oldest first, covering that many
     /// most-recent days (e.g. a 5-entry array covers the last 5 days, entry 0 being 5 days ago and
-    /// the last entry being yesterday) — TLSRPT reports are daily, unlike DMARC's own aggregate
+    /// the last entry being yesterday) - TLSRPT reports are daily, unlike DMARC's own aggregate
     /// window. A day with 0 failed sessions gets no FailureDetail; a day with failures gets one,
     /// pointing at the same mail.&lt;domain&gt; hostname MTA-STS's own MxHosts use, so a reader
     /// sees one consistent story rather than two unrelated hostnames.</summary>
@@ -274,8 +274,7 @@ public static class DemoDataGenerator
             cursor = cursor.AddMinutes(15);
         }
 
-        // Guarantee the injected failure exists even if the random roll above never hit it —
-        // the test suite (and a visitor looking at the poll status page) expects at least one,
+        // Guarantee the injected failure exists even if the random roll above never hit it -         // the test suite (and a visitor looking at the poll status page) expects at least one,
         // for texture, without depending on a low-probability random draw. Rewrite a cycle in
         // the MIDDLE of the window rather than the last one: Dashboard.razor shows the most
         // recent poll cycle's status prominently, so forcing the failure onto cycles[^1] would

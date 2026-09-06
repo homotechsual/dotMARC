@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace DotMarc.DnsPush;
 
-/// <summary>Fetches the raw, currently-live _dmarc.&lt;domain&gt; TXT record value — used only by
+/// <summary>Fetches the raw, currently-live _dmarc.&lt;domain&gt; TXT record value - used only by
 /// the DMARC push flow, to decide Create vs. Merge and build the merged value against whatever's
 /// live right now. Mirrors DmarcDnsChecker's own TXT-fetching logic rather than sharing code with
 /// it, matching this codebase's existing MxHostsLookup/MtaStsDnsVerifier precedent of small,

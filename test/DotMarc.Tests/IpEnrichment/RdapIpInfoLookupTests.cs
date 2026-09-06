@@ -46,7 +46,7 @@ public sealed class RdapIpInfoLookupTests
     public async Task LookupAsync_RequestsTheExpectedRdapPath_ForAnIPv6Address()
     {
         // Reproduces the live bug: Uri.EscapeDataString percent-encodes ':' to '%3A', and
-        // rdap.org's redirector 400s on that — every IPv6 lookup failed as a result. The path
+        // rdap.org's redirector 400s on that - every IPv6 lookup failed as a result. The path
         // must carry literal colons (legal unescaped in a URL path segment per RFC 3986).
         var (lookup, handler) = CreateLookup();
         handler.ResponseBody = "{}";

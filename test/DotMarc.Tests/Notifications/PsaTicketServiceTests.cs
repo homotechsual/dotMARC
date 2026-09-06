@@ -102,7 +102,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         context.Domains.Add(domain);
 
         // An earlier alert for the same domain+type, still unresolved, already has an open Halo
-        // ticket — this is what a cooldown-driven re-fire of AlertingService.EnsureAlertAsync looks
+        // ticket - this is what a cooldown-driven re-fire of AlertingService.EnsureAlertAsync looks
         // like for a domain that's stayed unhealthy across multiple cooldown windows.
         var earlierAlert = new AlertEvent
         {

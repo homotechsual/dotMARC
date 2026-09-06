@@ -4,19 +4,19 @@
 
 **Goal:** Persist per-poll-cycle outcomes (last polled time, message/report counts, success/error) so the Dashboard can show whether `PollingService` is actually working, and show that most recent status in a new panel below the domain table.
 
-**Architecture:** Two new EF Core entities (`PollCycle` raw history, `PollCycleDailySummary` permanent daily rollup). `PollingService`'s existing per-message loop starts counting instead of discarding the counts; `RunPollCycleAsync` writes one `PollCycle` row per cycle it actually runs (success or failure), then an inline prune-and-rollup step folds any row more than 7 days old into its day's summary and deletes it. `Dashboard.razor` reads the single latest `PollCycle` row the same way it already reads everything else — a fresh `IDbContextFactory`-created context per load.
+**Architecture:** Two new EF Core entities (`PollCycle` raw history, `PollCycleDailySummary` permanent daily rollup). `PollingService`'s existing per-message loop starts counting instead of discarding the counts; `RunPollCycleAsync` writes one `PollCycle` row per cycle it actually runs (success or failure), then an inline prune-and-rollup step folds any row more than 7 days old into its day's summary and deletes it. `Dashboard.razor` reads the single latest `PollCycle` row the same way it already reads everything else - a fresh `IDbContextFactory`-created context per load.
 
-**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack — no new dependency).
+**Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, xUnit + Testcontainers.PostgreSql (existing stack - no new dependency).
 
 ## Global Constraints
 
-- "Last polled" timestamp is formatted with .NET's `"O"` (round-trip) format specifier — a valid ISO 8601 timestamp.
-- Raw `PollCycle` history is kept 7 days, anchored to UTC calendar-day boundaries (a day is only rolled up once it's fully closed out — no partial-day merge across multiple prune passes).
-- `PollCycleDailySummary` rows are kept indefinitely (small — one row per day, not per cycle).
+- "Last polled" timestamp is formatted with .NET's `"O"` (round-trip) format specifier - a valid ISO 8601 timestamp.
+- Raw `PollCycle` history is kept 7 days, anchored to UTC calendar-day boundaries (a day is only rolled up once it's fully closed out - no partial-day merge across multiple prune passes).
+- `PollCycleDailySummary` rows are kept indefinitely (small - one row per day, not per cycle).
 - A poll cycle skipped because another replica holds the leader lock writes no `PollCycle` row.
-- No UI history/trend view is built — the Dashboard shows only the single latest `PollCycle` row. `PollCycleDailySummary` data isn't surfaced anywhere yet.
+- No UI history/trend view is built - the Dashboard shows only the single latest `PollCycle` row. `PollCycleDailySummary` data isn't surfaced anywhere yet.
 - No alerting (email/webhook) on a failed or overdue cycle.
-- No change to `ParseFailure`'s own per-message retry/dedup behavior — this only adds cycle-level counting around the existing logic.
+- No change to `ParseFailure`'s own per-message retry/dedup behavior - this only adds cycle-level counting around the existing logic.
 
 ---
 
@@ -27,10 +27,10 @@
 - Create: `src/DotMarc/Data/PollCycleDailySummary.cs`
 - Modify: `src/DotMarc/Data/DotMarcDbContext.cs`
 - Modify: `test/DotMarc.Tests/Data/DotMarcDbContextTests.cs`
-- (generated) `src/DotMarc/Migrations/` — a new EF Core migration
+- (generated) `src/DotMarc/Migrations/` - a new EF Core migration
 
 **Interfaces:**
-- Produces: `DotMarc.Data.PollCycle` (`Id`, `PolledUtc`, `MessagesChecked`, `ReportsParsed`, `ParseFailures`, `Succeeded`, `ErrorMessage`) and `DotMarc.Data.PollCycleDailySummary` (`Id`, `Date`, `TotalCycles`, `SuccessfulCycles`, `FailedCycles`, `TotalMessagesChecked`, `TotalReportsParsed`, `TotalParseFailures`), plus `DotMarcDbContext.PollCycles`/`PollCycleDailySummaries` — used by Task 2 (`PollingService`) and Task 4 (`Dashboard.razor`).
+- Produces: `DotMarc.Data.PollCycle` (`Id`, `PolledUtc`, `MessagesChecked`, `ReportsParsed`, `ParseFailures`, `Succeeded`, `ErrorMessage`) and `DotMarc.Data.PollCycleDailySummary` (`Id`, `Date`, `TotalCycles`, `SuccessfulCycles`, `FailedCycles`, `TotalMessagesChecked`, `TotalReportsParsed`, `TotalParseFailures`), plus `DotMarcDbContext.PollCycles`/`PollCycleDailySummaries` - used by Task 2 (`PollingService`) and Task 4 (`Dashboard.razor`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -80,7 +80,7 @@ Add to `test/DotMarc.Tests/Data/DotMarcDbContextTests.cs`, inside the existing `
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "CanInsertAndQuery_PollCycle|PollCycleDailySummary_DateMustBeUnique"`
-Expected: FAIL to build — `PollCycle`/`PollCycleDailySummary`/`DotMarcDbContext.PollCycles`/`PollCycleDailySummaries` don't exist yet.
+Expected: FAIL to build - `PollCycle`/`PollCycleDailySummary`/`DotMarcDbContext.PollCycles`/`PollCycleDailySummaries` don't exist yet.
 
 - [ ] **Step 3: Create the entities**
 
@@ -90,7 +90,7 @@ Create `src/DotMarc/Data/PollCycle.cs`:
 namespace DotMarc.Data;
 
 /// <summary>One row per poll cycle that actually ran (a cycle skipped because another replica held
-/// the leader lock — see PollingService.RunPollCycleAsync — writes nothing here; "last polled"
+/// the leader lock - see PollingService.RunPollCycleAsync - writes nothing here; "last polled"
 /// should reflect when polling actually happened, not a skip). Raw rows are kept for 7 days, then
 /// rolled up into PollCycleDailySummary and deleted (see PollingService.RollUpStalePollCyclesAsync).</summary>
 public sealed class PollCycle
@@ -112,7 +112,7 @@ namespace DotMarc.Data;
 
 /// <summary>One row per UTC calendar day, created/updated only once that day's raw PollCycle rows
 /// are more than 7 days old and get rolled up (see PollingService.RollUpStalePollCyclesAsync). Kept
-/// indefinitely — small compared to the raw rows it replaces (one row per day instead of one row
+/// indefinitely - small compared to the raw rows it replaces (one row per day instead of one row
 /// per poll cycle).</summary>
 public sealed class PollCycleDailySummary
 {
@@ -153,7 +153,7 @@ And add this configuration inside `OnModelCreating`, alongside the existing `mod
 - [ ] **Step 5: Generate the EF Core migration**
 
 Run: `dotnet ef migrations add AddPollCycleTracking --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
-Expected: creates three new files under `src/DotMarc/Migrations/` (a `..._AddPollCycleTracking.cs`, its `.Designer.cs`, and an updated `DotMarcDbContextModelSnapshot.cs`). This uses the project's already-configured local `dotnet-ef` tool (`.config/dotnet-tools.json`) — no separate install step needed. The command builds the project and inspects the real model, so review the generated migration's `Up`/`Down` methods to confirm they create exactly the `PollCycles` and `PollCycleDailySummaries` tables with the indexes from Step 4 — do not hand-edit the generated files unless something is actually wrong.
+Expected: creates three new files under `src/DotMarc/Migrations/` (a `..._AddPollCycleTracking.cs`, its `.Designer.cs`, and an updated `DotMarcDbContextModelSnapshot.cs`). This uses the project's already-configured local `dotnet-ef` tool (`.config/dotnet-tools.json`) - no separate install step needed. The command builds the project and inspects the real model, so review the generated migration's `Up`/`Down` methods to confirm they create exactly the `PollCycles` and `PollCycleDailySummaries` tables with the indexes from Step 4 - do not hand-edit the generated files unless something is actually wrong.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -183,11 +183,11 @@ git commit -m "Add PollCycle and PollCycleDailySummary entities"
 
 **Interfaces:**
 - Consumes: `PollCycle` entity and `DotMarcDbContext.PollCycles` (Task 1).
-- Produces: a `PollCycle` row written by `RunPollCycleAsync` after every cycle it actually executes (not one it skipped due to the leader lock) — used by Task 3 (rollup, reading the same table) and Task 4 (`Dashboard.razor`, reading the latest row).
+- Produces: a `PollCycle` row written by `RunPollCycleAsync` after every cycle it actually executes (not one it skipped due to the leader lock) - used by Task 3 (rollup, reading the same table) and Task 4 (`Dashboard.razor`, reading the latest row).
 
 - [ ] **Step 1: Write the failing tests**
 
-Add a failure-simulation flag to `test/DotMarc.Tests/Internal/FakeGraphMailboxClient.cs` — change:
+Add a failure-simulation flag to `test/DotMarc.Tests/Internal/FakeGraphMailboxClient.cs` - change:
 
 ```csharp
     public Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken) =>
@@ -212,13 +212,13 @@ to:
 
 Then, in `test/DotMarc.Tests/Ingestion/PollingServiceLeaderLockTests.cs`:
 
-Extend the existing `RunPollCycleAsync_SkipsPolling_WhenAnotherInstanceHoldsTheLeaderLock` test — inside its `using (var verify = CreateContext())` block, add one line after the existing `Assert.Empty(verify.Reports);`:
+Extend the existing `RunPollCycleAsync_SkipsPolling_WhenAnotherInstanceHoldsTheLeaderLock` test - inside its `using (var verify = CreateContext())` block, add one line after the existing `Assert.Empty(verify.Reports);`:
 
 ```csharp
             Assert.Empty(verify.PollCycles);
 ```
 
-Extend the existing `RunPollCycleAsync_ProcessesMessages_WhenTheLeaderLockIsFree` test — replace its body's verify block:
+Extend the existing `RunPollCycleAsync_ProcessesMessages_WhenTheLeaderLockIsFree` test - replace its body's verify block:
 
 ```csharp
         using (var verify = CreateContext())
@@ -294,7 +294,7 @@ Add two new `[Fact]` methods to the same class:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter PollingServiceLeaderLockTests`
-Expected: FAIL — `verify.PollCycles` is empty/missing where the new assertions expect rows (the production code doesn't write them yet).
+Expected: FAIL - `verify.PollCycles` is empty/missing where the new assertions expect rows (the production code doesn't write them yet).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -379,7 +379,7 @@ to:
     }
 ```
 
-(The public one-argument `PollOnceAsync(CancellationToken)` wrapper and its callers in `PollingServiceTests.cs`/`PollingServiceDiActivationTests.cs` need no change — it's declared to return plain `Task`, and `Task<PollCycleCounts>` is a `Task`, so forwarding the now-`Task<PollCycleCounts>`-returning private call still compiles unchanged.)
+(The public one-argument `PollOnceAsync(CancellationToken)` wrapper and its callers in `PollingServiceTests.cs`/`PollingServiceDiActivationTests.cs` need no change - it's declared to return plain `Task`, and `Task<PollCycleCounts>` is a `Task`, so forwarding the now-`Task<PollCycleCounts>`-returning private call still compiles unchanged.)
 
 Change `RunPollCycleAsync` from:
 
@@ -423,8 +423,8 @@ Add this new private method after `RunPollCycleAsync` (before the private `PollO
 
 ```csharp
     /// <summary>Writes one PollCycle row for a cycle that actually ran (never for one skipped due
-    /// to the leader lock — see RunPollCycleAsync). Rollup of stale rows happens here too, inline,
-    /// rather than as a separate scheduled job — see RollUpStalePollCyclesAsync.</summary>
+    /// to the leader lock - see RunPollCycleAsync). Rollup of stale rows happens here too, inline,
+    /// rather than as a separate scheduled job - see RollUpStalePollCyclesAsync.</summary>
     private static async Task RecordPollCycleAsync(DotMarcDbContext context, PollCycleCounts counts, bool succeeded, string? errorMessage, CancellationToken cancellationToken)
     {
         context.PollCycles.Add(new PollCycle
@@ -467,7 +467,7 @@ git commit -m "Record poll cycle outcomes (counts, success/failure) as PollCycle
 
 **Interfaces:**
 - Consumes: `PollCycle`, `PollCycleDailySummary` entities (Task 1).
-- Produces: `PollingService.RollUpStalePollCyclesAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) : Task` — `internal static` so tests can call it directly with hand-seeded, backdated rows (the production caller, `RecordPollCycleAsync`, always stamps `PolledUtc` as "now," so backdating can only happen by seeding rows directly in a test).
+- Produces: `PollingService.RollUpStalePollCyclesAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) : Task` - `internal static` so tests can call it directly with hand-seeded, backdated rows (the production caller, `RecordPollCycleAsync`, always stamps `PolledUtc` as "now," so backdating can only happen by seeding rows directly in a test).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -585,7 +585,7 @@ public sealed class PollCycleRollupTests : IAsyncLifetime
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter PollCycleRollupTests`
-Expected: FAIL to build — `PollingService.RollUpStalePollCyclesAsync` doesn't exist yet.
+Expected: FAIL to build - `PollingService.RollUpStalePollCyclesAsync` doesn't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -594,7 +594,7 @@ In `src/DotMarc/Ingestion/PollingService.cs`, add this method after `RecordPollC
 ```csharp
     /// <summary>Folds any PollCycle row belonging to a UTC calendar day more than 7 days in the
     /// past into that day's PollCycleDailySummary, then deletes the raw rows. internal (not
-    /// private) so tests can call it directly against hand-seeded, backdated rows — the only
+    /// private) so tests can call it directly against hand-seeded, backdated rows - the only
     /// production caller, RecordPollCycleAsync, always writes PolledUtc as "now," so there's no
     /// other way to exercise the &gt;7-day-old path deterministically. Anchored to a calendar-day
     /// boundary rather than a rolling timestamp: a day is only eligible once every one of its rows
@@ -639,7 +639,7 @@ In `src/DotMarc/Ingestion/PollingService.cs`, add this method after `RecordPollC
     }
 ```
 
-Then wire it into `RecordPollCycleAsync` (from Task 2) — add one line at the end of the method, after the existing `await context.SaveChangesAsync(...)`:
+Then wire it into `RecordPollCycleAsync` (from Task 2) - add one line at the end of the method, after the existing `await context.SaveChangesAsync(...)`:
 
 ```csharp
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -654,7 +654,7 @@ Expected: PASS.
 - [ ] **Step 5: Run the full test suite to confirm no regressions**
 
 Run: `dotnet test dotMARC.sln`
-Expected: PASS. (This also confirms Task 2's tests still pass now that every recorded cycle also triggers a rollup check — they should, since none of Task 2's test data is more than 7 days old.)
+Expected: PASS. (This also confirms Task 2's tests still pass now that every recorded cycle also triggers a rollup check - they should, since none of Task 2's test data is more than 7 days old.)
 
 - [ ] **Step 6: Commit**
 
@@ -673,7 +673,7 @@ git commit -m "Roll up PollCycle rows older than 7 days into PollCycleDailySumma
 **Interfaces:**
 - Consumes: `DotMarcDbContext.PollCycles` (Task 1); `IDbContextFactory<DotMarcDbContext>` (already injected in this file).
 
-This task has no automated tests: consistent with `ManageDomains.razor`/`ConfirmDeleteDomainDialog.razor` (this project has no Blazor component-rendering test framework — no bUnit anywhere in the suite). Verification is a build check plus a manual check when the environment allows one.
+This task has no automated tests: consistent with `ManageDomains.razor`/`ConfirmDeleteDomainDialog.razor` (this project has no Blazor component-rendering test framework - no bUnit anywhere in the suite). Verification is a build check plus a manual check when the environment allows one.
 
 - [ ] **Step 1: Add the panel markup**
 
@@ -745,7 +745,7 @@ Expected: Build succeeds with no errors.
 
 - [ ] **Step 4: Manual verification**
 
-If the environment allows running the app (`docker compose up postgres` plus `dotnet run --project src/DotMarc/DotMarc.csproj` with the Graph/EntraId env vars set, per the README's Development section) and signing in: confirm the new "Polling status" panel appears below the domain table, shows "Not polled yet." before the background service's first cycle completes, then updates to show a real ISO 8601 timestamp and counts once it has. If the environment doesn't allow this (no local Postgres port available, no interactive Entra sign-in — a known, previously-hit limitation in this project's sandboxed environments), report clearly in your report which steps you could and couldn't perform, and why — this is an acceptable, expected limitation, not a blocker.
+If the environment allows running the app (`docker compose up postgres` plus `dotnet run --project src/DotMarc/DotMarc.csproj` with the Graph/EntraId env vars set, per the README's Development section) and signing in: confirm the new "Polling status" panel appears below the domain table, shows "Not polled yet." before the background service's first cycle completes, then updates to show a real ISO 8601 timestamp and counts once it has. If the environment doesn't allow this (no local Postgres port available, no interactive Entra sign-in - a known, previously-hit limitation in this project's sandboxed environments), report clearly in your report which steps you could and couldn't perform, and why - this is an acceptable, expected limitation, not a blocker.
 
 - [ ] **Step 5: Commit**
 

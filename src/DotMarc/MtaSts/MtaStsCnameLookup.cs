@@ -3,11 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace DotMarc.MtaSts;
 
-/// <summary>Fetches the raw, currently-live mta-sts.&lt;domain&gt; CNAME target — used by the
+/// <summary>Fetches the raw, currently-live mta-sts.&lt;domain&gt; CNAME target - used by the
 /// MTA-STS push flow to decide Create vs. Merge before pushing, the same way
 /// DmarcTxtLookup/TlsrptTxtLookup already do for their record types. A CNAME here is MTA-STS's own
 /// normal, expected record type (unlike DMARC/TLSRPT, where finding one instead of a plain TXT
-/// record means third-party delegation) — there is no delegation concept for this lookup.</summary>
+/// record means third-party delegation) - there is no delegation concept for this lookup.</summary>
 public sealed class MtaStsCnameLookup : IMtaStsCnameLookup
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

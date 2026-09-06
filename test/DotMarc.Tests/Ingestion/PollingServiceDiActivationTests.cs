@@ -12,7 +12,7 @@ namespace DotMarc.Tests.Ingestion;
 
 /// <summary>Regression test for a Critical bug found in review: PollingService originally had two
 /// 3-parameter constructors, and the plan's assumption that DI would unambiguously pick the host
-/// constructor was wrong — both IGraphMailboxClient (Task 5) and DotMarcDbContext (Task 2) are
+/// constructor was wrong - both IGraphMailboxClient (Task 5) and DotMarcDbContext (Task 2) are
 /// also registered in the app's DI container, so both constructors had every parameter type
 /// resolvable.
 ///
@@ -20,7 +20,7 @@ namespace DotMarc.Tests.Ingestion;
 /// 1. Plain `services.AddSingleton&lt;PollingService&gt;()` / `AddHostedService&lt;PollingService&gt;()`
 ///    (which activates via the container's own built-in constructor-selection logic) throws
 ///    `InvalidOperationException: ... ambiguous` even with `[ActivatorUtilitiesConstructor]` present
-///    on the host constructor — the built-in container's own selection algorithm does NOT consult
+///    on the host constructor - the built-in container's own selection algorithm does NOT consult
 ///    that attribute; it is only honored by `ActivatorUtilities.CreateInstance`/`CreateFactory`.
 ///    Confirmed by temporarily removing the attribute and re-running this test: same exception
 ///    either way when going through a plain `AddSingleton&lt;PollingService&gt;()` registration.
@@ -28,7 +28,7 @@ namespace DotMarc.Tests.Ingestion;
 ///    explicitly (which Program.cs now does via
 ///    `AddHostedService&lt;PollingService&gt;(sp => ActivatorUtilities.CreateInstance&lt;PollingService&gt;(sp))`)
 ///    DOES honor `[ActivatorUtilitiesConstructor]` and deterministically selects the host
-///    constructor — this is the actual fix; the attribute is necessary but registering via
+///    constructor - this is the actual fix; the attribute is necessary but registering via
 ///    `AddHostedService&lt;PollingService&gt;()` alone (as originally proposed) is not sufficient.
 ///
 /// This test builds a ServiceCollection with the same registration shape as Program.cs (both

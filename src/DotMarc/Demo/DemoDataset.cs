@@ -3,7 +3,7 @@ using DotMarc.Data;
 namespace DotMarc.Demo;
 
 /// <summary>Everything DemoDataSeeder needs to (re)populate the database for one reset cycle.
-/// Produced by the pure DemoDataGenerator — see that class for the narrative this data tells.</summary>
+/// Produced by the pure DemoDataGenerator - see that class for the narrative this data tells.</summary>
 public sealed record DemoDataset(
     List<DemoGroupSeed> Groups,
     List<DemoDomainSeed> Domains,

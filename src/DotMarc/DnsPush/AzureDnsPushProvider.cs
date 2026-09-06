@@ -11,7 +11,7 @@ using Microsoft.Identity.Client;
 namespace DotMarc.DnsPush;
 
 /// <summary>Pushes a DNS record change to Azure DNS via a delegated Entra ID authorization-code
-/// exchange — the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
+/// exchange - the push only succeeds if the SIGNED-IN USER's own Azure RBAC grants them write
 /// access on the target zone; dotMARC never holds a standing grant of its own. Same "nothing about
 /// the end-user's push-time token is ever persisted" contract as CloudflareDnsPushProvider. The
 /// app's own OAuth client credentials are DB-backed (AzureDnsSettings/ISecretStore), read fresh
@@ -106,7 +106,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         if (zone is null)
         {
             return new DnsPushResult(DnsPushOutcome.ZoneNotFound,
-                $"Couldn't find {zoneName} in any subscription you authorized — check you have DNS Zone Contributor rights on it.");
+                $"Couldn't find {zoneName} in any subscription you authorized - check you have DNS Zone Contributor rights on it.");
         }
 
         return await PushRecordAsync(zone, zoneName, change, cancellationToken).ConfigureAwait(false);
@@ -152,7 +152,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
                     && (await cnameRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
                 {
                     return new DnsPushResult(DnsPushOutcome.ProviderError,
-                        $"A DNS record already exists at {change.Name} — remove it or update it manually rather than risk overwriting it.");
+                        $"A DNS record already exists at {change.Name} - remove it or update it manually rather than risk overwriting it.");
                 }
 
                 var data = new DnsCnameRecordData { TtlInSeconds = 3600, Cname = change.DesiredValue };
@@ -165,7 +165,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
                     && (await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
                 {
                     return new DnsPushResult(DnsPushOutcome.ProviderError,
-                        $"A DNS record already exists at {change.Name} — remove it or update it manually rather than risk overwriting it.");
+                        $"A DNS record already exists at {change.Name} - remove it or update it manually rather than risk overwriting it.");
                 }
 
                 var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
@@ -194,7 +194,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
 
         if (!string.Equals(existingType, "CNAME", StringComparison.OrdinalIgnoreCase))
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to delete an existing {existingType} record — only CNAME is supported for a replace. Nothing was changed.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to delete an existing {existingType} record - only CNAME is supported for a replace. Nothing was changed.");
         }
         if (!string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase))
         {
@@ -202,7 +202,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             // today. Guarding this side too means a future record type added without updating this
             // method fails loudly here instead of silently creating a TXT record under the wrong
             // type's name, then reporting the wrong type back in the error message.
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to create a {change.RecordType} record for a replace — only TXT is supported. Nothing was changed.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to create a {change.RecordType} record for a replace - only TXT is supported. Nothing was changed.");
         }
 
         try
@@ -212,29 +212,29 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
-            // Deliberately ProviderError, not ZoneNotFound — the zone WAS found; this specific
+            // Deliberately ProviderError, not ZoneNotFound - the zone WAS found; this specific
             // record just isn't there anymore (most likely removed since this page loaded, a
             // benign race a retry would clear). Reusing ZoneNotFound's "check the account you
             // authorized" message here would send the admin chasing a permissions problem that
             // doesn't exist.
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The {existingType} record at {change.Name} no longer exists at Azure DNS — it may have been removed since this page loaded. Nothing was changed; try again.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The {existingType} record at {change.Name} no longer exists at Azure DNS - it may have been removed since this page loaded. Nothing was changed; try again.");
         }
         catch (RequestFailedException ex)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected deleting the existing {existingType} record: {ex.Message} — nothing was changed.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected deleting the existing {existingType} record: {ex.Message} - nothing was changed.");
         }
         catch (TaskCanceledException)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Looking up or deleting the existing {existingType} record at {change.Name} timed out — nothing was changed; try again.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Looking up or deleting the existing {existingType} record at {change.Name} timed out - nothing was changed; try again.");
         }
 
-        // The delete above succeeded — from here on, any failure means the name now has NO
+        // The delete above succeeded - from here on, any failure means the name now has NO
         // record at all, which is why the remaining failure path returns ReplaceFailedAfterDelete
         // instead of the generic ProviderError. Catching TaskCanceledException alongside
         // RequestFailedException matters specifically here: a transport-level timeout on this call
         // is an Azure.Core TaskCanceledException, not a RequestFailedException, and letting it
         // escape unhandled would hit the generic exception handler with no postMessage ever firing
-        // — the same silent-failure gap this outcome exists to prevent.
+        // - the same silent-failure gap this outcome exists to prevent.
         try
         {
             var txtRecords = zone.GetDnsTxtRecords();
@@ -244,14 +244,14 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
         catch (Exception ex) when (ex is RequestFailedException or TaskCanceledException)
         {
-            return new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed: {ex.Message} — this name now has no record and needs manual attention.");
+            return new DnsPushResult(DnsPushOutcome.ReplaceFailedAfterDelete, $"The old {existingType} record at {change.Name} was deleted, but creating the new {change.RecordType} record failed: {ex.Message} - this name now has no record and needs manual attention.");
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
     }
 
     /// <summary>Wraps an access token already obtained via the delegated authorization-code
-    /// exchange above — ArmClient needs a TokenCredential, but there is nothing for it to actually
+    /// exchange above - ArmClient needs a TokenCredential, but there is nothing for it to actually
     /// fetch here; it already has the one token this whole operation is scoped to.</summary>
     private sealed class FixedTokenCredential : TokenCredential
     {

@@ -1,6 +1,6 @@
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row for Azure DNS push, same pattern as HaloPsaSettings — the
+/// <summary>Singleton settings row for Azure DNS push, same pattern as HaloPsaSettings - the
 /// client secret lives in ISecretStore under SecretStoreKey, never on this entity.</summary>
 public sealed class AzureDnsSettings
 {

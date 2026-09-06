@@ -11,14 +11,14 @@ namespace DotMarc.MtaSts;
 
 /// <summary>Azure Container Apps: binds mta-sts.&lt;domain&gt; to this same Container App with a
 /// free managed certificate, via the Resource Manager API rather than anything baked into the
-/// Bicep template at deploy time — these bindings come and go per-domain as customers opt in and
+/// Bicep template at deploy time - these bindings come and go per-domain as customers opt in and
 /// out, long after deployment. Authenticates as the Container App's own system-assigned managed
 /// identity (DefaultAzureCredential resolves that automatically when running in Azure); see
 /// infra/main.bicep for the custom RBAC role this needs.
 ///
 /// CNAME-based managed certificate validation requires the customer's CNAME to point directly at
-/// this Container App's own generated *.azurecontainerapps.io hostname — not at any intermediate
-/// hostname — so MtaSts:HostingHostname must be set to that exact value for this provisioner (see
+/// this Container App's own generated *.azurecontainerapps.io hostname - not at any intermediate
+/// hostname - so MtaSts:HostingHostname must be set to that exact value for this provisioner (see
 /// deploy-to-azure.mdx).</summary>
 public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
 {
@@ -42,7 +42,7 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
             .FirstOrDefault(d => string.Equals(d.Name, hostname, StringComparison.OrdinalIgnoreCase));
         if (existingBinding is not null && existingBinding.BindingType == ContainerAppCustomDomainBindingType.SniEnabled)
         {
-            // Already fully bound from an earlier cycle — nothing further to do here. Whether the
+            // Already fully bound from an earlier cycle - nothing further to do here. Whether the
             // certificate has actually finished issuing is what the serving self-check
             // (IMtaStsServingVerifier) determines, not this provisioner.
             return;
@@ -52,7 +52,7 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
         {
             // Azure requires the hostname already registered as a custom domain on the container
             // app before it will create a managed certificate for it
-            // (RequireCustomHostnameInEnvironment) — so this binds it first with no certificate,
+            // (RequireCustomHostnameInEnvironment) - so this binds it first with no certificate,
             // then creates the certificate below, then rebinds with the certificate attached. A
             // crash between these two steps leaves the binding Disabled with no certificate; the
             // existingBinding check above only short-circuits once it's fully SniEnabled, so the
@@ -65,14 +65,14 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
             }
             catch (RequestFailedException ex) when (string.Equals(ex.ErrorCode, "InvalidCustomHostNameValidation", StringComparison.Ordinal))
             {
-                // Azure validates hostname ownership at exactly this call — this is the ARM error
+                // Azure validates hostname ownership at exactly this call - this is the ARM error
                 // the user hits when the asuid.<hostname> TXT record isn't in place yet. Replace
                 // the raw error with the specific fix, using the same verification ID
                 // GetDomainVerificationIdAsync below would return (already loaded on this same
                 // containerApp.Data, so no extra ARM call needed).
                 var verificationId = containerApp.Data.CustomDomainVerificationId;
                 throw new InvalidOperationException(
-                    $"Missing ownership verification record — add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.", ex);
+                    $"Missing ownership verification record - add asuid.{hostname} TXT {verificationId} to DNS; this retries automatically.", ex);
             }
         }
 
@@ -103,10 +103,10 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
         // The managed certificate itself is left in place rather than deleted here: Azure ties
         // managed-certificate issuance to DNS validation succeeding at creation time, and
         // recreating it on a later re-enable would mean waiting on that validation again for no
-        // benefit — an orphaned, unbound certificate costs nothing to leave behind.
+        // benefit - an orphaned, unbound certificate costs nothing to leave behind.
     }
 
-    /// <summary>The Container App's own customDomainVerificationId — fixed for the life of the
+    /// <summary>The Container App's own customDomainVerificationId - fixed for the life of the
     /// resource, so the same value is correct for every domain this deployment hosts. Not cached:
     /// this is only called from a page load or a DNS push callback, both human-triggered and
     /// infrequent, never from PollingService's poll loop.</summary>

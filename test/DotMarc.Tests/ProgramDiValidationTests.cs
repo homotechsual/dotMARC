@@ -11,20 +11,20 @@ namespace DotMarc.Tests;
 /// AddDbContextFactory&lt;DotMarcDbContext&gt; together (the original shape of that fix) creates a
 /// scoped/singleton DbContextOptions&lt;DotMarcDbContext&gt; conflict that only surfaces when the
 /// container validates scopes. WebApplication.CreateBuilder enables ValidateScopes/ValidateOnBuild
-/// by default in the Development environment, but not in Production — so a plain `dotnet build`
+/// by default in the Development environment, but not in Production - so a plain `dotnet build`
 /// and even a Docker smoke test (Production by default, since the Dockerfile sets no explicit
 /// ASPNETCORE_ENVIRONMENT) both missed it; only actually starting the host with
 /// ASPNETCORE_ENVIRONMENT=Development throws.
 ///
 /// This test builds a ServiceProvider with ValidateScopes/ValidateOnBuild explicitly enabled
 /// (mirroring what CreateBuilder does in Development) using the exact registration shape
-/// Program.cs uses today — AddDbContextFactory only, no separate AddDbContext call — confirming:
+/// Program.cs uses today - AddDbContextFactory only, no separate AddDbContext call - confirming:
 /// 1. BuildServiceProvider itself doesn't throw (this is where the bug, if reintroduced, throws:
 ///    "Cannot consume scoped service 'DbContextOptions&lt;DotMarcDbContext&gt;' from singleton
 ///    'IDbContextFactory&lt;DotMarcDbContext&gt;'").
 /// 2. IDbContextFactory&lt;DotMarcDbContext&gt; resolves (used by Dashboard.razor/DomainDetail.razor).
 /// 3. DotMarcDbContext also resolves from a scope (used by PollingService's existing
-///    IServiceScopeFactory-based resolution) — this is exactly what the fix must not break, since
+///    IServiceScopeFactory-based resolution) - this is exactly what the fix must not break, since
 ///    AddDbContextFactory registers DotMarcDbContext itself as scoped too, without needing a
 ///    separate AddDbContext call.</summary>
 [Collection("Postgres")]
@@ -72,11 +72,11 @@ public sealed class ProgramDiValidationTests : IAsyncLifetime
             ValidateOnBuild = true
         });
 
-        // IDbContextFactory resolves directly (singleton) — used by the Blazor Server pages.
+        // IDbContextFactory resolves directly (singleton) - used by the Blazor Server pages.
         var factory = provider.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
         Assert.NotNull(factory);
 
-        // DotMarcDbContext also resolves from a scope — used by PollingService's existing
+        // DotMarcDbContext also resolves from a scope - used by PollingService's existing
         // IServiceScopeFactory-based resolution, which must keep working unchanged.
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();

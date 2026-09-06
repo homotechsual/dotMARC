@@ -5,7 +5,7 @@ using DotMarc.Data;
 namespace DotMarc.Dns;
 
 /// <summary>Checks whether a domain's DMARC records are correctly in place, querying Cloudflare's
-/// DNS-over-HTTPS JSON API rather than whatever resolver the host happens to have configured — see
+/// DNS-over-HTTPS JSON API rather than whatever resolver the host happens to have configured - see
 /// docs/superpowers/specs/2026-08-26-dmarc-dns-status-design.md for why. A waterfall, not two
 /// independent lookups: each step only runs if the previous one passed, so a domain with no DMARC
 /// record at all costs one query, not two.</summary>
@@ -44,7 +44,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
 
     /// <summary>RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being
     /// monitored (the normal MSP shape), that mailbox's domain must publish this record proving it
-    /// accepts reports for the monitored domain. Independent of CheckAsync above — this always
+    /// accepts reports for the monitored domain. Independent of CheckAsync above - this always
     /// runs and always returns its own result, regardless of whether CheckAsync's own-record check
     /// passed or failed, so both can be shown (and separately corrected) at once.</summary>
     public async Task<DmarcAuthorizationCheckResult> CheckAuthorizationAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken)
@@ -64,7 +64,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
 
     /// <summary>Returns the first TXT record's value (quotes stripped, multi-segment values
     /// joined), or null if the name doesn't resolve or has no TXT records (Cloudflare's JSON API
-    /// omits Answer entirely for both NXDOMAIN and NODATA — no need to branch on Status).</summary>
+    /// omits Answer entirely for both NXDOMAIN and NODATA - no need to branch on Status).</summary>
     private async Task<string?> QueryTxtAsync(string name, CancellationToken cancellationToken)
     {
         // The Accept header is also set by Program.cs's AddHttpClient<IDmarcDnsChecker,
@@ -89,7 +89,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
 
         // Cloudflare's JSON API returns the TXT record's data as one or more double-quoted
         // segments (multiple only for a value over 255 bytes, split across DNS's own
-        // character-string length limit) — e.g. "\"v=DMARC1; p=quarantine\"" for a short record,
+        // character-string length limit) - e.g. "\"v=DMARC1; p=quarantine\"" for a short record,
         // or "\"first part\" \"second part\"" for a long one. Splitting on `" "` between quoted
         // segments and stripping the outer quotes from what's left reconstructs the original value.
         return string.Join("", answer.Data.Split("\" \"")).Trim('"');

@@ -3,7 +3,7 @@ using DmarcRua;
 namespace DotMarc.Ingestion;
 
 /// <summary>Wraps DmarcRua's AggregateReport parser. DmarcRua itself only throws for input it
-/// cannot deserialize as XML at all (e.g. garbage bytes) — well-formed XML that fails schema
+/// cannot deserialize as XML at all (e.g. garbage bytes) - well-formed XML that fails schema
 /// validation instead sets ValidReport = false without throwing (confirmed empirically against
 /// DmarcRua 2.0.1). This wrapper treats both cases identically as failures, since PollingService's
 /// failure handling (Task 6) needs a single exception type to catch.</summary>

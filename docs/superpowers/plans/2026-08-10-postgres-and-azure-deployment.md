@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- PostgreSQL fully replaces SQLite — no dual-provider support. Do not add a "which database" configuration switch.
-- Real EF Core Migrations (`Database.Migrate()`) replace `Database.EnsureCreated()`. No data-preserving migration logic is needed for the `InitialCreate` migration — nothing has ever been deployed anywhere, so there's no existing data to carry forward.
-- No VNet integration for Postgres — public access with an "Allow Azure services" firewall rule, per the design spec's explicit decision.
-- Secrets (`Graph:ClientSecret`, `EntraId:ClientSecret`, the Postgres connection string) go into Key Vault, referenced from App Service settings — never as plaintext Application Settings in the Bicep template.
-- Actually provisioning Azure resources is out of scope for every task in this plan — ship the template and its documentation; running it against a real subscription is the user's own action.
-- The `InitialCreate` migration's exact content (Task 1) was generated and verified during planning — applied successfully against a real `postgres:18` container, confirmed to produce the correct 4 tables and all 4 indexes (including the two unique indexes and the composite `(DomainId, ReportingOrg, ReportId)` index from the project's earlier final-review fix wave). Use it verbatim; do not regenerate it from scratch unless the model has changed since this plan was written (it hasn't — no entity changes are part of this plan).
+- PostgreSQL fully replaces SQLite - no dual-provider support. Do not add a "which database" configuration switch.
+- Real EF Core Migrations (`Database.Migrate()`) replace `Database.EnsureCreated()`. No data-preserving migration logic is needed for the `InitialCreate` migration - nothing has ever been deployed anywhere, so there's no existing data to carry forward.
+- No VNet integration for Postgres - public access with an "Allow Azure services" firewall rule, per the design spec's explicit decision.
+- Secrets (`Graph:ClientSecret`, `EntraId:ClientSecret`, the Postgres connection string) go into Key Vault, referenced from App Service settings - never as plaintext Application Settings in the Bicep template.
+- Actually provisioning Azure resources is out of scope for every task in this plan - ship the template and its documentation; running it against a real subscription is the user's own action.
+- The `InitialCreate` migration's exact content (Task 1) was generated and verified during planning - applied successfully against a real `postgres:18` container, confirmed to produce the correct 4 tables and all 4 indexes (including the two unique indexes and the composite `(DomainId, ReportingOrg, ReportId)` index from the project's earlier final-review fix wave). Use it verbatim; do not regenerate it from scratch unless the model has changed since this plan was written (it hasn't - no entity changes are part of this plan).
 
 ---
 
@@ -37,7 +37,7 @@
 
 - [ ] **Step 1: Swap the EF Core provider in the project file**
 
-`src/DotMarc/DotMarc.csproj` — replace the SQLite-related package references:
+`src/DotMarc/DotMarc.csproj` - replace the SQLite-related package references:
 
 ```xml
 <PackageReference Include="MudBlazor" Version="9.8.0" />
@@ -52,7 +52,7 @@
 ```
 
 This removes `Microsoft.EntityFrameworkCore.Sqlite` and the `SQLitePCLRaw.bundle_e_sqlite3` version
-override (added earlier specifically to patch a SQLite-only CVE — moot once SQLite is gone) and
+override (added earlier specifically to patch a SQLite-only CVE - moot once SQLite is gone) and
 adds `Npgsql.EntityFrameworkCore.PostgreSQL`.
 
 - [ ] **Step 2: Add the dotnet-ef local tool**
@@ -62,7 +62,7 @@ dotnet new tool-manifest
 dotnet tool install dotnet-ef --version 10.0.10
 ```
 
-This creates the manifest at the repo root by default — move it into `.config/` to match the
+This creates the manifest at the repo root by default - move it into `.config/` to match the
 standard convention (some tooling and CI setups expect it there):
 
 ```bash
@@ -101,7 +101,7 @@ builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpg
 ```
 
 Replace `EnsureCreated()` with `MigrateAsync()` (note this requires `Program.cs`'s top-level
-statements to already be in an `async` context via top-level `await` — confirm this compiles; if
+statements to already be in an `async` context via top-level `await` - confirm this compiles; if
 the file isn't already using top-level `await` elsewhere, this `await` in the `using` block is
 still valid since .NET 6+ implicitly wraps top-level statement files in an async `Main` when any
 `await` is present):
@@ -115,7 +115,7 @@ using (var scope = app.Services.CreateScope())
 
 - [ ] **Step 4: Update the default connection string in appsettings.json**
 
-`src/DotMarc/appsettings.json` — change the `ConnectionStrings:DotMarc` value from the SQLite file
+`src/DotMarc/appsettings.json` - change the `ConnectionStrings:DotMarc` value from the SQLite file
 path to a Postgres connection string matching the `docker-compose` service name that Task 3 will
 add (so the default "just works" when running via compose):
 
@@ -128,9 +128,9 @@ add (so the default "just works" when running via compose):
 - [ ] **Step 5: Add the verified InitialCreate migration**
 
 These three files were generated via `dotnet ef migrations add InitialCreate` against the current
-model and verified during planning — applied successfully against a real `postgres:18` container,
+model and verified during planning - applied successfully against a real `postgres:18` container,
 producing exactly the 4 expected tables (`Domains`, `Reports`, `ReportRecords`, `ParseFailures`)
-and all 4 expected indexes. Create them with this exact content (do not regenerate — the model
+and all 4 expected indexes. Create them with this exact content (do not regenerate - the model
 hasn't changed since this was verified):
 
 `src/DotMarc/Migrations/20260810175555_InitialCreate.cs`:
@@ -482,10 +482,10 @@ namespace DotMarc.Migrations
 }
 ```
 
-`src/DotMarc/Migrations/DotMarcDbContextModelSnapshot.cs` — identical `BuildTargetModel` body to
+`src/DotMarc/Migrations/DotMarcDbContextModelSnapshot.cs` - identical `BuildTargetModel` body to
 the Designer file above, wrapped differently (this is the standing snapshot EF Core diffs future
 migrations against, versus the Designer file which is this specific migration's own point-in-time
-record — both are auto-generated and always kept in sync by the tooling):
+record - both are auto-generated and always kept in sync by the tooling):
 
 ```csharp
 // <auto-generated />
@@ -692,7 +692,7 @@ namespace DotMarc.Migrations
 - [ ] **Step 6: Update the Dockerfile's connection string and drop the SQLite data volume**
 
 `src/DotMarc/Dockerfile` currently declares a `VOLUME /app/data` and sets
-`ConnectionStrings__DotMarc` to a SQLite file path under it — both existed only to persist the
+`ConnectionStrings__DotMarc` to a SQLite file path under it - both existed only to persist the
 SQLite database file across container restarts. With Postgres owning persistence instead (via its
 own volume in Task 3's `docker-compose.yml`), remove the volume and change the default connection
 string to match the Postgres service name `docker-compose.yml` will use:
@@ -730,7 +730,7 @@ dotnet build dotMARC.sln
 
 Expected: builds with 0 errors. The existing test suite (33/33 as of the last final review) is
 expected to now FAIL to build or run, since it still constructs `DotMarcDbContext` against
-`UseSqlite` — this is expected and gets fixed in Task 2, not this task. Do not attempt to fix the
+`UseSqlite` - this is expected and gets fixed in Task 2, not this task. Do not attempt to fix the
 test project in this task.
 
 - [ ] **Step 8: Manually verify the migration applies against a real Postgres**
@@ -786,12 +786,12 @@ git commit -m "Replace SQLite with PostgreSQL: Npgsql provider, real EF Core Mig
   against a real Testcontainers.PostgreSql 4.13.0 + postgres:18 container: container start,
   connect, create a fresh database, connect to it, run a query, drop the database, and dispose the
   container all completed successfully.
-- Consumes: the migration from Task 1 — each test's fresh database is brought to the current
+- Consumes: the migration from Task 1 - each test's fresh database is brought to the current
   schema via `context.Database.MigrateAsync()`, not `EnsureCreated()`.
 
 - [ ] **Step 1: Add the Testcontainers package**
 
-`test/DotMarc.Tests/DotMarc.Tests.csproj` — add to the existing `<ItemGroup>` with the other
+`test/DotMarc.Tests/DotMarc.Tests.csproj` - add to the existing `<ItemGroup>` with the other
 `PackageReference`s:
 
 ```xml
@@ -810,8 +810,8 @@ using Xunit;
 namespace DotMarc.Tests.Internal;
 
 /// <summary>One Postgres container shared across the whole test run (starting it is the expensive
-/// part — several seconds), with each test getting its own freshly-created, freshly-migrated
-/// database on that shared container (cheap — a CREATE DATABASE against an already-running server).
+/// part - several seconds), with each test getting its own freshly-created, freshly-migrated
+/// database on that shared container (cheap - a CREATE DATABASE against an already-running server).
 /// This matches the isolation the project's previous per-test temp-file SQLite database gave,
 /// without paying container startup cost per test. Verified during planning: container start,
 /// connect, create/connect-to/query a fresh database, drop it, and dispose the container all
@@ -847,7 +847,7 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
             await using var connection = new NpgsqlConnection(adminConnectionString);
             await connection.OpenAsync();
 
-            // Postgres refuses to drop a database with active connections — terminate any first.
+            // Postgres refuses to drop a database with active connections - terminate any first.
             await using (var terminate = new NpgsqlCommand(
                 $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{databaseName}' AND pid <> pg_backend_pid()", connection))
             {
@@ -868,7 +868,7 @@ public sealed class PostgresCollection : ICollectionFixture<PostgresContainerFix
 
 Replace the SQLite temp-file pattern (`_dbPath`, `CreateContext()` using `UseSqlite`,
 `Database.EnsureCreated()`, file-based `Dispose()` with the `GC.Collect()`/`WaitForPendingFinalizers()`
-workaround) with the shared fixture. All five `[Fact]` bodies are unchanged from the current file —
+workaround) with the shared fixture. All five `[Fact]` bodies are unchanged from the current file - 
 only setup/teardown changes, and `CreateContext()` no longer needs to call `EnsureCreated()` itself
 since the fixture's `InitializeAsync()` migrates the database once per test:
 
@@ -1031,7 +1031,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         // Regression coverage for the review finding: PollingService shares one DbContext across
         // a whole poll cycle. If a mid-cycle SaveChangesAsync throws (e.g. a constraint
         // violation), the half-built entities from that failed call stay tracked as Added unless
-        // the tracker is explicitly cleared — otherwise the *next* SaveChanges call (recording a
+        // the tracker is explicitly cleared - otherwise the *next* SaveChanges call (recording a
         // ParseFailure) re-attempts them too and can throw again, uncaught. This confirms the
         // assumption PollingService's fix relies on: ChangeTracker.Clear() actually drops the
         // dangling entities, and a subsequent unrelated save then succeeds.
@@ -1061,7 +1061,7 @@ Replace the temp-file `_dbPath`/`CreateContext()`/`Dispose()` pattern with the s
 `PostgresContainerFixture`, migrating a fresh database in `InitializeAsync()`. All five test
 bodies (`FakeGraphMailboxClient`, `ValidReportXml`, and the five `[Fact]`s covering the happy path,
 parse failures, no-attachment skipping, the mark-as-read-failure idempotency regression, and the
-repeated-failure `AttemptCount` growth) are unchanged from the current file — only setup/teardown
+repeated-failure `AttemptCount` growth) are unchanged from the current file - only setup/teardown
 changes:
 
 `test/DotMarc.Tests/Ingestion/PollingServiceTests.cs`:
@@ -1220,7 +1220,7 @@ public class PollingServiceTests : IAsyncLifetime
             await service.PollOnceAsync(CancellationToken.None);
         }
 
-        // First attempt: report stored, but marking read failed — so it's NOT a ParseFailure, and
+        // First attempt: report stored, but marking read failed - so it's NOT a ParseFailure, and
         // the message is still considered unread for the next poll.
         using (var verify = CreateContext())
         {
@@ -1240,7 +1240,7 @@ public class PollingServiceTests : IAsyncLifetime
 
         using (var verify = CreateContext())
         {
-            Assert.Single(verify.Reports); // still exactly one — no duplicate.
+            Assert.Single(verify.Reports); // still exactly one - no duplicate.
             Assert.Empty(verify.ParseFailures);
         }
         Assert.Contains("msg-1", graphClient.MarkedAsRead);
@@ -1298,7 +1298,7 @@ public class PollingServiceTests : IAsyncLifetime
 
 This test's `[Fact]` body (activating `PollingService` via `ActivatorUtilities.CreateInstance` to
 confirm `[ActivatorUtilitiesConstructor]` resolves the constructor-ambiguity regression from the
-project's earlier final review) is unchanged — only its `DotMarcDbContext` registration switches
+project's earlier final review) is unchanged - only its `DotMarcDbContext` registration switches
 from a temp-file `UseSqlite` call to `UseNpgsql` against a database from the shared fixture:
 
 `test/DotMarc.Tests/Ingestion/PollingServiceDiActivationTests.cs`:
@@ -1317,7 +1317,7 @@ namespace DotMarc.Tests.Ingestion;
 
 /// <summary>Regression test for a Critical bug found in review: PollingService originally had two
 /// 3-parameter constructors, and the plan's assumption that DI would unambiguously pick the host
-/// constructor was wrong — both IGraphMailboxClient (Task 5) and DotMarcDbContext (Task 2) are
+/// constructor was wrong - both IGraphMailboxClient (Task 5) and DotMarcDbContext (Task 2) are
 /// also registered in the app's DI container, so both constructors had every parameter type
 /// resolvable.
 ///
@@ -1325,7 +1325,7 @@ namespace DotMarc.Tests.Ingestion;
 /// 1. Plain `services.AddSingleton&lt;PollingService&gt;()` / `AddHostedService&lt;PollingService&gt;()`
 ///    (which activates via the container's own built-in constructor-selection logic) throws
 ///    `InvalidOperationException: ... ambiguous` even with `[ActivatorUtilitiesConstructor]` present
-///    on the host constructor — the built-in container's own selection algorithm does NOT consult
+///    on the host constructor - the built-in container's own selection algorithm does NOT consult
 ///    that attribute; it is only honored by `ActivatorUtilities.CreateInstance`/`CreateFactory`.
 ///    Confirmed by temporarily removing the attribute and re-running this test: same exception
 ///    either way when going through a plain `AddSingleton&lt;PollingService&gt;()` registration.
@@ -1333,7 +1333,7 @@ namespace DotMarc.Tests.Ingestion;
 ///    explicitly (which Program.cs now does via
 ///    `AddHostedService&lt;PollingService&gt;(sp => ActivatorUtilities.CreateInstance&lt;PollingService&gt;(sp))`)
 ///    DOES honor `[ActivatorUtilitiesConstructor]` and deterministically selects the host
-///    constructor — this is the actual fix; the attribute is necessary but registering via
+///    constructor - this is the actual fix; the attribute is necessary but registering via
 ///    `AddHostedService&lt;PollingService&gt;()` alone (as originally proposed) is not sufficient.
 ///
 /// This test builds a ServiceCollection with the same registration shape as Program.cs (both
@@ -1427,20 +1427,20 @@ namespace DotMarc.Tests;
 /// AddDbContextFactory&lt;DotMarcDbContext&gt; together (the original shape of that fix) creates a
 /// scoped/singleton DbContextOptions&lt;DotMarcDbContext&gt; conflict that only surfaces when the
 /// container validates scopes. WebApplication.CreateBuilder enables ValidateScopes/ValidateOnBuild
-/// by default in the Development environment, but not in Production — so a plain `dotnet build`
+/// by default in the Development environment, but not in Production - so a plain `dotnet build`
 /// and even a Docker smoke test (Production by default, since the Dockerfile sets no explicit
 /// ASPNETCORE_ENVIRONMENT) both missed it; only actually starting the host with
 /// ASPNETCORE_ENVIRONMENT=Development throws.
 ///
 /// This test builds a ServiceProvider with ValidateScopes/ValidateOnBuild explicitly enabled
 /// (mirroring what CreateBuilder does in Development) using the exact registration shape
-/// Program.cs uses today — AddDbContextFactory only, no separate AddDbContext call — confirming:
+/// Program.cs uses today - AddDbContextFactory only, no separate AddDbContext call - confirming:
 /// 1. BuildServiceProvider itself doesn't throw (this is where the bug, if reintroduced, throws:
 ///    "Cannot consume scoped service 'DbContextOptions&lt;DotMarcDbContext&gt;' from singleton
 ///    'IDbContextFactory&lt;DotMarcDbContext&gt;'").
 /// 2. IDbContextFactory&lt;DotMarcDbContext&gt; resolves (used by Dashboard.razor/DomainDetail.razor).
 /// 3. DotMarcDbContext also resolves from a scope (used by PollingService's existing
-///    IServiceScopeFactory-based resolution) — this is exactly what the fix must not break, since
+///    IServiceScopeFactory-based resolution) - this is exactly what the fix must not break, since
 ///    AddDbContextFactory registers DotMarcDbContext itself as scoped too, without needing a
 ///    separate AddDbContext call.</summary>
 [Collection("Postgres")]
@@ -1488,11 +1488,11 @@ public sealed class ProgramDiValidationTests : IAsyncLifetime
             ValidateOnBuild = true
         });
 
-        // IDbContextFactory resolves directly (singleton) — used by the Blazor Server pages.
+        // IDbContextFactory resolves directly (singleton) - used by the Blazor Server pages.
         var factory = provider.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
         Assert.NotNull(factory);
 
-        // DotMarcDbContext also resolves from a scope — used by PollingService's existing
+        // DotMarcDbContext also resolves from a scope - used by PollingService's existing
         // IServiceScopeFactory-based resolution, which must keep working unchanged.
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DotMarcDbContext>();
@@ -1508,7 +1508,7 @@ dotnet test dotMARC.sln
 ```
 
 Expected: all tests pass. This will take noticeably longer than the previous SQLite-based run
-(container startup is a one-time cost per test run, typically 10-20 seconds, not per test) — that's
+(container startup is a one-time cost per test run, typically 10-20 seconds, not per test) - that's
 expected, not a regression to chase down.
 
 - [ ] **Step 8: Commit**
@@ -1575,8 +1575,8 @@ volumes:
 
 The `:?Set ...` syntax makes `docker compose up` fail fast with a clear message if a required
 secret env var isn't set, rather than starting the app with empty/invalid credentials.
-`POSTGRES_PASSWORD` has a default (`dotmarc`) since it's not a real external secret — it's only
-ever used for the container-to-container connection on the compose network — but can still be
+`POSTGRES_PASSWORD` has a default (`dotmarc`) since it's not a real external secret - it's only
+ever used for the container-to-container connection on the compose network - but can still be
 overridden.
 
 - [ ] **Step 2: Update the README's self-hosted run instructions**
@@ -1594,7 +1594,7 @@ docker compose up
 
 This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
 Docker volume (`dotmarc-postgres-data`). Set the six required environment variables from the setup
-steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
+steps above (or put them in a `.env` file next to `docker-compose.yml` - compose reads that
 automatically).
 ```
 
@@ -1610,7 +1610,7 @@ docker compose up --build -d
 ```
 
 Expected: both containers start, `postgres` reports healthy, `app` logs show a successful migration
-run (`Applying migration '20260810175555_InitialCreate'.`) followed by normal startup — the same
+run (`Applying migration '20260810175555_InitialCreate'.`) followed by normal startup - the same
 graceful placeholder-credential failure mode already established in every prior Docker smoke test
 in this project (Graph poll fails on the placeholder tenant, sign-in 500s on `/`) is expected and
 fine here too. Then:
@@ -1679,7 +1679,7 @@ jobs:
         run: dotnet test dotMARC.sln -c Release --no-build
 ```
 
-Note: the test suite now requires Docker (Testcontainers.PostgreSql, per Task 2) — `ubuntu-latest`
+Note: the test suite now requires Docker (Testcontainers.PostgreSql, per Task 2) - `ubuntu-latest`
 GitHub-hosted runners have Docker available by default, so no extra setup step is needed here.
 
 - [ ] **Step 2: Write the publish workflow**
@@ -1781,7 +1781,7 @@ jobs:
 ```
 
 `src/DotMarc/Dockerfile`'s final stage is explicitly named `final` (`FROM
-mcr.microsoft.com/dotnet/aspnet:10.0 AS final`) — `target: final` above pins the build to that
+mcr.microsoft.com/dotnet/aspnet:10.0 AS final`) - `target: final` above pins the build to that
 stage rather than relying on it being the last one declared.
 
 - [ ] **Step 3: Write the release workflow**
@@ -2018,7 +2018,7 @@ push: YAML is well-formed (`docker compose config` won't validate workflow YAML,
 check via any YAML linter available, or careful visual review against the file-for-file
 `psatool-busybar-agent` comparison, is the available substitute here), and that the referenced
 Dockerfile path (`src/DotMarc/Dockerfile`) and solution name (`dotMARC.sln`) are correct for this
-repo. Full verification happens on the first real push to `main` once this is merged — note in
+repo. Full verification happens on the first real push to `main` once this is merged - note in
 your report that workflow-level verification is necessarily incomplete until then, consistent with
 how this project has handled other things that can't be verified without a live external system
 (the Entra sign-in flow, for example).
@@ -2042,7 +2042,7 @@ git commit -m "Add CI/CD: build+test, GHCR/Docker Hub publish, tagged releases"
 **Interfaces:**
 - Produces: a deployable Bicep template provisioning an App Service Plan, a Linux Web App for
   Containers, an Azure Database for PostgreSQL Flexible Server, and a Key Vault with the Web App's
-  managed identity granted access — everything needed to run dotMARC on Azure. Actually running
+  managed identity granted access - everything needed to run dotMARC on Azure. Actually running
   `az deployment group create` against a real subscription is the user's own action.
 
 - [ ] **Step 1: Write the Bicep template**
@@ -2179,7 +2179,7 @@ resource keyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-0
   }
 }
 
-// These three secrets are provisioned empty. The app cannot function until they're set — see the
+// These three secrets are provisioned empty. The app cannot function until they're set - see the
 // README's "Deploy to Azure" section for the az keyvault secret set commands run after deployment.
 // Web App settings above reference them by name (not by version), so setting a new value takes
 // effect without redeploying the template.
@@ -2213,18 +2213,18 @@ output postgresServerFqdn string = postgresServer.properties.fullyQualifiedDomai
 output keyVaultName string = keyVault.name
 ```
 
-The three Key Vault secrets are provisioned empty deliberately — per the design spec, secret
+The three Key Vault secrets are provisioned empty deliberately - per the design spec, secret
 material never passes through the deployment command line or a parameters file. Web App settings
 reference them by name via `@Microsoft.KeyVault(VaultName=...;SecretName=...)` (not by version), so
 populating them after deployment with `az keyvault secret set` (Step 3 below) takes effect without
 needing to redeploy the Bicep template. `postgresAdminPassword` remains a deployment parameter
 because it's needed to provision the PostgreSQL server resource itself, not because it's meant to
-flow into a Key Vault secret automatically — the `ConnectionStrings-DotMarc` secret's value is
+flow into a Key Vault secret automatically - the `ConnectionStrings-DotMarc` secret's value is
 assembled and set manually in Step 3, using the `postgresServerFqdn` output.
 
 - [ ] **Step 2: Write the parameters file**
 
-`infra/main.parameters.json` — a template for the user to fill in (not committed with real values):
+`infra/main.parameters.json` - a template for the user to fill in (not committed with real values):
 
 ```json
 {
@@ -2246,14 +2246,14 @@ assembled and set manually in Step 3, using the `postgresServerFqdn` output.
 
 Note this file holds only non-secret configuration plus the Postgres admin password (required to
 provision the database server resource itself). `Graph:ClientSecret`, `EntraId:ClientSecret`, and
-the Postgres connection string are never passed as deployment parameters — they're set directly
+the Postgres connection string are never passed as deployment parameters - they're set directly
 into Key Vault after deployment, per Step 3 below.
 
 - [ ] **Step 3: Add the README Azure deployment section**
 
 Add a new `## Deploy to Azure` section documenting: what the template provisions (App Service,
 Postgres Flexible Server, Key Vault), the prerequisite steps (both Entra app registrations, same as
-the existing Docker setup instructions — link back to that section rather than duplicating it), and
+the existing Docker setup instructions - link back to that section rather than duplicating it), and
 the deployment command:
 
 ```bash
@@ -2265,12 +2265,12 @@ az deployment group create \
 ```
 
 Note clearly that `main.parameters.json` as checked in has placeholder values and must be filled in
-(or the equivalent `--parameters key=value` inline overrides used) before running this — it is not
+(or the equivalent `--parameters key=value` inline overrides used) before running this - it is not
 meant to be deployed as-is. Cross-reference the CI/CD-published GHCR image
 (`ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release) as the
 recommended `containerImage` value.
 
-After the deployment above succeeds, the app won't yet be able to sign in or reach Postgres — the
+After the deployment above succeeds, the app won't yet be able to sign in or reach Postgres - the
 template deliberately leaves three Key Vault secrets empty (see Task 5 Step 1) rather than accept
 secret material as deployment parameters. Populate them directly:
 
@@ -2295,7 +2295,7 @@ Vault references immediately rather than waiting for their normal refresh cycle.
 - [ ] **Step 4: Verify what can be verified**
 
 A full deployment can't be verified without a real Azure subscription (out of scope for this
-task). What can be checked: the Bicep file is syntactically valid —
+task). What can be checked: the Bicep file is syntactically valid - 
 
 ```bash
 az bicep build --file infra/main.bicep

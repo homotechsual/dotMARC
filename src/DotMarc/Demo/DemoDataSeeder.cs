@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.Demo;
 
-/// <summary>Wipes and rewrites every app-owned table from a DemoDataset — the same code path
+/// <summary>Wipes and rewrites every app-owned table from a DemoDataset - the same code path
 /// runs on first boot and on every scheduled reset (see DemoDataResetService), so there is only
 /// one seeding path, not two. Deliberately does not use AccessBootstrapper's advisory-lock
 /// pattern: this always runs against a single demo instance from either Program.cs's startup
@@ -20,7 +20,7 @@ public static class DemoDataSeeder
         // Wrapped in a transaction per the design spec's "writes it... inside a transaction"
         // requirement: Postgres's TRUNCATE ... RESTART IDENTITY is fully transactional, so a
         // mid-reset failure (e.g. WriteAsync throwing partway through) rolls the truncate back
-        // too, instead of leaving the database truncated with zero UserAccess rows — which would
+        // too, instead of leaving the database truncated with zero UserAccess rows - which would
         // otherwise deny every visitor access until the next scheduled reset, up to 24h later.
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await TruncateAllTablesAsync(context, cancellationToken).ConfigureAwait(false);
@@ -30,11 +30,11 @@ public static class DemoDataSeeder
 
     // "IpInfos" and "IpRanges" are deliberately NOT in this list: they're a shared
     // external-lookup cache (RDAP ownership/country data, keyed by IP address or by allocation
-    // block, not by domain/report), not demo-narrative data — wiping them on every reset would
+    // block, not by domain/report), not demo-narrative data - wiping them on every reset would
     // just force every demo IP to be re-looked-up against rdap.org for no benefit.
     //
     // "NotificationSettings" is also deliberately NOT in this list, for the same "shared
-    // config, not demo-narrative data" reason — plus it's a migration-seeded singleton row (see
+    // config, not demo-narrative data" reason - plus it's a migration-seeded singleton row (see
     // NotificationSettings's doc comment), so truncating it would leave the table empty until a
     // fresh row was reseeded, breaking every reader's SingleAsync assumption. "AlertEvents" IS
     // included: unlike those two, an alert is inherently tied to one demo domain's history, and

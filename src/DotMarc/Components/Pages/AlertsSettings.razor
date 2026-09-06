@@ -84,7 +84,7 @@ else
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
-                              HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+                              HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
             <MudItem xs="12" md="6" Class="d-flex align-center">
                 <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses from Halo</MudButton>
@@ -121,7 +121,7 @@ else
                 <MudButton Variant="Variant.Outlined" OnClick="GenerateWebhookSecretAsync">Generate new webhook secret</MudButton>
                 @if (_webhookSecretJustGenerated)
                 {
-                    <MudText Typo="Typo.caption" Color="Color.Warning">Not saved yet — click Save PSA settings before copying this URL.</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Warning">Not saved yet - click Save PSA settings before copying this URL.</MudText>
                 }
             </MudItem>
         </MudGrid>
@@ -179,7 +179,7 @@ else
         }
         catch (Exception)
         {
-            Snackbar.Add("Couldn't reach HaloPSA — save your account/credentials first, then try again.", Severity.Error);
+            Snackbar.Add("Couldn't reach HaloPSA - save your account/credentials first, then try again.", Severity.Error);
         }
     }
 

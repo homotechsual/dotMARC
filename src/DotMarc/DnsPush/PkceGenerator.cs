@@ -4,7 +4,7 @@ using System.Text;
 namespace DotMarc.DnsPush;
 
 /// <summary>Generates a PKCE code_verifier/code_challenge pair (RFC 7636, S256 method) for the
-/// OAuth authorization-code exchange — used even for these confidential/server-side clients as
+/// OAuth authorization-code exchange - used even for these confidential/server-side clients as
 /// defense in depth on the code exchange, per the design spec.</summary>
 public static class PkceGenerator
 {

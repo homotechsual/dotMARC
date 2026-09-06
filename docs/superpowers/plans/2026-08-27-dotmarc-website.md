@@ -12,20 +12,20 @@
 
 ## Global Constraints
 
-- Everything lives under `website/` — a self-contained npm project, independent of `dotMARC.sln`. Nothing outside `website/` (besides two new `.github/workflows/*.yml` files) is touched.
-- No Google Fonts CDN calls anywhere — all fonts self-hosted via `@fontsource` packages, bundled at build time.
+- Everything lives under `website/` - a self-contained npm project, independent of `dotMARC.sln`. Nothing outside `website/` (besides two new `.github/workflows/*.yml` files) is touched.
+- No Google Fonts CDN calls anywhere - all fonts self-hosted via `@fontsource` packages, bundled at build time.
 - Brand palette is dotMARC's existing dashboard palette, not a new one: light-mode Primary `#e3594f` / PrimaryLighten `#efaaa5` / PrimaryDarken `#c9443a`, Secondary `#263141` / SecondaryLighten `#3d4f63` / SecondaryDarken `#1a2230`; dark-mode Primary `#ef8b86` / PrimaryLighten `#fad0cc` / PrimaryDarken `#e3594f`, Background `#111827`, Surface `#1e2a3a` (from `src/DotMarc/Components/Layout/MainLayout.razor`'s `MudTheme`).
-- Single locale (English only) — no `i18n` config beyond Docusaurus's default, no locale dropdown, no per-locale build matrix.
-- Docs and blog use Docusaurus's standard classic-theme structure (sidebar, TOC, prev/next) — reskinned via CSS/Tailwind, never swizzled into fully custom layouts. Only the homepage (`src/pages/index.tsx`) is fully bespoke.
-- Package manager is npm (not yarn) — this project has no existing JS tooling convention to follow, and the CI/deploy tasks are written around `npm ci`.
-- `onBrokenLinks: 'throw'` — a broken internal link fails the build.
-- No Playwright/visual-regression tests, no first blog post, no DNS configuration — all explicitly out of scope per the spec's Non-goals.
+- Single locale (English only) - no `i18n` config beyond Docusaurus's default, no locale dropdown, no per-locale build matrix.
+- Docs and blog use Docusaurus's standard classic-theme structure (sidebar, TOC, prev/next) - reskinned via CSS/Tailwind, never swizzled into fully custom layouts. Only the homepage (`src/pages/index.tsx`) is fully bespoke.
+- Package manager is npm (not yarn) - this project has no existing JS tooling convention to follow, and the CI/deploy tasks are written around `npm ci`.
+- `onBrokenLinks: 'throw'` - a broken internal link fails the build.
+- No Playwright/visual-regression tests, no first blog post, no DNS configuration - all explicitly out of scope per the spec's Non-goals.
 - Production domain is `dotmarc.app`; Cloudflare account is Homotechsual (account ID `e5d7b48988c7e30b93f96550fd4f65d5`).
-- GitHub repo is `homotechsual/dotMARC` (confirmed via `git remote -v`) — used for `editUrl`/`organizationName`/`projectName` config and the GHCR image reference already used elsewhere in this repo.
+- GitHub repo is `homotechsual/dotMARC` (confirmed via `git remote -v`) - used for `editUrl`/`organizationName`/`projectName` config and the GHCR image reference already used elsewhere in this repo.
 
 ---
 
-### Task 1: Scaffold — Docusaurus + TypeScript + Tailwind + brand theming
+### Task 1: Scaffold - Docusaurus + TypeScript + Tailwind + brand theming
 
 **Files:**
 - Create: `website/package.json`
@@ -166,7 +166,7 @@ npm-debug.log*
 
 - [ ] **Step 2: Create the brand assets**
 
-Create `website/static/img/favicon.svg` (a rounded square with the brand palette — Docusaurus accepts an SVG favicon path directly):
+Create `website/static/img/favicon.svg` (a rounded square with the brand palette - Docusaurus accepts an SVG favicon path directly):
 
 ```svg
 <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
@@ -175,7 +175,7 @@ Create `website/static/img/favicon.svg` (a rounded square with the brand palette
 </svg>
 ```
 
-Create `website/static/img/logo-light.svg` (navbar logo for light mode — a dot mark plus wordmark, using a universally-available font stack so it renders correctly without waiting on the custom web font):
+Create `website/static/img/logo-light.svg` (navbar logo for light mode - a dot mark plus wordmark, using a universally-available font stack so it renders correctly without waiting on the custom web font):
 
 ```svg
 <svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="dotMARC">
@@ -343,7 +343,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const siteTitle = 'dotMARC';
 const siteTagline = 'Self-hosted DMARC monitoring for every client domain, from one mailbox.';
 const siteDescription =
-  'dotMARC is a self-hosted DMARC aggregate report analyzer for monitoring email authentication posture across multiple domains from a single mailbox — built for MSPs managing client domains, and equally usable by a single organization.';
+  'dotMARC is a self-hosted DMARC aggregate report analyzer for monitoring email authentication posture across multiple domains from a single mailbox - built for MSPs managing client domains, and equally usable by a single organization.';
 const siteUrl = 'https://dotmarc.app';
 
 const config: Config = {
@@ -473,11 +473,11 @@ Run: `cd website && npm install`
 Expected: installs cleanly, produces `package-lock.json`.
 
 Run: `npm run build`
-Expected: FAILS — there's no `docs/intro`-equivalent content yet (the classic preset's docs plugin needs at least one doc, and no `src/pages/index` exists yet either since Tasks 2/3 haven't run). This is expected at this point in the plan; do not try to fix it here.
+Expected: FAILS - there's no `docs/intro`-equivalent content yet (the classic preset's docs plugin needs at least one doc, and no `src/pages/index` exists yet either since Tasks 2/3 haven't run). This is expected at this point in the plan; do not try to fix it here.
 
 - [ ] **Step 7: Add a placeholder doc and page so the scaffold itself is verifiable**
 
-Create `website/docs/getting-started.md` (temporary placeholder — Task 3 replaces this with the real content):
+Create `website/docs/getting-started.md` (temporary placeholder - Task 3 replaces this with the real content):
 
 ```markdown
 ---
@@ -486,10 +486,10 @@ sidebar_position: 1
 
 # Getting Started
 
-Placeholder — replaced with real content in Task 3.
+Placeholder - replaced with real content in Task 3.
 ```
 
-Create `website/src/pages/index.tsx` (temporary placeholder — Task 2 replaces this with the real homepage):
+Create `website/src/pages/index.tsx` (temporary placeholder - Task 2 replaces this with the real homepage):
 
 ```tsx
 import type {ReactNode} from 'react';
@@ -497,7 +497,7 @@ import Layout from '@theme/Layout';
 
 export default function Home(): ReactNode {
   return (
-    <Layout title="dotMARC" description="Placeholder — replaced in Task 2.">
+    <Layout title="dotMARC" description="Placeholder - replaced in Task 2.">
       <main className="container mx-auto px-4 py-16">
         <h1>dotMARC</h1>
       </main>
@@ -509,10 +509,10 @@ export default function Home(): ReactNode {
 - [ ] **Step 8: Verify the build succeeds**
 
 Run: `npm run build`
-Expected: SUCCESS — `website/build/` is produced with no errors, no broken-link failures.
+Expected: SUCCESS - `website/build/` is produced with no errors, no broken-link failures.
 
 Run: `npm run typecheck`
-Expected: SUCCESS — no TypeScript errors.
+Expected: SUCCESS - no TypeScript errors.
 
 - [ ] **Step 9: Commit**
 
@@ -530,9 +530,9 @@ git commit -m "Scaffold the dotMARC website: Docusaurus, Tailwind, brand theming
 
 **Interfaces:**
 - Consumes: brand CSS custom properties from Task 1's `custom.css`; the `docusaurus.config.ts` navbar/footer from Task 1.
-- Produces: nothing later tasks depend on directly — the homepage is a leaf page.
+- Produces: nothing later tasks depend on directly - the homepage is a leaf page.
 
-No automated test — this is presentational content, verified by build success and a manual dev-server check (this codebase-to-be has no component-rendering test framework, same reasoning as this repo's Blazor UI tasks).
+No automated test - this is presentational content, verified by build success and a manual dev-server check (this codebase-to-be has no component-rendering test framework, same reasoning as this repo's Blazor UI tasks).
 
 - [ ] **Step 1: Write the homepage**
 
@@ -552,7 +552,7 @@ const heroCopy = {
   primaryCta: 'Read the docs',
   secondaryCta: 'View on GitHub',
   description:
-    'Built for MSPs managing DMARC across many client domains — and equally usable for a single organization watching its own.',
+    'Built for MSPs managing DMARC across many client domains - and equally usable for a single organization watching its own.',
 };
 
 const features = [
@@ -726,7 +726,7 @@ Expected: SUCCESS, no errors.
 
 - [ ] **Step 3: Manual verification**
 
-If a browser is available in this environment: `npm run start`, open the homepage, confirm the hero renders, buttons link to `/docs/getting-started` and the GitHub repo, and toggling dark mode (the navbar's color-mode switch) recolors the page correctly. If not possible in this environment, report clearly that this step was skipped and why — not a blocker.
+If a browser is available in this environment: `npm run start`, open the homepage, confirm the hero renders, buttons link to `/docs/getting-started` and the GitHub repo, and toggling dark mode (the navbar's color-mode switch) recolors the page correctly. If not possible in this environment, report clearly that this step was skipped and why - not a blocker.
 
 - [ ] **Step 4: Commit**
 
@@ -748,9 +748,9 @@ git commit -m "Add the dotMARC homepage"
 
 **Interfaces:**
 - Consumes: Task 1's `sidebars.ts` (autogenerated from this folder + each page's `sidebar_position`).
-- Produces: the five doc routes (`/docs/getting-started`, `/docs/local-development`, `/docs/deploy-to-azure`, `/docs/permissions-and-access`, `/docs/scope`) that Task 1's navbar/footer and Task 2's homepage already link to by these exact paths — do not rename any of these five files/slugs, or those existing links break.
+- Produces: the five doc routes (`/docs/getting-started`, `/docs/local-development`, `/docs/deploy-to-azure`, `/docs/permissions-and-access`, `/docs/scope`) that Task 1's navbar/footer and Task 2's homepage already link to by these exact paths - do not rename any of these five files/slugs, or those existing links break.
 
-No automated test — content pages, verified by build success (broken internal links fail the build per `onBrokenLinks: 'throw'`) and a manual read-through.
+No automated test - content pages, verified by build success (broken internal links fail the build per `onBrokenLinks: 'throw'`) and a manual read-through.
 
 - [ ] **Step 1: Getting Started**
 
@@ -763,7 +763,7 @@ sidebar_position: 1
 
 # Getting Started
 
-dotMARC needs **two separate** Entra app registrations — do not reuse one for both purposes.
+dotMARC needs **two separate** Entra app registrations - do not reuse one for both purposes.
 
 ## 1. Mailbox access (app-only)
 
@@ -813,7 +813,7 @@ Set via environment variables (double-underscore nesting):
 | `EntraId__ClientId` | Dashboard app registration's client ID |
 | `EntraId__ClientSecret` | Dashboard app registration's client secret |
 | `ConnectionStrings__DotMarc` | PostgreSQL connection string; defaults to `Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc` |
-| `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants — either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
+| `InitialAdmins__Emails` | Comma-separated list of email addresses granted the Admin role the very first time the app starts with no existing access grants - either a genuinely fresh install, or this app's first deploy of the permissions feature to an existing live environment. Only takes effect while the `UserAccess` table is empty; harmless to leave set afterwards. |
 
 :::danger Set `InitialAdmins__Emails` before deploying this feature
 Authorization is deny-by-default: with no existing access grants, the fallback policy locks out
@@ -837,7 +837,7 @@ docker compose up
 
 This runs dotMARC and a PostgreSQL 18 database together, with Postgres data persisted in a named
 Docker volume (`dotmarc-postgres-data`). Set the required environment variables from the setup
-steps above (or put them in a `.env` file next to `docker-compose.yml` — compose reads that
+steps above (or put them in a `.env` file next to `docker-compose.yml` - compose reads that
 automatically).
 
 ### Reverse proxy / TLS termination
@@ -933,17 +933,17 @@ sidebar_position: 3
   `Key Vault Secrets User` role.
 
 Before deploying, complete the two Entra app registrations described in
-[Getting Started](./getting-started.md) — the Bicep template takes the same non-secret client
+[Getting Started](./getting-started.md) - the Bicep template takes the same non-secret client
 IDs/tenant IDs as deployment parameters, and the client secrets are set into Key Vault after
 deployment (see below).
 
 ## 1. Fill in the parameters
 
-Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders — as checked in, the
+Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders - as checked in, the
 file contains placeholder values only and is **not meant to be deployed as-is**. At minimum, set
 `postgresAdminPassword`, `graphClientId`, `graphTenantId`, `graphMailboxAddress`,
 `entraIdTenantId`, and `entraIdClientId`. For `containerImage`, use the GHCR image published by
-CI/CD — `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release — rather
+CI/CD - `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release - rather
 than building your own.
 
 Alternatively, leave the file untouched and pass overrides inline with `--parameters key=value` on
@@ -977,8 +977,8 @@ added during one-time setup). Sign-in will fail with AADSTS50011 until this is d
 
 ## 4. Populate the Key Vault secrets
 
-The template deliberately provisions three Key Vault secrets — `Graph-ClientSecret`,
-`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` — empty, rather than accepting secret
+The template deliberately provisions three Key Vault secrets - `Graph-ClientSecret`,
+`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` - empty, rather than accepting secret
 material as deployment parameters (which would put it on the command line or in a parameters
 file). Until these are set, the app can't sign in or reach Postgres. Populate them directly:
 
@@ -1005,7 +1005,7 @@ their normal refresh cycle.
 
 :::danger Don't forget InitialAdmins\_\_Emails
 Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.md#configure)) before this
-deployment's first startup — without it, the tightened authorization policy locks out every user,
+deployment's first startup - without it, the tightened authorization policy locks out every user,
 including you.
 :::
 ```
@@ -1022,30 +1022,30 @@ sidebar_position: 4
 # Permissions & Access
 
 dotMARC uses a fine-grained permissions model so internal staff and external clients can be
-granted access the same way — by email, with an optional scope — rather than an all-or-nothing
+granted access the same way - by email, with an optional scope - rather than an all-or-nothing
 login.
 
 ## Roles
 
 A **Role** is a named bundle of permissions. Two are built in:
 
-- **Admin** — every permission, locked (its name and permission set can never be changed or
+- **Admin** - every permission, locked (its name and permission set can never be changed or
   deleted).
-- **Viewer** — read-only (`DomainsView`, `GroupsView`, `TagsView`), and the only role that can be
+- **Viewer** - read-only (`DomainsView`, `GroupsView`, `TagsView`), and the only role that can be
   restricted to specific Groups.
 
-Admins can also create custom roles covering any subset of the available permissions — domain
+Admins can also create custom roles covering any subset of the available permissions - domain
 management, Group/Tag management, and access management are each independently grantable.
 
 ## Granting access
 
-Access is granted from the **Manage Access** page: type an email, pick a role, and — if the role
-is Viewer — optionally pick which Groups they can see. This works identically whether the person
+Access is granted from the **Manage Access** page: type an email, pick a role, and - if the role
+is Viewer - optionally pick which Groups they can see. This works identically whether the person
 is internal staff or an external client contact.
 
 - A grant made before someone's first sign-in stays pending until they actually authenticate, at
   which point it binds to their stable Entra object ID.
-- A Viewer scoped to specific Groups can only ever see domains in those Groups — enforced at the
+- A Viewer scoped to specific Groups can only ever see domains in those Groups - enforced at the
   data-query level, not just hidden in the UI, so this holds even via direct URL navigation to a
   domain outside their scope.
 - An unscoped Viewer grant (no Groups selected) sees every domain, the same as before scoping was
@@ -1054,7 +1054,7 @@ is internal staff or an external client contact.
 ## Bootstrapping the first Admin
 
 See [Getting Started](./getting-started.md#configure) and
-[Deploy to Azure](./deploy-to-azure.md) — the `InitialAdmins__Emails` environment variable grants
+[Deploy to Azure](./deploy-to-azure.md) - the `InitialAdmins__Emails` environment variable grants
 Admin to the listed emails the very first time the app starts with no existing access grants. This
 is the only way to establish the first Admin; set it before your first deploy.
 ```
@@ -1073,7 +1073,7 @@ sidebar_position: 5
 dotMARC deliberately does not cover everything a DMARC tool could. Out of scope for this build:
 
 - **Forensic (RUF) reports.** Only DMARC aggregate (RUA) reports are ingested and parsed.
-- **Push notifications.** No email digests or real-time alerts — dotMARC is a dashboard you check,
+- **Push notifications.** No email digests or real-time alerts - dotMARC is a dashboard you check,
   not a system that pages you.
 - **Long-term raw-data rollups.** There's no 12-month historical raw-data aggregation job; reports
   are retained and queryable, but no separate rollup pipeline summarizes older data down.
@@ -1085,7 +1085,7 @@ existing data model, but they aren't part of what ships today.
 - [ ] **Step 6: Verify the build**
 
 Run: `cd website && npm run build`
-Expected: SUCCESS — all internal links (`./local-development.md`, `./deploy-to-azure.md`, etc., plus the navbar/footer's `/docs/getting-started` etc. from Task 1) resolve; `onBrokenLinks: 'throw'` would otherwise fail the build.
+Expected: SUCCESS - all internal links (`./local-development.md`, `./deploy-to-azure.md`, etc., plus the navbar/footer's `/docs/getting-started` etc. from Task 1) resolve; `onBrokenLinks: 'throw'` would otherwise fail the build.
 
 - [ ] **Step 7: Commit**
 
@@ -1104,13 +1104,13 @@ git commit -m "Add docs content: getting started, local dev, Azure deploy, permi
 
 **Interfaces:**
 - Consumes: Task 1's `docusaurus.config.ts` blog preset config (`routeBasePath: 'blog'`, already set).
-- Produces: the `/blog` route (empty index, no posts) — nothing later tasks depend on.
+- Produces: the `/blog` route (empty index, no posts) - nothing later tasks depend on.
 
-No automated test — configuration/content files, verified by build success.
+No automated test - configuration/content files, verified by build success.
 
 - [ ] **Step 1: Create the blog author registry**
 
-Create `website/blog/authors.yml` (empty registry — filled in whenever the first post is written, per the spec's explicit deferral of blog content):
+Create `website/blog/authors.yml` (empty registry - filled in whenever the first post is written, per the spec's explicit deferral of blog content):
 
 ```yaml
 # Blog post authors are declared here and referenced from each post's front matter
@@ -1129,12 +1129,11 @@ Create `website/blog/tags.yml`:
 - [ ] **Step 3: Verify the build**
 
 Run: `cd website && npm run build`
-Expected: SUCCESS — the blog plugin accepts an empty `blog/` folder (besides the two registry files) and produces an empty `/blog` index rather than erroring.
+Expected: SUCCESS - the blog plugin accepts an empty `blog/` folder (besides the two registry files) and produces an empty `/blog` index rather than erroring.
 
 If the build fails because the blog plugin requires at least one post: create
 `website/blog/2026-08-27-welcome.md` with genuinely minimal, real content (not a placeholder
-stub) —
-
+stub) - 
 ```markdown
 ---
 slug: welcome
@@ -1143,11 +1142,10 @@ authors: []
 tags: []
 ---
 
-This is where dotMARC release notes and announcements will show up. Nothing to report yet — check
+This is where dotMARC release notes and announcements will show up. Nothing to report yet - check
 back after the next release.
 ```
-
-— but only add this file if `npm run build` actually fails without it; report in your task summary
+ - but only add this file if `npm run build` actually fails without it; report in your task summary
 which path was taken.
 
 - [ ] **Step 4: Commit**
@@ -1159,7 +1157,7 @@ git commit -m "Set up the dotMARC blog (empty, ready for future posts)"
 
 ---
 
-### Task 5: Plugins — Plausible analytics + auto-generated OG images
+### Task 5: Plugins - Plausible analytics + auto-generated OG images
 
 **Files:**
 - Modify: `website/docusaurus.config.ts`
@@ -1171,9 +1169,9 @@ git commit -m "Set up the dotMARC blog (empty, ready for future posts)"
 
 **Interfaces:**
 - Consumes: Task 1's `docusaurus.config.ts` (adds to its existing `plugins: []` array and `themeConfig.image` fallback), Task 1's brand palette.
-- Produces: nothing later tasks depend on — this is the last content/config task before CI/deploy.
+- Produces: nothing later tasks depend on - this is the last content/config task before CI/deploy.
 
-No automated test — plugin wiring and generated-asset content, verified by build success (the OG plugin runs at build time and would fail the build if misconfigured) and a manual check of one generated image.
+No automated test - plugin wiring and generated-asset content, verified by build success (the OG plugin runs at build time and would fail the build if misconfigured) and a manual check of one generated image.
 
 - [ ] **Step 1: Add the plugin dependencies**
 
@@ -1236,9 +1234,9 @@ Create `website/static/img/og-backgrounds/blog-gradient.svg` (coral-to-slate gra
 
 - [ ] **Step 3: Create the OG image renderer**
 
-Create `website/lib/ImageRenderers.cjs` — a dotMARC-specific adaptation of Heriau's renderer
+Create `website/lib/ImageRenderers.cjs` - a dotMARC-specific adaptation of Heriau's renderer
 (`J:\Projects\Heriau\website\lib\ImageRenderers.cjs`), simplified since dotMARC has no
-locale/game-specific complexity — just three page categories (docs, pages, blog), one locale, one
+locale/game-specific complexity - just three page categories (docs, pages, blog), one locale, one
 brand:
 
 ```js
@@ -1467,7 +1465,7 @@ const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = req
 const ogPlugin = require('@homotechsual/docusaurus-og');
 ```
 
-Replace the currently-empty `presets` array's sibling — add a `plugins` array right after
+Replace the currently-empty `presets` array's sibling - add a `plugins` array right after
 `presets: [...]` closes (before `themeConfig:`):
 
 ```ts
@@ -1496,7 +1494,7 @@ Replace the currently-empty `presets` array's sibling — add a `plugins` array 
 
 Now that `website/static/img/og-backgrounds/pages-gradient.svg` exists, update
 `website/docusaurus.config.ts`'s `themeConfig.image` from Task 1's placeholder
-(`'img/favicon.svg'` — a tiny icon, not a usable OG-card image) to
+(`'img/favicon.svg'` - a tiny icon, not a usable OG-card image) to
 `'img/og-backgrounds/pages-gradient.svg'`. This is the fallback social-share image for any route
 the OG plugin's `imageRenderers` don't cover (the OG plugin overrides per-page images itself for
 docs/pages/blog routes, so this fallback is rarely hit, but it should be a real card-shaped image
@@ -1506,13 +1504,13 @@ rather than the favicon when it is).
 
 Run: `cd website && npm run build`
 Expected: SUCCESS. Check that `website/build/og-img/` (or wherever the OG plugin writes its
-output — confirm the actual output path from the build log) contains generated PNG/JPEG files for
+output - confirm the actual output path from the build log) contains generated PNG/JPEG files for
 at least the homepage and one docs page.
 
 If the build fails because `@homotechsual/docusaurus-og` needs different `imageRenderers` argument
 shapes than shown above, or a different plugin option name: check the plugin's actual type
 definitions (`node_modules/@homotechsual/docusaurus-og`) rather than guessing further, and adjust
-to match — report any such deviation clearly in your task summary.
+to match - report any such deviation clearly in your task summary.
 
 - [ ] **Step 6: Manual verification**
 
@@ -1529,7 +1527,7 @@ git commit -m "Wire up Plausible analytics and auto-generated OG images"
 
 ---
 
-### Task 6: CI/CD — path-scoped workflows + Cloudflare Pages deploy
+### Task 6: CI/CD - path-scoped workflows + Cloudflare Pages deploy
 
 **Files:**
 - Create: `.github/workflows/website-ci.yml`
@@ -1537,9 +1535,9 @@ git commit -m "Wire up Plausible analytics and auto-generated OG images"
 
 **Interfaces:**
 - Consumes: the completed `website/` project from Tasks 1-5 (`npm run build` must succeed).
-- Produces: nothing later tasks depend on — this is the final task.
+- Produces: nothing later tasks depend on - this is the final task.
 
-No automated test in the traditional sense — this task's own "test" is the workflow actually
+No automated test in the traditional sense - this task's own "test" is the workflow actually
 running successfully on GitHub Actions once pushed, which can't be verified locally. Verify what
 can be verified locally (YAML validity, the build command it invokes) and note the rest as
 requiring a live push to confirm.
@@ -1600,7 +1598,7 @@ jobs:
 - [ ] **Step 2: Create the publish workflow**
 
 Create `.github/workflows/website-publish.yml` (modeled on
-`J:\Projects\Heriau\website\.github\workflows\publish.yml`, simplified — no i18n build matrix, no
+`J:\Projects\Heriau\website\.github\workflows\publish.yml`, simplified - no i18n build matrix, no
 Cloudflare Worker to deploy alongside it):
 
 ```yaml
@@ -1726,17 +1724,17 @@ jobs:
 
 - [ ] **Step 3: Validate the workflow YAML**
 
-Run: `cd .github/workflows && python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in ['website-ci.yml','website-publish.yml']]; print('valid')"` (or any available YAML validator/linter — the point is confirming both files parse as valid YAML before committing, since a syntax error here would only surface on a live push).
+Run: `cd .github/workflows && python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in ['website-ci.yml','website-publish.yml']]; print('valid')"` (or any available YAML validator/linter - the point is confirming both files parse as valid YAML before committing, since a syntax error here would only surface on a live push).
 
 Expected: `valid` (or equivalent no-error output).
 
 - [ ] **Step 4: Report setup steps that need the repo owner, not this task**
 
 This task cannot itself: create the Cloudflare Pages project (`CF_PAGES_PROJECT_DOTMARC` repo
-variable, defaulting to `dotmarc-website` if unset — matches the workflow above), set the
+variable, defaulting to `dotmarc-website` if unset - matches the workflow above), set the
 `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` repo secrets, or attach the `dotmarc.app` custom
 domain to that Cloudflare Pages project. Note this clearly in your task report as required manual
-setup before `website-publish.yml` can succeed on a real push — this is expected and matches the
+setup before `website-publish.yml` can succeed on a real push - this is expected and matches the
 spec's explicit Non-goal ("DNS configuration for dotmarc.app... an operator action outside what an
 implementation plan can do").
 

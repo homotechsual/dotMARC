@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace DotMarc.MtaSts;
 
 /// <summary>Confirms a domain's mta-sts.&lt;domain&gt; CNAME actually points at dotMARC's own
-/// hosting hostname, querying Cloudflare's DNS-over-HTTPS JSON API — same approach and same
+/// hosting hostname, querying Cloudflare's DNS-over-HTTPS JSON API - same approach and same
 /// reasoning as DotMarc.Dns.DmarcDnsChecker (consistent results independent of the runtime
 /// environment's own resolver config, over HTTPS rather than raw UDP:53 so it works reliably from
 /// Azure Container Apps).</summary>

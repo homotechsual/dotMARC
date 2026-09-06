@@ -24,14 +24,14 @@ var builder = WebApplication.CreateBuilder(args);
 // The container listens on plain HTTP behind a TLS-terminating reverse proxy (see README) or,
 // when deployed to Azure, behind Container Apps' ingress proxy. ASP.NET Core otherwise
 // builds the OIDC redirect_uri from the request's own scheme, which is http unless forwarded
-// headers are processed — sending http://host/signin-oidc to Entra when https://host/signin-oidc
+// headers are processed - sending http://host/signin-oidc to Entra when https://host/signin-oidc
 // is what's registered, breaking sign-in with AADSTS50011.
 //
 // KnownProxies/KnownIPNetworks default to trusting only loopback, which Container Apps'
 // ingress proxy never is (it's never on loopback from the container's perspective, and a
 // self-hosted reverse proxy may not be either). The container has no other ingress path in
-// either supported deployment model — it is never directly reachable except through that
-// trusted front-end — so clearing both restrictions to trust any upstream proxy is safe here.
+// either supported deployment model - it is never directly reachable except through that
+// trusted front-end - so clearing both restrictions to trust any upstream proxy is safe here.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -50,7 +50,7 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // PollingService's existing IServiceScopeFactory-based scoped resolution (see the
 // [ActivatorUtilitiesConstructor] host constructor below), and Dashboard.razor/DomainDetail.razor,
 // which use the factory directly to create a short-lived context per render instead of holding one
-// scoped/tracked context for the whole Blazor Server circuit. Do NOT also call AddDbContext here —
+// scoped/tracked context for the whole Blazor Server circuit. Do NOT also call AddDbContext here - 
 // combined with AddDbContextFactory it creates a scoped/singleton DbContextOptions<T> conflict that
 // only surfaces when ASP.NET Core's DI container validates scopes, i.e. in Development
 // (WebApplication.CreateBuilder enables ValidateScopes/ValidateOnBuild there): builder.Build()
@@ -59,7 +59,7 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // wasn't caught by a Docker smoke test alone.
 builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(connectionString));
 
-// Previously unconfigured — Data Protection fell back to its default (non-durable across
+// Previously unconfigured - Data Protection fell back to its default (non-durable across
 // restarts/redeploys/replicas) key store, which DnsPushStateProtector tolerated only because its
 // state is minutes-lived. Secrets stored via DatabaseSecretStore need real durability, the same
 // argument that already moved NotificationSettings into Postgres.
@@ -115,7 +115,7 @@ builder.Services.AddHttpClient<ITlsrptDnsChecker, TlsrptDnsChecker>(client =>
 });
 
 // MTA-STS hosting is opt-in per deployment (see MtaStsOptions), so this section is intentionally
-// not validated at startup the way GraphOptions is above — a deployment that never sets
+// not validated at startup the way GraphOptions is above - a deployment that never sets
 // MtaSts:HostingHostname simply never enables MtaStsEnabled on any domain, and the background
 // cycle no-ops without it (see PollingService.RunMtaStsCheckCycleAsync).
 builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.GetSection(DotMarc.MtaSts.MtaStsOptions.SectionName));
@@ -125,7 +125,7 @@ builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
 builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();
 
 // KeyVault:VaultUri is only set by infra/main.bicep when enableKeyVaultWrite is true (see
-// KeyVault__VaultUri there); every other deployment — including local/Docker Compose — leaves it
+// KeyVault__VaultUri there); every other deployment - including local/Docker Compose - leaves it
 // unset and falls back to the Postgres-backed store.
 var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
 if (!string.IsNullOrWhiteSpace(keyVaultUri))
@@ -313,7 +313,7 @@ using (var scope = app.Services.CreateScope())
     await DatabaseMigrator.MigrateWithLeaderLockAsync(context);
     // AccessBootstrapper is a static class (matching this project's other *ManagementService
     // statics), so it can't take a constructor-injected ILogger<AccessBootstrapper> the way
-    // PollingService does — a static class can't be used as a generic type argument. Creating a
+    // PollingService does - a static class can't be used as a generic type argument. Creating a
     // logger from the category type directly gets the same category-name behavior ILogger<T>
     // would have given a non-static class.
     var accessBootstrapperLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AccessBootstrapper));
@@ -322,8 +322,8 @@ using (var scope = app.Services.CreateScope())
     if (demoOptions.Enabled)
     {
         // AccessBootstrapper (just above) already saved and tracks Admin/Viewer Role entities on
-        // this same context. DemoDataSeeder.ResetAsync truncates every table with raw SQL — which
-        // bypasses the change tracker entirely — then inserts its own fresh Role rows; Postgres
+        // this same context. DemoDataSeeder.ResetAsync truncates every table with raw SQL - which
+        // bypasses the change tracker entirely - then inserts its own fresh Role rows; Postgres
         // reissues identity 1 for those (RESTART IDENTITY), colliding with the still-tracked stale
         // Role from bootstrap. Clearing the tracker first (nothing above still needs saving; it's
         // all already persisted) avoids that collision.
@@ -336,7 +336,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Must run first, before any other middleware that reads the request's scheme/host (redirects,
-// authentication challenges, static files) — otherwise those still see the proxy's original
+// authentication challenges, static files) - otherwise those still see the proxy's original
 // (unforwarded) http request.
 app.UseForwardedHeaders();
 
@@ -384,7 +384,7 @@ if (demoOptions.Enabled)
         }
 
         // No antiforgery token: the only effect of this endpoint is changing which fixed demo
-        // persona the calling browser's own session views as — there's no cross-user or
+        // persona the calling browser's own session views as - there's no cross-user or
         // cross-tenant side effect a forged request could cause, so skipping CSRF protection
         // here (unlike every other mutating endpoint in this app, which goes through Blazor's
         // own antiforgery-protected form handling) is a deliberate, low-risk simplification.
@@ -406,12 +406,12 @@ if (demoOptions.Enabled)
 }
 
 // Both endpoints below are hostname-routed (mta-sts.<domain>), not path-routed under this app's
-// own hostname, so they're unauthenticated by necessity — Caddy and receiving mail servers are
+// own hostname, so they're unauthenticated by necessity - Caddy and receiving mail servers are
 // never signed in. Gating is done by looking up the Domain instead (see each endpoint).
 
 // Caddy's on-demand-TLS "ask" callback: only let Caddy attempt certificate issuance for a
 // hostname once DNS has actually been verified to point here, not the moment a customer merely
-// enables hosting (PendingDns) — otherwise a typo'd or not-yet-propagated CNAME would burn a
+// enables hosting (PendingDns) - otherwise a typo'd or not-yet-propagated CNAME would burn a
 // Let's Encrypt validation attempt against a hostname that doesn't resolve here yet.
 app.MapGet("/.well-known/mta-sts-ask", async (string domain, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
 {
@@ -455,7 +455,7 @@ app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContex
 }).AllowAnonymous();
 
 // Unlike the two /.well-known/mta-sts* endpoints above, these run under this app's own hostname
-// and DO require the caller to already be signed in — a push is a write action gated by the same
+// and DO require the caller to already be signed in - a push is a write action gated by the same
 // permission its target already needs (MtaStsManage for the CNAME, DomainsEdit for the DMARC TXT
 // record), checked explicitly below since /start doesn't yet know which target it's for from route
 // data alone.
@@ -506,7 +506,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     }
 
     // The signed state proves the /start redirect was legitimate, but says nothing about whether
-    // whoever's browser lands HERE still holds the permission the push actually needs — re-run the
+    // whoever's browser lands HERE still holds the permission the push actually needs - re-run the
     // same target-to-policy check /start already made rather than relying solely on the app's
     // FallbackPolicy (any authenticated user).
     var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" or "dmarc-auth" => "DomainsEdit", _ => null };
@@ -548,7 +548,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         changes = [cnameChange];
 
         // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
-        // custom domain — see AzureMtaStsHostProvisioner and the design spec's "Fetching the
+        // custom domain - see AzureMtaStsHostProvisioner and the design spec's "Fetching the
         // verification ID" section. Caddy has no such requirement, and a null/empty ID (the ARM
         // call failed, or this deployment isn't actually Azure-provisioned) just means the push
         // proceeds with the CNAME alone rather than failing outright.
@@ -571,7 +571,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var mailbox = graphOptions.Value.MailboxAddress;
         if (existing.DelegatedToCname is not null)
         {
-            // The record is a CNAME delegated to a third party — DNS doesn't allow a CNAME to
+            // The record is a CNAME delegated to a third party - DNS doesn't allow a CNAME to
             // coexist with any other record type at the same name, so there's no in-place merge
             // here, only delete-then-create. The confirm dialog makes this explicit before the
             // user ever reaches this endpoint (DnsRecordPushDecision.NeedsConfirmation always
@@ -595,10 +595,10 @@ app.MapGet("/dns-push/{provider}/callback", async (
     else if (decodedState.PushTarget == "dmarc-auth")
     {
         // RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being monitored
-        // (the normal MSP shape — a shared mailbox on the MSP's own domain, not each client's),
+        // (the normal MSP shape - a shared mailbox on the MSP's own domain, not each client's),
         // that mailbox's domain must publish this record proving it accepts reports for the
         // monitored domain. Unlike the "dmarc"/"tlsrpt" targets above, this record's zone is the
-        // MAILBOX's domain, not domain.Name — ZoneName below reflects that, which is what sends
+        // MAILBOX's domain, not domain.Name - ZoneName below reflects that, which is what sends
         // this push through whichever DNS provider hosts the deployment's own domain rather than
         // the client's.
         var mailbox = graphOptions.Value.MailboxAddress;
@@ -617,7 +617,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         }
         else
         {
-            // No structured tags to preserve here (unlike DMARC/TLSRPT's rua= merge) — an
+            // No structured tags to preserve here (unlike DMARC/TLSRPT's rua= merge) - an
             // authorization record's only job is to exist with v=DMARC1, so an unexpected
             // existing value is simply overwritten once the confirm dialog (shown for any
             // existing-differs-from-proposed case, per DnsRecordPushDecision.NeedsConfirmation)
@@ -664,8 +664,8 @@ app.MapGet("/dns-push/{provider}/callback", async (
         _ => "error"
     };
 
-    // The popup's postMessage carries only this coarse flag — DetailMessage never reaches the
-    // browser — so this is the only place the specific reason (status codes, provider error text)
+    // The popup's postMessage carries only this coarse flag - DetailMessage never reaches the
+    // browser - so this is the only place the specific reason (status codes, provider error text)
     // survives at all. Logged at Warning for every non-Pushed outcome, not just
     // ReplaceFailedAfterDelete, since any of them can otherwise be silently undiagnosable.
     if (result.Outcome != DnsPushOutcome.Pushed)
@@ -677,11 +677,11 @@ app.MapGet("/dns-push/{provider}/callback", async (
     return DnsPushPopupResult.Close(resultFlag);
 });
 
-// Unauthenticated by necessity — HaloPSA's own outbound webhook config isn't confirmed to support
+// Unauthenticated by necessity - HaloPSA's own outbound webhook config isn't confirmed to support
 // custom headers, so the shared secret travels in the path instead. A non-matching secret returns
 // 404 rather than 401 so an unauthenticated caller can't even confirm this endpoint exists.
 //
-// Binds the raw HttpRequest rather than a typed HaloWebhookTicketPayload parameter — a typed body
+// Binds the raw HttpRequest rather than a typed HaloWebhookTicketPayload parameter - a typed body
 // parameter is parsed by ASP.NET Core's model binder before the handler runs at all, which would
 // 400 a malformed body regardless of whether the secret is even right. The secret check has to
 // happen first, and body parsing happens only after it passes, inside the handler.
@@ -704,7 +704,7 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
     }
     catch (JsonException ex)
     {
-        // Nothing a retry from Halo would fix — log it and 200 rather than surfacing a failure
+        // Nothing a retry from Halo would fix - log it and 200 rather than surfacing a failure
         // status that could trigger a retry storm.
         logger.LogWarning(ex, "Received an unparseable HaloPSA webhook payload.");
         return Results.Ok();

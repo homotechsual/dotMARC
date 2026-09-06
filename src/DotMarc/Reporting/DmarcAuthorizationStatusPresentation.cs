@@ -4,7 +4,7 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps DmarcAuthorizationCheckStatus to the MudBlazor color/label pair used on
-/// DomainDetail.razor's Overview health checklist — same shared-presentation-logic precedent as
+/// DomainDetail.razor's Overview health checklist - same shared-presentation-logic precedent as
 /// DmarcStatusPresentation.</summary>
 public static class DmarcAuthorizationStatusPresentation
 {

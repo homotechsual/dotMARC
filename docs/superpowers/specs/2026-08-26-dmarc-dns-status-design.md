@@ -5,7 +5,7 @@
 dotMARC tells you whether a domain's aggregate reports are arriving, but not whether the DNS
 records that make that possible are actually correct. A domain can look fine (reports flowing,
 pass rate healthy) while quietly relying on records that happen to work today and could break
-silently — and a domain that's never sent a report gives no signal at all about *why*: no DMARC
+silently - and a domain that's never sent a report gives no signal at all about *why*: no DMARC
 record published, a `rua=` tag pointing at the wrong mailbox, or (the case this design's title
 names directly) a missing external-reporting authorization record. This design adds a DNS-based
 check, queried against Cloudflare's public resolvers, that answers that question directly and
@@ -20,28 +20,27 @@ implementation-detail name borrowed from a UI pattern, not a description of what
 
 - For every domain, know whether its own `_dmarc.<domain>` TXT record exists, is well-formed, and
   actually authorizes reports to be sent to dotMARC's configured mailbox.
-- Know whether the RFC 7489 §7.1 external-reporting authorization record — published at
-  `<domain>._report._dmarc.<mailbox-domain>`, e.g. `blossom.wales._report._dmarc.mjco.uk` — exists
+- Know whether the RFC 7489 §7.1 external-reporting authorization record - published at
+  `<domain>._report._dmarc.<mailbox-domain>`, e.g. `blossom.wales._report._dmarc.mjco.uk` - exists
   when it's required (i.e. whenever the mailbox's domain differs from the monitored domain, which
   is effectively always in this app's shared-mailbox architecture).
 - Query Cloudflare specifically (not whatever resolver the host happens to have configured), so
   results are consistent and independent of the runtime environment's own DNS configuration.
 - Keep this fresh automatically, without requiring a user to remember to check.
 - Show a compact, at-a-glance summary on the Dashboard, with the full reason on the per-domain
-  drilldown page — and nothing at all on Manage Domains, which is a configuration surface only.
+  drilldown page - and nothing at all on Manage Domains, which is a configuration surface only.
 - Rename `IsPinned` → `IsMonitored` throughout (data model, service, both Razor pages, tests).
 
 ## Non-goals
 
-- Checking anything beyond the two records above (e.g. SPF, DKIM, MX — this is a DMARC-record
+- Checking anything beyond the two records above (e.g. SPF, DKIM, MX - this is a DMARC-record
   status check, not a general domain-health scanner).
-- A manual "check now" trigger. Automatic, on the same cadence as polling, is the only trigger —
-  see [Trigger and cadence](#trigger-and-cadence) below.
+- A manual "check now" trigger. Automatic, on the same cadence as polling, is the only trigger -   see [Trigger and cadence](#trigger-and-cadence) below.
 - Querying any DNS provider other than Cloudflare, or falling back to a second provider if
-  Cloudflare is unreachable — a failed check just leaves the domain's status as whatever it was
+  Cloudflare is unreachable - a failed check just leaves the domain's status as whatever it was
   before (see [Failure handling](#failure-handling)).
 - Anything on Manage Domains. That page manages configuration (add, remove, monitored toggle,
-  order); it doesn't show status of any kind, DNS or otherwise — this design doesn't touch it
+  order); it doesn't show status of any kind, DNS or otherwise - this design doesn't touch it
   beyond the terminology rename.
 
 ## Data model
@@ -49,16 +48,16 @@ implementation-detail name borrowed from a UI pattern, not a description of what
 `Domain` gains three fields:
 
 - **`DmarcCheckStatus`** (enum: `NotChecked`, `Ok`, `MissingOwnRecord`, `Misconfigured`,
-  `MissingAuthorizationRecord`) — the single terminal status from the waterfall below. Default
+  `MissingAuthorizationRecord`) - the single terminal status from the waterfall below. Default
   `NotChecked` for a domain that hasn't been checked yet (including every domain that exists
   before this migration runs).
-- **`DmarcCheckedUtc`** (`DateTimeOffset?`) — when the check last ran. `null` until the first
+- **`DmarcCheckedUtc`** (`DateTimeOffset?`) - when the check last ran. `null` until the first
   check.
-- **`DmarcCheckDetail`** (`string?`) — a human-readable reason, e.g. `"rua= points to
+- **`DmarcCheckDetail`** (`string?`) - a human-readable reason, e.g. `"rua= points to
   other@example.com, not rua.dmarc@mjco.uk"` or `"No TXT record found at
   blossom.wales._report._dmarc.mjco.uk"`. `null` when `DmarcCheckStatus` is `Ok` or `NotChecked`.
 
-Same migration renames `IsPinned` → `IsMonitored` (a plain column rename, not a new column — see
+Same migration renames `IsPinned` → `IsMonitored` (a plain column rename, not a new column - see
 [Terminology rename](#terminology-rename-ispinned--ismonitored)).
 
 ## The check: a waterfall, not two independent lookups
@@ -71,17 +70,17 @@ DNS query, not two:
    `mailto:` URIs per RFC 7489) doesn't include the configured mailbox address
    (`GraphOptions.MailboxAddress`, case-insensitive) → `Misconfigured`, stop.
 3. Record is valid and correctly addressed. If the mailbox's domain (the part after `@` in
-   `MailboxAddress`) equals the monitored domain → `Ok`, stop — same-domain destinations are
+   `MailboxAddress`) equals the monitored domain → `Ok`, stop - same-domain destinations are
    exempt from the authorization-record requirement.
 4. Domains differ. Query `<domain>._report._dmarc.<mailbox-domain>` as TXT. No record →
    `MissingAuthorizationRecord`. Record present → `Ok`. (Per RFC 7489, this record should itself
    start with `v=DMARC1`, but real-world publishers are inconsistent about this in practice for a
-   record whose only job is presence-as-consent — its mere existence is treated as sufficient
+   record whose only job is presence-as-consent - its mere existence is treated as sufficient
    here, matching what recipients' own DMARC implementations generally accept.)
 
 ## Querying Cloudflare
 
-Cloudflare's DNS-over-HTTPS JSON API, not raw UDP to 1.1.1.1/1.0.0.1 — this runs over HTTPS (443),
+Cloudflare's DNS-over-HTTPS JSON API, not raw UDP to 1.1.1.1/1.0.0.1 - this runs over HTTPS (443),
 which is reliably open outbound from Azure Container Apps, unlike raw UDP:53, and needs no new DNS
 protocol library:
 
@@ -99,7 +98,7 @@ Response shape (relevant fields only):
 `Status: 0` is NOERROR; `Status: 3` is NXDOMAIN (the "no record" case in the waterfall above). A
 TXT record's `data` field carries the literal record text still wrapped in double quotes (and, for
 records over 255 bytes, as multiple adjacent quoted segments that concatenate into the full
-value) — both need stripping/joining before parsing `v=`/`rua=` out of it.
+value) - both need stripping/joining before parsing `v=`/`rua=` out of it.
 
 New service, following this project's existing `IGraphMailboxClient`/`GraphMailboxClient`
 pattern exactly (interface + typed `HttpClient` implementation, registered the same way in
@@ -119,8 +118,8 @@ Uri("https://cloudflare-dns.com/"));`.
 ## Trigger and cadence
 
 Runs inside `PollingService`'s existing cycle (the same background service, same leader-election
-advisory lock — no second scheduled job to build or coordinate), after the mailbox poll itself.
-For every `Domain` row (not only monitored ones — an auto-discovered domain benefits from knowing
+advisory lock - no second scheduled job to build or coordinate), after the mailbox poll itself.
+For every `Domain` row (not only monitored ones - an auto-discovered domain benefits from knowing
 its authorization record is actually in place just as much as a manually-added one), skip unless
 `DmarcCheckedUtc` is `null` or more than 24 hours old. On a normal 5-minute poll interval this
 means the DNS check work only actually happens roughly once a day per domain, not every cycle.
@@ -129,7 +128,7 @@ means the DNS check work only actually happens roughly once a day per domain, no
 
 If the Cloudflare request itself fails (network error, non-2xx response, timeout) for a given
 domain's check, that domain's `DmarcCheckStatus`/`DmarcCheckedUtc`/`DmarcCheckDetail` are left
-unchanged — no partial update, no "unknown/error" status distinct from `NotChecked`. The domain is
+unchanged - no partial update, no "unknown/error" status distinct from `NotChecked`. The domain is
 simply retried on the next cycle once 24 hours have passed since its last successful check (or
 immediately, since `DmarcCheckedUtc` never advanced). This mirrors `PollingService`'s existing
 policy of leaving a message unread and retrying rather than recording a failure state that has to
@@ -140,18 +139,18 @@ be separately cleared.
 `Dashboard.razor`'s domain table:
 
 - Existing `Status` column (report pass-rate health: OK/Warning/Missing) is relabeled
-  **`Report Status`** — disambiguating it from the new column, not a behavior change.
+  **`Report Status`** - disambiguating it from the new column, not a behavior change.
 - New **`DNS Status`** column: a chip in the same visual style as `Report Status`, driven directly
-  by `DmarcCheckStatus` — `Ok` (green), `MissingOwnRecord`/`Misconfigured` (red),
+  by `DmarcCheckStatus` - `Ok` (green), `MissingOwnRecord`/`Misconfigured` (red),
   `MissingAuthorizationRecord` (amber/warning), `NotChecked` (neutral grey, "Not checked yet").
-- Existing `Pinned` column is relabeled **`Monitored`** (see rename section) — no behavior change,
+- Existing `Pinned` column is relabeled **`Monitored`** (see rename section) - no behavior change,
   same toggle switch.
 
 ## Domain detail changes
 
 `DomainDetail.razor`'s Overview tab gains a "DMARC record status" panel (same kind of addition as
 the Dashboard's existing "Polling status" panel from a prior design): the full status, the
-`DmarcCheckedUtc` timestamp, and — when status isn't `Ok`/`NotChecked` — the specific
+`DmarcCheckedUtc` timestamp, and - when status isn't `Ok`/`NotChecked` - the specific
 `DmarcCheckDetail` reason text.
 
 ## Terminology rename: `IsPinned` → `IsMonitored`
@@ -168,7 +167,7 @@ Mechanical rename, not a behavior change. Touches:
   reference to `IsPinned`/`SetPinnedAsync` in setup or assertions.
 
 Not touched: the original project design spec
-(`docs/superpowers/specs/2026-08-09-dotmarc-design.md`) and every prior migration file — both are
+(`docs/superpowers/specs/2026-08-09-dotmarc-design.md`) and every prior migration file - both are
 historical records of what was true when they were written, the same reason a database migration
 is never hand-edited after the fact. The new migration this design adds is the record of the
 rename; the old ones stay exactly as they are.

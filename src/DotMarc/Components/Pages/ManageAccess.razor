@@ -214,7 +214,7 @@
             var result = await RoleManagementService.UpdateRoleAsync(db, row.Id, newName, row.Permissions, CancellationToken.None);
             if (result != RoleManagementService.UpdateRoleResult.Updated)
             {
-                Snackbar.Add("Failed to rename role — the name may be empty or already taken.", Severity.Error);
+                Snackbar.Add("Failed to rename role - the name may be empty or already taken.", Severity.Error);
             }
         }
         catch (Exception)
@@ -232,7 +232,7 @@
             var result = await RoleManagementService.UpdateRoleAsync(db, row.Id, row.Name, permissions.ToList(), CancellationToken.None);
             if (result != RoleManagementService.UpdateRoleResult.Updated)
             {
-                Snackbar.Add($"Failed to update {row.Name}'s permissions — the role may have been renamed or locked elsewhere. Try again.", Severity.Error);
+                Snackbar.Add($"Failed to update {row.Name}'s permissions - the role may have been renamed or locked elsewhere. Try again.", Severity.Error);
             }
         }
         catch (Exception)
@@ -250,7 +250,7 @@
             var result = await RoleManagementService.RemoveRoleAsync(db, row.Id, CancellationToken.None);
             if (result == RoleManagementService.RemoveRoleResult.InUse)
             {
-                Snackbar.Add($"Can't remove {row.Name} — it's still granted to at least one person. Revoke or reassign their access first.", Severity.Error);
+                Snackbar.Add($"Can't remove {row.Name} - it's still granted to at least one person. Revoke or reassign their access first.", Severity.Error);
             }
         }
         catch (Exception)
@@ -299,7 +299,7 @@
             var result = await UserAccessManagementService.RevokeAccessAsync(db, row.Id, CancellationToken.None);
             if (result == UserAccessManagementService.RevokeAccessResult.LastAdminGuard)
             {
-                Snackbar.Add($"Can't revoke {row.Email} — they're the last remaining grant with Manage Access permission. Grant Manage Access to someone else first.", Severity.Error);
+                Snackbar.Add($"Can't revoke {row.Email} - they're the last remaining grant with Manage Access permission. Grant Manage Access to someone else first.", Severity.Error);
                 return;
             }
             await LoadAsync();

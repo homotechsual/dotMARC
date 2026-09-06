@@ -1,8 +1,8 @@
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row for the HaloPSA PSA integration — same "exactly one row,
+/// <summary>Singleton settings row for the HaloPSA PSA integration - same "exactly one row,
 /// seeded via migration HasData" pattern as NotificationSettings. The client secret itself lives
-/// in ISecretStore under SecretStoreKey, never on this entity — every reader of this entity should
+/// in ISecretStore under SecretStoreKey, never on this entity - every reader of this entity should
 /// treat ClientSecretConfigured as the only signal about the secret's presence.</summary>
 public sealed class HaloPsaSettings
 {

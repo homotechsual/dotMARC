@@ -36,7 +36,7 @@ public static class DomainStatistics
 
     /// <summary>Volume-weighted pass rate across ALL supplied domains' in-window reports combined
     /// (sum of passing message counts over sum of all message counts), rather than averaging each
-    /// domain's own pass rate equally — a domain sending 10 messages in the window should not move
+    /// domain's own pass rate equally - a domain sending 10 messages in the window should not move
     /// the overall figure as much as one sending 10,000.</summary>
     public static double GetOverallPassRate(IEnumerable<IEnumerable<Report>> perDomainReportsInWindow)
     {

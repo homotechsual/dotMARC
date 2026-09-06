@@ -190,7 +190,7 @@ public class PollingServiceTests : IAsyncLifetime
             await service.PollOnceAsync(CancellationToken.None);
         }
 
-        // First attempt: report stored, but marking read failed — so it's NOT a ParseFailure, and
+        // First attempt: report stored, but marking read failed - so it's NOT a ParseFailure, and
         // the message is still considered unread for the next poll.
         using (var verify = CreateContext())
         {
@@ -210,7 +210,7 @@ public class PollingServiceTests : IAsyncLifetime
 
         using (var verify = CreateContext())
         {
-            Assert.Single(verify.Reports); // still exactly one — no duplicate.
+            Assert.Single(verify.Reports); // still exactly one - no duplicate.
             Assert.Empty(verify.ParseFailures);
         }
         Assert.Contains("msg-1", graphClient.MarkedAsRead);
@@ -221,7 +221,7 @@ public class PollingServiceTests : IAsyncLifetime
     {
         // Regression coverage for the "mark-as-read keeps 403ing forever" case: once a message has
         // produced a stored Report, later polls must not re-fetch or re-parse its attachment just
-        // because Graph's isRead flag never got set — only a cheap mark-as-read retry.
+        // because Graph's isRead flag never got set - only a cheap mark-as-read retry.
         var graphClient = new FakeGraphMailboxClient();
         graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
         graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
@@ -240,7 +240,7 @@ public class PollingServiceTests : IAsyncLifetime
         }
 
         // Replace the attachment with something that would fail to parse if the message were
-        // reprocessed — proving the second poll skips the fetch/parse path entirely rather than
+        // reprocessed - proving the second poll skips the fetch/parse path entirely rather than
         // merely tolerating a duplicate.
         graphClient.Attachments["msg-1"] = [new MailboxAttachment("garbage.xml", "text/xml", "not xml"u8.ToArray())];
 

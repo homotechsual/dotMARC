@@ -166,7 +166,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         await context.SaveChangesAsync();
 
         // Editing the MX list on an already-enabled, already-Active domain shouldn't reset it back
-        // to PendingDns — only the false-to-true enable transition does that.
+        // to PendingDns - only the false-to-true enable transition does that.
         await DomainManagementService.SetMtaStsConfigAsync(
             context, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com", "backup.contoso.com"], 604_800, CancellationToken.None);
 
@@ -231,7 +231,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     {
         // Regression coverage for "existing installs don't need a data-backfill migration": rows
         // created directly (bypassing AddDomainAsync's append-at-end logic), the way every domain
-        // that predates this feature exists today, are left at SortOrder's default of 0 — tied.
+        // that predates this feature exists today, are left at SortOrder's default of 0 - tied.
         // The ordering query's secondary key must still produce a sensible, predictable order.
         using var context = CreateContext();
         context.Domains.Add(new Domain { Name = "zebra.com", FirstSeenUtc = DateTimeOffset.UtcNow });

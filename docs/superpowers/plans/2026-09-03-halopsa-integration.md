@@ -20,7 +20,7 @@
 - Follow the existing typed-`HttpClient` + interface pattern for any new HTTP client (see `TeamsWebhookClient`, `GenericWebhookClient`).
 - Migration commands: `dotnet ef migrations add <Name> --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`, run from the repo root.
 - Tests: `Testcontainers.PostgreSql` (see `PostgresContainerFixture`, the `[Collection("Postgres")]` pattern) for anything touching the DB; `FakeHttpMessageHandler` for anything making outbound HTTP calls; `WebApplicationFactory<Program>` (see `DemoSignInEndpointTests`) for the new minimal-API endpoint.
-- No automated test coverage for Razor/Blazor component rendering — established gap in this codebase (verified manually), not something to build test infrastructure for as a side effect of this feature.
+- No automated test coverage for Razor/Blazor component rendering - established gap in this codebase (verified manually), not something to build test infrastructure for as a side effect of this feature.
 
 ---
 
@@ -35,7 +35,7 @@
 - Create (generated): `src/DotMarc/Migrations/<timestamp>_AddHaloPsaIntegration.cs` and `.Designer.cs`
 
 **Interfaces:**
-- Produces: `HaloPsaSettings` entity (`Id`, `Enabled`, `AccountName`, `AuthServerUrl`, `ResourceServerUrl`, `ClientId`, `ClientSecretConfigured`, `TicketTypeId`, `DefaultPriorityId`, `ClosedStatusId`, `WebhookSecret`, `ProtectedClientSecret` — the last one internal-use-only, see Task 2). `Group.HaloClientId` (`int?`). `Domain.HaloClientId` (`int?`). `AlertEvent.ExternalTicketProvider`/`ExternalTicketId` (`string?`).
+- Produces: `HaloPsaSettings` entity (`Id`, `Enabled`, `AccountName`, `AuthServerUrl`, `ResourceServerUrl`, `ClientId`, `ClientSecretConfigured`, `TicketTypeId`, `DefaultPriorityId`, `ClosedStatusId`, `WebhookSecret`, `ProtectedClientSecret` - the last one internal-use-only, see Task 2). `Group.HaloClientId` (`int?`). `Domain.HaloClientId` (`int?`). `AlertEvent.ExternalTicketProvider`/`ExternalTicketId` (`string?`).
 
 - [ ] **Step 1: Create the `HaloPsaSettings` entity**
 
@@ -43,7 +43,7 @@
 // src/DotMarc/Notifications/HaloPsaSettings.cs
 namespace DotMarc.Notifications;
 
-/// <summary>Singleton settings row for the HaloPSA PSA integration — same "exactly one row,
+/// <summary>Singleton settings row for the HaloPSA PSA integration - same "exactly one row,
 /// seeded via migration HasData" pattern as NotificationSettings. ProtectedClientSecret is
 /// written and read only by DatabaseHaloSecretStore (see IHaloSecretStore); every other reader
 /// of this entity should treat ClientSecretConfigured as the only signal about the secret's
@@ -68,21 +68,21 @@ public sealed class HaloPsaSettings
 - [ ] **Step 2: Add `HaloClientId` to `Group`**
 
 ```csharp
-// src/DotMarc/Data/Group.cs — add alongside the existing properties
+// src/DotMarc/Data/Group.cs - add alongside the existing properties
 public int? HaloClientId { get; set; }
 ```
 
 - [ ] **Step 3: Add `HaloClientId` to `Domain`**
 
 ```csharp
-// src/DotMarc/Data/Domain.cs — add alongside the existing MTA-STS properties
+// src/DotMarc/Data/Domain.cs - add alongside the existing MTA-STS properties
 public int? HaloClientId { get; set; } // override; null means "use the Group's mapping"
 ```
 
 - [ ] **Step 4: Add ticket correlation fields to `AlertEvent`**
 
 ```csharp
-// src/DotMarc/Notifications/AlertEvent.cs — add after Message
+// src/DotMarc/Notifications/AlertEvent.cs - add after Message
 public string? ExternalTicketProvider { get; set; } // "HaloPSA" today; null if no ticket was created
 public string? ExternalTicketId { get; set; }
 ```
@@ -105,7 +105,7 @@ modelBuilder.Entity<HaloPsaSettings>().HasData(new HaloPsaSettings { Id = 1 });
 
 Run: `dotnet ef migrations add AddHaloPsaIntegration --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
 
-Open the generated migration and confirm it contains: the `HaloPsaSettings` table (with the seed row's `InsertData`), `HaloClientId` columns added to `Groups` and `Domains`, and `ExternalTicketProvider`/`ExternalTicketId` columns added to `AlertEvents`. If anything is missing, the entity/`OnModelCreating` change above wasn't picked up — fix it before proceeding, don't hand-edit the migration.
+Open the generated migration and confirm it contains: the `HaloPsaSettings` table (with the seed row's `InsertData`), `HaloClientId` columns added to `Groups` and `Domains`, and `ExternalTicketProvider`/`ExternalTicketId` columns added to `AlertEvents`. If anything is missing, the entity/`OnModelCreating` change above wasn't picked up - fix it before proceeding, don't hand-edit the migration.
 
 - [ ] **Step 7: Apply and verify against a real database**
 
@@ -160,7 +160,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 ```
 
-No `OnModelCreating` changes needed — `IDataProtectionKeyContext` brings its own conventional mapping for `DataProtectionKey`.
+No `OnModelCreating` changes needed - `IDataProtectionKeyContext` brings its own conventional mapping for `DataProtectionKey`.
 
 - [ ] **Step 3: Generate and apply the migration**
 
@@ -181,7 +181,7 @@ Add near the top, right after `AddDbContextFactory<DotMarcDbContext>` is registe
 using Microsoft.AspNetCore.DataProtection;
 // ... existing usings
 
-// Previously unconfigured — Data Protection fell back to its default (non-durable across
+// Previously unconfigured - Data Protection fell back to its default (non-durable across
 // restarts/redeploys/replicas) key store, which DnsPushStateProtector tolerated only because its
 // state is minutes-lived. The HaloPSA client secret (see DatabaseHaloSecretStore) needs real
 // durability, the same argument that already moved NotificationSettings into Postgres.
@@ -196,7 +196,7 @@ namespace DotMarc.Notifications;
 
 /// <summary>Stores and retrieves the HaloPSA API client secret. Two implementations: this one
 /// (Postgres + Data Protection, the default/fallback) and KeyVaultHaloSecretStore (Azure,
-/// opt-in) — selected in Program.cs on whether KeyVault:VaultUri is configured. Never exposes the
+/// opt-in) - selected in Program.cs on whether KeyVault:VaultUri is configured. Never exposes the
 /// value through HaloPsaSettings itself.</summary>
 public interface IHaloSecretStore
 {
@@ -283,7 +283,7 @@ public sealed class DatabaseHaloSecretStoreTests : IAsyncLifetime
 - [ ] **Step 7: Run the test to verify it fails**
 
 Run: `dotnet test dotMARC.sln --filter DatabaseHaloSecretStoreTests`
-Expected: FAIL — `DatabaseHaloSecretStore` doesn't exist yet.
+Expected: FAIL - `DatabaseHaloSecretStore` doesn't exist yet.
 
 - [ ] **Step 8: Implement `DatabaseHaloSecretStore`**
 
@@ -358,7 +358,7 @@ git commit -m "Persist Data Protection keys to Postgres; add the Postgres-backed
 - Modify: `src/DotMarc/Program.cs`
 - Modify: `infra/main.bicep`
 - Modify: `infra/main.parameters.json`
-- Test: `test/DotMarc.Tests/Notifications/KeyVaultHaloSecretStoreTests.cs` (unit test against a fake `SecretClient` transport — no real Azure resource; the actual live Key Vault path is verified manually, same acceptance as `AzureMtaStsHostProvisioner`)
+- Test: `test/DotMarc.Tests/Notifications/KeyVaultHaloSecretStoreTests.cs` (unit test against a fake `SecretClient` transport - no real Azure resource; the actual live Key Vault path is verified manually, same acceptance as `AzureMtaStsHostProvisioner`)
 
 **Interfaces:**
 - Consumes: `IHaloSecretStore` (Task 2).
@@ -381,7 +381,7 @@ namespace DotMarc.Notifications;
 
 /// <summary>Stores the HaloPSA client secret in the Key Vault infra/main.bicep already
 /// provisions, under a fixed secret name. Selected instead of DatabaseHaloSecretStore when
-/// KeyVault:VaultUri is configured (see Program.cs) — requires the container's managed identity
+/// KeyVault:VaultUri is configured (see Program.cs) - requires the container's managed identity
 /// to hold the write role infra/main.bicep grants only when enableHaloPsaKeyVaultWrite is true.
 /// The value never touches Postgres.</summary>
 public sealed class KeyVaultHaloSecretStore : IHaloSecretStore
@@ -478,12 +478,12 @@ internal sealed class FakeTokenCredential : TokenCredential
 - [ ] **Step 4: Run the tests, fix `FakeHttpMessageHandler` content-type if needed, verify pass**
 
 Run: `dotnet test dotMARC.sln --filter KeyVaultHaloSecretStoreTests`
-Expected: PASS. If the Azure SDK's pipeline rejects `FakeHttpMessageHandler`'s fixed `application/json` content type or adds required headers the fake doesn't echo back, adjust the fake's response headers rather than the production code — this is a test-only concern.
+Expected: PASS. If the Azure SDK's pipeline rejects `FakeHttpMessageHandler`'s fixed `application/json` content type or adds required headers the fake doesn't echo back, adjust the fake's response headers rather than the production code - this is a test-only concern.
 
 - [ ] **Step 5: Wire DI selection in `Program.cs`**
 
 ```csharp
-// src/DotMarc/Program.cs — near the other typed-client/store registrations
+// src/DotMarc/Program.cs - near the other typed-client/store registrations
 var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
 if (!string.IsNullOrWhiteSpace(keyVaultUri))
 {
@@ -503,7 +503,7 @@ Add `using Azure.Identity;` and `using Azure.Security.KeyVault.Secrets;` to `Pro
 Add a new param, right after `azureDnsClientId`:
 
 ```bicep
-@description('Grant the container app write access to its own Key Vault, used to store the HaloPSA API client secret entered through Alert settings at runtime rather than in Postgres. Off by default, since it widens the managed identity beyond Key Vault Secrets User (read-only) — see deploy-to-azure.mdx.')
+@description('Grant the container app write access to its own Key Vault, used to store the HaloPSA API client secret entered through Alert settings at runtime rather than in Postgres. Off by default, since it widens the managed identity beyond Key Vault Secrets User (read-only) - see deploy-to-azure.mdx.')
 param enableHaloPsaKeyVaultWrite bool = false
 ```
 
@@ -518,7 +518,7 @@ Add the new custom role and its assignment, near the existing MTA-STS custom rol
 ```bicep
 // The container app can already read every secret in this vault (Key Vault Secrets User,
 // assigned above). Writing the HaloPSA client secret at runtime needs one narrow addition on top
-// of that — not a broader get+set role — matching the MTA-STS custom roles' precedent of the
+// of that - not a broader get+set role - matching the MTA-STS custom roles' precedent of the
 // smallest permission delta Azure's RBAC surface allows, gated off by default since it's a real
 // widening of what this identity can do.
 resource haloPsaKeyVaultWriteRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enableHaloPsaKeyVaultWrite) {
@@ -686,7 +686,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test dotMARC.sln --filter HaloPsaSettingsServiceTests`
-Expected: FAIL — `HaloPsaSettingsService` doesn't exist yet.
+Expected: FAIL - `HaloPsaSettingsService` doesn't exist yet.
 
 - [ ] **Step 3: Implement `HaloPsaSettingsService`**
 
@@ -698,7 +698,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DotMarc.Notifications;
 
 /// <summary>Read/update the singleton HaloPsaSettings row. Follows NotificationSettingsService's
-/// convention exactly, plus the client secret's own write path via IHaloSecretStore — the secret
+/// convention exactly, plus the client secret's own write path via IHaloSecretStore - the secret
 /// never travels through the HaloPsaSettings object this returns to a caller.</summary>
 public static class HaloPsaSettingsService
 {
@@ -764,7 +764,7 @@ git commit -m "Add HaloPsaSettingsService"
 > implementation below is a concrete, best-effort mapping based on the confirmed pieces
 > (`{AuthServerUrl}/token`, `CreateTicketRequest`-style fields `summary`/`details`/`client_id`/
 > `tickettype_id`). **Step 8 below is a manual verification step against a real or trial Halo
-> tenant** — if field names don't match, fix `HaloPsaClient`'s request/response DTOs only; the
+> tenant** - if field names don't match, fix `HaloPsaClient`'s request/response DTOs only; the
 > public interface and every other task built on top of it do not change.
 
 - [ ] **Step 1: Define the read-model records**
@@ -858,7 +858,7 @@ public sealed class HaloPsaClientTests
         await client.CreateTicketAsync(Settings, 7, "a.example", "MissedReport", "t", "m");
         await client.CreateTicketAsync(Settings, 7, "b.example", "MissedReport", "t", "m");
 
-        // One token request, two ticket-creation requests — the second call reused the cached token.
+        // One token request, two ticket-creation requests - the second call reused the cached token.
         Assert.Equal(3, handler.Requests.Count);
         Assert.Equal(1, handler.Requests.Count(r => r.RequestUri!.ToString().EndsWith("/token")));
     }
@@ -894,7 +894,7 @@ public sealed class HaloPsaClientTests
 - [ ] **Step 4: Run the tests to verify they fail**
 
 Run: `dotnet test dotMARC.sln --filter HaloPsaClientTests`
-Expected: FAIL — `HaloPsaClient`/`HaloPsaTokenCache` don't exist yet.
+Expected: FAIL - `HaloPsaClient`/`HaloPsaTokenCache` don't exist yet.
 
 - [ ] **Step 5: Implement `HaloPsaTokenCache`**
 
@@ -906,7 +906,7 @@ using System.Text.Json.Serialization;
 namespace DotMarc.Notifications;
 
 /// <summary>Caches the OAuth2 client_credentials token in memory for the lifetime of this
-/// singleton instance — safe even across multiple Container Apps replicas, since each replica
+/// singleton instance - safe even across multiple Container Apps replicas, since each replica
 /// just acquires its own token independently; no shared/distributed cache is needed at this call
 /// volume (alert-triggered, not a per-request hot path).</summary>
 public sealed class HaloPsaTokenCache
@@ -1056,7 +1056,7 @@ Expected: PASS (all four tests).
 
 - [ ] **Step 8: Manual live verification (not automatable in CI)**
 
-Against a real or trial HaloPSA tenant: create an API application (Configuration → Integrations → HaloPSA API) with `edit:tickets read:tickets read:customers read:teams`, plug its account name/auth URL/resource URL/client ID/secret into a locally-running dotMARC's Alert settings (once Task 9 exists), and confirm `ListClientsAsync`/`CreateTicketAsync`/`CloseTicketAsync` succeed against the real API. Fix field names in Step 6's request/response DTOs if Halo's actual responses differ — nothing else in this plan depends on the wire format, only on `IHaloPsaClient`'s public shape.
+Against a real or trial HaloPSA tenant: create an API application (Configuration → Integrations → HaloPSA API) with `edit:tickets read:tickets read:customers read:teams`, plug its account name/auth URL/resource URL/client ID/secret into a locally-running dotMARC's Alert settings (once Task 9 exists), and confirm `ListClientsAsync`/`CreateTicketAsync`/`CloseTicketAsync` succeed against the real API. Fix field names in Step 6's request/response DTOs if Halo's actual responses differ - nothing else in this plan depends on the wire format, only on `IHaloPsaClient`'s public shape.
 
 - [ ] **Step 9: Register `HaloPsaClient` in `Program.cs`**
 
@@ -1075,7 +1075,7 @@ git commit -m "Add HaloPsaClient: OAuth2 client_credentials token acquisition an
 
 ---
 
-## Task 6: Client mapping — Group/Domain `HaloClientId` + resolution rule
+## Task 6: Client mapping - Group/Domain `HaloClientId` + resolution rule
 
 **Files:**
 - Modify: `src/DotMarc/Data/GroupManagementService.cs`
@@ -1154,7 +1154,7 @@ public sealed class HaloClientResolverTests
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `dotnet test dotMARC.sln --filter HaloClientResolverTests`
-Expected: FAIL — `HaloClientResolver` doesn't exist yet.
+Expected: FAIL - `HaloClientResolver` doesn't exist yet.
 
 - [ ] **Step 3: Implement `HaloClientResolver`**
 
@@ -1166,7 +1166,7 @@ namespace DotMarc.Notifications;
 
 /// <summary>Resolves which Halo client a domain's ticket should be created against. Domain and
 /// Group is an implicit EF many-to-many with no order column, so "the domain's Groups" has no
-/// natural order — lowest Group.Id (oldest-created) is the deterministic tie-break.</summary>
+/// natural order - lowest Group.Id (oldest-created) is the deterministic tie-break.</summary>
 public static class HaloClientResolver
 {
     public static int? Resolve(Domain domain)
@@ -1193,7 +1193,7 @@ Expected: PASS (all four tests).
 - [ ] **Step 5: Add `SetHaloClientIdAsync` to `GroupManagementService`**
 
 ```csharp
-// src/DotMarc/Data/GroupManagementService.cs — add as a new method
+// src/DotMarc/Data/GroupManagementService.cs - add as a new method
 /// <summary>Sets (or clears, with null) a Group's Halo client mapping, from the "Halo Client"
 /// column on Manage Groups.</summary>
 public static async Task SetHaloClientIdAsync(DotMarcDbContext context, int groupId, int? haloClientId, CancellationToken cancellationToken = default)
@@ -1207,7 +1207,7 @@ public static async Task SetHaloClientIdAsync(DotMarcDbContext context, int grou
 - [ ] **Step 6: Add `SetHaloClientIdAsync` to `DomainManagementService`**
 
 ```csharp
-// src/DotMarc/Data/DomainManagementService.cs — add as a new method, mirroring SetMonitoredAsync
+// src/DotMarc/Data/DomainManagementService.cs - add as a new method, mirroring SetMonitoredAsync
 /// <summary>Sets (or clears, with null) a domain's Halo client override, from Manage Domains.</summary>
 public static async Task SetHaloClientIdAsync(DotMarcDbContext context, int domainId, int? haloClientId, CancellationToken cancellationToken = default)
 {
@@ -1497,7 +1497,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
 - [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `dotnet test dotMARC.sln --filter PsaTicketServiceTests`
-Expected: FAIL — `PsaTicketService` doesn't exist yet.
+Expected: FAIL - `PsaTicketService` doesn't exist yet.
 
 - [ ] **Step 4: Implement `PsaTicketService`**
 
@@ -1642,14 +1642,14 @@ private sealed class NoOpHaloPsaClient : IHaloPsaClient
 }
 ```
 
-(`PsaTicketService.CreateTicketAsync`/`CloseTicketAsync` both already no-op when `HaloPsaSettings.Enabled` is `false`, which is the seeded default — `NoOpHaloPsaClient` is never actually called in these tests, it just satisfies the constructor.) Update every `new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance)` call to `new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance)`.
+(`PsaTicketService.CreateTicketAsync`/`CloseTicketAsync` both already no-op when `HaloPsaSettings.Enabled` is `false`, which is the seeded default - `NoOpHaloPsaClient` is never actually called in these tests, it just satisfies the constructor.) Update every `new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, NullLogger<AlertingService>.Instance)` call to `new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance)`.
 
 - [ ] **Step 8: Register `IPsaTicketService` in `Program.cs`**
 
-`AlertingService` is registered `AddSingleton`, and a singleton cannot depend on a scoped service — `IPsaTicketService` must be `AddSingleton` too, matching `IAlertWebhookClient`'s existing registration right above it:
+`AlertingService` is registered `AddSingleton`, and a singleton cannot depend on a scoped service - `IPsaTicketService` must be `AddSingleton` too, matching `IAlertWebhookClient`'s existing registration right above it:
 
 ```csharp
-// src/DotMarc/Program.cs — add right before the existing AlertingService registration
+// src/DotMarc/Program.cs - add right before the existing AlertingService registration
 builder.Services.AddSingleton<IPsaTicketService, PsaTicketService>();
 builder.Services.AddSingleton<IAlertingService, AlertingService>();
 ```
@@ -1737,7 +1737,7 @@ public sealed class HaloWebhookStatusMatcherTests
 - [ ] **Step 3: Run the test to verify it fails**
 
 Run: `dotnet test dotMARC.sln --filter HaloWebhookStatusMatcherTests`
-Expected: FAIL — `HaloWebhookStatusMatcher` doesn't exist yet.
+Expected: FAIL - `HaloWebhookStatusMatcher` doesn't exist yet.
 
 - [ ] **Step 4: Implement `HaloWebhookStatusMatcher`**
 
@@ -1861,17 +1861,17 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
 - [ ] **Step 7: Run the tests to verify they fail**
 
 Run: `dotnet test dotMARC.sln --filter HaloWebhookEndpointTests`
-Expected: FAIL — the endpoint doesn't exist yet (404 on every request, including the "wrong secret" case which expects 404 for a different reason — check the response body/logs to confirm it's actually "no such route", not the intended behavior, before moving on).
+Expected: FAIL - the endpoint doesn't exist yet (404 on every request, including the "wrong secret" case which expects 404 for a different reason - check the response body/logs to confirm it's actually "no such route", not the intended behavior, before moving on).
 
 - [ ] **Step 8: Add the endpoint to `Program.cs`**
 
 ```csharp
-// src/DotMarc/Program.cs — after the existing /dns-push/{provider}/callback endpoint
+// src/DotMarc/Program.cs - after the existing /dns-push/{provider}/callback endpoint
 using System.Security.Cryptography;
 using System.Text;
 // ... add to existing usings
 
-// Unauthenticated by necessity — HaloPSA's own outbound webhook config isn't confirmed to support
+// Unauthenticated by necessity - HaloPSA's own outbound webhook config isn't confirmed to support
 // custom headers, so the shared secret travels in the path instead. A non-matching secret returns
 // 404 rather than 401 so an unauthenticated caller can't even confirm this endpoint exists.
 app.MapPost("/integrations/halopsa/webhook/{secret}", async (
@@ -1920,7 +1920,7 @@ git commit -m "Add inbound HaloPSA webhook endpoint that resolves alerts on tick
 
 ---
 
-## Task 9: Alert settings UI — PSA integration section
+## Task 9: Alert settings UI - PSA integration section
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/AlertsSettings.razor`
@@ -1928,7 +1928,7 @@ git commit -m "Add inbound HaloPSA webhook endpoint that resolves alerts on tick
 **Interfaces:**
 - Consumes: `HaloPsaSettingsService` (Task 4), `IHaloPsaClient` (Task 5).
 
-No automated test for this task — Blazor component rendering has no test harness in this codebase (established gap, verified manually elsewhere). Manual verification steps are listed at the end instead of a TDD cycle.
+No automated test for this task - Blazor component rendering has no test harness in this codebase (established gap, verified manually elsewhere). Manual verification steps are listed at the end instead of a TDD cycle.
 
 - [ ] **Step 1: Add the PSA integration section to `AlertsSettings.razor`**
 
@@ -1963,7 +1963,7 @@ Add `@inject IHaloPsaClient HaloPsaClient` alongside the existing injects, and a
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
-                              HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured — leave blank to keep it." : "No secret configured yet.")" />
+                              HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
             <MudItem xs="12" md="6" Class="d-flex align-center">
                 <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses from Halo</MudButton>
@@ -2008,7 +2008,7 @@ Add `@inject IHaloPsaClient HaloPsaClient` alongside the existing injects, and a
 - [ ] **Step 2: Add the backing state and handlers to `@code`**
 
 ```csharp
-// AlertsSettings.razor — add to the existing @code block
+// AlertsSettings.razor - add to the existing @code block
 private HaloPsaSettings? _haloSettings;
 private string? _newHaloClientSecret;
 private List<HaloTicketType> _haloTicketTypes = [];
@@ -2033,7 +2033,7 @@ private async Task LoadHaloOptionsAsync()
     }
     catch (Exception)
     {
-        Snackbar.Add("Couldn't reach HaloPSA — save your account/credentials first, then try again.", Severity.Error);
+        Snackbar.Add("Couldn't reach HaloPSA - save your account/credentials first, then try again.", Severity.Error);
     }
 }
 
@@ -2089,7 +2089,7 @@ docker compose up postgres -d
 dotnet run --project src/DotMarc/DotMarc.csproj
 ```
 
-Sign in (demo mode or real auth per local setup), navigate to `/alerts/settings`, confirm the new "PSA integration (HaloPSA)" section renders, "Generate new webhook secret" populates the read-only webhook URL field, and "Save PSA settings" persists without error (check the `HaloPsaSettings` row in Postgres directly if needed). "Load ticket types..." will fail gracefully (toast, not a crash) without real Halo credentials — that's expected at this stage.
+Sign in (demo mode or real auth per local setup), navigate to `/alerts/settings`, confirm the new "PSA integration (HaloPSA)" section renders, "Generate new webhook secret" populates the read-only webhook URL field, and "Save PSA settings" persists without error (check the `HaloPsaSettings` row in Postgres directly if needed). "Load ticket types..." will fail gracefully (toast, not a crash) without real Halo credentials - that's expected at this stage.
 
 - [ ] **Step 4: Commit**
 
@@ -2100,7 +2100,7 @@ git commit -m "Add PSA integration section to Alert settings"
 
 ---
 
-## Task 10: Manage Groups / Manage Domains UI — Halo Client mapping
+## Task 10: Manage Groups / Manage Domains UI - Halo Client mapping
 
 **Files:**
 - Modify: `src/DotMarc/Components/Pages/ManageGroups.razor`
@@ -2109,11 +2109,11 @@ git commit -m "Add PSA integration section to Alert settings"
 **Interfaces:**
 - Consumes: `GroupManagementService.SetHaloClientIdAsync`, `DomainManagementService.SetHaloClientIdAsync` (Task 6), `IHaloPsaClient.ListClientsAsync` (Task 5).
 
-No automated test — same established gap as Task 9.
+No automated test - same established gap as Task 9.
 
 - [ ] **Step 1: Add the Halo Client column to `ManageGroups.razor`**
 
-Add `@inject IHaloPsaClient HaloPsaClient` and `@inject IDbContextFactory<DotMarcDbContext> DbFactory` is already present — add loading the Halo client list and current `HaloPsaSettings` in `OnInitializedAsync`, and extend `GroupRow`:
+Add `@inject IHaloPsaClient HaloPsaClient` and `@inject IDbContextFactory<DotMarcDbContext> DbFactory` is already present - add loading the Halo client list and current `HaloPsaSettings` in `OnInitializedAsync`, and extend `GroupRow`:
 
 ```csharp
 // @code block additions
@@ -2199,7 +2199,7 @@ private async Task SetHaloClientIdAsync(GroupRow row, int? haloClientId)
 
 - [ ] **Step 2: Add the name-match suggestion**
 
-`MudSelect`'s `Value` is already bound to `context.HaloClientId`, which is `null` for an unmapped Group — a case-insensitive name match is a *suggestion* shown next to the picker, not auto-applied (matching the MTA-STS MX-hosts sync icon precedent: review then explicitly save). Add a small hint under the picker when unmapped and a match exists:
+`MudSelect`'s `Value` is already bound to `context.HaloClientId`, which is `null` for an unmapped Group - a case-insensitive name match is a *suggestion* shown next to the picker, not auto-applied (matching the MTA-STS MX-hosts sync icon precedent: review then explicitly save). Add a small hint under the picker when unmapped and a match exists:
 
 ```razor
 @{
@@ -2288,7 +2288,7 @@ Add the matching cell, right after the existing Tags `<MudTd>` block:
 }
 ```
 
-No name-match suggestion here — this is explicitly the override/exception path, not the common one. Add the handler:
+No name-match suggestion here - this is explicitly the override/exception path, not the common one. Add the handler:
 
 ```csharp
 private async Task SetHaloClientIdAsync(DomainRow row, int? haloClientId)
@@ -2313,7 +2313,7 @@ dotnet build dotMARC.sln
 dotnet run --project src/DotMarc/DotMarc.csproj
 ```
 
-Navigate to `/groups` and `/domains`. Without Halo configured (`_haloConfigured` false), confirm neither page shows a Halo Client column at all (no regression to the existing layout). This can't be verified end-to-end against real Halo without live credentials (Task 5 Step 8) — confirm at minimum that the column correctly stays hidden when unconfigured.
+Navigate to `/groups` and `/domains`. Without Halo configured (`_haloConfigured` false), confirm neither page shows a Halo Client column at all (no regression to the existing layout). This can't be verified end-to-end against real Halo without live credentials (Task 5 Step 8) - confirm at minimum that the column correctly stays hidden when unconfigured.
 
 - [ ] **Step 5: Commit**
 
@@ -2332,7 +2332,7 @@ git commit -m "Add Halo Client mapping to Manage Groups and Manage Domains"
 - Modify: `website/docs/alerts.mdx`
 
 **Interfaces:**
-- None — documentation only.
+- None - documentation only.
 
 - [ ] **Step 1: Write `website/docs/psa-integration.mdx`**
 
@@ -2346,7 +2346,7 @@ description: Sync dotMARC alerts to HaloPSA tickets, opened and closed automatic
 
 dotMARC can open a HaloPSA ticket when an alert fires, close it automatically when the alert
 resolves, and resolve the alert back when a tech closes the ticket directly in Halo. See
-[Alerts](./alerts.mdx) for how alerting itself works — this page covers wiring it to HaloPSA
+[Alerts](./alerts.mdx) for how alerting itself works - this page covers wiring it to HaloPSA
 specifically.
 
 ## Set up the Halo API application
@@ -2358,7 +2358,7 @@ account name, auth server URL, resource server URL, client ID, and client secret
 ## Configure dotMARC
 
 From **Alert settings**, in the **PSA integration (HaloPSA)** section: enable it, fill in the
-account name/URLs/client ID, and paste in the client secret (it's write-only — once saved, you
+account name/URLs/client ID, and paste in the client secret (it's write-only - once saved, you
 won't see it again, only whether one is configured). Click **Load ticket types / priorities /
 statuses from Halo** to populate the three dropdowns, pick the ticket type new tickets should use,
 the default priority, and which Halo status counts as "closed" for resolving the alert back.
@@ -2374,7 +2374,7 @@ you're running on Azure and want it in Key Vault.
 ## Route tickets to the right client
 
 Tickets need to land against the right Halo client (company). From **Manage groups**, each Group
-gets a **Halo Client** picker — set once per Group (typically once per MSP client), every domain
+gets a **Halo Client** picker - set once per Group (typically once per MSP client), every domain
 in that Group routes there. If a Group's name matches a Halo client's name, a suggested match
 appears; review and click **Use it** rather than it being applied automatically. A domain that
 needs to route differently than its Group can be overridden individually from **Manage domains**.
@@ -2390,7 +2390,7 @@ leaving the generic webhook URL blank, it isn't an error.
 - Ticket closed in Halo → alert resolved in dotMARC automatically, via the webhook above.
 - Nothing else syncs: no comments, no reassignment, no priority changes flow back from Halo. If
   the underlying condition is still active after a ticket's closed early in Halo, the next check
-  cycle re-opens the alert (and a new ticket) once the cooldown allows — this is expected, not a
+  cycle re-opens the alert (and a new ticket) once the cooldown allows - this is expected, not a
   sync bug.
 ```
 
@@ -2403,7 +2403,7 @@ Add after the existing "Optional: DNS provider push secrets" subsection (before 
 
 By default the HaloPSA API client secret entered through Alert settings is encrypted and stored
 in Postgres. To store it in this deployment's Key Vault instead, redeploy with
-`enableHaloPsaKeyVaultWrite` set to `true` — this grants the container app's managed identity a
+`enableHaloPsaKeyVaultWrite` set to `true` - this grants the container app's managed identity a
 narrowly-scoped write role on the vault (see `infra/main.bicep`'s `haloPsaKeyVaultWriteRole`, it
 adds only `secrets/setSecret`, read is already covered by the existing `Key Vault Secrets User`
 assignment). No manual `az keyvault secret set` needed here, the app writes the secret itself the
@@ -2439,7 +2439,7 @@ git commit -m "Document the HaloPSA integration"
 
 ## Self-review notes
 
-- **Spec coverage:** every section of the spec (`2026-09-02-halopsa-integration-design.md`) maps to a task — data model → Task 1; secret storage (both backends) → Tasks 2–3; Halo API client → Task 5; client mapping/resolution → Task 6; ticket lifecycle wiring → Task 7; inbound webhook → Task 8; UI → Tasks 9–10; testing conventions and docs are folded into each task and Task 11 respectively.
-- **Signature correction:** `IPsaTicketService.CreateTicketAsync` drops the `Domain domain` parameter the spec sketched — `AlertingService.EnsureAlertAsync` only ever has `domainName` (a string) in scope, never a loaded `Domain` entity, so `PsaTicketService` loads it itself (with `Groups` included, since `HaloClientResolver` needs that navigation populated). Flagged inline in Task 7.
+- **Spec coverage:** every section of the spec (`2026-09-02-halopsa-integration-design.md`) maps to a task - data model → Task 1; secret storage (both backends) → Tasks 2–3; Halo API client → Task 5; client mapping/resolution → Task 6; ticket lifecycle wiring → Task 7; inbound webhook → Task 8; UI → Tasks 9–10; testing conventions and docs are folded into each task and Task 11 respectively.
+- **Signature correction:** `IPsaTicketService.CreateTicketAsync` drops the `Domain domain` parameter the spec sketched - `AlertingService.EnsureAlertAsync` only ever has `domainName` (a string) in scope, never a loaded `Domain` entity, so `PsaTicketService` loads it itself (with `Groups` included, since `HaloClientResolver` needs that navigation populated). Flagged inline in Task 7.
 - **Type consistency check:** `IHaloPsaClient`, `IPsaTicketService`, `IHaloSecretStore`, `HaloPsaSettings`, `HaloClientResolver.Resolve`, and `HaloWebhookStatusMatcher.IsClosedStatus` all use the same signatures everywhere they're referenced across Tasks 4–10.
-- **`AlertingService` singleton/scoped check:** `IPsaTicketService` is registered `AddSingleton` (Task 7 Step 8), matching `IAlertWebhookClient`'s existing lifetime — `AlertingService` itself is a singleton and cannot depend on a scoped service.
+- **`AlertingService` singleton/scoped check:** `IPsaTicketService` is registered `AddSingleton` (Task 7 Step 8), matching `IAlertWebhookClient`'s existing lifetime - `AlertingService` itself is a singleton and cannot depend on a scoped service.

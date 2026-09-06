@@ -98,7 +98,7 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
         // enum value (e.g. MtaStsView) existed: EnsureBuiltInRoleAsync's "only set permissions
         // when creating the role" behavior otherwise leaves that Admin role permanently stuck
         // without the new permission, even though this class's own doc comment claims Admin
-        // "self-syncs when the enum grows" — the two Enum.GetValues<Permission>() call sites
+        // "self-syncs when the enum grows" - the two Enum.GetValues<Permission>() call sites
         // computing the same value doesn't help if neither one ever runs again for an existing
         // row.
         using (var context = CreateContext())
@@ -128,7 +128,7 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
     [Fact]
     public async Task BootstrapWithLeaderLockAsync_DoesNotOverwrite_AnAdminEditedViewerRole()
     {
-        // Viewer, unlike Admin, is IsLocked: false — deliberately editable via ManageAccess.razor.
+        // Viewer, unlike Admin, is IsLocked: false - deliberately editable via ManageAccess.razor.
         // Backfilling missing permissions onto Admin must not extend to silently overwriting a
         // Viewer role an admin has customized away from AccessBootstrapper.ViewerPermissions.
         using (var context = CreateContext())

@@ -1,7 +1,7 @@
 @* One row of the domain detail page's Overview "Domain health" checklist. A CSS grid, not a
    MudTable row: every check's action differs (push button, recheck button, tab link, configure
    button, or nothing), so a real MudTable's homogeneous RowTemplate would fight this more than
-   help — see the design spec's UI changes section. *@
+   help - see the design spec's UI changes section. *@
 <div class="dotmarc-health-row" style="display:grid; grid-template-columns: 220px 160px 180px 1fr; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--mud-palette-lines-default);">
     <MudText Typo="Typo.body1">@Title</MudText>
     <MudChip T="string" Color="@StatusColor" Size="Size.Small">@StatusLabel</MudChip>

@@ -158,7 +158,7 @@
             var mxHosts = await MxHostsLookup.LookupAsync(Domain.Name, CancellationToken.None);
             if (mxHosts.Count == 0)
             {
-                Snackbar.Add($"No MX records found for {Domain.Name} — add them manually in Advanced before enabling.", Severity.Warning);
+                Snackbar.Add($"No MX records found for {Domain.Name} - add them manually in Advanced before enabling.", Severity.Warning);
                 return;
             }
 
@@ -237,7 +237,7 @@
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
-                Snackbar.Add($"Couldn't find a configured DNS push option for {Domain.Name} — add the CNAME manually.", Severity.Warning);
+                Snackbar.Add($"Couldn't find a configured DNS push option for {Domain.Name} - add the CNAME manually.", Severity.Warning);
                 return;
             }
 
@@ -281,12 +281,12 @@
     }
 
     /// <summary>Runs PollingService's own per-domain MTA-STS check on demand, outside its normal
-    /// 15-minute/24-hour schedule — for right after fixing a record, so status updates without
+    /// 15-minute/24-hour schedule - for right after fixing a record, so status updates without
     /// waiting for the next automatic pass. Calls the exact same per-domain state machine the
     /// batch cycle runs (PollingService.RunSingleMtaStsCheckAsync) so this can never drift from
     /// what the scheduled check actually does, including its own internal handling of a
     /// provisioning failure (it sets Failed status and a detail message itself rather than
-    /// throwing) — only a DNS/serving-verifier failure can still throw here, hence the catch.</summary>
+    /// throwing) - only a DNS/serving-verifier failure can still throw here, hence the catch.</summary>
     private async Task RecheckAsync()
     {
         var hostingHostname = MtaStsOptions.Value.HostingHostname;

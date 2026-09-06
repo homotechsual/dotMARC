@@ -115,9 +115,9 @@ including you.
 ### Optional: Key Vault-backed secret storage
 
 By default, runtime-editable secrets (the HaloPSA API client secret, Cloudflare/Azure DNS push
-OAuth client secrets — anything configured through an in-app settings page rather than a deployment
+OAuth client secrets - anything configured through an in-app settings page rather than a deployment
 parameter) are encrypted and stored in Postgres. To store them in this deployment's Key Vault
-instead, redeploy with `enableKeyVaultWrite` set to `true` — this grants the container app's
+instead, redeploy with `enableKeyVaultWrite` set to `true` - this grants the container app's
 managed identity a narrowly-scoped write role on the vault (see `infra/main.bicep`'s
 `keyVaultWriteRole`, it adds only `secrets/setSecret`, read is already covered by the existing
 `Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app

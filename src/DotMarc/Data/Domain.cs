@@ -2,7 +2,7 @@ namespace DotMarc.Data;
 
 /// <summary>A monitored domain. Rows are created automatically the first time a report arrives
 /// for a domain (auto-discovery); <see cref="IsMonitored"/> is set explicitly via the dashboard
-/// and only affects whether a missing-report warning is shown for that domain — it does not
+/// and only affects whether a missing-report warning is shown for that domain - it does not
 /// change ingestion behavior.</summary>
 public sealed class Domain
 {

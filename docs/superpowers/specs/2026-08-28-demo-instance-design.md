@@ -9,7 +9,7 @@ without any real Entra sign-in, real mailbox, or real DMARC data. Visitors can m
 so the demo never degrades or gets used to attack anything.
 
 This is the same product image as production, running in a new `Demo__Enabled=true` mode that
-swaps out real auth/ingestion for fixed personas and generated data — not a fork.
+swaps out real auth/ingestion for fixed personas and generated data - not a fork.
 
 ## Non-goals
 
@@ -21,7 +21,7 @@ swaps out real auth/ingestion for fixed personas and generated data — not a fo
   stale or briefly broken state until they navigate again. Documented and accepted (see
   "Reset job" below).
 * Any change to the real (non-demo) authentication, ingestion, or authorization code paths. Every
-  addition here is gated behind `Demo__Enabled` and is inert — zero behavior change — when unset.
+  addition here is gated behind `Demo__Enabled` and is inert - zero behavior change - when unset.
 
 ## Architecture summary
 
@@ -51,16 +51,16 @@ swaps out real auth/ingestion for fixed personas and generated data — not a fo
 `Program.cs` branches on `DemoOptions.Enabled`:
 
 * **Demo mode**: skip `GraphOptions` binding/validation, skip registering `PollingService`
-  (there is no mailbox to poll — the dataset comes from `DemoDataResetService` instead), and
+  (there is no mailbox to poll - the dataset comes from `DemoDataResetService` instead), and
   register plain ASP.NET Core cookie authentication
   (`AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(...)`)
   instead of `AddMicrosoftIdentityWebApp`.
-* **Normal mode**: unchanged — everything below is additive and inert.
+* **Normal mode**: unchanged - everything below is additive and inert.
 
 New pieces, all under `src/DotMarc/Demo/`:
 
 * `Components/Pages/Demo/DemoSignIn.razor` at route `/demo`, `@attribute [AllowAnonymous]`
-  (same pattern as the existing `AccessDenied.razor`/`Error.razor`) — the only page reachable
+  (same pattern as the existing `AccessDenied.razor`/`Error.razor`) - the only page reachable
   without auth in demo mode. Two buttons: "Continue as Demo Admin" and "Continue as Demo Viewer
   (Aurora Retail only)", each a plain HTML form posting to a minimal API endpoint (see below).
 * A minimal API endpoint, `POST /demo/sign-in/{persona}` (`persona` is `admin` or `viewer`,
@@ -70,10 +70,10 @@ New pieces, all under `src/DotMarc/Demo/`:
   `HttpContext.SignInAsync`, then redirects to `/`. Nothing else changes:
   `UserAccessClaimsTransformation` already resolves permissions from `UserAccess` by that email,
   so the entire authorization system (roles, scoped groups, every `[Authorize(Policy=...)]`)
-  works completely unmodified — this endpoint's only job is producing an authenticated principal
+  works completely unmodified - this endpoint's only job is producing an authenticated principal
   with the right email claim.
 * A small banner in `MainLayout.razor`, rendered only when `Demo__Enabled=true`: "Simulated demo
-  data — you're viewing as **Demo Admin**" (or Viewer) with a "Switch persona" link back to
+  data - you're viewing as **Demo Admin**" (or Viewer) with a "Switch persona" link back to
   `/demo`. Switching persona re-hits the sign-in endpoint for the other persona, which overwrites
   the cookie.
 * Sign-out (not currently implemented for the real app either) is out of scope; "switch persona"
@@ -86,10 +86,10 @@ ungrouped domain:
 
 | Client (Group) | Domains | Story |
 |---|---|---|
-| Aurora Retail | `aurora-retail.example`, `shop.aurora-retail.example` | Healthy — `p=reject`, ~99.7% pass, clean trend line. This is the Demo Viewer persona's scope. |
-| Brightline Legal | `brightline-legal.example` | Ramping up — pass rate climbs from ~70% to ~96% over the last 60 days (a DKIM rollout mid-story), `DmarcCheckStatus=Ok`. |
-| Cobalt Freight | `cobalt-freight.example`, `fleet.cobalt-freight.example` | A problem worth investigating — a marketing ESP sending unaligned mail shows up as a distinct failing source IP alongside otherwise-clean traffic (Dashboard "Warning" state). The second domain is `Missing` (no reports in 3+ days). |
-| Driftwood Media | `driftwood-media.example` | Legacy, monitor-only — still `p=none`, ~85% pass, `DmarcCheckStatus=MissingAuthorizationRecord`. |
+| Aurora Retail | `aurora-retail.example`, `shop.aurora-retail.example` | Healthy - `p=reject`, ~99.7% pass, clean trend line. This is the Demo Viewer persona's scope. |
+| Brightline Legal | `brightline-legal.example` | Ramping up - pass rate climbs from ~70% to ~96% over the last 60 days (a DKIM rollout mid-story), `DmarcCheckStatus=Ok`. |
+| Cobalt Freight | `cobalt-freight.example`, `fleet.cobalt-freight.example` | A problem worth investigating - a marketing ESP sending unaligned mail shows up as a distinct failing source IP alongside otherwise-clean traffic (Dashboard "Warning" state). The second domain is `Missing` (no reports in 3+ days). |
+| Driftwood Media | `driftwood-media.example` | Legacy, monitor-only - still `p=none`, ~85% pass, `DmarcCheckStatus=MissingAuthorizationRecord`. |
 | *(ungrouped)* | `driftwood-events.example` | Shows the "no group" case on the dashboard. |
 
 Reporting orgs are real-world senders (`google.com`, `outlook.com`, `yahoo.com`,
@@ -101,7 +101,7 @@ story instead of looking flat/random.
 Poll history mirrors the app's own retention convention (see `PollCycle`/
 `PollCycleDailySummary` doc comments): the last 7 days as raw `PollCycle` rows (mostly
 `Succeeded=true`, one failure for texture), days 8–60 pre-rolled into
-`PollCycleDailySummary` rows directly — never generated as raw rows and rolled up, since that's
+`PollCycleDailySummary` rows directly - never generated as raw rows and rolled up, since that's
 pure overhead for a seeder. 2–3 `ParseFailure` rows with plausible reasons ("attachment was not
 a valid gzip archive") populate that page too.
 
@@ -114,7 +114,7 @@ group.
 Following this codebase's established "pure core, thin I/O adapter" split (see
 `DomainStatistics`, `DmarcReportParser`): a pure `DemoDataGenerator.Generate(Random, DateTimeOffset now)`
 returns plain in-memory records (domains, groups, reports, records, poll cycles, parse
-failures) with no EF/DB dependency — independently unit-testable (e.g. "Brightline's pass rate
+failures) with no EF/DB dependency - independently unit-testable (e.g. "Brightline's pass rate
 strictly increases over the window", "Cobalt Freight's second domain has no report in the last 3
 days"). A thin `DemoDataSeeder` (EF-dependent) takes that output and writes it, plus the two
 roles and two `UserAccess` grants, inside a transaction.
@@ -123,14 +123,14 @@ roles and two `UserAccess` grants, inside a transaction.
 
 `DemoDataResetService : BackgroundService`, registered only when `Demo__Enabled=true`:
 
-* On startup, seeds immediately if the `Domains` table is empty (covers first boot — this
+* On startup, seeds immediately if the `Domains` table is empty (covers first boot - this
   replaces `AccessBootstrapper`/`InitialAdmins__Emails` in demo mode rather than layering on top
   of it, since the seeder creates the Admin/Viewer roles and the two demo grants itself).
 * Otherwise waits until the next `Demo__ResetHourUtc` (default 4) and resets then, repeating
   every 24h via a `PeriodicTimer`.
 * A reset deletes all rows from every app-owned table (`Domains`, `Reports`, `ReportRecords`,
   `Groups`, `Tags`, `Roles`, `UserAccesses`, `PollCycles`, `PollCycleDailySummaries`,
-  `ParseFailures`, `ProcessedMessages`) in FK-safe order, then runs `DemoDataSeeder` — the exact
+  `ParseFailures`, `ProcessedMessages`) in FK-safe order, then runs `DemoDataSeeder` - the exact
   same path used on first boot, so there is only one seeding code path, not two.
 * Seeded with `new Random(seed)` where `seed` is derived from the reset run's date, so each
   night's dataset is a fresh variation but a given day's dataset is reproducible if the container
@@ -183,7 +183,7 @@ volumes:
   dotmarc-demo-postgres-data:
 ```
 
-No Caddy container in this repo's compose — the VM's existing shared Caddy instance (already
+No Caddy container in this repo's compose - the VM's existing shared Caddy instance (already
 handling TLS/routing for other Homotechsual sites) routes to `dotmarc-demo:8080` over the shared
 `proxy` external network. A reference snippet for that Caddyfile (to be folded in by hand, per
 the earlier discussion):
@@ -208,7 +208,7 @@ job + SSH deploy job):
   added fresh for this repo), copies `docker-compose.demo.yml` to the VM, writes a `.env` with
   `DOTMARC_IMAGE`, `POSTGRES_PASSWORD` (new secret, distinct from any other stack's password on
   that VM), and `docker compose -f docker-compose.demo.yml --env-file .env up -d`.
-* `DOTMARC_DEMO_DOMAIN` (`demo.dotmarc.app`) is a repository **variable**, not a secret — it's
+* `DOTMARC_DEMO_DOMAIN` (`demo.dotmarc.app`) is a repository **variable**, not a secret - it's
   not sensitive, and storing it as a secret risks the same output-masking failure mode fixed
   earlier in `release.yml` (a job output containing a secret's value gets silently dropped). It's
   only used for the Caddyfile reference snippet above (folded in by hand), not passed to the
@@ -216,7 +216,7 @@ job + SSH deploy job):
 
 ## Testing
 
-* `DemoDataGenerator` is a pure function — unit tests assert the narrative invariants that matter
+* `DemoDataGenerator` is a pure function - unit tests assert the narrative invariants that matter
   (Brightline's pass rate trends upward, Cobalt Freight's second domain is stale/missing, Aurora
   Retail stays consistently high, counts of domains/groups match the table above) without any
   database.

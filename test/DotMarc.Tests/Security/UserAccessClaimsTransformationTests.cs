@@ -46,7 +46,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
 
     private static ClaimsPrincipal PrincipalForWithoutPreferredUsername(string objectId, string email)
     {
-        // No "preferred_username" claim at all — only ClaimTypes.Email — to exercise the fallback
+        // No "preferred_username" claim at all - only ClaimTypes.Email - to exercise the fallback
         // chain in UserAccessClaimsTransformation.TransformAsync. This assumption (that
         // preferred_username is the right claim to look at first) is unverifiable without a live
         // Entra sign-in, so the transformation falls back through ClaimTypes.Upn/Email/"email"

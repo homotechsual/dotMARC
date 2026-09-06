@@ -51,7 +51,7 @@ public static class UserAccessManagementService
         return GrantAccessResult.Granted;
     }
 
-    /// <summary>Not yet called from any UI — ManageAccess.razor's page spec deliberately only
+    /// <summary>Not yet called from any UI - ManageAccess.razor's page spec deliberately only
     /// covers Grant + Revoke, not editing an existing grant's role/scope. Reserved here for a
     /// future edit-grant feature; kept rather than removed so that feature doesn't have to
     /// re-derive this logic.</summary>
@@ -73,7 +73,7 @@ public static class UserAccessManagementService
         return UpdateAccessResult.Updated;
     }
 
-    /// <summary>Refuses to revoke the last remaining grant that carries AccessManage — doing so
+    /// <summary>Refuses to revoke the last remaining grant that carries AccessManage - doing so
     /// would permanently lock the app out of its own Manage Access page, recoverable only via
     /// direct SQL. Checked by role/permission content, not by the built-in Admin role's identity,
     /// since a custom role could also carry AccessManage.</summary>
@@ -110,7 +110,7 @@ public static class UserAccessManagementService
 
     /// <summary>Looks up the caller's access grant by Entra object ID first (the stable,
     /// already-bound case). Falling back to a case-insensitive email match only when no
-    /// object-ID match is found — binding that grant's EntraObjectId to the given value so every
+    /// object-ID match is found - binding that grant's EntraObjectId to the given value so every
     /// later sign-in resolves by object ID instead. Returns null when neither matches: the caller
     /// (the claims transformation) simply adds no permission claims for an unrecognized
     /// identity, and the tightened fallback authorization policy denies them.</summary>

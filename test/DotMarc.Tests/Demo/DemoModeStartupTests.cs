@@ -63,8 +63,8 @@ public sealed class DemoModeStartupTests : IAsyncLifetime
         // be completely unreachable in the real (non-demo) app.
         //
         // This can't be observed through a raw HTTP round-trip here: the app's FallbackPolicy
-        // (RequireAuthenticatedUser) intercepts every unauthenticated request — including one to
-        // a path with no matching endpoint at all — before ASP.NET Core's routing would ever get
+        // (RequireAuthenticatedUser) intercepts every unauthenticated request - including one to
+        // a path with no matching endpoint at all - before ASP.NET Core's routing would ever get
         // a chance to return a literal 404. With a placeholder, unresolvable EntraId tenant, that
         // interception itself throws while trying to challenge via OpenIdConnect (confirmed by
         // capturing full server-side logs during investigation: AuthorizationMiddleware ->
@@ -74,14 +74,13 @@ public sealed class DemoModeStartupTests : IAsyncLifetime
         // nonexistent path once EntraId is configured, whether or not this endpoint exists), so
         // asserting on the resulting HTTP status code wouldn't actually verify what this guard
         // needs to verify. Inspecting the compiled endpoint list directly instead is a reliable,
-        // HTTP-pipeline-independent way to confirm the mapping itself is genuinely absent — see
+        // HTTP-pipeline-independent way to confirm the mapping itself is genuinely absent - see
         // task-5-report.md for the two confirming runs (disabled: route list has no
         // "demo/sign-in" entry; enabled: it does).
         await using var factory = CreateFactory(demoEnabled: false).WithWebHostBuilder(builder =>
         {
             // The real (non-demo) app requires Graph/EntraId config to start; provide the
-            // minimum placeholder values so the host builds far enough to route the request —
-            // ValidateOnStart only rejects missing values, not unreachable ones.
+            // minimum placeholder values so the host builds far enough to route the request -             // ValidateOnStart only rejects missing values, not unreachable ones.
             builder.UseSetting("Graph:ClientId", "placeholder");
             builder.UseSetting("Graph:TenantId", "placeholder");
             builder.UseSetting("Graph:ClientSecret", "placeholder");

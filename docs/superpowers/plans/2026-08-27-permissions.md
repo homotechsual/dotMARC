@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace dotMARC's current "any authenticated user gets full access" authorization with a fine-grained, per-permission model that grants internal staff and external client contacts access the same way — by email, with an optional Group scope — while leaving sign-in itself (multi-tenant Entra ID) completely unchanged.
+**Goal:** Replace dotMARC's current "any authenticated user gets full access" authorization with a fine-grained, per-permission model that grants internal staff and external client contacts access the same way - by email, with an optional Group scope - while leaving sign-in itself (multi-tenant Entra ID) completely unchanged.
 
-**Architecture:** A fixed `Permission` enum plus two new entities (`Role` — a named, admin-editable bundle of permissions; `UserAccess` — one row per granted person, keyed by email and bound to their Entra object ID on first sign-in) live in `DotMarc.Data`, following this project's existing entity/management-service conventions. An `IClaimsTransformation` enriches the signed-in user's `ClaimsPrincipal` with a claim per granted permission (and per accessible Group, when scoped) once per sign-in; ASP.NET Core's built-in policy-based authorization (`[Authorize(Policy = ...)]` / `AuthorizeView`) does the actual gating, page-by-page and control-by-control. A startup step, guarded by the same Postgres advisory-lock pattern already used for migrations, seeds the built-in `Admin`/`Viewer` roles and — only when no access grants exist yet — the initial Admin(s) from an environment variable.
+**Architecture:** A fixed `Permission` enum plus two new entities (`Role` - a named, admin-editable bundle of permissions; `UserAccess` - one row per granted person, keyed by email and bound to their Entra object ID on first sign-in) live in `DotMarc.Data`, following this project's existing entity/management-service conventions. An `IClaimsTransformation` enriches the signed-in user's `ClaimsPrincipal` with a claim per granted permission (and per accessible Group, when scoped) once per sign-in; ASP.NET Core's built-in policy-based authorization (`[Authorize(Policy = ...)]` / `AuthorizeView`) does the actual gating, page-by-page and control-by-control. A startup step, guarded by the same Postgres advisory-lock pattern already used for migrations, seeds the built-in `Admin`/`Viewer` roles and - only when no access grants exist yet - the initial Admin(s) from an environment variable.
 
 **Tech Stack:** ASP.NET Core Blazor Server, MudBlazor 9.8.0, EF Core + Npgsql, Microsoft.Identity.Web (already a dependency, used for the existing OIDC sign-in), xUnit + Testcontainers.PostgreSql.
 
@@ -17,37 +17,37 @@
   `GroupsView`, `GroupsAdd`, `GroupsRename`, `GroupsDelete`, `TagsView`,
   `TagsAdd`, `TagsEdit`, `TagsDelete`, `AccessManage`.
 - Exactly two built-in roles, seeded at startup (not via EF Core `HasData`
-  — see Task 3): `Admin` (`IsLocked = true`, `IsScopable = false`, every
+  - see Task 3): `Admin` (`IsLocked = true`, `IsScopable = false`, every
   permission) and `Viewer` (`IsLocked = false`, `IsScopable = true`,
   `DomainsView`/`GroupsView`/`TagsView` only). `IsLocked` blocks renaming,
   permission-set changes, and deletion of a role through every code path,
   not just the UI. `IsScopable` is never exposed as an admin-editable
-  option — every custom role is created with `IsScopable = false` — it
+  option - every custom role is created with `IsScopable = false` - it
   exists purely so the "scope only applies to Viewer" rule survives a
   rename of the Viewer role itself, rather than being a fragile
   name-string check.
 - A `UserAccess` grant's `ScopedGroups` is only ever meaningful when its
-  Role has `IsScopable = true` — the service layer clears/ignores any
+  Role has `IsScopable = true` - the service layer clears/ignores any
   supplied Group IDs for a non-scopable role, regardless of what the
   caller passes.
 - A grant is made by `Email` and stays looked-up-by-email until the first
   time that email successfully signs in, at which point `EntraObjectId`
   is populated and becomes the lookup key from then on.
-- Sign-in itself does not change in this plan — no new Entra app
+- Sign-in itself does not change in this plan - no new Entra app
   registration settings, no B2B, no new identity provider.
 - `InitialAdmins:Emails` (comma-separated) is only ever consulted when the
   `UserAccess` table is completely empty; once any row exists, it's a
   no-op on every subsequent startup.
 - The migration, the bootstrap seeding, and the tightened authorization
   fallback policy all land across this plan's tasks but are only
-  meaningful once ALL of them are deployed together — Task 4 (the
+  meaningful once ALL of them are deployed together - Task 4 (the
   fallback-policy tightening) must not go out ahead of Task 3 (bootstrap
   seeding) in any real deployment, since that would lock out every user
   including the intended Admin. (Within this plan's own task sequence
   they're ordered correctly; this note is for whoever deploys the merged
   result.)
 - No automated test exists for Blazor UI rendering in this codebase (no
-  component-rendering test framework) — every UI-only task ends with a
+  component-rendering test framework) - every UI-only task ends with a
   manual-verification step instead, consistent with every prior UI task
   this session.
 
@@ -68,7 +68,7 @@
   Constraints), `DotMarc.Data.Role { int Id, string Name, bool IsLocked,
   bool IsScopable, List<Permission> Permissions }`, `DotMarc.Data.UserAccess
   { int Id, string Email, string? EntraObjectId, int RoleId, Role Role,
-  List<Group> ScopedGroups }` — used by every later task in this plan.
+  List<Group> ScopedGroups }` - used by every later task in this plan.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -156,7 +156,7 @@ existing `DotMarcDbContextTests` class:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "CanInsertAndQuery_RoleWithPermissions|Role_Name_MustBeUnique|CanInsertAndQuery_UserAccessWithScopedGroups|UserAccess_Email_MustBeUnique"`
-Expected: FAIL to build — `Permission`, `Role`, `UserAccess` don't exist yet.
+Expected: FAIL to build - `Permission`, `Role`, `UserAccess` don't exist yet.
 
 - [ ] **Step 3: Create the entities**
 
@@ -165,7 +165,7 @@ Create `src/DotMarc/Data/Permission.cs`:
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>Every independently-grantable capability in the app. A fixed, closed set — adding a
+/// <summary>Every independently-grantable capability in the app. A fixed, closed set - adding a
 /// new one is a code change (a new UI surface to gate), not something an admin can define, so this
 /// is an enum rather than a database-driven list.</summary>
 public enum Permission
@@ -193,11 +193,11 @@ Create `src/DotMarc/Data/Role.cs`:
 namespace DotMarc.Data;
 
 /// <summary>A named bundle of Permissions, grantable to any number of people via UserAccess.
-/// IsLocked is true only for the built-in Admin role — enforced in RoleManagementService, not
+/// IsLocked is true only for the built-in Admin role - enforced in RoleManagementService, not
 /// just hidden in the UI, so Admin can never be renamed, have its permissions changed, or be
 /// deleted through any code path, keeping it a reliable break-glass account. IsScopable is true
 /// only for the built-in Viewer role and is never exposed as something an admin can set on a
-/// custom role — it exists so "scope only applies to Viewer" survives a rename of Viewer itself,
+/// custom role - it exists so "scope only applies to Viewer" survives a rename of Viewer itself,
 /// rather than being a fragile string comparison against the name "Viewer".</summary>
 public sealed class Role
 {
@@ -214,13 +214,13 @@ Create `src/DotMarc/Data/UserAccess.cs`:
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>One granted person — internal staff or an external client contact, granted the same
+/// <summary>One granted person - internal staff or an external client contact, granted the same
 /// way. Email is what an admin types and is authoritative until EntraObjectId is populated on
 /// that email's first successful sign-in, after which lookups use the object ID so a later
 /// UPN/email rename on the Entra side can't orphan the grant. ScopedGroups only has any effect
-/// when Role.IsScopable is true (see Role's doc comment) — UserAccessManagementService clears it
+/// when Role.IsScopable is true (see Role's doc comment) - UserAccessManagementService clears it
 /// for any other role. An empty ScopedGroups list on a scopable role's grant means unrestricted
-/// view access, not "access to nothing" — matching how the Dashboard's own Group filter already
+/// view access, not "access to nothing" - matching how the Dashboard's own Group filter already
 /// treats "no filter selected".</summary>
 public sealed class UserAccess
 {
@@ -264,31 +264,31 @@ In `OnModelCreating`, add:
         });
 ```
 
-`Role.Permissions` converts to/from a `string[]` — Npgsql maps a CLR
+`Role.Permissions` converts to/from a `string[]` - Npgsql maps a CLR
 `string[]` property directly to a native Postgres `text[]` array column,
 so this needs no separate join table. `DeleteBehavior.Restrict` on the
 `UserAccess`→`Role` relationship means the database itself refuses to
-delete a `Role` that any `UserAccess` row still references — a backstop
+delete a `Role` that any `UserAccess` row still references - a backstop
 behind the service-level check Task 2 adds.
 
 - [ ] **Step 5: Generate the migration**
 
 Run: `dotnet ef migrations add AddPermissionsAndAccess --project src/DotMarc/DotMarc.csproj --startup-project src/DotMarc/DotMarc.csproj`
 
-Review the generated migration carefully — this is the first place this
+Review the generated migration carefully - this is the first place this
 project has mapped a `List<TEnum>` property, so don't assume the
 conversion worked as expected:
 
 - Confirm `Roles.Permissions` is created as `text[]` (a genuine Postgres
   array column), not `jsonb` or a separate table. If it came out as
   something else, the `HasConversion` in Step 4 isn't being picked up the
-  way this plan expects — stop and report rather than guessing at a fix.
+  way this plan expects - stop and report rather than guessing at a fix.
 - Confirm the join table for `UserAccess.ScopedGroups`↔`Group` (an
   implicit many-to-many, same mechanism as `Domain.Groups`/`Domain.Tags`
   from the domain-grouping feature) is created correctly.
 - Confirm both new unique indexes (`Roles.Name`, `UserAccesses.Email`)
   are present.
-- Confirm this is purely additive — new tables only, nothing altered or
+- Confirm this is purely additive - new tables only, nothing altered or
   dropped on any existing table.
 
 - [ ] **Step 6: Run the tests to verify they pass**
@@ -332,7 +332,7 @@ git commit -m "Add Permission enum and Role/UserAccess entities"
   - `UserAccessManagementService.UpdateAccessResult` (`Updated`, `RoleNotFound`)
   - `UserAccessManagementService.UpdateAccessAsync(DotMarcDbContext, int userAccessId, int roleId, IReadOnlyList<int> groupIds, CancellationToken) : Task<UpdateAccessResult>`
   - `UserAccessManagementService.RevokeAccessAsync(DotMarcDbContext, int userAccessId, CancellationToken) : Task`
-  - `UserAccessManagementService.ResolveAsync(DotMarcDbContext, string? entraObjectId, string? email, CancellationToken) : Task<UserAccess?>` —
+  - `UserAccessManagementService.ResolveAsync(DotMarcDbContext, string? entraObjectId, string? email, CancellationToken) : Task<UserAccess?>` - 
     the sign-in-time lookup/bind entry point Task 4's claims transformation calls.
   All `*Async` methods default `CancellationToken cancellationToken = default`, matching this
   project's existing management-service convention.
@@ -648,7 +648,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         var resolved = await UserAccessManagementService.ResolveAsync(context, "oid-123", "person-renamed@example.com", CancellationToken.None);
 
         Assert.NotNull(resolved);
-        Assert.Equal("person@example.com", resolved!.Email); // unchanged — lookup used the object ID, not the new email.
+        Assert.Equal("person@example.com", resolved!.Email); // unchanged - lookup used the object ID, not the new email.
     }
 
     [Fact]
@@ -666,7 +666,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter "RoleManagementServiceTests|UserAccessManagementServiceTests"`
-Expected: FAIL to build — `RoleManagementService`/`UserAccessManagementService` don't exist yet.
+Expected: FAIL to build - `RoleManagementService`/`UserAccessManagementService` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -752,7 +752,7 @@ public static class RoleManagementService
 
     /// <summary>Unlike Group/Tag deletion (which only ever removes membership rows and is always
     /// safe), deleting a Role that's still granted to someone would leave their UserAccess row
-    /// pointing at nothing — an undefined-permissions state. This checks first and refuses rather
+    /// pointing at nothing - an undefined-permissions state. This checks first and refuses rather
     /// than letting that happen; the database's own DeleteBehavior.Restrict foreign key is a
     /// backstop behind this check, not the primary guard.</summary>
     public static async Task<RemoveRoleResult> RemoveRoleAsync(DotMarcDbContext context, int roleId, CancellationToken cancellationToken = default)
@@ -858,7 +858,7 @@ public static class UserAccessManagementService
 
     /// <summary>Looks up the caller's access grant by Entra object ID first (the stable,
     /// already-bound case). Falling back to a case-insensitive email match only when no
-    /// object-ID match is found — binding that grant's EntraObjectId to the given value so every
+    /// object-ID match is found - binding that grant's EntraObjectId to the given value so every
     /// later sign-in resolves by object ID instead. Returns null when neither matches: the caller
     /// (the claims transformation) simply adds no permission claims for an unrecognized
     /// identity, and the tightened fallback authorization policy denies them.</summary>
@@ -918,7 +918,7 @@ git commit -m "Add RoleManagementService and UserAccessManagementService"
 
 ---
 
-### Task 3: `AccessBootstrapper` — seed built-in roles and the initial Admin(s)
+### Task 3: `AccessBootstrapper` - seed built-in roles and the initial Admin(s)
 
 **Files:**
 - Create: `src/DotMarc/Data/InitialAdminsOptions.cs`
@@ -1052,7 +1052,7 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter AccessBootstrapperTests`
-Expected: FAIL to build — `AccessBootstrapper`/`InitialAdminsOptions` don't exist yet.
+Expected: FAIL to build - `AccessBootstrapper`/`InitialAdminsOptions` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1061,7 +1061,7 @@ Create `src/DotMarc/Data/InitialAdminsOptions.cs`:
 ```csharp
 namespace DotMarc.Data;
 
-/// <summary>Binds the InitialAdmins:Emails configuration section — a comma-separated list of
+/// <summary>Binds the InitialAdmins:Emails configuration section - a comma-separated list of
 /// emails granted the Admin role the very first time the app starts with an empty UserAccess
 /// table (see AccessBootstrapper). Deliberately not validated/required like GraphOptions: an
 /// empty or absent value is a completely valid state on every startup after the first one.</summary>
@@ -1085,7 +1085,7 @@ namespace DotMarc.Data;
 /// completely empty, grants Admin to the emails configured via InitialAdmins:Emails. Guarded by
 /// the same Postgres advisory-lock pattern as DatabaseMigrator, so multiple replicas starting
 /// concurrently don't race each other. Called once at startup, right after migrations run and
-/// before the app serves any request — see Program.cs — so there's no window where the
+/// before the app serves any request - see Program.cs - so there's no window where the
 /// authorization fallback policy (tightened in a later task) is live before this has run.
 /// "Empty UserAccess table" covers both a genuinely fresh deployment and this app's own existing
 /// live deployment picking up the permissions feature for the first time: from the database's
@@ -1152,7 +1152,7 @@ public static class AccessBootstrapper
 ```
 
 In `src/DotMarc/Program.cs`, add `using Microsoft.Extensions.Options;` to
-the existing `using` block if not already present (check first — the
+the existing `using` block if not already present (check first - the
 existing `GraphOptions`/`IOptions<GraphOptions>` usage a few lines down
 means it's very likely already there).
 
@@ -1222,7 +1222,7 @@ git commit -m "Add AccessBootstrapper to seed built-in roles and the initial Adm
 - Produces: `DotMarc.Security.UserAccessClaimsTransformation` (implements
   `IClaimsTransformation`), `UserAccessClaimsTransformation.PermissionClaimType`
   (`const string`), `UserAccessClaimsTransformation.ScopedGroupClaimType`
-  (`const string`) — later tasks (6, 7, 8) read these claim types directly
+  (`const string`) - later tasks (6, 7, 8) read these claim types directly
   from `AuthenticationState.User` to implement scope-locking on the
   Dashboard and Domain Detail. Also produces the named authorization
   policies `"DomainsWrite"` and `"GroupsOrTagsWrite"`, used by Tasks 7 and
@@ -1351,7 +1351,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
 }
 ```
 
-This test file needs a tiny fake `IDbContextFactory<DotMarcDbContext>` —
+This test file needs a tiny fake `IDbContextFactory<DotMarcDbContext>` - 
 `FakeGraphMailboxClient`-style, but for the DB factory rather than Graph.
 Create `test/DotMarc.Tests/Internal/FakeDbContextFactory.cs`:
 
@@ -1362,7 +1362,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DotMarc.Tests.Internal;
 
 /// <summary>A minimal IDbContextFactory<DotMarcDbContext> that always points at the same test
-/// connection string — used where a real class under test (like
+/// connection string - used where a real class under test (like
 /// UserAccessClaimsTransformation) needs to create its own short-lived contexts rather than
 /// being handed one directly.</summary>
 internal sealed class FakeDbContextFactory(string connectionString) : IDbContextFactory<DotMarcDbContext>
@@ -1378,7 +1378,7 @@ internal sealed class FakeDbContextFactory(string connectionString) : IDbContext
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test test/DotMarc.Tests/DotMarc.Tests.csproj --filter UserAccessClaimsTransformationTests`
-Expected: FAIL to build — `UserAccessClaimsTransformation`/`FakeDbContextFactory` don't exist yet.
+Expected: FAIL to build - `UserAccessClaimsTransformation`/`FakeDbContextFactory` don't exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1394,10 +1394,10 @@ using Microsoft.Identity.Web;
 namespace DotMarc.Security;
 
 /// <summary>Enriches the signed-in user's ClaimsPrincipal with dotMARC-specific authorization
-/// data — one claim per granted Permission, plus one claim per accessible Group ID when the
-/// grant is scoped — looked up via UserAccessManagementService.ResolveAsync. ASP.NET Core
+/// data - one claim per granted Permission, plus one claim per accessible Group ID when the
+/// grant is scoped - looked up via UserAccessManagementService.ResolveAsync. ASP.NET Core
 /// invokes IClaimsTransformation as part of the authentication middleware, once per sign-in,
-/// before the Blazor Server circuit starts — not on every render — so this doesn't add a
+/// before the Blazor Server circuit starts - not on every render - so this doesn't add a
 /// database round-trip to normal page navigation.</summary>
 public sealed class UserAccessClaimsTransformation : IClaimsTransformation
 {
@@ -1417,7 +1417,7 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
             return principal;
         }
 
-        // GetObjectId() is Microsoft.Identity.Web's own accessor for the Entra object ID claim —
+        // GetObjectId() is Microsoft.Identity.Web's own accessor for the Entra object ID claim - 
         // preferred over reading a raw claim type string, since it's resilient to the exact
         // claim-type mapping in effect for a given token version/configuration.
         var objectId = principal.GetObjectId();
@@ -1451,7 +1451,7 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
 
 **Verify against a real sign-in before trusting this fully**: the
 `"preferred_username"` claim type is the standard OIDC claim Entra ID
-puts the user's email/UPN in, and is what this task assumes — but claim
+puts the user's email/UPN in, and is what this task assumes - but claim
 mapping can vary with configuration. If manual verification (Task 4's
 Step 6) is possible in this environment, confirm by temporarily logging
 `principal.Claims` and checking which claim actually carries the signed-in
@@ -1500,12 +1500,12 @@ builder.Services.AddAuthorization(options =>
 ```
 
 `RequireClaim(type, params string[] values)` is satisfied if the user has
-*any* claim of that type matching *any* of the given values — this is
+*any* claim of that type matching *any* of the given values - this is
 what gives `"DomainsWrite"`/`"GroupsOrTagsWrite"` their "at least one of
 these permissions" (OR) semantics, with no custom
 `IAuthorizationHandler` needed. The fallback policy's bare
 `RequireClaim(PermissionClaimType)` (no specific value) means "has at
-least one permission claim, whatever it is" — which is what actually
+least one permission claim, whatever it is" - which is what actually
 gates "authenticated AND recognized" now, replacing the old
 `RequireAuthenticatedUser()`-only check.
 
@@ -1544,7 +1544,7 @@ git commit -m "Add claims transformation and permission-based authorization poli
   `Permission` (Task 1). Uses the `"AccessManage"` policy (Task 4).
 
 No automated test for this task's Razor UI, consistent with this
-project's established precedent — the service layer underneath is already
+project's established precedent - the service layer underneath is already
 fully tested by Task 2.
 
 - [ ] **Step 1: Create the Manage Access page**
@@ -1757,7 +1757,7 @@ Create `src/DotMarc/Components/Pages/ManageAccess.razor`:
             var result = await RoleManagementService.UpdateRoleAsync(db, row.Id, newName, row.Permissions, CancellationToken.None);
             if (result != RoleManagementService.UpdateRoleResult.Updated)
             {
-                Snackbar.Add("Failed to rename role — the name may be empty or already taken.", Severity.Error);
+                Snackbar.Add("Failed to rename role - the name may be empty or already taken.", Severity.Error);
             }
         }
         catch (Exception)
@@ -1789,7 +1789,7 @@ Create `src/DotMarc/Components/Pages/ManageAccess.razor`:
             var result = await RoleManagementService.RemoveRoleAsync(db, row.Id, CancellationToken.None);
             if (result == RoleManagementService.RemoveRoleResult.InUse)
             {
-                Snackbar.Add($"Can't remove {row.Name} — it's still granted to at least one person. Revoke or reassign their access first.", Severity.Error);
+                Snackbar.Add($"Can't remove {row.Name} - it's still granted to at least one person. Revoke or reassign their access first.", Severity.Error);
             }
         }
         catch (Exception)
@@ -1874,11 +1874,11 @@ to:
 
 `AuthorizeView`'s default rendering with no `<Authorized>`/`<NotAuthorized>`
 child content is: render the child content when authorized, render
-nothing when not — exactly "hide, don't disable," matching this
+nothing when not - exactly "hide, don't disable," matching this
 project's established convention from the domain-grouping feature. Add
 `@using Microsoft.AspNetCore.Components.Authorization` to the top of
 `MainLayout.razor` if it isn't already implicitly available (check the
-file first — Blazor's default `_Imports.razor` likely already covers
+file first - Blazor's default `_Imports.razor` likely already covers
 this for every component in `Components/`, in which case no change is
 needed here).
 
@@ -1901,7 +1901,7 @@ couple of permissions, grant access to a second email scoped to an
 existing Group, and confirm the grant shows "Pending first sign-in" until
 that email actually signs in. If this environment doesn't allow it
 (consistent with every prior UI task this session), report clearly which
-steps were skipped and why — not a blocker.
+steps were skipped and why - not a blocker.
 
 - [ ] **Step 6: Commit**
 
@@ -1920,7 +1920,7 @@ git commit -m "Add Manage Access page"
 
 **Interfaces:**
 - Consumes: `UserAccessClaimsTransformation.ScopedGroupClaimType` (Task 4)
-  — read from the current `AuthenticationState.User`'s claims.
+  - read from the current `AuthenticationState.User`'s claims.
 
 No automated test for this task's Razor UI, consistent with this
 project's established precedent.
@@ -1989,13 +1989,13 @@ to:
         }
 ```
 
-This reuses the existing `_selectedGroupId` filter field exactly as-is —
+This reuses the existing `_selectedGroupId` filter field exactly as-is - 
 a scoped user simply never has any Group in `_allGroups` outside their
 allowed set, so the dropdown can't offer anything else, and this forces a
 valid selection rather than leaving `_selectedGroupId` null (which would
-mean "no filter" — unrestricted — exactly what a scoped user must not be
+mean "no filter" - unrestricted - exactly what a scoped user must not be
 able to reach). The existing `if (_selectedGroupId is { } groupId) { domains = domains.Where(...) }` filtering logic later in `LoadAsync` needs no
-changes — it already narrows by whatever `_selectedGroupId` holds.
+changes - it already narrows by whatever `_selectedGroupId` holds.
 
 Also lock the dropdown itself so a scoped user can't clear it back to
 "no filter" via the UI's own `Clearable` control. Change:
@@ -2026,7 +2026,7 @@ existing `@page "/domains/{DomainName}"` line:
 
 Add the same two `@using` lines as Step 1 if not already present, plus
 `@inject AuthenticationStateProvider AuthenticationStateProvider` and
-`@inject NavigationManager Navigation` (check first — `NavigationManager`
+`@inject NavigationManager Navigation` (check first - `NavigationManager`
 may already be injected by this page; if so, don't duplicate it).
 
 In `OnInitializedAsync` (or wherever `_domain` is currently loaded), after
@@ -2050,7 +2050,7 @@ existing load logic, then add:
 ```
 
 This must run after `_domain` is loaded (so `_domain.Groups` is
-populated) — check the existing query that fetches `_domain` includes
+populated) - check the existing query that fetches `_domain` includes
 `.Include(d => d.Groups)` already; if it doesn't (the DMARC DNS status
 and domain-grouping features may not have needed it before now), add it.
 
@@ -2156,8 +2156,8 @@ Change:
             <MudTd Style="width: 2.5rem;">
                 @* Drag/drop attributes live on plain <div>s, not MudTd itself: MudTd is a
                    MudBlazor component, and whether its attribute splatting forwards
-                   @ondragover:preventDefault correctly to the rendered <td> — with no paired
-                   @ondragover handler — isn't a guarantee Blazor makes for components the way it
+                   @ondragover:preventDefault correctly to the rendered <td> - with no paired
+                   @ondragover handler - isn't a guarantee Blazor makes for components the way it
                    does for elements. A native element sidesteps the question entirely. *@
                 <div draggable="true" @ondragstart="@(() => OnDragStart(context.Id))"
                      @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))"
@@ -2174,8 +2174,8 @@ to:
                 <AuthorizeView Policy="DomainsReorder">
                     @* Drag/drop attributes live on plain <div>s, not MudTd itself: MudTd is a
                        MudBlazor component, and whether its attribute splatting forwards
-                       @ondragover:preventDefault correctly to the rendered <td> — with no paired
-                       @ondragover handler — isn't a guarantee Blazor makes for components the way it
+                       @ondragover:preventDefault correctly to the rendered <td> - with no paired
+                       @ondragover handler - isn't a guarantee Blazor makes for components the way it
                        does for elements. A native element sidesteps the question entirely. *@
                     <div draggable="true" @ondragstart="@(() => OnDragStart(context.Id))"
                          @ondragover:preventDefault="true" @ondrop="@(() => OnDropAsync(context.Id))"
@@ -2369,13 +2369,13 @@ unlike the Groups/Tags multi-selects on Manage Domains).
 Same shape as Step 2, using `TagsAdd` for the add form, `TagsEdit` for
 both the name `MudTextField` and the color `MudSelect` (both edit the
 same `Tag` row, so both fall under the one `DomainsEdit`-equivalent
-permission — `TagsEdit` — for Tags, rather than being split into two
+permission - `TagsEdit` - for Tags, rather than being split into two
 separate permissions; the `Permission` enum from Task 1 deliberately has
 one `TagsEdit`, not `TagsRename` + `TagsRecolor`), and `TagsDelete` for
 the delete button. The `NotAuthorized` fallback for the name field shows
 `@context.Name` as plain text; the `NotAuthorized` fallback for the color
 field shows the existing read-only `MudChip` preview (the first column
-already does this — reuse that same `<MudChip T="string" Color="context.Color">@context.Name</MudChip>`
+already does this - reuse that same `<MudChip T="string" Color="context.Color">@context.Name</MudChip>`
 markup as the fallback for the color cell too, rather than plain text,
 since color genuinely needs a visual swatch to convey anything).
 

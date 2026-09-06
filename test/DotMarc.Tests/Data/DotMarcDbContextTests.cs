@@ -155,7 +155,7 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         // Regression coverage for the review finding: PollingService shares one DbContext across
         // a whole poll cycle. If a mid-cycle SaveChangesAsync throws (e.g. a constraint
         // violation), the half-built entities from that failed call stay tracked as Added unless
-        // the tracker is explicitly cleared — otherwise the *next* SaveChanges call (recording a
+        // the tracker is explicitly cleared - otherwise the *next* SaveChanges call (recording a
         // ParseFailure) re-attempts them too and can throw again, uncaught. This confirms the
         // assumption PollingService's fix relies on: ChangeTracker.Clear() actually drops the
         // dangling entities, and a subsequent unrelated save then succeeds.

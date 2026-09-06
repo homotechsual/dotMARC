@@ -13,7 +13,7 @@ public static class TagManagementService
     public enum AddTagResult { Added, InvalidName, AlreadyExists, InvalidColor }
 
     /// <summary>The only tag colors this project's design allows. Success/Warning/Error are
-    /// deliberately excluded — they already carry pass/fail/status meaning on the Dashboard's
+    /// deliberately excluded - they already carry pass/fail/status meaning on the Dashboard's
     /// Report Status and DNS Status chips, so a tag using one of them would visually read as a
     /// status indicator. This is the single canonical source of truth; ManageGroups.razor's
     /// color picker reads from here rather than duplicating the list.</summary>
@@ -88,7 +88,7 @@ public static class TagManagementService
     }
 
     /// <summary>Permanently deletes a Tag row. See GroupManagementService.RemoveGroupAsync's doc
-    /// comment — the same implicit many-to-many cascade behavior applies here.</summary>
+    /// comment - the same implicit many-to-many cascade behavior applies here.</summary>
     public static async Task RemoveTagAsync(DotMarcDbContext context, int tagId, CancellationToken cancellationToken = default)
     {
         var tag = await context.Tags.SingleAsync(t => t.Id == tagId, cancellationToken).ConfigureAwait(false);
@@ -96,7 +96,7 @@ public static class TagManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Replaces a domain's full set of tag memberships with exactly the given tag IDs —
+    /// <summary>Replaces a domain's full set of tag memberships with exactly the given tag IDs - 
     /// see GroupManagementService.SetDomainGroupsAsync's doc comment for why this replaces
     /// rather than incrementally adds/removes.</summary>
     public static async Task SetDomainTagsAsync(DotMarcDbContext context, int domainId, IReadOnlyList<int> tagIds, CancellationToken cancellationToken = default)

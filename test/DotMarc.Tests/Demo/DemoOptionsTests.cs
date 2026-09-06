@@ -16,7 +16,7 @@ public sealed class DemoOptionsTests
     }
 
     /// <summary>DemoDataResetService.GetDelayUntilNextReset builds a DateTimeOffset straight from
-    /// ResetHourUtc, outside any try/catch in BackgroundService.ExecuteAsync's loop — an
+    /// ResetHourUtc, outside any try/catch in BackgroundService.ExecuteAsync's loop - an
     /// out-of-range value throws ArgumentOutOfRangeException there and crashes the whole host
     /// under the default BackgroundServiceExceptionBehavior.StopHost. Program.cs wires
     /// ValidateDataAnnotations().ValidateOnStart() for DemoOptions so a misconfigured value fails

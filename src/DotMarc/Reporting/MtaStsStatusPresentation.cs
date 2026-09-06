@@ -4,7 +4,7 @@ using MudBlazor;
 namespace DotMarc.Reporting;
 
 /// <summary>Maps MtaStsStatus to the MudBlazor color/label pair used on DomainDetail.razor's
-/// MTA-STS tab — same shared-presentation-logic precedent as DmarcStatusPresentation.</summary>
+/// MTA-STS tab - same shared-presentation-logic precedent as DmarcStatusPresentation.</summary>
 public static class MtaStsStatusPresentation
 {
     public static Color GetColor(MtaStsStatus status) => status switch

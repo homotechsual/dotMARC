@@ -8,7 +8,7 @@ namespace DotMarc.Tests.Data;
 
 /// <summary>Covers DatabaseMigrator.MigrateWithLeaderLockAsync's Postgres advisory-lock guard:
 /// multiple replicas starting concurrently (rolling deploy, scale-out) must not race to apply
-/// migrations against the same database — each waits its turn for the lock, then runs
+/// migrations against the same database - each waits its turn for the lock, then runs
 /// MigrateAsync (a no-op once a prior holder already applied everything).</summary>
 [Collection("Postgres")]
 public sealed class DatabaseMigratorTests : IAsyncLifetime

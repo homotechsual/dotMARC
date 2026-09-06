@@ -16,7 +16,7 @@ public sealed class MtaStsServingVerifier : IMtaStsServingVerifier
         }
         catch (HttpRequestException)
         {
-            // Certificate not issued yet, DNS not propagated everywhere, connection refused — all
+            // Certificate not issued yet, DNS not propagated everywhere, connection refused - all
             // read the same to the caller: not serving correctly yet, try again next cycle.
             return false;
         }

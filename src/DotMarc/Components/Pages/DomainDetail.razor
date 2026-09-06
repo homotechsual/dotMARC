@@ -412,7 +412,7 @@ else
         // SignalR connection back to the browser yet), once again when the real interactive
         // circuit starts. That's harmless for the plain DB queries above, but the enrichment
         // kick-off below makes real network calls (RDAP lookups) through a process-wide
-        // semaphore — running it during the prerender pass would double every lookup and burn a
+        // semaphore - running it during the prerender pass would double every lookup and burn a
         // throttle permit that pass can't even display the result of (its renderer is disposed
         // by the time InvokeAsync(StateHasChanged) below would run). RendererInfo.IsInteractive
         // is false during prerendering and true once the interactive circuit is live, so gating
@@ -435,7 +435,7 @@ else
                 }
                 else if (IpRangeMatcher.FindContaining(cachedRanges, source.SourceIp) is { } range)
                 {
-                    // A different IP in the same RDAP allocation block was already looked up —
+                    // A different IP in the same RDAP allocation block was already looked up - 
                     // no need to spend another background lookup (or throttle permit) on this
                     // one, or to write it its own IpInfo row; the range cache alone covers it.
                     source.Organization = range.Organization;
@@ -450,7 +450,7 @@ else
         }
 
         // Bucket by day-received (of the report, not the record) rather than the record itself,
-        // since ReportRecord has no timestamp of its own — Report.ReceivedUtc is what's available.
+        // since ReportRecord has no timestamp of its own - Report.ReceivedUtc is what's available.
         var dailyBuckets = _domain.Reports
             .SelectMany(r => r.Records.Select(rec => new { Date = DateOnly.FromDateTime(r.ReceivedUtc.UtcDateTime), rec.Disposition, rec.MessageCount }))
             .GroupBy(x => x.Date)
@@ -486,14 +486,14 @@ else
             {
                 // Operational visibility for the failure mode this feature already hit once
                 // (rdap.org's WAF silently rejecting requests): the orchestrating caller logs, not
-                // the low-level checker (RdapIpInfoLookup) itself — matches
+                // the low-level checker (RdapIpInfoLookup) itself - matches
                 // PollingService.RunDmarcCheckCycleAsync's logging around DmarcDnsChecker.
                 Logger.LogWarning("RDAP lookup for source IP {SourceIp} did not resolve to Ok (status: {Status}).", source.SourceIp, info.Status);
             }
         }
         catch (Exception ex)
         {
-            // Leave Organization/Country null — the row settles into an "unknown" state below
+            // Leave Organization/Country null - the row settles into an "unknown" state below
             // rather than spinning forever. EnrichAsync itself already turns network failures
             // into a persisted LookupFailed IpInfo row; this catch only guards against something
             // unexpected in that path taking down the whole fire-and-forget task.
@@ -522,7 +522,7 @@ else
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
-                Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+                Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
                 return;
             }
 
@@ -538,7 +538,7 @@ else
             }
 
             // A CNAME-delegated record (existing.DelegatedToCname set) always gets a fresh
-            // create-style value, matching what the server actually pushes for this case — merging
+            // create-style value, matching what the server actually pushes for this case - merging
             // the third party's own policy content in wouldn't make sense once their delegation is
             // being replaced entirely.
             string proposed;
@@ -551,7 +551,7 @@ else
                 var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, GraphOptions.Value.MailboxAddress);
                 if (merged is null)
                 {
-                    Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                    Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
                     return;
                 }
                 proposed = merged;
@@ -585,7 +585,7 @@ else
 
     /// <summary>Pushes the RFC 7489 §7.1 authorization record proving the mailbox's own domain
     /// accepts DMARC reports for this monitored domain. Unlike PushDmarcRecordAsync/
-    /// PushTlsrptRecordAsync, the record being pushed doesn't live in THIS domain's zone — it
+    /// PushTlsrptRecordAsync, the record being pushed doesn't live in THIS domain's zone - it
     /// lives in the mailbox's domain's zone (typically the MSP's own domain), so provider
     /// detection and the push itself both target that domain instead of DomainName. See
     /// Program.cs's "dmarc-auth" callback branch for the matching server-side half.</summary>
@@ -607,7 +607,7 @@ else
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
-                Snackbar.Add($"Couldn't find a configured DNS push option for {mailboxDomain} — add the record manually.", Severity.Warning);
+                Snackbar.Add($"Couldn't find a configured DNS push option for {mailboxDomain} - add the record manually.", Severity.Warning);
                 return;
             }
 
@@ -662,7 +662,7 @@ else
         var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
         if (pushProvider is null)
         {
-            Snackbar.Add("Couldn't find a configured DNS push option for this domain — add the record manually.", Severity.Warning);
+            Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
             return;
         }
 
@@ -696,7 +696,7 @@ else
             var merged = TlsrptRuaMerge.TryMerge(existing.DirectValue, mailbox);
             if (merged is null)
             {
-                Snackbar.Add("Couldn't safely compute a fix for this record — it needs a manual look.", Severity.Warning);
+                Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
                 return;
             }
             proposed = merged;
@@ -724,7 +724,7 @@ else
     }
 
     /// <summary>Runs PollingService's own per-domain DMARC check on demand, outside its ~24h
-    /// schedule — for right after fixing a record, so the status updates without waiting for the
+    /// schedule - for right after fixing a record, so the status updates without waiting for the
     /// next automatic pass. Reuses the exact same per-domain logic the batch cycle runs (see
     /// PollingService.RunSingleDmarcCheckAsync's remarks) so this can never drift from what the
     /// scheduled check actually does.</summary>
@@ -756,7 +756,7 @@ else
         }
     }
 
-    /// <summary>DMARC-authorization counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>DMARC-authorization counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckDmarcAuthorizationAsync()
     {
         _isRecheckingDmarcAuth = true;
@@ -785,7 +785,7 @@ else
         }
     }
 
-    /// <summary>TLSRPT counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>TLSRPT counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckTlsrptAsync()
     {
         var mailbox = GraphOptions.Value.TlsrptMailboxAddress;
@@ -821,7 +821,7 @@ else
         }
     }
 
-    /// <summary>SPF counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>SPF counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckSpfAsync()
     {
         _isRecheckingSpf = true;
@@ -850,7 +850,7 @@ else
         }
     }
 
-    /// <summary>MX counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>MX counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckMxAsync()
     {
         _isRecheckingMx = true;
@@ -879,7 +879,7 @@ else
         }
     }
 
-    /// <summary>DKIM counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    /// <summary>DKIM counterpart to RecheckDmarcAsync - see its remarks.</summary>
     private async Task RecheckDkimAsync()
     {
         _isRecheckingDkim = true;
@@ -946,21 +946,21 @@ else
                 Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
                 break;
             case "cancelled":
-                break; // user backed out of the provider's consent screen — no need to say anything
+                break; // user backed out of the provider's consent screen - no need to say anything
             case "zone-not-found":
                 Snackbar.Add("Couldn't find that domain in the account you authorized.", Severity.Warning);
                 break;
             case "unmergeable":
-                Snackbar.Add("Couldn't safely compute a fix for that record — it needs a manual look.", Severity.Warning);
+                Snackbar.Add("Couldn't safely compute a fix for that record - it needs a manual look.", Severity.Warning);
                 break;
             case "replace-failed":
                 // Distinct from the generic "error" case on purpose: this specific outcome means
                 // the old record was already deleted before the replacement failed to create, so
-                // the domain now has NO record at that name — worse than before the push, not just
+                // the domain now has NO record at that name - worse than before the push, not just
                 // "nothing happened." RequireInteraction keeps it on screen instead of
                 // auto-dismissing like the other toasts.
                 Snackbar.Add(
-                    "The old record was deleted, but creating its replacement failed — this domain now has no record at that name and needs manual attention.",
+                    "The old record was deleted, but creating its replacement failed - this domain now has no record at that name and needs manual attention.",
                     Severity.Error, config => config.RequireInteraction = true);
                 break;
             case "error":
