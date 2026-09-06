@@ -257,4 +257,18 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.Equal(7, (await verify.Domains.SingleAsync(d => d.Id == domain.Id)).HaloClientId);
     }
+
+    [Fact]
+    public async Task SetDkimSelectorsAsync_SavesTheSelectorList()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+
+        await DomainManagementService.SetDkimSelectorsAsync(context, domainId, ["selector1", "selector2"], CancellationToken.None);
+
+        using var verify = CreateContext();
+        var domain = verify.Domains.Single();
+        Assert.Equal(["selector1", "selector2"], domain.DkimSelectors);
+    }
 }

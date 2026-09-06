@@ -106,6 +106,17 @@ public static class DomainManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Saves a domain's DKIM selector list from the domain detail page's "Configure DKIM
+    /// selectors" dialog. Does not itself trigger a recheck — the dialog's own save handler does
+    /// that immediately afterward via PollingService.RunSingleDkimCheckAsync, matching the "enable
+    /// MTA-STS" flow's immediate-check-after-save pattern.</summary>
+    public static async Task SetDkimSelectorsAsync(DotMarcDbContext context, int domainId, List<string> selectors, CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        domain.DkimSelectors = selectors;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Persists a full custom display order: SortOrder is set to each domain's index in
     /// orderedDomainIds. A full-list resequence rather than a gap/fractional scheme — simple, and
     /// correct at the scale (a handful to a few dozen domains) this app is designed for. Two
