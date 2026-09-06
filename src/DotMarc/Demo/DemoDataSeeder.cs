@@ -84,7 +84,20 @@ public static class DemoDataSeeder
                 MtaStsMxHosts = domainSeed.MtaStsMxHosts,
                 TlsrptCheckStatus = domainSeed.TlsrptCheckStatus,
                 TlsrptCheckedUtc = domainSeed.TlsrptCheckedUtc,
-                TlsrptCheckDetail = domainSeed.TlsrptCheckDetail
+                TlsrptCheckDetail = domainSeed.TlsrptCheckDetail,
+                DmarcAuthorizationCheckStatus = domainSeed.DmarcAuthorizationCheckStatus,
+                DmarcAuthorizationCheckedUtc = domainSeed.DmarcAuthorizationCheckStatus == DmarcAuthorizationCheckStatus.NotChecked ? null : domainSeed.FirstSeenUtc,
+                DmarcAuthorizationCheckDetail = domainSeed.DmarcAuthorizationCheckDetail,
+                SpfCheckStatus = domainSeed.SpfCheckStatus,
+                SpfCheckedUtc = domainSeed.SpfCheckStatus == SpfCheckStatus.NotChecked ? null : domainSeed.FirstSeenUtc,
+                SpfCheckDetail = domainSeed.SpfCheckDetail,
+                MxCheckStatus = domainSeed.MxCheckStatus,
+                MxCheckedUtc = domainSeed.MxCheckStatus == MxCheckStatus.NotChecked ? null : domainSeed.FirstSeenUtc,
+                MxCheckDetail = domainSeed.MxCheckDetail,
+                DkimSelectors = domainSeed.DkimSelectors ?? [],
+                DkimCheckStatus = domainSeed.DkimCheckStatus,
+                DkimCheckedUtc = domainSeed.DkimCheckStatus == DkimCheckStatus.NotConfigured ? null : domainSeed.FirstSeenUtc,
+                DkimCheckDetail = domainSeed.DkimCheckDetail
             };
 
             if (domainSeed.GroupName is not null)

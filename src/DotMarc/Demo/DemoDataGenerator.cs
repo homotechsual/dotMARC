@@ -46,7 +46,9 @@ public static class DemoDataGenerator
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.PendingCertificate,
                 mtaStsDetail: "DNS resolved; a TLS certificate is being issued.",
                 tlsrptCheckStatus: TlsrptCheckStatus.MissingOwnRecord,
-                tlsrptCheckDetail: "No TXT record found at _smtp._tls.brightline-legal.example"),
+                tlsrptCheckDetail: "No TXT record found at _smtp._tls.brightline-legal.example",
+                spfCheckStatus: SpfCheckStatus.MissingRecord,
+                spfCheckDetail: "No SPF (v=spf1) TXT record found at brightline-legal.example"),
             BuildDomain(random, nowUtc, sortOrder: 3, name: "cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.87,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
@@ -54,7 +56,14 @@ public static class DemoDataGenerator
                 mtaStsDetail: "Certificate renewal failed: mta-sts.cobalt-freight.example no longer resolves to the hosting hostname.",
                 tlsrptCheckStatus: TlsrptCheckStatus.Misconfigured,
                 tlsrptCheckDetail: "_smtp._tls.cobalt-freight.example's rua= does not point at the configured mailbox",
-                tlsrptDailyFailedSessions: [12, 15, 9, 18, 14]),
+                tlsrptDailyFailedSessions: [12, 15, 9, 18, 14],
+                spfCheckStatus: SpfCheckStatus.MultipleRecords,
+                spfCheckDetail: "cobalt-freight.example has 2 SPF records — RFC 7208 requires exactly one",
+                mxCheckStatus: MxCheckStatus.UnresolvableTarget,
+                mxCheckDetail: "MX target(s) do not resolve: mail.cobalt-freight.example",
+                dkimSelectors: ["selector1"],
+                dkimCheckStatus: DkimCheckStatus.Missing,
+                dkimCheckDetail: "No DKIM record found for selector(s): selector1"),
             BuildDomain(random, nowUtc, sortOrder: 4, name: "fleet.cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com"], passRateForDay: _ => 0.98,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays - 4,
@@ -62,9 +71,9 @@ public static class DemoDataGenerator
                 mtaStsDetail: "Waiting for mta-sts.fleet.cobalt-freight.example to resolve."),
             BuildDomain(random, nowUtc, sortOrder: 5, name: "driftwood-media.example", groupName: "Driftwood Media",
                 orgs: ["yahoo.com", "protonmail.com"], passRateForDay: _ => 0.85,
-                status: DmarcCheckStatus.MissingAuthorizationRecord,
-                detail: "No TXT record found at driftwood-media.example._report._dmarc.nova-msp.example",
-                daysOfHistory: HistoryDays),
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dmarcAuthorizationCheckStatus: DmarcAuthorizationCheckStatus.Missing,
+                dmarcAuthorizationCheckDetail: "No TXT record found at driftwood-media.example._report._dmarc.nova-msp.example"),
             BuildDomain(random, nowUtc, sortOrder: 6, name: "driftwood-events.example", groupName: null,
                 orgs: ["google.com"], passRateForDay: _ => 0.97,
                 status: DmarcCheckStatus.NotChecked, detail: null, daysOfHistory: HistoryDays),
@@ -87,7 +96,16 @@ public static class DemoDataGenerator
         bool mtaStsEnabled = false, MtaStsMode mtaStsMode = MtaStsMode.Testing, MtaStsStatus mtaStsStatus = MtaStsStatus.NotConfigured,
         string? mtaStsDetail = null,
         TlsrptCheckStatus tlsrptCheckStatus = TlsrptCheckStatus.NotChecked, string? tlsrptCheckDetail = null,
-        int[]? tlsrptDailyFailedSessions = null)
+        int[]? tlsrptDailyFailedSessions = null,
+        DmarcAuthorizationCheckStatus dmarcAuthorizationCheckStatus = DmarcAuthorizationCheckStatus.NotApplicable,
+        string? dmarcAuthorizationCheckDetail = null,
+        SpfCheckStatus spfCheckStatus = SpfCheckStatus.Ok,
+        string? spfCheckDetail = null,
+        MxCheckStatus mxCheckStatus = MxCheckStatus.Ok,
+        string? mxCheckDetail = null,
+        List<string>? dkimSelectors = null,
+        DkimCheckStatus dkimCheckStatus = DkimCheckStatus.NotConfigured,
+        string? dkimCheckDetail = null)
     {
         var reports = new List<DemoReportSeed>();
         DateTimeOffset? lastReportReceivedUtc = null;
@@ -132,7 +150,16 @@ public static class DemoDataGenerator
             TlsrptCheckStatus: tlsrptCheckStatus,
             TlsrptCheckedUtc: tlsrptDailyFailedSessions is { Length: > 0 } ? nowUtc.AddHours(-2) : null,
             TlsrptCheckDetail: tlsrptCheckDetail,
-            TlsrptReports: tlsrptDailyFailedSessions is { Length: > 0 } ? BuildTlsrptReports(nowUtc, name, tlsrptDailyFailedSessions) : []);
+            TlsrptReports: tlsrptDailyFailedSessions is { Length: > 0 } ? BuildTlsrptReports(nowUtc, name, tlsrptDailyFailedSessions) : [],
+            DmarcAuthorizationCheckStatus: dmarcAuthorizationCheckStatus,
+            DmarcAuthorizationCheckDetail: dmarcAuthorizationCheckDetail,
+            SpfCheckStatus: spfCheckStatus,
+            SpfCheckDetail: spfCheckDetail,
+            MxCheckStatus: mxCheckStatus,
+            MxCheckDetail: mxCheckDetail,
+            DkimSelectors: dkimSelectors ?? [],
+            DkimCheckStatus: dkimCheckStatus,
+            DkimCheckDetail: dkimCheckDetail);
     }
 
     /// <summary>One report per entry in dailyFailedSessions, oldest first, covering that many

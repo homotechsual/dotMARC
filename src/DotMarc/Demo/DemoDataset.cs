@@ -33,7 +33,16 @@ public sealed record DemoDomainSeed(
     TlsrptCheckStatus TlsrptCheckStatus,
     DateTimeOffset? TlsrptCheckedUtc,
     string? TlsrptCheckDetail,
-    List<DemoTlsrptReportSeed> TlsrptReports);
+    List<DemoTlsrptReportSeed> TlsrptReports,
+    DmarcAuthorizationCheckStatus DmarcAuthorizationCheckStatus = DmarcAuthorizationCheckStatus.NotApplicable,
+    string? DmarcAuthorizationCheckDetail = null,
+    SpfCheckStatus SpfCheckStatus = SpfCheckStatus.Ok,
+    string? SpfCheckDetail = null,
+    MxCheckStatus MxCheckStatus = MxCheckStatus.Ok,
+    string? MxCheckDetail = null,
+    List<string>? DkimSelectors = null,
+    DkimCheckStatus DkimCheckStatus = DkimCheckStatus.NotConfigured,
+    string? DkimCheckDetail = null);
 
 public sealed record DemoTlsrptReportSeed(
     string ReportingOrg,

@@ -98,8 +98,9 @@ public sealed class DemoDataGeneratorTests
         var dataset = Generate();
         var domain = dataset.Domains.Single(d => d.Name == "driftwood-media.example");
 
-        Assert.Equal(DmarcCheckStatus.MissingAuthorizationRecord, domain.DmarcCheckStatus);
-        Assert.False(string.IsNullOrWhiteSpace(domain.DmarcCheckDetail));
+        Assert.Equal(DmarcCheckStatus.Ok, domain.DmarcCheckStatus);
+        Assert.Equal(DmarcAuthorizationCheckStatus.Missing, domain.DmarcAuthorizationCheckStatus);
+        Assert.False(string.IsNullOrWhiteSpace(domain.DmarcAuthorizationCheckDetail));
     }
 
     [Fact]
