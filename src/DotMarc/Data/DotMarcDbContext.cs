@@ -44,6 +44,10 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.TlsrptCheckStatus).HasConversion<string>();
             entity.Property(d => d.MtaStsStatus).HasConversion<string>();
             entity.Property(d => d.MtaStsMode).HasConversion<string>();
+            entity.Property(d => d.DmarcAuthorizationCheckStatus).HasConversion<string>();
+            entity.Property(d => d.SpfCheckStatus).HasConversion<string>();
+            entity.Property(d => d.MxCheckStatus).HasConversion<string>();
+            entity.Property(d => d.DkimCheckStatus).HasConversion<string>();
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<string> behind a value converter throws at runtime ("cannot be used as a
@@ -52,6 +56,15 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.MtaStsMxHosts)
                 .HasConversion(
                     hosts => hosts.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
+
+            entity.Property(d => d.DkimSelectors)
+                .HasConversion(
+                    selectors => selectors.ToArray(),
                     stored => stored.ToList())
                 .Metadata.SetValueComparer(new ValueComparer<List<string>>(
                     (a, b) => (a ?? new()).SequenceEqual(b ?? new()),

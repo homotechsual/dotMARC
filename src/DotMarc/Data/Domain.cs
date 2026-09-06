@@ -19,6 +19,23 @@ public sealed class Domain
     public DateTimeOffset? TlsrptCheckedUtc { get; set; }
     public string? TlsrptCheckDetail { get; set; }
 
+    public DmarcAuthorizationCheckStatus DmarcAuthorizationCheckStatus { get; set; }
+    public DateTimeOffset? DmarcAuthorizationCheckedUtc { get; set; }
+    public string? DmarcAuthorizationCheckDetail { get; set; }
+
+    public SpfCheckStatus SpfCheckStatus { get; set; }
+    public DateTimeOffset? SpfCheckedUtc { get; set; }
+    public string? SpfCheckDetail { get; set; }
+
+    public MxCheckStatus MxCheckStatus { get; set; }
+    public DateTimeOffset? MxCheckedUtc { get; set; }
+    public string? MxCheckDetail { get; set; }
+
+    public List<string> DkimSelectors { get; set; } = [];
+    public DkimCheckStatus DkimCheckStatus { get; set; }
+    public DateTimeOffset? DkimCheckedUtc { get; set; }
+    public string? DkimCheckDetail { get; set; }
+
     public bool MtaStsEnabled { get; set; }
     public MtaStsStatus MtaStsStatus { get; set; }
     public DateTimeOffset? MtaStsCheckedUtc { get; set; }
