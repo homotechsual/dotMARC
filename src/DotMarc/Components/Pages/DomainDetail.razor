@@ -26,6 +26,9 @@
 @inject IDmarcAuthorizationTxtLookup DmarcAuthorizationTxtLookup
 @inject IDmarcDnsChecker DmarcDnsChecker
 @inject ITlsrptDnsChecker TlsrptDnsChecker
+@inject ISpfDnsChecker SpfDnsChecker
+@inject IMxDnsChecker MxDnsChecker
+@inject IDkimDnsChecker DkimDnsChecker
 @inject IOptions<GraphOptions> GraphOptions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -51,115 +54,177 @@ else
             </MudGrid>
             <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
             <MudPaper Class="pa-4 mt-4" Elevation="1">
-                <div class="d-flex align-center justify-space-between mb-2">
-                    <MudText Typo="Typo.subtitle1">DMARC record status</MudText>
-                    <AuthorizeView Policy="DomainsEdit" Context="dmarcRecheckAuthState">
-                        <Authorized>
-                            @if (_isRecheckingDmarc)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                            }
-                            else
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAsync" title="Recheck now" />
-                            }
-                        </Authorized>
-                    </AuthorizeView>
-                </div>
-                @if (_domain.DmarcCheckStatus == DmarcCheckStatus.NotChecked)
-                {
-                    <MudText Typo="Typo.body2">Not checked yet.</MudText>
-                }
-                else
-                {
-                    <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(_domain.DmarcCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(_domain.DmarcCheckStatus)</MudChip>
-                    @if (_domain.DmarcCheckedUtc is { } checkedUtc)
-                    {
-                        <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(_domain.DmarcCheckDetail))
-                    {
-                        <MudText Typo="Typo.body2" Class="mt-1">@_domain.DmarcCheckDetail</MudText>
-                    }
-                    @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured)
-                    {
-                        <AuthorizeView Policy="DomainsEdit" Context="dmarcPushAuthState">
-                            <div class="mt-2">
-                                @if (_isPushingDmarcRecord)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                }
-                                else
-                                {
-                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
-                                               OnClick="PushDmarcRecordAsync">Push via your DNS provider</MudButton>
-                                }
-                            </div>
-                        </AuthorizeView>
-                    }
-                    else if (_domain.DmarcCheckStatus == DmarcCheckStatus.MissingAuthorizationRecord)
-                    {
-                        <AuthorizeView Policy="DomainsEdit" Context="dmarcAuthPushAuthState">
-                            <div class="mt-2">
-                                @if (_isPushingDmarcAuthRecord)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                }
-                                else
-                                {
-                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
-                                               OnClick="PushDmarcAuthorizationRecordAsync">Push authorization record via your DNS provider</MudButton>
-                                }
-                            </div>
-                        </AuthorizeView>
-                    }
-                }
-            </MudPaper>
-            @if (!string.IsNullOrWhiteSpace(GraphOptions.Value.TlsrptMailboxAddress))
-            {
-                <MudPaper Class="pa-4 mt-4" Elevation="1">
-                    <div class="d-flex align-center justify-space-between mb-2">
-                        <MudText Typo="Typo.subtitle1">TLS reporting record status</MudText>
-                        <AuthorizeView Policy="DomainsEdit" Context="tlsrptRecheckAuthState">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Domain health</MudText>
+
+                <DomainHealthCheckRow Title="DMARC record"
+                                      StatusColor="@DmarcStatusPresentation.GetColor(_domain.DmarcCheckStatus)"
+                                      StatusLabel="@DmarcStatusPresentation.GetLabel(_domain.DmarcCheckStatus)"
+                                      CheckedUtc="_domain.DmarcCheckedUtc"
+                                      Detail="@_domain.DmarcCheckDetail">
+                    <ActionContent>
+                        <AuthorizeView Policy="DomainsEdit" Context="dmarcRecheckAuthState">
                             <Authorized>
-                                @if (_isRecheckingTlsrpt)
+                                @if (_isRecheckingDmarc)
                                 {
                                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                                 }
                                 else
                                 {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckTlsrptAsync" title="Recheck now" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAsync" title="Recheck now" />
+                                }
+                                @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured)
+                                {
+                                    @if (_isPushingDmarcRecord)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    }
+                                    else
+                                    {
+                                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                                   OnClick="PushDmarcRecordAsync">Push via your DNS provider</MudButton>
+                                    }
                                 }
                             </Authorized>
                         </AuthorizeView>
-                    </div>
-                    @if (_domain.TlsrptCheckStatus == TlsrptCheckStatus.NotChecked)
-                    {
-                        <MudText Typo="Typo.body2">Not checked yet.</MudText>
-                    }
-                    else
-                    {
-                        <MudChip T="string" Color="@TlsrptStatusPresentation.GetColor(_domain.TlsrptCheckStatus)" Size="Size.Small">@TlsrptStatusPresentation.GetLabel(_domain.TlsrptCheckStatus)</MudChip>
-                        @if (_domain.TlsrptCheckedUtc is { } checkedUtc)
-                        {
-                            <MudText Typo="Typo.caption" Class="mt-1">Last checked: @checkedUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(_domain.TlsrptCheckDetail))
-                        {
-                            <MudText Typo="Typo.body2" Class="mt-1">@_domain.TlsrptCheckDetail</MudText>
-                        }
-                        @if (_domain.TlsrptCheckStatus is TlsrptCheckStatus.MissingOwnRecord or TlsrptCheckStatus.Misconfigured)
-                        {
-                            <AuthorizeView Policy="DomainsEdit">
-                                <div class="mt-2">
-                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
-                                               OnClick="PushTlsrptRecordAsync">Push via your DNS provider</MudButton>
-                                </div>
+                    </ActionContent>
+                </DomainHealthCheckRow>
+
+                <DomainHealthCheckRow Title="DMARC authorization record"
+                                      StatusColor="@DmarcAuthorizationStatusPresentation.GetColor(_domain.DmarcAuthorizationCheckStatus)"
+                                      StatusLabel="@DmarcAuthorizationStatusPresentation.GetLabel(_domain.DmarcAuthorizationCheckStatus)"
+                                      CheckedUtc="_domain.DmarcAuthorizationCheckedUtc"
+                                      Detail="@_domain.DmarcAuthorizationCheckDetail">
+                    <ActionContent>
+                        <AuthorizeView Policy="DomainsEdit" Context="dmarcAuthRecheckAuthState">
+                            <Authorized>
+                                @if (_isRecheckingDmarcAuth)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAuthorizationAsync" title="Recheck now" />
+                                }
+                                @if (_domain.DmarcAuthorizationCheckStatus == DmarcAuthorizationCheckStatus.Missing)
+                                {
+                                    @if (_isPushingDmarcAuthRecord)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    }
+                                    else
+                                    {
+                                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                                   OnClick="PushDmarcAuthorizationRecordAsync">Push authorization record via your DNS provider</MudButton>
+                                    }
+                                }
+                            </Authorized>
+                        </AuthorizeView>
+                    </ActionContent>
+                </DomainHealthCheckRow>
+
+                @if (!string.IsNullOrWhiteSpace(GraphOptions.Value.TlsrptMailboxAddress))
+                {
+                    <DomainHealthCheckRow Title="TLS reporting record"
+                                          StatusColor="@TlsrptStatusPresentation.GetColor(_domain.TlsrptCheckStatus)"
+                                          StatusLabel="@TlsrptStatusPresentation.GetLabel(_domain.TlsrptCheckStatus)"
+                                          CheckedUtc="_domain.TlsrptCheckedUtc"
+                                          Detail="@_domain.TlsrptCheckDetail">
+                        <ActionContent>
+                            <AuthorizeView Policy="DomainsEdit" Context="tlsrptRecheckAuthState">
+                                <Authorized>
+                                    @if (_isRecheckingTlsrpt)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    }
+                                    else
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckTlsrptAsync" title="Recheck now" />
+                                    }
+                                    @if (_domain.TlsrptCheckStatus is TlsrptCheckStatus.MissingOwnRecord or TlsrptCheckStatus.Misconfigured)
+                                    {
+                                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                                   OnClick="PushTlsrptRecordAsync">Push via your DNS provider</MudButton>
+                                    }
+                                </Authorized>
                             </AuthorizeView>
-                        }
-                    }
-                </MudPaper>
-            }
+                        </ActionContent>
+                    </DomainHealthCheckRow>
+                }
+
+                <DomainHealthCheckRow Title="MTA-STS"
+                                      StatusColor="@MtaStsStatusPresentation.GetColor(_domain.MtaStsStatus)"
+                                      StatusLabel="@MtaStsStatusPresentation.GetLabel(_domain.MtaStsStatus)"
+                                      CheckedUtc="_domain.MtaStsCheckedUtc"
+                                      Detail="@_domain.MtaStsCheckDetail">
+                    <ActionContent>
+                        <MudLink OnClick="@(() => NavigateToTabAsync("mta-sts"))" Style="cursor:pointer">View details</MudLink>
+                    </ActionContent>
+                </DomainHealthCheckRow>
+
+                <DomainHealthCheckRow Title="SPF"
+                                      StatusColor="@SpfStatusPresentation.GetColor(_domain.SpfCheckStatus)"
+                                      StatusLabel="@SpfStatusPresentation.GetLabel(_domain.SpfCheckStatus)"
+                                      CheckedUtc="_domain.SpfCheckedUtc"
+                                      Detail="@_domain.SpfCheckDetail">
+                    <ActionContent>
+                        <AuthorizeView Policy="DomainsEdit" Context="spfRecheckAuthState">
+                            <Authorized>
+                                @if (_isRecheckingSpf)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckSpfAsync" title="Recheck now" />
+                                }
+                            </Authorized>
+                        </AuthorizeView>
+                    </ActionContent>
+                </DomainHealthCheckRow>
+
+                <DomainHealthCheckRow Title="MX"
+                                      StatusColor="@MxStatusPresentation.GetColor(_domain.MxCheckStatus)"
+                                      StatusLabel="@MxStatusPresentation.GetLabel(_domain.MxCheckStatus)"
+                                      CheckedUtc="_domain.MxCheckedUtc"
+                                      Detail="@_domain.MxCheckDetail">
+                    <ActionContent>
+                        <AuthorizeView Policy="DomainsEdit" Context="mxRecheckAuthState">
+                            <Authorized>
+                                @if (_isRecheckingMx)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckMxAsync" title="Recheck now" />
+                                }
+                            </Authorized>
+                        </AuthorizeView>
+                    </ActionContent>
+                </DomainHealthCheckRow>
+
+                <DomainHealthCheckRow Title="DKIM"
+                                      StatusColor="@DkimStatusPresentation.GetColor(_domain.DkimCheckStatus)"
+                                      StatusLabel="@DkimStatusPresentation.GetLabel(_domain.DkimCheckStatus)"
+                                      CheckedUtc="_domain.DkimCheckedUtc"
+                                      Detail="@_domain.DkimCheckDetail">
+                    <ActionContent>
+                        <AuthorizeView Policy="DomainsEdit" Context="dkimAuthState">
+                            <Authorized>
+                                @if (_isRecheckingDkim)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else if (_domain.DkimSelectors.Count > 0)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDkimAsync" title="Recheck now" />
+                                }
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="OpenDkimSelectorsDialogAsync">Configure selectors</MudButton>
+                            </Authorized>
+                        </AuthorizeView>
+                    </ActionContent>
+                </DomainHealthCheckRow>
+            </MudPaper>
         </MudTabPanel>
 
         <MudTabPanel Text="MTA-STS">
@@ -264,6 +329,10 @@ else
     private bool _isPushingDmarcAuthRecord;
     private bool _isRecheckingDmarc;
     private bool _isRecheckingTlsrpt;
+    private bool _isRecheckingDmarcAuth;
+    private bool _isRecheckingSpf;
+    private bool _isRecheckingMx;
+    private bool _isRecheckingDkim;
     private DotNetObjectReference<DomainDetail>? _dotNetRef;
 
     public void Dispose() => _dotNetRef?.Dispose();
@@ -280,6 +349,12 @@ else
         var slug = TabSlugs[index >= 0 && index < TabSlugs.Length ? index : 0];
         Navigation.NavigateTo($"/domains/{DomainName}/{slug}", replace: true);
         return Task.CompletedTask;
+    }
+
+    private Task NavigateToTabAsync(string slug)
+    {
+        var index = Array.IndexOf(TabSlugs, slug);
+        return OnActiveTabIndexChangedAsync(index >= 0 ? index : 0);
     }
 
     protected override async Task OnInitializedAsync()
@@ -678,6 +753,35 @@ else
         }
     }
 
+    /// <summary>DMARC-authorization counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    private async Task RecheckDmarcAuthorizationAsync()
+    {
+        _isRecheckingDmarcAuth = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleDmarcAuthorizationCheckAsync(domain, DmarcDnsChecker, GraphOptions.Value.MailboxAddress, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s DMARC authorization record. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.DmarcAuthorizationCheckStatus = domain.DmarcAuthorizationCheckStatus;
+            _domain.DmarcAuthorizationCheckedUtc = domain.DmarcAuthorizationCheckedUtc;
+            _domain.DmarcAuthorizationCheckDetail = domain.DmarcAuthorizationCheckDetail;
+        }
+        finally
+        {
+            _isRecheckingDmarcAuth = false;
+        }
+    }
+
     /// <summary>TLSRPT counterpart to RecheckDmarcAsync — see its remarks.</summary>
     private async Task RecheckTlsrptAsync()
     {
@@ -712,6 +816,115 @@ else
         {
             _isRecheckingTlsrpt = false;
         }
+    }
+
+    /// <summary>SPF counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    private async Task RecheckSpfAsync()
+    {
+        _isRecheckingSpf = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleSpfCheckAsync(domain, SpfDnsChecker, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s SPF record. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.SpfCheckStatus = domain.SpfCheckStatus;
+            _domain.SpfCheckedUtc = domain.SpfCheckedUtc;
+            _domain.SpfCheckDetail = domain.SpfCheckDetail;
+        }
+        finally
+        {
+            _isRecheckingSpf = false;
+        }
+    }
+
+    /// <summary>MX counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    private async Task RecheckMxAsync()
+    {
+        _isRecheckingMx = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleMxCheckAsync(domain, MxDnsChecker, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s MX record. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.MxCheckStatus = domain.MxCheckStatus;
+            _domain.MxCheckedUtc = domain.MxCheckedUtc;
+            _domain.MxCheckDetail = domain.MxCheckDetail;
+        }
+        finally
+        {
+            _isRecheckingMx = false;
+        }
+    }
+
+    /// <summary>DKIM counterpart to RecheckDmarcAsync — see its remarks.</summary>
+    private async Task RecheckDkimAsync()
+    {
+        _isRecheckingDkim = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleDkimCheckAsync(domain, DkimDnsChecker, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s DKIM record. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.DkimCheckStatus = domain.DkimCheckStatus;
+            _domain.DkimCheckedUtc = domain.DkimCheckedUtc;
+            _domain.DkimCheckDetail = domain.DkimCheckDetail;
+        }
+        finally
+        {
+            _isRecheckingDkim = false;
+        }
+    }
+
+    private async Task OpenDkimSelectorsDialogAsync()
+    {
+        var parameters = new DialogParameters<ConfigureDkimSelectorsDialog>
+        {
+            { x => x.DomainName, DomainName },
+            { x => x.CurrentSelectors, _domain!.DkimSelectors }
+        };
+        var dialogRef = await DialogService.ShowAsync<ConfigureDkimSelectorsDialog>("Configure DKIM selectors", parameters);
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled)
+        {
+            return;
+        }
+
+        var selectors = (List<string>)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await DomainManagementService.SetDkimSelectorsAsync(db, _domain!.Id, selectors, CancellationToken.None);
+        _domain.DkimSelectors = selectors;
+
+        await RecheckDkimAsync();
     }
 
     private async Task OpenDnsPushPopupAsync(string providerKey, int domainId, string target)
