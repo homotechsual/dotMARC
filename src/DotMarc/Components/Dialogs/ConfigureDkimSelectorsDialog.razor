@@ -1,0 +1,35 @@
+@* src/DotMarc/Components/Dialogs/ConfigureDkimSelectorsDialog.razor *@
+<MudDialog>
+    <TitleContent>Configure DKIM selectors</TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            One selector per line (e.g. <code>selector1</code>, <code>google</code>). dotMARC checks
+            <code>&lt;selector&gt;._domainkey.@DomainName</code> for each one you list here.
+        </MudText>
+        <MudTextField @bind-Value="_selectorsText" Label="Selectors" Lines="4" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string DomainName { get; set; } = "";
+    [Parameter] public List<string> CurrentSelectors { get; set; } = [];
+
+    private string _selectorsText = "";
+
+    protected override void OnInitialized() => _selectorsText = string.Join('\n', CurrentSelectors);
+
+    private void Save()
+    {
+        var selectors = _selectorsText
+            .Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        MudDialog.Close(DialogResult.Ok(selectors));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
