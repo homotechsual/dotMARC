@@ -1,0 +1,58 @@
+---
+slug: v0-4-0
+title: "dotMARC v0.4.0: PSA ticketing, smarter DNS pushes, and a real health checklist"
+description: HaloPSA ticketing tied to alerts, DNS pushes that can replace a third-party CNAME instead of just refusing, MTA-STS's last Azure-only gap closed, and a consolidated domain health checklist covering DMARC, TLSRPT, MTA-STS, SPF, MX, and DKIM.
+authors: [mikey]
+tags: [release]
+---
+
+Since [`v0.3.0`](/blog/v0-3-0), dotMARC picked up four things worth calling out: tickets that open
+and close themselves in HaloPSA, DNS pushes that can now fix a record instead of just refusing to
+touch it, one more Azure-only gap closed in MTA-STS, and a real breakdown of everything dotMARC
+actually knows about a domain's health.
+
+{/* truncate */}
+
+## Alerts that open and close their own PSA tickets
+
+If you run HaloPSA, dotMARC can now turn an alert straight into a ticket, and close it again the
+moment the underlying problem clears, no manual bookkeeping either way. Map clients to Halo
+companies from **Manage Groups** or **Manage Domains** (a per-domain override is there if one
+domain needs to go somewhere different from its group's default), pick a priority, and configure
+the rest from the new **PSA integration** section in **Alert settings**. A domain that already has
+an open ticket for the same problem won't get a second one.
+
+## DNS pushes that can actually fix what's wrong
+
+Every DNS push, DMARC, TLSRPT, MTA-STS, its ownership-verification record, now lives on the
+domain's own page instead of being scattered across separate screens, and all of them share one
+confirm flow: dotMARC looks up what's actually there first and shows you a before/after diff before
+touching anything. The real change is what happens when that record is a CNAME delegated to a
+third party (a common shape for TLSRPT and DMARC when another vendor manages your reporting):
+dotMARC used to just refuse and tell you to fix it by hand. Now it says exactly what it's about to
+do, deleting that CNAME and replacing it with the record dotMARC manages, and only proceeds once
+you confirm. Every push also gets its own manual recheck button, so confirming a fix landed doesn't
+mean waiting for the next scheduled check.
+
+## MTA-STS closes its last Azure-only gap
+
+Azure Container Apps needs a second, easy-to-miss DNS record before it'll bind a custom domain: an
+ownership-verification TXT record alongside the usual MTA-STS CNAME. dotMARC now shows that record
+right on the MTA-STS tab and pushes it automatically alongside the CNAME on Azure deployments, so
+"the CNAME's right there, why won't it activate" is one less thing to debug by hand.
+
+## A real health checklist, not just a DMARC guess
+
+DMARC's status used to be one chip standing in for four different things, including whether a
+cross-domain authorization record existed, checked only if the record itself was already fine. That
+authorization check is now fully independent, shown as its own row, checked and pushable on its own
+regardless of what the main DMARC record is doing. Alongside it, dotMARC now runs SPF and MX checks
+for the first time (presence, a sane record count, and that MX targets actually resolve), and DKIM
+if you tell it which selector to look for. All seven checks, DMARC record, DMARC authorization,
+TLSRPT, MTA-STS, SPF, MX, and DKIM, now live on one consolidated health checklist on each domain's
+Overview tab.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.4.0) for
+everything that shipped between these two tags, including the usual pile of fixes.
