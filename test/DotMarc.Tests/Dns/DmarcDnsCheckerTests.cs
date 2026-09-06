@@ -70,35 +70,31 @@ public class DmarcDnsCheckerTests
     }
 
     [Fact]
-    public async Task CheckAsync_ReturnsOk_WhenAuthorizationRecordIsPresent()
+    public async Task CheckAsync_ReturnsOk_AndMakesOnlyOneRequest_RegardlessOfMailboxDomain()
     {
         var (checker, handler) = CreateChecker();
-        handler.ResponseBodies.Enqueue("""
+        handler.ResponseBody = """
             {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk\""}]}
-            """);
-        handler.ResponseBodies.Enqueue("""
-            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1\""}]}
-            """);
+            """;
 
         var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
 
         Assert.Equal(DmarcCheckStatus.Ok, result.Status);
-        Assert.Equal(2, handler.Requests.Count);
-        Assert.Contains("contoso.io._report._dmarc.mjco.uk", handler.Requests[1].RequestUri!.ToString());
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
-    public async Task CheckAsync_ReturnsMissingAuthorizationRecord_WhenAuthorizationRecordIsAbsent()
+    public async Task CheckAsync_ReturnsOk_EvenWhenTheAuthorizationRecordWouldBeMissing()
     {
         var (checker, handler) = CreateChecker();
-        handler.ResponseBodies.Enqueue("""
+        handler.ResponseBody = """
             {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk\""}]}
-            """);
-        handler.ResponseBodies.Enqueue(NxDomainResponse);
+            """;
 
         var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
 
-        Assert.Equal(DmarcCheckStatus.MissingAuthorizationRecord, result.Status);
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
@@ -168,5 +164,42 @@ public class DmarcDnsCheckerTests
         await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
 
         Assert.Contains(handler.Requests[0].Headers.Accept, h => h.MediaType == "application/dns-json");
+    }
+
+    [Fact]
+    public async Task CheckAuthorizationAsync_ReturnsNotApplicable_WhenMailboxDomainMatchesMonitoredDomain()
+    {
+        var (checker, _) = CreateChecker();
+
+        var result = await checker.CheckAuthorizationAsync("contoso.io", "dmarc@contoso.io", CancellationToken.None);
+
+        Assert.Equal(DmarcAuthorizationCheckStatus.NotApplicable, result.Status);
+        Assert.Null(result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAuthorizationAsync_ReturnsMissing_WhenNoAuthorizationRecordExists()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = NxDomainResponse;
+
+        var result = await checker.CheckAuthorizationAsync("contoso.io", "dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcAuthorizationCheckStatus.Missing, result.Status);
+        Assert.Contains("contoso.io._report._dmarc.mjco.uk", handler.Requests[0].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task CheckAuthorizationAsync_ReturnsOk_WhenAuthorizationRecordExists()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1;\""}]}
+            """;
+
+        var result = await checker.CheckAuthorizationAsync("contoso.io", "dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcAuthorizationCheckStatus.Ok, result.Status);
+        Assert.Null(result.Detail);
     }
 }

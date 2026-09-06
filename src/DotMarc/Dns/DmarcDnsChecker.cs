@@ -39,17 +39,27 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
                     : $"_dmarc.{domainName}'s rua= points to {string.Join(", ", ruaAddresses)}, not {mailboxAddress}");
         }
 
+        return new DmarcCheckResult(DmarcCheckStatus.Ok, null);
+    }
+
+    /// <summary>RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being
+    /// monitored (the normal MSP shape), that mailbox's domain must publish this record proving it
+    /// accepts reports for the monitored domain. Independent of CheckAsync above — this always
+    /// runs and always returns its own result, regardless of whether CheckAsync's own-record check
+    /// passed or failed, so both can be shown (and separately corrected) at once.</summary>
+    public async Task<DmarcAuthorizationCheckResult> CheckAuthorizationAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken)
+    {
         var mailboxDomain = mailboxAddress[(mailboxAddress.IndexOf('@') + 1)..];
         if (string.Equals(mailboxDomain, domainName, StringComparison.OrdinalIgnoreCase))
         {
-            return new DmarcCheckResult(DmarcCheckStatus.Ok, null);
+            return new DmarcAuthorizationCheckResult(DmarcAuthorizationCheckStatus.NotApplicable, null);
         }
 
         var authorizationName = $"{domainName}._report._dmarc.{mailboxDomain}";
         var authorizationRecord = await QueryTxtAsync(authorizationName, cancellationToken).ConfigureAwait(false);
         return authorizationRecord is null
-            ? new DmarcCheckResult(DmarcCheckStatus.MissingAuthorizationRecord, $"No TXT record found at {authorizationName}")
-            : new DmarcCheckResult(DmarcCheckStatus.Ok, null);
+            ? new DmarcAuthorizationCheckResult(DmarcAuthorizationCheckStatus.Missing, $"No TXT record found at {authorizationName}")
+            : new DmarcAuthorizationCheckResult(DmarcAuthorizationCheckStatus.Ok, null);
     }
 
     /// <summary>Returns the first TXT record's value (quotes stripped, multi-segment values
