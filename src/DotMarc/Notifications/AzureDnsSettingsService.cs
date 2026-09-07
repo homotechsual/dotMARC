@@ -11,7 +11,6 @@ public static class AzureDnsSettingsService
     public static async Task SaveAsync(DotMarcDbContext context, ISecretStore secretStore, AzureDnsSettings updated, string? newClientSecret, CancellationToken cancellationToken = default)
     {
         var existing = await context.AzureDnsSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
-        existing.TenantId = updated.TenantId;
         existing.ClientId = updated.ClientId;
 
         if (!string.IsNullOrWhiteSpace(newClientSecret))

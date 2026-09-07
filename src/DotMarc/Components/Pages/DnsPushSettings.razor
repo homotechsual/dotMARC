@@ -38,13 +38,10 @@
     <MudPaper Class="pa-4">
         <MudText Typo="Typo.h5" Class="mb-4">Azure DNS</MudText>
         <MudGrid>
-            <MudItem xs="12" md="4">
-                <MudTextField Label="Tenant ID" @bind-Value="_azureDnsSettings.TenantId" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="6">
                 <MudTextField Label="Client ID" @bind-Value="_azureDnsSettings.ClientId" Variant="Variant.Outlined" />
             </MudItem>
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="6">
                 <MudTextField Label="Client secret" @bind-Value="_newAzureDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>

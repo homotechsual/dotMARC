@@ -34,7 +34,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     public async Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
-        return !string.IsNullOrEmpty(settings.TenantId) && !string.IsNullOrEmpty(settings.ClientId) && settings.ClientSecretConfigured;
+        return !string.IsNullOrEmpty(settings.ClientId) && settings.ClientSecretConfigured;
     }
 
     public async Task<string> BuildAuthorizationUrlAsync(string state, string codeChallenge, string redirectUri, CancellationToken cancellationToken = default)
@@ -55,7 +55,12 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256"
         };
-        return $"https://login.microsoftonline.com/{settings.TenantId}/oauth2/v2.0/authorize?" +
+        // This is a cross-tenant delegation flow by design (see the class doc comment) - a
+        // tenant-specific authority here would reject any account outside dotMARC's own tenant
+        // with AADSTS50020, exactly the "wrong endpoint" case Microsoft's own troubleshooting
+        // docs describe. "organizations" (not "common") since the requested scope is
+        // management.azure.com, which personal Microsoft accounts can never hold anyway.
+        return "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?" +
             string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
@@ -64,14 +69,18 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(AzureDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(settings.TenantId) || string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
+        if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
         {
             return new DnsPushResult(DnsPushOutcome.ProviderError, "Azure DNS push is not configured for this deployment.");
         }
 
+        // Must match BuildAuthorizationUrlAsync's authority exactly (MSAL requires the same
+        // cloud/host between the authorize request and the confidential client's own authority) -
+        // "organizations" so the incoming auth code can be redeemed regardless of which tenant the
+        // user actually signed in to.
         var confidentialClient = ConfidentialClientApplicationBuilder.Create(settings.ClientId)
             .WithClientSecret(clientSecret)
-            .WithAuthority($"https://login.microsoftonline.com/{settings.TenantId}")
+            .WithAuthority("https://login.microsoftonline.com/organizations")
             .WithRedirectUri(redirectUri)
             .Build();
 
