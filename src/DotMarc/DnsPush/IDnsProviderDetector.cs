@@ -4,5 +4,5 @@ namespace DotMarc.DnsPush;
 
 public interface IDnsProviderDetector
 {
-    Task<DetectedDnsProvider> DetectAsync(string domainName, CancellationToken cancellationToken);
+    Task<DnsProviderDetectionResult> DetectAsync(string domainName, CancellationToken cancellationToken);
 }
