@@ -39,7 +39,7 @@
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
-@if (_domain is not null && _domain.DnsProvider is DetectedDnsProvider.Cloudflare or DetectedDnsProvider.AzureDns)
+@if (_domain is not null && _domain.DnsProvider.ToProviderKey() is not null)
 {
     <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
         DNS: @DnsProviderStatusPresentation.GetLabel(_domain.DnsProvider) (@_domain.DnsZone)

@@ -78,22 +78,37 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
             return new DnsPushResult(DnsPushOutcome.ProviderError, "Google Cloud DNS push is not configured for this deployment.");
         }
 
-        var accessToken = await ExchangeCodeForTokenAsync(settings.ClientId, clientSecret, code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
-        if (accessToken is null)
+        // Everything below is network calls: token exchange, then for each change a
+        // projects.list/managedZones.list zone search, an rrsets lookup, and a changes POST.
+        // Unlike Cloudflare/Azure - which need narrower, carefully placed catches around their
+        // non-atomic delete-then-create window so a mid-operation failure can be reported as
+        // ReplaceFailedAfterDelete rather than a plain error - every mutation here goes through
+        // Cloud DNS's atomic Change API, so no matter which call below fails, nothing was ever
+        // half-applied. That means one outer catch is sufficient: there is no partial-failure
+        // state to distinguish.
+        try
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Google rejected the authorization code exchange.");
-        }
-
-        foreach (var change in changes)
-        {
-            var result = await PushOneChangeAsync(change, accessToken, cancellationToken).ConfigureAwait(false);
-            if (result.Outcome != DnsPushOutcome.Pushed)
+            var accessToken = await ExchangeCodeForTokenAsync(settings.ClientId, clientSecret, code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
+            if (accessToken is null)
             {
-                return result;
+                return new DnsPushResult(DnsPushOutcome.ProviderError, "Google rejected the authorization code exchange.");
             }
-        }
 
-        return new DnsPushResult(DnsPushOutcome.Pushed, null);
+            foreach (var change in changes)
+            {
+                var result = await PushOneChangeAsync(change, accessToken, cancellationToken).ConfigureAwait(false);
+                if (result.Outcome != DnsPushOutcome.Pushed)
+                {
+                    return result;
+                }
+            }
+
+            return new DnsPushResult(DnsPushOutcome.Pushed, null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Couldn't reach Google to push the DNS record: {ex.Message} - nothing was changed.");
+        }
     }
 
     private async Task<DnsPushResult> PushOneChangeAsync(DnsRecordChange change, string accessToken, CancellationToken cancellationToken)
