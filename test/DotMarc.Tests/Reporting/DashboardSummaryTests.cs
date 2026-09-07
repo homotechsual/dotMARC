@@ -33,9 +33,12 @@ public class DashboardSummaryTests
             HeaderFrom = "contoso.io"
         };
 
-    private static Domain DomainWith(string name, bool isMonitored, DateTimeOffset? lastReportReceivedUtc, params Report[] reports)
+    private static Domain DomainWith(string name, bool isMonitored, DateTimeOffset? lastReportReceivedUtc, params Report[] reports) =>
+        DomainWith(name, isMonitored, lastReportReceivedUtc, SpfCheckStatus.NotChecked, reports);
+
+    private static Domain DomainWith(string name, bool isMonitored, DateTimeOffset? lastReportReceivedUtc, SpfCheckStatus spfCheckStatus, params Report[] reports)
     {
-        var domain = new Domain { Name = name, FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = isMonitored, LastReportReceivedUtc = lastReportReceivedUtc };
+        var domain = new Domain { Name = name, FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = isMonitored, LastReportReceivedUtc = lastReportReceivedUtc, SpfCheckStatus = spfCheckStatus };
         domain.Reports.AddRange(reports);
         return domain;
     }
@@ -97,6 +100,27 @@ public class DashboardSummaryTests
         var (_, rows) = DashboardSummary.Build([domain], parseFailureCount: 0);
 
         Assert.Equal("Missing", Assert.Single(rows).Status);
+    }
+
+    [Fact]
+    public void Build_NeverMarksANullRoutedDomainMissing_RegardlessOfLastReportReceivedUtc()
+    {
+        var domain = DomainWith("contoso.io", isMonitored: true, lastReportReceivedUtc: null, SpfCheckStatus.NullSpf);
+
+        var (summary, rows) = DashboardSummary.Build([domain], parseFailureCount: 0);
+
+        Assert.NotEqual("Missing", Assert.Single(rows).Status);
+        Assert.Equal(0, summary.MissingCount);
+    }
+
+    [Fact]
+    public void Build_IncludesSpfCheckStatus_OnEachRow()
+    {
+        var domain = DomainWith("contoso.io", isMonitored: true, DateTimeOffset.UtcNow, SpfCheckStatus.NullSpf);
+
+        var (_, rows) = DashboardSummary.Build([domain], parseFailureCount: 0);
+
+        Assert.Equal(SpfCheckStatus.NullSpf, Assert.Single(rows).SpfCheckStatus);
     }
 
     [Fact]

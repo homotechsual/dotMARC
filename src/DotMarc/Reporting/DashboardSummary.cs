@@ -19,11 +19,12 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
             {
                 var passRate = DomainStatistics.GetPassRate(d.Reports);
 
-                var missingReport = d.IsMonitored && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
+                var isNullRouted = d.SpfCheckStatus == SpfCheckStatus.NullSpf;
+                var missingReport = d.IsMonitored && !isNullRouted && (d.LastReportReceivedUtc is null || d.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
                 var status = missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
                 var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
 
-                return new DashboardDomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsMonitored, d.DmarcCheckStatus, d.DmarcAuthorizationCheckStatus, d.MtaStsStatus);
+                return new DashboardDomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsMonitored, d.DmarcCheckStatus, d.DmarcAuthorizationCheckStatus, d.MtaStsStatus, d.SpfCheckStatus);
             })
             .ToList();
 
@@ -42,4 +43,4 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
 }
 
 /// <summary>One domain's row in the Dashboard's table.</summary>
-public sealed record DashboardDomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsMonitored, DmarcCheckStatus DmarcCheckStatus, DmarcAuthorizationCheckStatus DmarcAuthorizationCheckStatus, MtaStsStatus MtaStsStatus);
+public sealed record DashboardDomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsMonitored, DmarcCheckStatus DmarcCheckStatus, DmarcAuthorizationCheckStatus DmarcAuthorizationCheckStatus, MtaStsStatus MtaStsStatus, SpfCheckStatus SpfCheckStatus);

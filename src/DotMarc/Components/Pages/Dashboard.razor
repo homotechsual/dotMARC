@@ -103,7 +103,13 @@ else
             </tr>
         </HeaderContent>
         <RowTemplate>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@context.Name</MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                @context.Name
+                @if (context.SpfCheckStatus == SpfCheckStatus.NullSpf)
+                {
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">Null-routed</MudChip>
+                }
+            </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer"><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
