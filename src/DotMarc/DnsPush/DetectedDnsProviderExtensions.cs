@@ -12,6 +12,7 @@ public static class DetectedDnsProviderExtensions
     {
         DetectedDnsProvider.Cloudflare => "cloudflare",
         DetectedDnsProvider.AzureDns => "azure-dns",
+        DetectedDnsProvider.GoogleCloudDns => "google-cloud-dns",
         _ => null
     };
 }

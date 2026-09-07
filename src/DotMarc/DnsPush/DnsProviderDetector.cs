@@ -23,6 +23,13 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
     private static readonly string[] CloudflareNsSuffixes = [".ns.cloudflare.com"];
     private static readonly string[] AzureDnsNsSuffixes =
         [".azure-dns.com", ".azure-dns.net", ".azure-dns.org", ".azure-dns.info"];
+    // Also the NS suffix the legacy Google Domains registrar (now Squarespace-operated) used and
+    // still uses for unmigrated zones - there is no way to tell "a real Cloud DNS zone this app
+    // can push to" apart from "a legacy Google Domains zone with no GCP project behind it" using
+    // NS records alone. A push against the latter just fails cleanly as ZoneNotFound once zone
+    // discovery searches every accessible project and finds nothing, same as any other unmatched
+    // zone - accepted, not fixable without a different kind of signal than NS suffix matching.
+    private static readonly string[] GoogleCloudDnsNsSuffixes = [".googledomains.com"];
 
     private readonly HttpClient _http;
 
@@ -46,6 +53,10 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
                     if (AzureDnsNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
                     {
                         return new DnsProviderDetectionResult(DetectedDnsProvider.AzureDns, candidate);
+                    }
+                    if (GoogleCloudDnsNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return new DnsProviderDetectionResult(DetectedDnsProvider.GoogleCloudDns, candidate);
                     }
                 }
 

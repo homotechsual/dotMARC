@@ -11,7 +11,7 @@ public static class DnsProviderStatusPresentation
 {
     public static Color GetColor(DetectedDnsProvider provider) => provider switch
     {
-        DetectedDnsProvider.Cloudflare or DetectedDnsProvider.AzureDns => Color.Success,
+        DetectedDnsProvider.Cloudflare or DetectedDnsProvider.AzureDns or DetectedDnsProvider.GoogleCloudDns => Color.Success,
         DetectedDnsProvider.Unknown => Color.Warning,
         _ => Color.Default
     };
@@ -20,6 +20,7 @@ public static class DnsProviderStatusPresentation
     {
         DetectedDnsProvider.Cloudflare => "Cloudflare",
         DetectedDnsProvider.AzureDns => "Azure DNS",
+        DetectedDnsProvider.GoogleCloudDns => "Google Cloud DNS",
         DetectedDnsProvider.Unknown => "Not recognized",
         _ => "Not checked yet"
     };

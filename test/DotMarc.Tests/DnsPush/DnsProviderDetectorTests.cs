@@ -45,6 +45,20 @@ public sealed class DnsProviderDetectorTests
     }
 
     [Fact]
+    public async Task DetectAsync_ReturnsGoogleCloudDns_ForTheGoogleDomainsNsSuffix()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":2,"data":"ns-cloud-a1.googledomains.com."},{"type":2,"data":"ns-cloud-a2.googledomains.com."}]}
+            """;
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(DetectedDnsProvider.GoogleCloudDns, result.Provider);
+        Assert.Equal("contoso.io", result.ZoneName);
+    }
+
+    [Fact]
     public async Task DetectAsync_ReturnsUnknown_ForAnUnrecognizedProvider()
     {
         var (detector, handler) = CreateDetector();
