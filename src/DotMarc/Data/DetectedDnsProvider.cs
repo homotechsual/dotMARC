@@ -9,5 +9,6 @@ public enum DetectedDnsProvider
     NotChecked,
     Unknown,
     Cloudflare,
-    AzureDns
+    AzureDns,
+    GoogleCloudDns
 }
