@@ -107,7 +107,9 @@ else
                 @context.Name
                 @if (context.SpfCheckStatus == SpfCheckStatus.NullSpf)
                 {
-                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">Null-routed</MudChip>
+                    <MudTooltip Text="This domain publishes a null SPF record (no authorized senders). For parked domains like this, DMARC's p=reject is the recommended policy." Arrow="true">
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">Null-routed</MudChip>
+                    </MudTooltip>
                 }
             </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer"><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
