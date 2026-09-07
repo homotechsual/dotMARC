@@ -256,6 +256,20 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Domain_DnsProvider_DefaultsToNotChecked()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow });
+        context.SaveChanges();
+
+        using var verify = CreateContext();
+        var domain = verify.Domains.Single();
+        Assert.Equal(DetectedDnsProvider.NotChecked, domain.DnsProvider);
+        Assert.Null(domain.DnsZone);
+        Assert.Null(domain.DnsProviderCheckedUtc);
+    }
+
+    [Fact]
     public void CanInsertAndQuery_ProcessedMessage()
     {
         using (var context = CreateContext())

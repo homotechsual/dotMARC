@@ -45,6 +45,10 @@ public sealed class Domain
     public List<string> MtaStsMxHosts { get; set; } = [];
     public int? HaloClientId { get; set; } // override; null means "use the Group's mapping"
 
+    public DetectedDnsProvider DnsProvider { get; set; }
+    public string? DnsZone { get; set; }
+    public DateTimeOffset? DnsProviderCheckedUtc { get; set; }
+
     public List<Report> Reports { get; set; } = [];
     public List<TlsrptReport> TlsrptReports { get; set; } = [];
     public List<Group> Groups { get; set; } = [];

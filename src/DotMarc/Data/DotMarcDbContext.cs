@@ -48,6 +48,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.SpfCheckStatus).HasConversion<string>();
             entity.Property(d => d.MxCheckStatus).HasConversion<string>();
             entity.Property(d => d.DkimCheckStatus).HasConversion<string>();
+            entity.Property(d => d.DnsProvider).HasConversion<string>();
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<string> behind a value converter throws at runtime ("cannot be used as a

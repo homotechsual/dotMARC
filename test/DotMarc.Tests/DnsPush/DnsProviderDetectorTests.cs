@@ -1,3 +1,4 @@
+using DotMarc.Data;
 using DotMarc.DnsPush;
 using DotMarc.Tests.Internal;
 using Xunit;

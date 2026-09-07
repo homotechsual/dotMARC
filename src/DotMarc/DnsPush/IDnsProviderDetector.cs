@@ -1,3 +1,5 @@
+using DotMarc.Data;
+
 namespace DotMarc.DnsPush;
 
 public interface IDnsProviderDetector
