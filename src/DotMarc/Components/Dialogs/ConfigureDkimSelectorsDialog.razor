@@ -1,4 +1,5 @@
 @* src/DotMarc/Components/Dialogs/ConfigureDkimSelectorsDialog.razor *@
+@using DotMarc.Dns
 <MudDialog>
     <TitleContent>Configure DKIM selectors</TitleContent>
     <DialogContent>
@@ -18,10 +19,21 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public string DomainName { get; set; } = "";
     [Parameter] public List<string> CurrentSelectors { get; set; } = [];
+    [Parameter] public string? DetectedInboxProvider { get; set; }
 
     private string _selectorsText = "";
 
-    protected override void OnInitialized() => _selectorsText = string.Join('\n', CurrentSelectors);
+    protected override void OnInitialized()
+    {
+        if (CurrentSelectors.Count > 0)
+        {
+            _selectorsText = string.Join('\n', CurrentSelectors);
+        }
+        else if (DetectedInboxProvider is not null && DkimSelectorSuggestions.GetSuggestedSelectors(DetectedInboxProvider) is { } suggested)
+        {
+            _selectorsText = string.Join('\n', suggested);
+        }
+    }
 
     private void Save()
     {

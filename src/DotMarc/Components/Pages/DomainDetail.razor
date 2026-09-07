@@ -944,7 +944,8 @@ else
         var parameters = new DialogParameters<ConfigureDkimSelectorsDialog>
         {
             { x => x.DomainName, DomainName },
-            { x => x.CurrentSelectors, _domain!.DkimSelectors }
+            { x => x.CurrentSelectors, _domain!.DkimSelectors },
+            { x => x.DetectedInboxProvider, _detectedMailServices.FirstOrDefault(s => s.Kind == DetectedMailServiceKind.Inbox)?.ProviderName }
         };
         var dialogRef = await DialogService.ShowAsync<ConfigureDkimSelectorsDialog>("Configure DKIM selectors", parameters);
         var result = await dialogRef.Result;
