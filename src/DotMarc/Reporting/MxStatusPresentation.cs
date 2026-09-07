@@ -10,7 +10,7 @@ public static class MxStatusPresentation
 {
     public static Color GetColor(MxCheckStatus status) => status switch
     {
-        MxCheckStatus.Ok => Color.Success,
+        MxCheckStatus.Ok or MxCheckStatus.NullMx => Color.Success,
         MxCheckStatus.UnresolvableTarget => Color.Warning,
         MxCheckStatus.MissingRecord => Color.Error,
         _ => Color.Default
@@ -19,6 +19,7 @@ public static class MxStatusPresentation
     public static string GetLabel(MxCheckStatus status) => status switch
     {
         MxCheckStatus.Ok => "OK",
+        MxCheckStatus.NullMx => "Null MX (no inbound mail)",
         MxCheckStatus.MissingRecord => "No MX record",
         MxCheckStatus.UnresolvableTarget => "Target does not resolve",
         _ => "Not checked yet"

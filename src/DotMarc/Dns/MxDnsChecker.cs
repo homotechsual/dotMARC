@@ -27,7 +27,7 @@ public sealed class MxDnsChecker : IMxDnsChecker
         }
         if (mxAnswers.Count == 1 && mxAnswers[0].Exchange == ".")
         {
-            return new MxCheckResult(MxCheckStatus.Ok, "Explicit null MX (RFC 7505) - this domain intentionally does not accept mail.");
+            return new MxCheckResult(MxCheckStatus.NullMx, "Explicit null MX (RFC 7505) - this domain intentionally does not accept mail.");
         }
 
         var unresolvable = new List<string>();

@@ -26,7 +26,7 @@ public sealed class MxDnsCheckerTests
     }
 
     [Fact]
-    public async Task CheckAsync_ReturnsOk_WhenNullMxIsPublished()
+    public async Task CheckAsync_ReturnsNullMx_WhenNullMxIsPublished()
     {
         var (checker, handler) = CreateChecker();
         handler.ResponseBody = """
@@ -35,7 +35,7 @@ public sealed class MxDnsCheckerTests
 
         var result = await checker.CheckAsync("contoso.io", CancellationToken.None);
 
-        Assert.Equal(MxCheckStatus.Ok, result.Status);
+        Assert.Equal(MxCheckStatus.NullMx, result.Status);
         Assert.NotNull(result.Detail);
     }
 
