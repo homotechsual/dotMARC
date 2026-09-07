@@ -47,6 +47,10 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             ["redirect_uri"] = redirectUri,
             ["response_mode"] = "query",
             ["scope"] = $"{Scope} openid",
+            // Without this, a browser with an active Microsoft session silently reuses it - the
+            // signed-in user could push to the wrong tenant/subscription without ever being asked
+            // which account this push should run as.
+            ["prompt"] = "select_account",
             ["state"] = state,
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256"
