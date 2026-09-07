@@ -170,8 +170,10 @@ az containerapp update --name $APP --resource-group $RG --set-env-vars `
 ```
 
 :::tip[Git Bash]
+
 If you're running these `az` commands from Git Bash on Windows rather than PowerShell, any
 argument starting with `/` (every Azure resource ID) gets silently mangled into a Windows path by
 MSYS's path conversion, `MissingSubscription` errors on `az role assignment create` are the
 usual symptom. Set `export MSYS_NO_PATHCONV=1` first.
+
 :::
