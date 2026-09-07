@@ -1,5 +1,6 @@
 using DotMarc.Data;
 using DotMarc.Dns;
+using DotMarc.DnsPush;
 using DotMarc.Graph;
 using DotMarc.MtaSts;
 using DotMarc.Notifications;
@@ -49,6 +50,8 @@ public sealed class PollingService : BackgroundService
     /// trying to filter the staleness query by DkimSelectors.Count, which doesn't translate cleanly
     /// through the List&lt;string&gt; value converter.</summary>
     internal const long DkimCheckLeaderLockKey = 84_200_017;
+
+    internal const long DnsProviderCheckLeaderLockKey = 84_200_019;
 
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
@@ -169,6 +172,17 @@ public sealed class PollingService : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "DKIM check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var dnsProviderDetector = scope.ServiceProvider.GetRequiredService<IDnsProviderDetector>();
+                        await RunDnsProviderCheckCycleAsync(context, dnsProviderDetector, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "DNS provider check cycle failed; will retry next interval.");
                     }
 
                     if (!string.IsNullOrWhiteSpace(_options!.TlsrptMailboxAddress))
@@ -466,6 +480,75 @@ public sealed class PollingService : BackgroundService
         domain.DkimCheckStatus = result.Status;
         domain.DkimCheckedUtc = DateTimeOffset.UtcNow;
         domain.DkimCheckDetail = result.Detail;
+    }
+
+    /// <summary>DNS provider counterpart to RunSingleSpfCheckAsync - see its remarks. Unlike the
+    /// other single-domain check methods, this one also writes a resolved zone name
+    /// (Domain.DnsZone) alongside the status - see DnsProviderDetector's doc comment for what that
+    /// means when the domain isn't itself the zone apex.</summary>
+    internal static async Task RunSingleDnsProviderCheckAsync(Domain domain, IDnsProviderDetector dnsProviderDetector, CancellationToken cancellationToken)
+    {
+        var result = await dnsProviderDetector.DetectAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+        domain.DnsProvider = result.Provider;
+        domain.DnsZone = result.ZoneName;
+        domain.DnsProviderCheckedUtc = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Runs a DNS provider/zone check for every domain whose last check
+    /// (DnsProviderCheckedUtc) is null or more than 24 hours old.</summary>
+    internal async Task RunDnsProviderCheckCycleAsync(DotMarcDbContext context, IDnsProviderDetector dnsProviderDetector, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", DnsProviderCheckLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the DNS-provider-check lock for this cycle; skipping.");
+            return;
+        }
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var staleDomains = await context.Domains
+                .Where(d => d.DnsProviderCheckedUtc == null || d.DnsProviderCheckedUtc < cutoff)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var anyUpdated = false;
+            foreach (var domain in staleDomains)
+            {
+                try
+                {
+                    await RunSingleDnsProviderCheckAsync(domain, dnsProviderDetector, cancellationToken).ConfigureAwait(false);
+                    anyUpdated = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "DNS provider check failed for {Domain}; will retry next cycle.", domain.Name);
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Runs a DMARC authorization-record check for every domain whose last check
