@@ -83,4 +83,18 @@ public sealed class MailServiceDetectorTests
 
         Assert.Empty(result);
     }
+
+    [Fact]
+    public async Task DetectAsync_DeduplicatesInboxProvider_WhenMultipleMxSuffixesMatchTheSameProvider()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBodies.Enqueue("""{"Status":0,"Answer":[{"type":15,"data":"10 mx.zoho.com."},{"type":15,"data":"20 mx2.zohomail.com."}]}""");
+        handler.ResponseBodies.Enqueue("""{"Status":3}""");
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        var service = Assert.Single(result);
+        Assert.Equal("Zoho Mail", service.ProviderName);
+        Assert.Equal(DetectedMailServiceKind.Inbox, service.Kind);
+    }
 }
