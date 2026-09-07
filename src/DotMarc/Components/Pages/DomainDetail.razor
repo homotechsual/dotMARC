@@ -29,6 +29,7 @@
 @inject ISpfDnsChecker SpfDnsChecker
 @inject IMxDnsChecker MxDnsChecker
 @inject IDkimDnsChecker DkimDnsChecker
+@inject IMailServiceDetector MailServiceDetector
 @inject IOptions<GraphOptions> GraphOptions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -58,6 +59,20 @@ else
                     <MudText Typo="Typo.subtitle1">Domain health</MudText>
                     <DocsLink Href="https://dotmarc.app/docs/scope" Text="What dotMARC monitors for a domain" Class="ml-2" />
                 </div>
+                @if (_detectedMailServices.Count > 0)
+                {
+                    <div class="d-flex align-center flex-wrap mb-3" style="gap:6px;">
+                        @foreach (var service in _detectedMailServices)
+                        {
+                            <MudChip T="string"
+                                     Color="@(service.Kind == DetectedMailServiceKind.Inbox ? Color.Primary : Color.Secondary)"
+                                     Size="Size.Small"
+                                     Icon="@(service.Kind == DetectedMailServiceKind.Inbox ? Icons.Material.Filled.Inbox : Icons.Material.Filled.Send)">
+                                @service.ProviderName
+                            </MudChip>
+                        }
+                    </div>
+                }
 
                 <DomainHealthCheckRow Title="DMARC record"
                                       StatusColor="@DmarcStatusPresentation.GetColor(_domain.DmarcCheckStatus)"
@@ -324,6 +339,7 @@ else
 
     private int _activeTabIndex;
     private Domain? _domain;
+    private List<DetectedMailService> _detectedMailServices = [];
     private List<Report> _reports = [];
     private List<TlsrptReport> _tlsrptReports = [];
     private List<SourceRow> _sources = [];
@@ -450,6 +466,17 @@ else
                 {
                     _ = EnrichSourceInBackgroundAsync(source);
                 }
+            }
+
+            try
+            {
+                _detectedMailServices = await MailServiceDetector.DetectAsync(DomainName, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Informational-only badges - a transient DNS failure here shouldn't disrupt the
+                // rest of the page load. Logged so a persistent failure is still diagnosable.
+                Logger.LogWarning(ex, "Failed to detect mail services for {DomainName}.", DomainName);
             }
         }
 
