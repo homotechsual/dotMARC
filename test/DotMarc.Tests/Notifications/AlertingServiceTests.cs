@@ -60,6 +60,20 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await context.SaveChangesAsync();
     }
 
+    private async Task SeedNullRoutedDomainAsync(string name)
+    {
+        await using var context = CreateContext();
+        context.Domains.Add(new Domain
+        {
+            Name = name,
+            IsMonitored = true,
+            FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+            LastReportReceivedUtc = null,
+            SpfCheckStatus = SpfCheckStatus.NullSpf
+        });
+        await context.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task CheckPinnedDomainsAsync_CreatesOneMissedReportAlert_PerDomainWithinCooldown()
     {
@@ -111,6 +125,74 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await using var verifyContext = CreateContext();
         var alert = await verifyContext.AlertEvents.SingleAsync();
         Assert.Equal("The monitored domain 'contoso.io' has not received a DMARC report yet.", alert.Message);
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_SkipsMissingReportCheck_ForANullRoutedDomain()
+    {
+        await SeedSettingsAsync();
+        await SeedNullRoutedDomainAsync("contoso.io");
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verifyContext = CreateContext();
+        Assert.Empty(verifyContext.AlertEvents);
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_ResolvesStaleMissedReportAlert_ForADomainThatBecameNullRouted()
+    {
+        await SeedSettingsAsync();
+        await using (var context = CreateContext())
+        {
+            context.Domains.Add(new Domain
+            {
+                Name = "contoso.io",
+                IsMonitored = true,
+                FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+                LastReportReceivedUtc = null,
+                SpfCheckStatus = SpfCheckStatus.NullSpf
+            });
+            context.AlertEvents.Add(new AlertEvent
+            {
+                DomainName = "contoso.io",
+                AlertType = "MissedReport",
+                Severity = "Warning",
+                Title = "Missing expected DMARC report",
+                Message = "stale, from before this domain became null-routed",
+                CreatedUtc = DateTimeOffset.UtcNow.AddDays(-5)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync();
+        Assert.True(alert.IsResolved);
+        Assert.NotNull(alert.ResolvedUtc);
+    }
+
+    [Fact]
+    public async Task FlagUnexpectedActivityForNullRoutedDomainAsync_CreatesAnAlert()
+    {
+        await SeedSettingsAsync();
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.FlagUnexpectedActivityForNullRoutedDomainAsync("contoso.io", CancellationToken.None);
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync();
+        Assert.Equal("UnexpectedActivityOnNullRoutedDomain", alert.AlertType);
+        Assert.Equal("contoso.io", alert.DomainName);
+        Assert.Contains("null-routed", alert.Message);
+        Assert.Equal(1, fakeNotifier.CallCount);
     }
 
     [Fact]

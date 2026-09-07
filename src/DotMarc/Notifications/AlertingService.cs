@@ -9,6 +9,7 @@ public interface IAlertingService
     Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default);
     Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default);
     Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default);
+    Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, CancellationToken cancellationToken = default);
 }
 
 public sealed class AlertingService : IAlertingService
@@ -49,6 +50,15 @@ public sealed class AlertingService : IAlertingService
 
         foreach (var domain in domains)
         {
+            if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
+            {
+                // Null-routed (SPF v=spf1 -all): no reports is the expected, healthy state, not a
+                // problem - resolve any pre-existing alert from before the domain became
+                // null-routed and skip the missing-report check entirely for it.
+                await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
             if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
             {
                 await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
@@ -82,6 +92,19 @@ public sealed class AlertingService : IAlertingService
 
         var failureSummary = failureTypes.Count == 0 ? "no failure category supplied" : string.Join(", ", failureTypes.Distinct(StringComparer.OrdinalIgnoreCase));
         await EnsureAlertAsync(db, settings, domainName, "TlsrptFailure", "Warning", "TLS delivery failures reported", $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var settings = await NotificationSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
+        if (!settings.Enabled)
+        {
+            return;
+        }
+
+        var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.";
+        await EnsureAlertAsync(db, settings, domainName, "UnexpectedActivityOnNullRoutedDomain", "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ResolveAlertAsync(string domainName, string alertType, CancellationToken cancellationToken)
