@@ -33,15 +33,7 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
         var candidate = domainName;
         for (var i = 0; i < MaxQueries; i++)
         {
-            List<string> nsHosts;
-            try
-            {
-                nsHosts = await QueryNsHostsAsync(candidate, cancellationToken).ConfigureAwait(false);
-            }
-            catch (HttpRequestException)
-            {
-                return new DnsProviderDetectionResult(DetectedDnsProvider.Unknown, domainName);
-            }
+            var nsHosts = await QueryNsHostsAsync(candidate, cancellationToken).ConfigureAwait(false);
 
             if (nsHosts.Count > 0)
             {

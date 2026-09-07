@@ -584,16 +584,13 @@ else
         _isPushingDmarcRecord = true;
         try
         {
-            var providerKey = _domain!.DnsProvider switch
-            {
-                DetectedDnsProvider.Cloudflare => "cloudflare",
-                DetectedDnsProvider.AzureDns => "azure-dns",
-                _ => null
-            };
+            var providerKey = _domain!.DnsProvider.ToProviderKey();
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
-                Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
+                Snackbar.Add(_domain!.DnsProvider == DetectedDnsProvider.NotChecked
+                    ? "This domain's DNS provider hasn't been checked yet - try the recheck button on the Overview tab, then push again."
+                    : "Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
                 return;
             }
 
@@ -669,12 +666,7 @@ else
             var mailboxDomain = mailbox[(mailbox.IndexOf('@') + 1)..];
 
             var detected = await DnsProviderDetector.DetectAsync(mailboxDomain, CancellationToken.None);
-            var providerKey = detected.Provider switch
-            {
-                DetectedDnsProvider.Cloudflare => "cloudflare",
-                DetectedDnsProvider.AzureDns => "azure-dns",
-                _ => null
-            };
+            var providerKey = detected.Provider.ToProviderKey();
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
             if (pushProvider is null)
             {
@@ -723,16 +715,13 @@ else
 
     private async Task PushTlsrptRecordAsync()
     {
-        var providerKey = _domain!.DnsProvider switch
-        {
-            DetectedDnsProvider.Cloudflare => "cloudflare",
-            DetectedDnsProvider.AzureDns => "azure-dns",
-            _ => null
-        };
+        var providerKey = _domain!.DnsProvider.ToProviderKey();
         var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
         if (pushProvider is null)
         {
-            Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
+            Snackbar.Add(_domain!.DnsProvider == DetectedDnsProvider.NotChecked
+                ? "This domain's DNS provider hasn't been checked yet - try the recheck button on the Overview tab, then push again."
+                : "Couldn't find a configured DNS push option for this domain - add the record manually.", Severity.Warning);
             return;
         }
 

@@ -546,13 +546,20 @@ app.MapGet("/dns-push/{provider}/callback", async (
     string domainZone = domain.Name;
     if (decodedState.PushTarget != "dmarc-auth")
     {
-        var domainZoneDetection = await dnsProviderDetector.DetectAsync(domain.Name, CancellationToken.None);
-        var domainProviderKey = domainZoneDetection.Provider switch
+        DnsProviderDetectionResult domainZoneDetection;
+        try
         {
-            DetectedDnsProvider.Cloudflare => "cloudflare",
-            DetectedDnsProvider.AzureDns => "azure-dns",
-            _ => null
-        };
+            domainZoneDetection = await dnsProviderDetector.DetectAsync(domain.Name, CancellationToken.None);
+        }
+        catch (HttpRequestException)
+        {
+            // A transient DNS lookup failure here is not the same as "zone not found" (which
+            // means the lookup succeeded but no configured account owns that zone) - report it
+            // as a generic error instead of implying a permissions/configuration problem that
+            // doesn't exist.
+            return DnsPushPopupResult.Close("error");
+        }
+        var domainProviderKey = domainZoneDetection.Provider.ToProviderKey();
         if (!string.Equals(domainProviderKey, provider, StringComparison.OrdinalIgnoreCase))
         {
             return DnsPushPopupResult.Close("zone-not-found");
@@ -634,13 +641,16 @@ app.MapGet("/dns-push/{provider}/callback", async (
         var authorizationName = $"{domain.Name}._report._dmarc.{mailboxDomain}";
         const string proposed = "v=DMARC1;";
 
-        var mailboxZoneDetection = await dnsProviderDetector.DetectAsync(mailboxDomain, CancellationToken.None);
-        var mailboxProviderKey = mailboxZoneDetection.Provider switch
+        DnsProviderDetectionResult mailboxZoneDetection;
+        try
         {
-            DetectedDnsProvider.Cloudflare => "cloudflare",
-            DetectedDnsProvider.AzureDns => "azure-dns",
-            _ => null
-        };
+            mailboxZoneDetection = await dnsProviderDetector.DetectAsync(mailboxDomain, CancellationToken.None);
+        }
+        catch (HttpRequestException)
+        {
+            return DnsPushPopupResult.Close("error");
+        }
+        var mailboxProviderKey = mailboxZoneDetection.Provider.ToProviderKey();
         if (!string.Equals(mailboxProviderKey, provider, StringComparison.OrdinalIgnoreCase))
         {
             return DnsPushPopupResult.Close("zone-not-found");

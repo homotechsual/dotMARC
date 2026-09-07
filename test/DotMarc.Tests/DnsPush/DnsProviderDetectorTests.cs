@@ -146,13 +146,11 @@ public sealed class DnsProviderDetectorTests
     }
 
     [Fact]
-    public async Task DetectAsync_ReturnsUnknown_WhenHttpRequestFails()
+    public async Task DetectAsync_PropagatesHttpRequestException_MatchingSiblingCheckersConvention()
     {
         var (detector, handler) = CreateDetector();
         handler.StatusCode = System.Net.HttpStatusCode.InternalServerError;
 
-        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
-
-        Assert.Equal(DetectedDnsProvider.Unknown, result.Provider);
+        await Assert.ThrowsAsync<HttpRequestException>(() => detector.DetectAsync("contoso.io", CancellationToken.None));
     }
 }
