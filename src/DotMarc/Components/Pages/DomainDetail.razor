@@ -37,10 +37,7 @@
 
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
-<div class="d-flex align-center mb-4">
-    <MudText Typo="Typo.h4">@DomainName</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/mta-sts" Text="MTA-STS statuses explained" Class="ml-2" />
-</div>
+<MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
 
 @if (_domain is null)
 {
@@ -57,7 +54,10 @@ else
             </MudGrid>
             <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
             <MudPaper Class="pa-4 mt-4" Elevation="1">
-                <MudText Typo="Typo.subtitle1" Class="mb-2">Domain health</MudText>
+                <div class="d-flex align-center mb-2">
+                    <MudText Typo="Typo.subtitle1">Domain health</MudText>
+                    <DocsLink Href="https://dotmarc.app/docs/scope" Text="What dotMARC monitors for a domain" Class="ml-2" />
+                </div>
 
                 <DomainHealthCheckRow Title="DMARC record"
                                       StatusColor="@DmarcStatusPresentation.GetColor(_domain.DmarcCheckStatus)"
@@ -237,6 +237,10 @@ else
         </MudTabPanel>
 
         <MudTabPanel Text="TLS reports">
+            <div class="d-flex align-center mb-2">
+                <MudText Typo="Typo.subtitle1">TLS delivery reports</MudText>
+                <DocsLink Href="https://dotmarc.app/docs/mta-sts#tls-reporting" Text="How TLS reporting works" Class="ml-2" />
+            </div>
             @if (_tlsrptReports.Count == 0)
             {
                 <MudText Class="my-4">No TLS reports received yet.</MudText>
