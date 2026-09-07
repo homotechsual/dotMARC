@@ -39,6 +39,12 @@
 <PageTitle>dotMARC - @DomainName</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
+@if (_domain is not null && _domain.DnsProvider is DetectedDnsProvider.Cloudflare or DetectedDnsProvider.AzureDns)
+{
+    <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+        DNS: @DnsProviderStatusPresentation.GetLabel(_domain.DnsProvider) (@_domain.DnsZone)
+    </MudText>
+}
 
 @if (_domain is null)
 {
@@ -242,6 +248,27 @@ else
                         </AuthorizeView>
                     </ActionContent>
                 </DomainHealthCheckRow>
+
+                <DomainHealthCheckRow Title="DNS provider"
+                                      StatusColor="@DnsProviderStatusPresentation.GetColor(_domain.DnsProvider)"
+                                      StatusLabel="@DnsProviderStatusPresentation.GetLabel(_domain.DnsProvider)"
+                                      CheckedUtc="_domain.DnsProviderCheckedUtc"
+                                      Detail="@(_domain.DnsZone is { } zone ? $"Zone: {zone}" : null)">
+                    <ActionContent>
+                        <AuthorizeView Policy="DomainsEdit" Context="dnsProviderAuthState">
+                            <Authorized>
+                                @if (_isRecheckingDnsProvider)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDnsProviderAsync" title="Recheck now" />
+                                }
+                            </Authorized>
+                        </AuthorizeView>
+                    </ActionContent>
+                </DomainHealthCheckRow>
             </MudPaper>
         </MudTabPanel>
 
@@ -356,6 +383,7 @@ else
     private bool _isRecheckingSpf;
     private bool _isRecheckingMx;
     private bool _isRecheckingDkim;
+    private bool _isRecheckingDnsProvider;
     private DotNetObjectReference<DomainDetail>? _dotNetRef;
 
     public void Dispose() => _dotNetRef?.Dispose();
@@ -556,8 +584,7 @@ else
         _isPushingDmarcRecord = true;
         try
         {
-            var detected = await DnsProviderDetector.DetectAsync(DomainName, CancellationToken.None);
-            var providerKey = detected switch
+            var providerKey = _domain!.DnsProvider switch
             {
                 DetectedDnsProvider.Cloudflare => "cloudflare",
                 DetectedDnsProvider.AzureDns => "azure-dns",
@@ -642,7 +669,7 @@ else
             var mailboxDomain = mailbox[(mailbox.IndexOf('@') + 1)..];
 
             var detected = await DnsProviderDetector.DetectAsync(mailboxDomain, CancellationToken.None);
-            var providerKey = detected switch
+            var providerKey = detected.Provider switch
             {
                 DetectedDnsProvider.Cloudflare => "cloudflare",
                 DetectedDnsProvider.AzureDns => "azure-dns",
@@ -696,8 +723,7 @@ else
 
     private async Task PushTlsrptRecordAsync()
     {
-        var detected = await DnsProviderDetector.DetectAsync(DomainName, CancellationToken.None);
-        var providerKey = detected switch
+        var providerKey = _domain!.DnsProvider switch
         {
             DetectedDnsProvider.Cloudflare => "cloudflare",
             DetectedDnsProvider.AzureDns => "azure-dns",
@@ -949,6 +975,35 @@ else
         finally
         {
             _isRecheckingDkim = false;
+        }
+    }
+
+    /// <summary>DNS provider counterpart to RecheckDmarcAsync - see its remarks.</summary>
+    private async Task RecheckDnsProviderAsync()
+    {
+        _isRecheckingDnsProvider = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            try
+            {
+                await PollingService.RunSingleDnsProviderCheckAsync(domain, DnsProviderDetector, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add($"Failed to check {DomainName}'s DNS provider. Try again.", Severity.Error);
+                return;
+            }
+            await db.SaveChangesAsync();
+
+            _domain!.DnsProvider = domain.DnsProvider;
+            _domain.DnsZone = domain.DnsZone;
+            _domain.DnsProviderCheckedUtc = domain.DnsProviderCheckedUtc;
+        }
+        finally
+        {
+            _isRecheckingDnsProvider = false;
         }
     }
 

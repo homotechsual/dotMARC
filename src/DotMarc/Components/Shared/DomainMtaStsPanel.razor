@@ -227,8 +227,7 @@
                 return;
             }
 
-            var detected = await DnsProviderDetector.DetectAsync(Domain.Name, CancellationToken.None);
-            var providerKey = detected switch
+            var providerKey = Domain.DnsProvider switch
             {
                 DetectedDnsProvider.Cloudflare => "cloudflare",
                 DetectedDnsProvider.AzureDns => "azure-dns",
