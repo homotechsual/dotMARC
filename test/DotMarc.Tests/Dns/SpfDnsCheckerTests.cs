@@ -53,6 +53,33 @@ public sealed class SpfDnsCheckerTests
     }
 
     [Fact]
+    public async Task CheckAsync_ReturnsNullSpf_WhenTheRecordIsExactlyVEqualsSpf1DashAll()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=spf1 -all\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(SpfCheckStatus.NullSpf, result.Status);
+        Assert.Contains("no senders are authorized", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsOk_NotNullSpf_WhenDashAllFollowsARealMechanism()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=spf1 include:_spf.google.com -all\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(SpfCheckStatus.Ok, result.Status);
+    }
+
+    [Fact]
     public async Task CheckAsync_ReturnsMisconfigured_WhenARecordLooksLikeSpfButHasTheWrongPrefix()
     {
         var (checker, handler) = CreateChecker();

@@ -37,6 +37,16 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
         {
             return new SpfCheckResult(SpfCheckStatus.MultipleRecords, $"{domainName} has {spfRecords.Count} SPF records - RFC 7208 requires exactly one");
         }
+
+        // The spfRecords[0]["v=spf1".Length..] slice is safe because spfRecords was already
+        // filtered to records StartsWith("v=spf1", ...) above.
+        var mechanisms = spfRecords[0]["v=spf1".Length..]
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (mechanisms.Length == 1 && string.Equals(mechanisms[0], "-all", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SpfCheckResult(SpfCheckStatus.NullSpf, $"{domainName} publishes a null SPF record (v=spf1 -all) - no senders are authorized to send mail as this domain.");
+        }
+
         return new SpfCheckResult(SpfCheckStatus.Ok, null);
     }
 

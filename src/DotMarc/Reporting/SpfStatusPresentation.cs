@@ -10,7 +10,7 @@ public static class SpfStatusPresentation
 {
     public static Color GetColor(SpfCheckStatus status) => status switch
     {
-        SpfCheckStatus.Ok => Color.Success,
+        SpfCheckStatus.Ok or SpfCheckStatus.NullSpf => Color.Success,
         SpfCheckStatus.MultipleRecords => Color.Warning,
         SpfCheckStatus.MissingRecord or SpfCheckStatus.Misconfigured => Color.Error,
         _ => Color.Default
@@ -19,6 +19,7 @@ public static class SpfStatusPresentation
     public static string GetLabel(SpfCheckStatus status) => status switch
     {
         SpfCheckStatus.Ok => "OK",
+        SpfCheckStatus.NullSpf => "Null SPF (no senders)",
         SpfCheckStatus.MissingRecord => "No SPF record",
         SpfCheckStatus.MultipleRecords => "Multiple SPF records",
         SpfCheckStatus.Misconfigured => "Misconfigured",
