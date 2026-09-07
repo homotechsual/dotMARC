@@ -1101,6 +1101,11 @@ public sealed class PollingService : BackgroundService
                 if (_alertingService is not null)
                 {
                     await _alertingService.ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+
+                    if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
+                    {
+                        await _alertingService.FlagUnexpectedActivityForNullRoutedDomainAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 // The report is safely committed and recorded as processed at this point - a

@@ -112,6 +112,51 @@ public class PollingServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PollOnceAsync_FlagsUnexpectedActivity_WhenAReportArrivesForANullRoutedDomain()
+    {
+        using (var seed = CreateContext())
+        {
+            seed.Domains.Add(new Domain
+            {
+                Name = "contoso.io",
+                FirstSeenUtc = DateTimeOffset.UtcNow,
+                SpfCheckStatus = SpfCheckStatus.NullSpf
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+
+        var alertingService = new FakeAlertingService();
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, alertingService, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        Assert.Contains("contoso.io", alertingService.FlaggedNullRoutedDomains);
+    }
+
+    [Fact]
+    public async Task PollOnceAsync_DoesNotFlagUnexpectedActivity_ForANormalDomain()
+    {
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ValidReportXml))];
+
+        var alertingService = new FakeAlertingService();
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, alertingService, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        Assert.Empty(alertingService.FlaggedNullRoutedDomains);
+    }
+
+    [Fact]
     public async Task RunTlsrptPollCycleAsync_ParsesCompressedReportAndStoresPolicyFailures()
     {
         var graphClient = new FakeGraphMailboxClient();
