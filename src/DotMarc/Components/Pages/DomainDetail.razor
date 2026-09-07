@@ -468,16 +468,7 @@ else
                 }
             }
 
-            try
-            {
-                _detectedMailServices = await MailServiceDetector.DetectAsync(DomainName, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                // Informational-only badges - a transient DNS failure here shouldn't disrupt the
-                // rest of the page load. Logged so a persistent failure is still diagnosable.
-                Logger.LogWarning(ex, "Failed to detect mail services for {DomainName}.", DomainName);
-            }
+            _ = DetectMailServicesInBackgroundAsync();
         }
 
         // Bucket by day-received (of the report, not the record) rather than the record itself,
@@ -534,6 +525,28 @@ else
         {
             EnrichmentThrottle.Release();
             source.IsEnrichmentPending = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Runs mail service detection (MX + SPF DNS-over-HTTPS lookups) off the render
+    /// path, mirroring EnrichSourceInBackgroundAsync above - awaiting this directly in
+    /// OnInitializedAsync would block the whole page load on two sequential DNS-over-HTTPS round
+    /// trips, worst case stalling on the typed HttpClient's default 100-second timeout.</summary>
+    private async Task DetectMailServicesInBackgroundAsync()
+    {
+        try
+        {
+            _detectedMailServices = await MailServiceDetector.DetectAsync(DomainName, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Informational-only badges - a transient DNS failure here shouldn't disrupt the
+            // rest of the page load. Logged so a persistent failure is still diagnosable.
+            Logger.LogWarning(ex, "Failed to detect mail services for {DomainName}.", DomainName);
+        }
+        finally
+        {
             await InvokeAsync(StateHasChanged);
         }
     }
