@@ -179,6 +179,78 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CheckPinnedDomainsAsync_ResolvesUnexpectedActivityAlert_ForANullRoutedDomainThatHasGoneQuietAgain()
+    {
+        await SeedSettingsAsync();
+        await using (var context = CreateContext())
+        {
+            context.Domains.Add(new Domain
+            {
+                Name = "contoso.io",
+                IsMonitored = true,
+                FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+                LastReportReceivedUtc = DateTimeOffset.UtcNow.AddDays(-5),
+                SpfCheckStatus = SpfCheckStatus.NullSpf
+            });
+            context.AlertEvents.Add(new AlertEvent
+            {
+                DomainName = "contoso.io",
+                AlertType = "UnexpectedActivityOnNullRoutedDomain",
+                Severity = "Warning",
+                Title = "Unexpected mail activity on a null-routed domain",
+                Message = "unexpected activity detected earlier",
+                CreatedUtc = DateTimeOffset.UtcNow.AddDays(-3)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync(e => e.AlertType == "UnexpectedActivityOnNullRoutedDomain");
+        Assert.True(alert.IsResolved);
+        Assert.NotNull(alert.ResolvedUtc);
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_DoesNotResolveUnexpectedActivityAlert_ForANullRoutedDomainWithARecentReport()
+    {
+        await SeedSettingsAsync();
+        await using (var context = CreateContext())
+        {
+            context.Domains.Add(new Domain
+            {
+                Name = "contoso.io",
+                IsMonitored = true,
+                FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+                LastReportReceivedUtc = DateTimeOffset.UtcNow.AddHours(-1),
+                SpfCheckStatus = SpfCheckStatus.NullSpf
+            });
+            context.AlertEvents.Add(new AlertEvent
+            {
+                DomainName = "contoso.io",
+                AlertType = "UnexpectedActivityOnNullRoutedDomain",
+                Severity = "Warning",
+                Title = "Unexpected mail activity on a null-routed domain",
+                Message = "unexpected activity detected just now",
+                CreatedUtc = DateTimeOffset.UtcNow.AddHours(-1)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync(e => e.AlertType == "UnexpectedActivityOnNullRoutedDomain");
+        Assert.False(alert.IsResolved);
+        Assert.Null(alert.ResolvedUtc);
+    }
+
+    [Fact]
     public async Task FlagUnexpectedActivityForNullRoutedDomainAsync_CreatesAnAlert()
     {
         await SeedSettingsAsync();

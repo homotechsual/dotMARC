@@ -56,6 +56,20 @@ public sealed class AlertingService : IAlertingService
                 // problem - resolve any pre-existing alert from before the domain became
                 // null-routed and skip the missing-report check entirely for it.
                 await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+
+                // UnexpectedActivityOnNullRoutedDomain resolves only once the domain has gone
+                // quiet again (no report within the missing-report threshold window). This branch
+                // runs unconditionally for every null-routed domain each cycle, so resolving it
+                // unconditionally here would auto-close the alert on the very next poll after it
+                // fires, defeating its purpose of surfacing unexpected activity for an admin to
+                // see. Same threshold semantics as MissedReport, just inverted: fires when a
+                // report unexpectedly arrives, stays open while reports keep arriving within the
+                // threshold window, auto-resolves once activity stops for the threshold period.
+                if (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < cutoffUtc)
+                {
+                    await ResolveAlertAsync(domain.Name, "UnexpectedActivityOnNullRoutedDomain", cancellationToken).ConfigureAwait(false);
+                }
+
                 continue;
             }
 
