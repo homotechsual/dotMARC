@@ -35,7 +35,7 @@
 
 @if (_azureDnsSettings is not null)
 {
-    <MudPaper Class="pa-4">
+    <MudPaper Class="pa-4 mb-4">
         <MudText Typo="Typo.h5" Class="mb-4">Azure DNS</MudText>
         <MudGrid>
             <MudItem xs="12" md="6">
@@ -50,17 +50,37 @@
     </MudPaper>
 }
 
+@if (_googleCloudDnsSettings is not null)
+{
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h5" Class="mb-4">Google Cloud DNS</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Client ID" @bind-Value="_googleCloudDnsSettings.ClientId" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Label="Client secret" @bind-Value="_newGoogleCloudDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                              HelperText="@(_googleCloudDnsSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveGoogleCloudDnsAsync">Save Google Cloud DNS settings</MudButton>
+    </MudPaper>
+}
+
 @code {
     private CloudflareDnsSettings? _cloudflareSettings;
     private AzureDnsSettings? _azureDnsSettings;
+    private GoogleCloudDnsSettings? _googleCloudDnsSettings;
     private string? _newCloudflareClientSecret;
     private string? _newAzureDnsClientSecret;
+    private string? _newGoogleCloudDnsClientSecret;
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _cloudflareSettings = await CloudflareDnsSettingsService.GetAsync(db);
         _azureDnsSettings = await AzureDnsSettingsService.GetAsync(db);
+        _googleCloudDnsSettings = await GoogleCloudDnsSettingsService.GetAsync(db);
     }
 
     private async Task SaveCloudflareAsync()
@@ -106,6 +126,29 @@
         catch (Exception)
         {
             Snackbar.Add("Failed to save Azure DNS settings. Try again.", Severity.Error);
+        }
+    }
+
+    private async Task SaveGoogleCloudDnsAsync()
+    {
+        if (_googleCloudDnsSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await GoogleCloudDnsSettingsService.SaveAsync(db, SecretStoreAccessor, _googleCloudDnsSettings, string.IsNullOrWhiteSpace(_newGoogleCloudDnsClientSecret) ? null : _newGoogleCloudDnsClientSecret);
+            _newGoogleCloudDnsClientSecret = null;
+            Snackbar.Add("Google Cloud DNS settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _googleCloudDnsSettings = await GoogleCloudDnsSettingsService.GetAsync(reloadDb);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save Google Cloud DNS settings. Try again.", Severity.Error);
         }
     }
 }

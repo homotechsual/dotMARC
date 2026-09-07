@@ -176,6 +176,9 @@ builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequ
 builder.Services.AddSingleton<DotMarc.DnsPush.AzureDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.AzureDnsPushProvider>());
 
+builder.Services.AddHttpClient<DotMarc.DnsPush.GoogleCloudDnsPushProvider>();
+builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.GoogleCloudDnsPushProvider>());
+
 builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.DnsPush.DnsProviderDetector>(client =>
 {
     client.BaseAddress = new Uri("https://cloudflare-dns.com/");
