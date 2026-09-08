@@ -14,6 +14,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Domain> Domains => Set<Domain>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportRecord> ReportRecords => Set<ReportRecord>();
+    public DbSet<ReportRecordAuthDetail> ReportRecordAuthDetails => Set<ReportRecordAuthDetail>();
+    public DbSet<ReportRecordPolicyOverrideReason> ReportRecordPolicyOverrideReasons => Set<ReportRecordPolicyOverrideReason>();
     public DbSet<TlsrptReport> TlsrptReports => Set<TlsrptReport>();
     public DbSet<TlsrptReportPolicy> TlsrptReportPolicies => Set<TlsrptReportPolicy>();
     public DbSet<TlsrptFailureDetail> TlsrptFailureDetails => Set<TlsrptFailureDetail>();
@@ -99,6 +101,27 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(r => r.Disposition).HasConversion<string>();
             entity.Property(r => r.SpfResult).HasConversion<string>();
             entity.Property(r => r.DkimResult).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<ReportRecordAuthDetail>(entity =>
+        {
+            entity.HasOne(d => d.ReportRecord)
+                .WithMany(r => r.AuthDetails)
+                .HasForeignKey(d => d.ReportRecordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(d => d.Mechanism).HasConversion<string>();
+            entity.Property(d => d.Result).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<ReportRecordPolicyOverrideReason>(entity =>
+        {
+            entity.HasOne(o => o.ReportRecord)
+                .WithMany(r => r.OverrideReasons)
+                .HasForeignKey(o => o.ReportRecordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(o => o.Type).HasConversion<string>();
         });
 
         modelBuilder.Entity<TlsrptReport>(entity =>

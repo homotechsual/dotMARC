@@ -13,4 +13,7 @@ public sealed class ReportRecord
     public AuthResult SpfResult { get; set; }
     public AuthResult DkimResult { get; set; }
     public required string HeaderFrom { get; set; }
+
+    public List<ReportRecordAuthDetail> AuthDetails { get; set; } = [];
+    public List<ReportRecordPolicyOverrideReason> OverrideReasons { get; set; } = [];
 }

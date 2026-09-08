@@ -14,6 +14,7 @@ public sealed class Report
     public DateTimeOffset DateRangeEndUtc { get; set; }
     public required string RawXml { get; set; }
     public DateTimeOffset ReceivedUtc { get; set; }
+    public DateTimeOffset? AuthDetailBackfilledUtc { get; set; }
 
     public List<ReportRecord> Records { get; set; } = [];
 }
