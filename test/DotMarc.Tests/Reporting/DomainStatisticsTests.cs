@@ -121,6 +121,40 @@ public class DomainStatisticsTests
     }
 
     [Fact]
+    public void GetSourceAggregates_CombinesOverrideReasonsAndAuthDetails_AcrossASourcesRecordsInWindow()
+    {
+        var recordA = Record("203.0.113.70", 5, AuthResult.Fail, AuthResult.Pass, DispositionResult.Quarantine);
+        recordA.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.LocalPolicy });
+        recordA.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Spf, Domain = "envelope.contoso.io", Result = DmarcMechanismResult.Fail });
+
+        var recordB = Record("203.0.113.70", 3, AuthResult.Fail, AuthResult.Pass, DispositionResult.Quarantine);
+        recordB.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.LocalPolicy }); // same type as recordA - must not duplicate
+        recordB.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "contoso.io", Result = DmarcMechanismResult.Pass, Selector = "default" });
+
+        var report = ReportWith(recordA, recordB);
+
+        var aggregates = DomainStatistics.GetSourceAggregates([report]);
+
+        var source = aggregates.Single();
+        Assert.Equal(8, source.Volume);
+        Assert.Equal([DmarcPolicyOverrideType.LocalPolicy], source.OverrideReasonTypes);
+        Assert.Equal(2, source.AuthDetails.Count);
+        Assert.Contains(source.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Spf && d.Domain == "envelope.contoso.io" && d.Result == DmarcMechanismResult.Fail);
+        Assert.Contains(source.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Dkim && d.Domain == "contoso.io" && d.Result == DmarcMechanismResult.Pass);
+    }
+
+    [Fact]
+    public void GetSourceAggregates_ReturnsEmptyReasonsAndAuthDetails_WhenTheSourceHasNone()
+    {
+        var report = ReportWith(Record("198.51.100.50", 1, AuthResult.Pass, AuthResult.Pass));
+
+        var source = DomainStatistics.GetSourceAggregates([report]).Single();
+
+        Assert.Empty(source.OverrideReasonTypes);
+        Assert.Empty(source.AuthDetails);
+    }
+
+    [Fact]
     public void GetWindowCutoffUtc_Is30DaysBeforeNow()
     {
         var now = new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero);

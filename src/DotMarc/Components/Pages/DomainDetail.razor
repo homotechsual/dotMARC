@@ -318,15 +318,25 @@ else
                     <MudTh>SPF</MudTh>
                     <MudTh>DKIM</MudTh>
                     <MudTh>Disposition</MudTh>
+                    <MudTh>Reason</MudTh>
                     <MudTh>Owner</MudTh>
                     <MudTh>Country</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.SourceIp</MudTd>
                     <MudTd>@context.Volume</MudTd>
-                    <MudTd>@context.SpfResult</MudTd>
-                    <MudTd>@context.DkimResult</MudTd>
+                    <MudTd>
+                        <MudTooltip Text="@context.AuthDetailTooltip(DmarcAuthMechanism.Spf)" Arrow="true">
+                            <span>@context.SpfResult</span>
+                        </MudTooltip>
+                    </MudTd>
+                    <MudTd>
+                        <MudTooltip Text="@context.AuthDetailTooltip(DmarcAuthMechanism.Dkim)" Arrow="true">
+                            <span>@context.DkimResult</span>
+                        </MudTooltip>
+                    </MudTd>
                     <MudTd>@context.Disposition</MudTd>
+                    <MudTd>@context.ReasonSummary</MudTd>
                     <MudTd>
                         @if (context.IsEnrichmentPending)
                         {
@@ -419,6 +429,12 @@ else
             .AsNoTracking()
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Records)
+            .ThenInclude(rec => rec.AuthDetails)
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Records)
+            .ThenInclude(rec => rec.OverrideReasons)
             .Include(d => d.TlsrptReports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Policies)
             .ThenInclude(policy => policy.FailureDetails)
@@ -451,7 +467,7 @@ else
         _passRate = DomainStatistics.GetPassRate(_domain.Reports);
 
         _sources = DomainStatistics.GetSourceAggregates(_domain.Reports)
-            .Select(a => new SourceRow(a.SourceIp, a.Volume, a.SpfResult.ToString(), a.DkimResult.ToString(), a.Disposition.ToString()))
+            .Select(a => new SourceRow(a.SourceIp, a.Volume, a.SpfResult.ToString(), a.DkimResult.ToString(), a.Disposition.ToString(), a.OverrideReasonTypes, a.AuthDetails))
             .OrderByDescending(s => s.Volume)
             .ToList();
 
@@ -1062,15 +1078,29 @@ else
     public void OnDnsPushPopupBlocked() =>
         Snackbar.Add("Your browser blocked the pop-up. Allow pop-ups for this site and try again, or add the record manually.", Severity.Warning);
 
-    private sealed class SourceRow(string sourceIp, int volume, string spfResult, string dkimResult, string disposition)
+    private sealed class SourceRow(string sourceIp, int volume, string spfResult, string dkimResult, string disposition, IReadOnlyList<DmarcPolicyOverrideType> overrideReasonTypes, IReadOnlyList<AuthDetailSummary> authDetails)
     {
         public string SourceIp { get; } = sourceIp;
         public int Volume { get; } = volume;
         public string SpfResult { get; } = spfResult;
         public string DkimResult { get; } = dkimResult;
         public string Disposition { get; } = disposition;
+        public IReadOnlyList<DmarcPolicyOverrideType> OverrideReasonTypes { get; } = overrideReasonTypes;
+        public IReadOnlyList<AuthDetailSummary> AuthDetails { get; } = authDetails;
         public string? Organization { get; set; }
         public string? Country { get; set; }
         public bool IsEnrichmentPending { get; set; } = true;
+
+        public string ReasonSummary => OverrideReasonTypes.Count == 0
+            ? ""
+            : string.Join(", ", OverrideReasonTypes.Select(t => t.ToString()));
+
+        public string AuthDetailTooltip(DmarcAuthMechanism mechanism)
+        {
+            var matching = AuthDetails.Where(d => d.Mechanism == mechanism).ToList();
+            return matching.Count == 0
+                ? "No per-mechanism detail was reported for this source."
+                : string.Join("; ", matching.Select(d => $"{d.Domain}: {d.Result}"));
+        }
     }
 }

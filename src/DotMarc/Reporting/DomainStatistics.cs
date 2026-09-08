@@ -68,7 +68,9 @@ public static class DomainStatistics
                 g.Sum(r => r.MessageCount),
                 CombineAuthResult(g.Select(r => r.SpfResult)),
                 CombineAuthResult(g.Select(r => r.DkimResult)),
-                CombineDisposition(g.Select(r => r.Disposition))))
+                CombineDisposition(g.Select(r => r.Disposition)),
+                g.SelectMany(r => r.OverrideReasons).Select(o => o.Type).Distinct().ToList(),
+                g.SelectMany(r => r.AuthDetails).Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).Distinct().ToList()))
             .ToList();
 
     private static bool IsPassing(ReportRecord record) =>
@@ -90,4 +92,8 @@ public static class DomainStatistics
 }
 
 /// <summary>One source IP's aggregated activity within the report window.</summary>
-public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult SpfResult, AuthResult DkimResult, DispositionResult Disposition);
+public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult SpfResult, AuthResult DkimResult, DispositionResult Disposition, IReadOnlyList<DmarcPolicyOverrideType> OverrideReasonTypes, IReadOnlyList<AuthDetailSummary> AuthDetails);
+
+/// <summary>One distinct (mechanism, domain, result) combination seen for a source in-window -
+/// deduplicated so a source failing the same way on every report doesn't repeat itself.</summary>
+public sealed record AuthDetailSummary(DmarcAuthMechanism Mechanism, string Domain, DmarcMechanismResult Result);
