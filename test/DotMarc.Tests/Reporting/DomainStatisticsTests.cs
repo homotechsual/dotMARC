@@ -163,4 +163,75 @@ public class DomainStatisticsTests
 
         Assert.Equal(now.AddDays(-30), cutoff);
     }
+
+    [Fact]
+    public void GetReasonBreakdown_ExcludesNoneDispositionRecords()
+    {
+        var report = ReportWith(Record("198.51.100.60", 100, AuthResult.Pass, AuthResult.Pass, DispositionResult.None));
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(0, breakdown.Total);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsARejectWithNoReasonAsNoReasonGiven()
+    {
+        var report = ReportWith(Record("198.51.100.61", 50, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject));
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(50, breakdown.NoReasonGiven);
+        Assert.Equal(0, breakdown.BenignOverride);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsATrustedForwarderReasonAsBenignOverride()
+    {
+        var record = Record("198.51.100.62", 30, AuthResult.Fail, AuthResult.Pass, DispositionResult.Quarantine);
+        record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.TrustedForwarder });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(30, breakdown.BenignOverride);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_PrefersBenignOverLocalPolicy_WhenARecordHasBoth()
+    {
+        var record = Record("198.51.100.63", 20, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.LocalPolicy });
+        record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.MailingList });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(20, breakdown.BenignOverride);
+        Assert.Equal(0, breakdown.LocalPolicy);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsAnOtherOnlyReasonAsOther()
+    {
+        var record = Record("198.51.100.64", 15, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.Other });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(15, breakdown.Other);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_MultiDomainOverload_SumsAcrossDomains()
+    {
+        var domainA = ReportWith(Record("198.51.100.65", 10, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject));
+        var domainB = ReportWith(Record("198.51.100.66", 40, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject));
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([[domainA], [domainB]]);
+
+        Assert.Equal(50, breakdown.NoReasonGiven);
+        Assert.Equal(50, breakdown.Total);
+    }
 }

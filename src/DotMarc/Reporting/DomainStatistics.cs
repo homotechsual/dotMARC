@@ -73,6 +73,48 @@ public static class DomainStatistics
                 g.SelectMany(r => r.AuthDetails).Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).Distinct().ToList()))
             .ToList();
 
+    /// <summary>Buckets every Reject/Quarantine record's message volume by why it was
+    /// disposed-against - the direct signal for "does this look like benign forwarding or a real
+    /// spoofing attempt". Disposition == None records are excluded (nothing to explain). A record
+    /// with multiple reason entries buckets by priority: Benign wins if any entry is
+    /// Forwarded/SampledOut/TrustedForwarder/MailingList (one benign explanation is enough), else
+    /// LocalPolicy wins if any entry is LocalPolicy, else Other. No reason at all is the least
+    /// benign-looking signal, since a real receiver usually only omits &lt;reason&gt; when
+    /// disposition matches assessment exactly.</summary>
+    public static ReasonBreakdown GetReasonBreakdown(IEnumerable<Report> reportsInWindow)
+    {
+        int benign = 0, localPolicy = 0, other = 0, noReason = 0;
+
+        foreach (var record in reportsInWindow.SelectMany(r => r.Records).Where(r => r.Disposition != DispositionResult.None))
+        {
+            var reasonTypes = record.OverrideReasons.Select(o => o.Type).ToList();
+
+            if (reasonTypes.Count == 0)
+            {
+                noReason += record.MessageCount;
+            }
+            else if (reasonTypes.Any(IsBenignOverride))
+            {
+                benign += record.MessageCount;
+            }
+            else if (reasonTypes.Contains(DmarcPolicyOverrideType.LocalPolicy))
+            {
+                localPolicy += record.MessageCount;
+            }
+            else
+            {
+                other += record.MessageCount;
+            }
+        }
+
+        return new ReasonBreakdown(benign, localPolicy, other, noReason);
+    }
+
+    /// <summary>Same bucketing as the single-domain overload, summed across every supplied
+    /// domain's in-window reports - mirrors GetOverallPassRate's existing multi-domain shape.</summary>
+    public static ReasonBreakdown GetReasonBreakdown(IEnumerable<IEnumerable<Report>> perDomainReportsInWindow) =>
+        GetReasonBreakdown(perDomainReportsInWindow.SelectMany(reports => reports));
+
     private static bool IsPassing(ReportRecord record) =>
         record.SpfResult == AuthResult.Pass || record.DkimResult == AuthResult.Pass;
 
@@ -89,6 +131,9 @@ public static class DomainStatistics
 
         return seen.Contains(DispositionResult.Quarantine) ? DispositionResult.Quarantine : DispositionResult.None;
     }
+
+    private static bool IsBenignOverride(DmarcPolicyOverrideType type) =>
+        type is DmarcPolicyOverrideType.Forwarded or DmarcPolicyOverrideType.SampledOut or DmarcPolicyOverrideType.TrustedForwarder or DmarcPolicyOverrideType.MailingList;
 }
 
 /// <summary>One source IP's aggregated activity within the report window.</summary>
@@ -97,3 +142,10 @@ public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult Spf
 /// <summary>One distinct (mechanism, domain, result) combination seen for a source in-window -
 /// deduplicated so a source failing the same way on every report doesn't repeat itself.</summary>
 public sealed record AuthDetailSummary(DmarcAuthMechanism Mechanism, string Domain, DmarcMechanismResult Result);
+
+/// <summary>Reject/Quarantine message volume in a window, bucketed by why it happened. See
+/// DomainStatistics.GetReasonBreakdown for the bucketing rules.</summary>
+public sealed record ReasonBreakdown(int BenignOverride, int LocalPolicy, int Other, int NoReasonGiven)
+{
+    public int Total => BenignOverride + LocalPolicy + Other + NoReasonGiven;
+}
