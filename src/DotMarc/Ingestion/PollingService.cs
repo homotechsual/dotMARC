@@ -56,6 +56,8 @@ public sealed class PollingService : BackgroundService
 
     internal const long IpEnrichmentLeaderLockKey = 84_200_021;
 
+    internal const long AuthDetailBackfillLeaderLockKey = 84_200_023;
+
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
     private readonly IGraphMailboxClient? _graphClient;
@@ -198,6 +200,16 @@ public sealed class PollingService : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "IP enrichment cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        await RunAuthDetailBackfillCycleAsync(context, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Auth-detail backfill cycle failed; will retry next interval.");
                     }
 
                     if (!string.IsNullOrWhiteSpace(_options!.TlsrptMailboxAddress))
@@ -619,6 +631,106 @@ public sealed class PollingService : BackgroundService
                 _logger.LogWarning(ex, "IP enrichment failed for {SourceIp}; will retry next cycle.", ip);
             }
         }
+    }
+
+    private const int AuthDetailBackfillBatchSize = 25;
+
+    /// <summary>One-time-per-report catch-up for reports ingested before this feature shipped:
+    /// re-parses each report's stored RawXml and populates the AuthDetail/OverrideReason child
+    /// rows its ReportRecords never got. Matches candidate reports by
+    /// AuthDetailBackfilledUtc IS NULL (set unconditionally once a report is processed here,
+    /// success or skip - not by "has any child rows", since a report with genuinely no
+    /// auth_results detail would otherwise look perpetually unbackfilled and be retried forever).
+    /// Bounded per cycle and resumable, same shape as RunIpEnrichmentCycleAsync.</summary>
+    internal async Task RunAuthDetailBackfillCycleAsync(DotMarcDbContext context, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", AuthDetailBackfillLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the auth-detail-backfill lock for this cycle; skipping.");
+            return;
+        }
+
+        var candidateReports = await context.Reports
+            .Include(r => r.Records)
+            .Where(r => r.AuthDetailBackfilledUtc == null)
+            .OrderBy(r => r.Id)
+            .Take(AuthDetailBackfillBatchSize)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var report in candidateReports)
+        {
+            try
+            {
+                var parsed = DmarcReportParser.Parse(System.Text.Encoding.UTF8.GetBytes(report.RawXml));
+
+                // Both lists were derived from the same feedback.Record array in the same order
+                // (see DmarcReportParser.Parse and StoreReportAsync's foreach) - Id ascending is a
+                // safe, unambiguous ordinal proxy for "the order these were originally inserted in".
+                var orderedRecords = report.Records.OrderBy(r => r.Id).ToList();
+
+                if (orderedRecords.Count == parsed.Records.Count)
+                {
+                    for (var i = 0; i < orderedRecords.Count; i++)
+                    {
+                        var storedRecord = orderedRecords[i];
+                        var parsedRecord = parsed.Records[i];
+
+                        foreach (var detail in parsedRecord.AuthDetails)
+                        {
+                            storedRecord.AuthDetails.Add(new ReportRecordAuthDetail
+                            {
+                                Mechanism = detail.Mechanism,
+                                Domain = detail.Domain,
+                                Result = detail.Result,
+                                Selector = detail.Selector,
+                                Scope = detail.Scope,
+                                HumanResult = detail.HumanResult
+                            });
+                        }
+
+                        foreach (var reason in parsedRecord.OverrideReasons)
+                        {
+                            storedRecord.OverrideReasons.Add(new ReportRecordPolicyOverrideReason
+                            {
+                                Type = reason.Type,
+                                Comment = reason.Comment
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Report {ReportId} has {StoredCount} stored records but re-parsing RawXml produced {ParsedCount}; leaving it without auth detail.",
+                        report.Id, orderedRecords.Count, parsed.Records.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to backfill auth detail for report {ReportId}; RawXml may no longer be parseable.", report.Id);
+            }
+
+            // Marked handled either way - a permanently-unparseable RawXml or a genuine
+            // record-count mismatch must not be retried forever on every future cycle.
+            report.AuthDetailBackfilledUtc = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs a DMARC authorization-record check for every domain whose last check
