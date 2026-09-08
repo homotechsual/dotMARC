@@ -48,7 +48,7 @@ public class DashboardSummaryTests
     {
         var (summary, rows) = DashboardSummary.Build([], parseFailureCount: 0);
 
-        Assert.Equal(new DashboardSummary(0, 0, 0, 0, 0, 0), summary);
+        Assert.Equal(new DashboardSummary(0, 0, 0, 0, 0, 0, new ReasonBreakdown(0, 0, 0, 0)), summary);
         Assert.Empty(rows);
     }
 
@@ -178,5 +178,26 @@ public class DashboardSummaryTests
         var (summary, _) = DashboardSummary.Build([domainA, domainB], parseFailureCount: 0);
 
         Assert.Equal(0.01, summary.OverallPassRate, precision: 3);
+    }
+
+    [Fact]
+    public void Build_ComputesReasonBreakdown_AcrossAllSuppliedDomains()
+    {
+        var domainA = new Domain { Name = "a.test", FirstSeenUtc = DateTimeOffset.UtcNow, SortOrder = 0 };
+        domainA.Reports.Add(new Report
+        {
+            ReportingOrg = "google.com",
+            ReportId = "r1",
+            DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            DateRangeEndUtc = DateTimeOffset.UtcNow,
+            RawXml = "<feedback/>",
+            ReceivedUtc = DateTimeOffset.UtcNow,
+            Records = { new ReportRecord { SourceIp = "203.0.113.1", MessageCount = 40, Disposition = DispositionResult.Reject, SpfResult = AuthResult.Fail, DkimResult = AuthResult.Fail, HeaderFrom = "a.test" } }
+        });
+
+        var (summary, _) = DashboardSummary.Build([domainA], parseFailureCount: 0);
+
+        Assert.Equal(40, summary.ReasonBreakdown.NoReasonGiven);
+        Assert.Equal(40, summary.ReasonBreakdown.Total);
     }
 }

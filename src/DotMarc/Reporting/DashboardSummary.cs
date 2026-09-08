@@ -8,7 +8,7 @@ namespace DotMarc.Reporting;
 /// already filtered to the report window by the caller's EF query) and a parse-failure count,
 /// keeping this calculation testable without EF or Blazor - same "pure core, thin I/O adapter"
 /// split as <see cref="DomainStatistics"/>.</summary>
-public sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount, int SourceCount)
+public sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount, int SourceCount, ReasonBreakdown ReasonBreakdown)
 {
     public static (DashboardSummary Summary, List<DashboardDomainRow> Rows) Build(IReadOnlyList<Domain> domains, int parseFailureCount)
     {
@@ -36,7 +36,8 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
             rows.Count(r => r.Status == "Warning"),
             rows.Count(r => r.Status == "Missing"),
             parseFailureCount,
-            sourceCount);
+            sourceCount,
+            DomainStatistics.GetReasonBreakdown(domains.Select(d => (IEnumerable<Report>)d.Reports)));
 
         return (summary, rows);
     }
