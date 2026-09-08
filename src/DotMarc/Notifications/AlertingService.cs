@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -42,9 +43,13 @@ public sealed class AlertingService : IAlertingService
         }
 
         var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.MissingReportThresholdDays);
+        var reasonWindowCutoffUtc = DomainStatistics.GetWindowCutoffUtc();
         var domains = await db.Domains
             .AsNoTracking()
             .Where(d => d.IsMonitored)
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= reasonWindowCutoffUtc))
+            .ThenInclude(r => r.Records)
+            .ThenInclude(rec => rec.OverrideReasons)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -69,20 +74,39 @@ public sealed class AlertingService : IAlertingService
                 {
                     await ResolveAlertAsync(domain.Name, "UnexpectedActivityOnNullRoutedDomain", cancellationToken).ConfigureAwait(false);
                 }
-
-                continue;
             }
-
-            if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
+            else if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
             {
                 await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
-                continue;
+            }
+            else
+            {
+                var message = domain.LastReportReceivedUtc is { } receivedUtc
+                    ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
+                    : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
+                await EnsureAlertAsync(db, settings, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
             }
 
-            var message = domain.LastReportReceivedUtc is { } receivedUtc
-                ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
-                : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
-            await EnsureAlertAsync(db, settings, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
+            // Independent of the report-freshness branch above - a domain can be reporting fine
+            // AND have a reject mix worth flagging, so this always runs.
+            await CheckSuspiciousRejectActivityAsync(db, settings, domain, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task CheckSuspiciousRejectActivityAsync(DotMarcDbContext context, NotificationSettings settings, Domain domain, CancellationToken cancellationToken)
+    {
+        var breakdown = DomainStatistics.GetReasonBreakdown(domain.Reports);
+        var nonBenign = breakdown.LocalPolicy + breakdown.Other + breakdown.NoReasonGiven;
+        var nonBenignPercent = breakdown.Total == 0 ? 0 : (double)nonBenign / breakdown.Total * 100;
+
+        if (breakdown.Total >= settings.SuspiciousRejectMinVolume && nonBenignPercent >= settings.SuspiciousRejectNonBenignPercent)
+        {
+            var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding.";
+            await EnsureAlertAsync(context, settings, domain.Name, "SuspiciousRejectActivity", "Warning", "Reject activity looks like more than benign forwarding", message, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await ResolveAlertAsync(domain.Name, "SuspiciousRejectActivity", cancellationToken).ConfigureAwait(false);
         }
     }
 

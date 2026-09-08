@@ -34,7 +34,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     private DotMarcDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
-    private async Task SeedSettingsAsync(bool enabled = true, int missingReportThresholdDays = 2, int cooldownMinutes = 180)
+    private async Task SeedSettingsAsync(bool enabled = true, int missingReportThresholdDays = 2, int cooldownMinutes = 180, int suspiciousRejectMinVolume = 10, int suspiciousRejectNonBenignPercent = 50)
     {
         await using var context = CreateContext();
         await NotificationSettingsService.SaveAsync(context, new NotificationSettings
@@ -43,7 +43,9 @@ public sealed class AlertingServiceTests : IAsyncLifetime
             DeliveryMode = "Teams",
             TeamsWebhookUrl = "https://example.test/webhook",
             MissingReportThresholdDays = missingReportThresholdDays,
-            CooldownMinutes = cooldownMinutes
+            CooldownMinutes = cooldownMinutes,
+            SuspiciousRejectMinVolume = suspiciousRejectMinVolume,
+            SuspiciousRejectNonBenignPercent = suspiciousRejectNonBenignPercent
         });
     }
 
@@ -71,6 +73,40 @@ public sealed class AlertingServiceTests : IAsyncLifetime
             LastReportReceivedUtc = null,
             SpfCheckStatus = SpfCheckStatus.NullSpf
         });
+        await context.SaveChangesAsync();
+    }
+
+    private async Task SeedMonitoredDomainWithRejectsAsync(string name, DateTimeOffset lastReportReceivedUtc, params (int MessageCount, DmarcPolicyOverrideType? ReasonType)[] rejectedRecords)
+    {
+        await using var context = CreateContext();
+        var domain = new Domain
+        {
+            Name = name,
+            IsMonitored = true,
+            FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+            LastReportReceivedUtc = lastReportReceivedUtc
+        };
+        var report = new Report
+        {
+            ReportingOrg = "google.com",
+            ReportId = Guid.NewGuid().ToString(),
+            DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            DateRangeEndUtc = DateTimeOffset.UtcNow,
+            RawXml = "<feedback/>",
+            ReceivedUtc = lastReportReceivedUtc,
+            AuthDetailBackfilledUtc = DateTimeOffset.UtcNow
+        };
+        foreach (var (messageCount, reasonType) in rejectedRecords)
+        {
+            var record = new ReportRecord { SourceIp = "203.0.113.9", MessageCount = messageCount, Disposition = DispositionResult.Reject, SpfResult = AuthResult.Fail, DkimResult = AuthResult.Fail, HeaderFrom = name };
+            if (reasonType is { } type)
+            {
+                record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = type });
+            }
+            report.Records.Add(record);
+        }
+        domain.Reports.Add(report);
+        context.Domains.Add(domain);
         await context.SaveChangesAsync();
     }
 
@@ -265,6 +301,84 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         Assert.Equal("contoso.io", alert.DomainName);
         Assert.Contains("null-routed", alert.Message);
         Assert.Equal(1, fakeNotifier.CallCount);
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_CreatesSuspiciousRejectActivityAlert_WhenRejectsAreMostlyNonBenign()
+    {
+        await SeedSettingsAsync(suspiciousRejectMinVolume: 10, suspiciousRejectNonBenignPercent: 50);
+        await SeedMonitoredDomainWithRejectsAsync("contoso.io", DateTimeOffset.UtcNow, (20, null));
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verifyContext = CreateContext();
+        var alert = await verifyContext.AlertEvents.SingleAsync(e => e.AlertType == "SuspiciousRejectActivity");
+        Assert.Equal("contoso.io", alert.DomainName);
+        Assert.False(alert.IsResolved);
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_DoesNotCreateSuspiciousRejectActivityAlert_WhenRejectsAreMostlyBenign()
+    {
+        await SeedSettingsAsync(suspiciousRejectMinVolume: 10, suspiciousRejectNonBenignPercent: 50);
+        await SeedMonitoredDomainWithRejectsAsync("contoso.io", DateTimeOffset.UtcNow, (20, DmarcPolicyOverrideType.TrustedForwarder));
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verifyContext = CreateContext();
+        Assert.False(await verifyContext.AlertEvents.AnyAsync(e => e.AlertType == "SuspiciousRejectActivity"));
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_DoesNotCreateSuspiciousRejectActivityAlert_BelowMinVolume()
+    {
+        await SeedSettingsAsync(suspiciousRejectMinVolume: 100, suspiciousRejectNonBenignPercent: 50);
+        await SeedMonitoredDomainWithRejectsAsync("contoso.io", DateTimeOffset.UtcNow, (20, null));
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verifyContext = CreateContext();
+        Assert.False(await verifyContext.AlertEvents.AnyAsync(e => e.AlertType == "SuspiciousRejectActivity"));
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_ResolvesSuspiciousRejectActivityAlert_OnceRatioDropsBelowThreshold()
+    {
+        await SeedSettingsAsync(suspiciousRejectMinVolume: 10, suspiciousRejectNonBenignPercent: 50, cooldownMinutes: 0);
+        await SeedMonitoredDomainWithRejectsAsync("contoso.io", DateTimeOffset.UtcNow, (20, null));
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+        await service.CheckPinnedDomainsAsync();
+
+        await using (var midContext = CreateContext())
+        {
+            Assert.True(await midContext.AlertEvents.AnyAsync(e => e.AlertType == "SuspiciousRejectActivity" && !e.IsResolved));
+        }
+
+        // The underlying activity now looks benign - mutate the existing record's reasons in
+        // place rather than reseeding, so this is still the same domain/report the first check saw.
+        await using (var mutate = CreateContext())
+        {
+            var record = await mutate.ReportRecords.Include(r => r.OverrideReasons).SingleAsync(r => r.SourceIp == "203.0.113.9");
+            record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason { Type = DmarcPolicyOverrideType.MailingList });
+            await mutate.SaveChangesAsync();
+        }
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verifyContext = CreateContext();
+        var alert = await verifyContext.AlertEvents.Where(e => e.AlertType == "SuspiciousRejectActivity").OrderByDescending(e => e.CreatedUtc).FirstAsync();
+        Assert.True(alert.IsResolved);
     }
 
     [Fact]
