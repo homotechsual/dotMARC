@@ -1,4 +1,5 @@
 using DmarcRua;
+using DotMarc.Data;
 
 namespace DotMarc.Ingestion;
 
@@ -34,7 +35,9 @@ public static class DmarcReportParser
             r.Row.PolicyEvaluated.Disposition.ToString(),
             r.Row.PolicyEvaluated.Spf.ToString(),
             r.Row.PolicyEvaluated.Dkim.ToString(),
-            r.Identifiers.HeaderFrom)).ToList();
+            r.Identifiers.HeaderFrom,
+            MapAuthDetails(r.AuthResults),
+            MapOverrideReasons(r.Row.PolicyEvaluated.Reason))).ToList();
 
         return new ParsedReport(
             feedback.PolicyPublished.Domain,
@@ -44,4 +47,36 @@ public static class DmarcReportParser
             DateTimeOffset.FromUnixTimeSeconds(feedback.ReportMetadata.DateRange.End),
             records);
     }
+
+    private static List<ParsedAuthDetail> MapAuthDetails(AuthResultType authResults)
+    {
+        var details = new List<ParsedAuthDetail>();
+
+        foreach (var dkim in authResults.Dkim ?? [])
+        {
+            details.Add(new ParsedAuthDetail(
+                DmarcAuthMechanism.Dkim,
+                dkim.Domain,
+                Enum.Parse<DmarcMechanismResult>(dkim.Result.ToString()),
+                dkim.Selector,
+                null,
+                dkim.HumanResult));
+        }
+
+        foreach (var spf in authResults.Spf ?? [])
+        {
+            details.Add(new ParsedAuthDetail(
+                DmarcAuthMechanism.Spf,
+                spf.Domain,
+                Enum.Parse<DmarcMechanismResult>(spf.Result.ToString()),
+                null,
+                spf.Scope?.ToString(),
+                spf.HumanResult));
+        }
+
+        return details;
+    }
+
+    private static List<ParsedPolicyOverrideReason> MapOverrideReasons(PolicyOverrideReason[]? reasons) =>
+        (reasons ?? []).Select(r => new ParsedPolicyOverrideReason(Enum.Parse<DmarcPolicyOverrideType>(r.Type.ToString()), r.Comment)).ToList();
 }

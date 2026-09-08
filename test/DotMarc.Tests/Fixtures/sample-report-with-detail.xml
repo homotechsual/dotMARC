@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<feedback>
+  <report_metadata>
+    <org_name>google.com</org_name>
+    <email>noreply-dmarc-support@google.com</email>
+    <report_id>detail-report-1</report_id>
+    <date_range>
+      <begin>1754438400</begin>
+      <end>1754524800</end>
+    </date_range>
+  </report_metadata>
+  <policy_published>
+    <domain>contoso.io</domain>
+    <adkim>r</adkim>
+    <aspf>r</aspf>
+    <p>quarantine</p>
+    <sp>quarantine</sp>
+    <pct>100</pct>
+  </policy_published>
+  <record>
+    <row>
+      <source_ip>203.0.113.50</source_ip>
+      <count>12</count>
+      <policy_evaluated>
+        <disposition>none</disposition>
+        <dkim>pass</dkim>
+        <spf>fail</spf>
+        <reason>
+          <type>local_policy</type>
+          <comment>arc allowed</comment>
+        </reason>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>contoso.io</header_from>
+    </identifiers>
+    <auth_results>
+      <spf>
+        <domain>envelope.contoso.io</domain>
+        <result>fail</result>
+      </spf>
+      <dkim>
+        <domain>contoso.io</domain>
+        <result>pass</result>
+        <selector>default</selector>
+      </dkim>
+      <dkim>
+        <domain>relay.contoso.io</domain>
+        <result>temperror</result>
+        <selector>backup</selector>
+      </dkim>
+    </auth_results>
+  </record>
+</feedback>
