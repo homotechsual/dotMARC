@@ -180,9 +180,10 @@ Drill into any domain for a 30-day pass/quarantine/reject chart and its DMARC re
 
 ### DNS provider push (optional)
 
-If a domain's DNS is hosted on Cloudflare or Azure DNS, dotMARC can push the MTA-STS CNAME or the
-DMARC TXT record straight there instead of you copying it in by hand. Each push is authenticated
-fresh through that provider's own consent screen, with nothing about that authentication stored.
+If a domain's DNS is hosted on Cloudflare, Azure DNS, or Google Cloud DNS, dotMARC can push the
+MTA-STS CNAME or the DMARC TXT record straight there instead of you copying it in by hand. Each
+push is authenticated fresh through that provider's own consent screen, with nothing about that
+authentication stored.
 
 **Cloudflare**: register a self-managed OAuth client at **Manage account** → **OAuth clients** →
 **Create OAuth client** in the Cloudflare dashboard. dotMARC's push flow is a confidential,
@@ -207,15 +208,33 @@ into dotMARC directly (see below), there's nothing to set as an environment vari
 parameter for this.
 
 **Azure DNS**: register a *third*, separate Entra app registration (do not reuse the mailbox or
-dashboard app). Go to **App registrations** → **New registration**, then **Authentication** → add a
-**Web** redirect URI of `https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API
-permissions** → add the delegated **Azure Service Management** → `user_impersonation` permission.
+dashboard app). Go to **App registrations** → **New registration**, set **Supported account
+types** to the multitenant option (accounts in any organizational directory) - this flow lets each
+customer authorize a push into *their own* tenant, which is a different tenant than the one this
+app registration lives in, so it must not be restricted to a single tenant. Then
+**Authentication** → add a **Web** redirect URI of
+`https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API permissions** → add the
+delegated **Azure Service Management** → `user_impersonation` permission.
 
-Both providers are independently optional and configured the same way regardless of how you're
-running dotMARC (Docker Compose or Azure): sign in with an account holding the `DnsPushManage`
-permission and go to **Manage → DNS push settings**, enter the OAuth client ID/secret (and, for
-Azure DNS, tenant ID) for whichever provider(s) you registered, and save. Leave either unconfigured
-and dotMARC simply reports it can't find a configured push option when you try to use it - the push
+**Google Cloud DNS**: in a Google Cloud project, enable the **Cloud DNS API** and **Cloud Resource
+Manager API**, then create an OAuth client at **APIs & Services** → **Credentials** → **Create
+Credentials** → **OAuth client ID** (application type **Web application**), with an authorized
+redirect URI of `https://<your-deployment-host>/dns-push/google-cloud-dns/callback`. On the
+**OAuth consent screen**, add both scopes dotMARC requests: `.../auth/ndev.clouddns.readwrite`
+(read/write access to Cloud DNS) and `.../auth/cloudplatformprojects.readonly` (lets dotMARC list
+the customer's projects to find which one holds the target zone - it never needs a project ID
+entered manually). The Cloud DNS write scope is a Google-classified "sensitive" scope, so while
+your own account can authorize while the app is in **Testing** mode (add it to the consent
+screen's test users list), any other customer will need the consent screen submitted for Google's
+verification first - a one-time review in Google Cloud Console that can take several days to turn
+around. Budget for that lead time before relying on this provider for a customer outside your own
+test-user allowlist.
+
+All three providers are independently optional and configured the same way regardless of how
+you're running dotMARC (Docker Compose or Azure): sign in with an account holding the
+`DnsPushManage` permission and go to **Manage → DNS push settings**, enter the OAuth client
+ID/secret for whichever provider(s) you registered, and save. Leave any of them unconfigured and
+dotMARC simply reports it can't find a configured push option when you try to use it - the push
 action itself still appears, it just won't succeed for an unconfigured provider.
 
 Next: [Local Development](./local-development.mdx) to run and test the app from source, or
