@@ -1259,7 +1259,7 @@ public sealed class PollingService : BackgroundService
 
         foreach (var record in parsed.Records)
         {
-            report.Records.Add(new ReportRecord
+            var reportRecord = new ReportRecord
             {
                 SourceIp = record.SourceIp,
                 MessageCount = record.MessageCount,
@@ -1267,8 +1267,37 @@ public sealed class PollingService : BackgroundService
                 SpfResult = Enum.Parse<AuthResult>(record.SpfResult),
                 DkimResult = Enum.Parse<AuthResult>(record.DkimResult),
                 HeaderFrom = record.HeaderFrom
-            });
+            };
+
+            foreach (var detail in record.AuthDetails)
+            {
+                reportRecord.AuthDetails.Add(new ReportRecordAuthDetail
+                {
+                    Mechanism = detail.Mechanism,
+                    Domain = detail.Domain,
+                    Result = detail.Result,
+                    Selector = detail.Selector,
+                    Scope = detail.Scope,
+                    HumanResult = detail.HumanResult
+                });
+            }
+
+            foreach (var reason in record.OverrideReasons)
+            {
+                reportRecord.OverrideReasons.Add(new ReportRecordPolicyOverrideReason
+                {
+                    Type = reason.Type,
+                    Comment = reason.Comment
+                });
+            }
+
+            report.Records.Add(reportRecord);
         }
+
+        // A newly-ingested report already has its detail captured above, so it never needs the
+        // historical backfill cycle (Task 5) to touch it - only pre-existing reports from before
+        // this feature shipped start with this null.
+        report.AuthDetailBackfilledUtc = DateTimeOffset.UtcNow;
 
         context.Reports.Add(report);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

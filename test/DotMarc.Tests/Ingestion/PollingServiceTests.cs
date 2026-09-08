@@ -425,4 +425,65 @@ public class PollingServiceTests : IAsyncLifetime
         var newDomain = verify.Domains.Single(d => d.Name == "contoso.io");
         Assert.Equal(2, newDomain.SortOrder);
     }
+
+    private const string ReportWithDetailXml = """
+        <?xml version="1.0" encoding="UTF-8" ?>
+        <feedback>
+          <report_metadata>
+            <org_name>google.com</org_name>
+            <email>noreply-dmarc-support@google.com</email>
+            <report_id>detail-1</report_id>
+            <date_range><begin>1754438400</begin><end>1754524800</end></date_range>
+          </report_metadata>
+          <policy_published><domain>contoso.io</domain><adkim>r</adkim><aspf>r</aspf><p>quarantine</p><sp>quarantine</sp><pct>100</pct></policy_published>
+          <record>
+            <row>
+              <source_ip>203.0.113.50</source_ip>
+              <count>12</count>
+              <policy_evaluated>
+                <disposition>none</disposition><dkim>pass</dkim><spf>fail</spf>
+                <reason><type>local_policy</type><comment>arc allowed</comment></reason>
+              </policy_evaluated>
+            </row>
+            <identifiers><header_from>contoso.io</header_from></identifiers>
+            <auth_results>
+              <spf><domain>envelope.contoso.io</domain><result>fail</result></spf>
+              <dkim><domain>contoso.io</domain><result>pass</result><selector>default</selector></dkim>
+            </auth_results>
+          </record>
+        </feedback>
+        """;
+
+    [Fact]
+    public async Task PollOnceAsync_StoresAuthDetailAndOverrideReasons_AndMarksTheReportBackfilled()
+    {
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(ReportWithDetailXml))];
+
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        using (var verify = CreateContext())
+        {
+            var report = verify.Reports
+                .Include(r => r.Records).ThenInclude(rec => rec.AuthDetails)
+                .Include(r => r.Records).ThenInclude(rec => rec.OverrideReasons)
+                .Single();
+
+            Assert.NotNull(report.AuthDetailBackfilledUtc);
+
+            var record = report.Records.Single();
+            Assert.Equal(2, record.AuthDetails.Count);
+            Assert.Contains(record.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Spf && d.Domain == "envelope.contoso.io" && d.Result == DmarcMechanismResult.Fail);
+            Assert.Contains(record.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Dkim && d.Selector == "default" && d.Result == DmarcMechanismResult.Pass);
+
+            var reason = record.OverrideReasons.Single();
+            Assert.Equal(DmarcPolicyOverrideType.LocalPolicy, reason.Type);
+            Assert.Equal("arc allowed", reason.Comment);
+        }
+    }
 }
