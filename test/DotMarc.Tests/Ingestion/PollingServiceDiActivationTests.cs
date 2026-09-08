@@ -2,6 +2,7 @@ using DotMarc.Data;
 using DotMarc.Graph;
 using DotMarc.Ingestion;
 using DotMarc.Notifications;
+using DotMarc.Reporting;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,6 +107,6 @@ public sealed class PollingServiceDiActivationTests : IAsyncLifetime
 
         public Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

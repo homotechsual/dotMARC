@@ -1,5 +1,6 @@
 using DotMarc.Data;
 using DotMarc.Notifications;
+using DotMarc.Reporting;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -293,7 +294,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         var fakeNotifier = new FakeAlertWebhookClient();
         var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
 
-        await service.FlagUnexpectedActivityForNullRoutedDomainAsync("contoso.io", CancellationToken.None);
+        await service.FlagUnexpectedActivityForNullRoutedDomainAsync("contoso.io", new ReasonBreakdown(0, 0, 0, 0), CancellationToken.None);
 
         await using var verify = CreateContext();
         var alert = await verify.AlertEvents.SingleAsync();
@@ -301,6 +302,38 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         Assert.Equal("contoso.io", alert.DomainName);
         Assert.Contains("null-routed", alert.Message);
         Assert.Equal(1, fakeNotifier.CallCount);
+    }
+
+    [Fact]
+    public async Task FlagUnexpectedActivityForNullRoutedDomainAsync_MentionsForwarding_WhenTheBreakdownIsBenignDominant()
+    {
+        await SeedSettingsAsync();
+        await SeedNullRoutedDomainAsync("contoso.io");
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.FlagUnexpectedActivityForNullRoutedDomainAsync("contoso.io", new ReasonBreakdown(BenignOverride: 90, LocalPolicy: 0, Other: 0, NoReasonGiven: 10));
+
+        await using var verifyContext = CreateContext();
+        var alert = await verifyContext.AlertEvents.SingleAsync(e => e.AlertType == "UnexpectedActivityOnNullRoutedDomain");
+        Assert.Contains("forwarder or mailing list", alert.Message);
+    }
+
+    [Fact]
+    public async Task FlagUnexpectedActivityForNullRoutedDomainAsync_MentionsSpoofing_WhenTheBreakdownIsNotBenignDominant()
+    {
+        await SeedSettingsAsync();
+        await SeedNullRoutedDomainAsync("contoso.io");
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+
+        await service.FlagUnexpectedActivityForNullRoutedDomainAsync("contoso.io", new ReasonBreakdown(BenignOverride: 0, LocalPolicy: 0, Other: 0, NoReasonGiven: 40));
+
+        await using var verifyContext = CreateContext();
+        var alert = await verifyContext.AlertEvents.SingleAsync(e => e.AlertType == "UnexpectedActivityOnNullRoutedDomain");
+        Assert.Contains("genuine spoofing attempt", alert.Message);
     }
 
     [Fact]

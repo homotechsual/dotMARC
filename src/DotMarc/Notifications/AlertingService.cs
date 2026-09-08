@@ -10,7 +10,7 @@ public interface IAlertingService
     Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default);
     Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default);
     Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default);
-    Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, CancellationToken cancellationToken = default);
+    Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default);
 }
 
 public sealed class AlertingService : IAlertingService
@@ -132,7 +132,7 @@ public sealed class AlertingService : IAlertingService
         await EnsureAlertAsync(db, settings, domainName, "TlsrptFailure", "Warning", "TLS delivery failures reported", $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.", cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, CancellationToken cancellationToken = default)
+    public async Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var settings = await NotificationSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
@@ -141,7 +141,16 @@ public sealed class AlertingService : IAlertingService
             return;
         }
 
-        var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.";
+        // Benign-dominant (at least half the reject/quarantine volume has a forwarder/mailing-list/
+        // sampling override reason) reads as "probably not an attack"; anything else, including no
+        // reject/quarantine volume at all yet, adds no extra sentence rather than guessing.
+        var reasonContext = reasonBreakdown.Total == 0
+            ? ""
+            : reasonBreakdown.BenignOverride * 2 >= reasonBreakdown.Total
+                ? " This looks like a forwarder or mailing list, not spoofing."
+                : " No benign override reason was given - this looks like a genuine spoofing attempt.";
+
+        var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.{reasonContext}";
         await EnsureAlertAsync(db, settings, domainName, "UnexpectedActivityOnNullRoutedDomain", "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
     }
 

@@ -454,6 +454,53 @@ public class PollingServiceTests : IAsyncLifetime
         </feedback>
         """;
 
+    private const string NullRoutedRejectReportXml = """
+        <?xml version="1.0" encoding="UTF-8" ?>
+        <feedback>
+          <report_metadata>
+            <org_name>google.com</org_name>
+            <email>noreply-dmarc-support@google.com</email>
+            <report_id>null-routed-1</report_id>
+            <date_range><begin>1754438400</begin><end>1754524800</end></date_range>
+          </report_metadata>
+          <policy_published><domain>contoso.io</domain><adkim>r</adkim><aspf>r</aspf><p>reject</p><sp>reject</sp><pct>100</pct></policy_published>
+          <record>
+            <row>
+              <source_ip>203.0.113.80</source_ip>
+              <count>25</count>
+              <policy_evaluated><disposition>reject</disposition><dkim>fail</dkim><spf>fail</spf></policy_evaluated>
+            </row>
+            <identifiers><header_from>contoso.io</header_from></identifiers>
+            <auth_results><spf><domain>contoso.io</domain><result>fail</result></spf></auth_results>
+          </record>
+        </feedback>
+        """;
+
+    [Fact]
+    public async Task PollOnceAsync_PassesTheNewReportsReasonBreakdown_ToTheNullRoutedFlag()
+    {
+        using (var seed = CreateContext())
+        {
+            seed.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, SpfCheckStatus = SpfCheckStatus.NullSpf });
+            await seed.SaveChangesAsync();
+        }
+
+        var graphClient = new FakeGraphMailboxClient();
+        graphClient.UnreadMessages.Add(new MailboxMessage("msg-1", "Report domain: contoso.io", true));
+        graphClient.Attachments["msg-1"] = [new MailboxAttachment("report.xml.gz", "application/gzip", GzipOf(NullRoutedRejectReportXml))];
+
+        var alertingService = new FakeAlertingService();
+        using (var context = CreateContext())
+        {
+            var service = new PollingService(graphClient, context, alertingService, NullLogger<PollingService>.Instance);
+            await service.PollOnceAsync(CancellationToken.None);
+        }
+
+        var breakdown = Assert.Single(alertingService.FlaggedReasonBreakdowns);
+        Assert.Equal(25, breakdown.NoReasonGiven);
+        Assert.Equal(25, breakdown.Total);
+    }
+
     [Fact]
     public async Task PollOnceAsync_StoresAuthDetailAndOverrideReasons_AndMarksTheReportBackfilled()
     {

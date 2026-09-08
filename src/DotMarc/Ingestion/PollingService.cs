@@ -5,6 +5,7 @@ using DotMarc.Graph;
 using DotMarc.IpEnrichment;
 using DotMarc.MtaSts;
 using DotMarc.Notifications;
+using DotMarc.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -1360,7 +1361,7 @@ public sealed class PollingService : BackgroundService
             {
                 var decompressed = ReportDecompressor.Decompress(attachment.ContentBytes);
                 var parsed = DmarcReportParser.Parse(decompressed);
-                var domain = await StoreReportAsync(context, parsed, System.Text.Encoding.UTF8.GetString(decompressed), cancellationToken).ConfigureAwait(false);
+                var (domain, reasonBreakdown) = await StoreReportAsync(context, parsed, System.Text.Encoding.UTF8.GetString(decompressed), cancellationToken).ConfigureAwait(false);
                 await RecordProcessedMessageAsync(context, message.Id, cancellationToken).ConfigureAwait(false);
 
                 if (_alertingService is not null)
@@ -1369,7 +1370,7 @@ public sealed class PollingService : BackgroundService
 
                     if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
                     {
-                        await _alertingService.FlagUnexpectedActivityForNullRoutedDomainAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                        await _alertingService.FlagUnexpectedActivityForNullRoutedDomainAsync(domain.Name, reasonBreakdown, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -1401,7 +1402,7 @@ public sealed class PollingService : BackgroundService
         throw lastError ?? new InvalidDataException("No attachment could be parsed as a DMARC report.");
     }
 
-    private async Task<Domain> StoreReportAsync(DotMarcDbContext context, ParsedReport parsed, string rawXml, CancellationToken cancellationToken)
+    private async Task<(Domain Domain, ReasonBreakdown ReasonBreakdown)> StoreReportAsync(DotMarcDbContext context, ParsedReport parsed, string rawXml, CancellationToken cancellationToken)
     {
         var domain = await context.Domains.SingleOrDefaultAsync(d => d.Name == parsed.Domain, cancellationToken).ConfigureAwait(false);
         if (domain is null)
@@ -1423,7 +1424,7 @@ public sealed class PollingService : BackgroundService
             // Same report already stored from an earlier attempt at this message (see the
             // MarkAsReadAsync-failure handling in ProcessMessageAsync). Nothing to insert - the
             // caller still retries marking the message read.
-            return domain;
+            return (domain, new ReasonBreakdown(0, 0, 0, 0));
         }
 
         domain.LastReportReceivedUtc = DateTimeOffset.UtcNow;
@@ -1483,7 +1484,7 @@ public sealed class PollingService : BackgroundService
 
         context.Reports.Add(report);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return domain;
+        return (domain, DomainStatistics.GetReasonBreakdown([report]));
     }
 
     private static async Task StoreTlsrptReportAsync(DotMarcDbContext context, ParsedTlsrptReport parsed, CancellationToken cancellationToken)
