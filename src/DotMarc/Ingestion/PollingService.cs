@@ -2,6 +2,7 @@ using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.DnsPush;
 using DotMarc.Graph;
+using DotMarc.IpEnrichment;
 using DotMarc.MtaSts;
 using DotMarc.Notifications;
 using Microsoft.EntityFrameworkCore;
@@ -52,6 +53,8 @@ public sealed class PollingService : BackgroundService
     internal const long DkimCheckLeaderLockKey = 84_200_017;
 
     internal const long DnsProviderCheckLeaderLockKey = 84_200_019;
+
+    internal const long IpEnrichmentLeaderLockKey = 84_200_021;
 
     private sealed record PollCycleCounts(int MessagesChecked, int ReportsParsed, int ParseFailures);
 
@@ -183,6 +186,18 @@ public sealed class PollingService : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "DNS provider check cycle failed; will retry next interval.");
+                    }
+
+                    try
+                    {
+                        context.ChangeTracker.Clear();
+                        var ipLookup = scope.ServiceProvider.GetRequiredService<IIpInfoLookup>();
+                        var ipDbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+                        await RunIpEnrichmentCycleAsync(context, ipLookup, ipDbFactory, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "IP enrichment cycle failed; will retry next interval.");
                     }
 
                     if (!string.IsNullOrWhiteSpace(_options!.TlsrptMailboxAddress))
@@ -548,6 +563,61 @@ public sealed class PollingService : BackgroundService
         finally
         {
             await lockTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private const int IpEnrichmentBatchSize = 25;
+
+    /// <summary>Enriches source IPs proactively instead of waiting for a domain's Sources tab to
+    /// be viewed (the only trigger before this cycle existed). Bounded per cycle so a large
+    /// backlog after a bulk import doesn't turn one poll interval into a long RDAP hammering
+    /// session - the remainder is simply picked up on the next cycle.</summary>
+    internal async Task RunIpEnrichmentCycleAsync(DotMarcDbContext context, IIpInfoLookup ipLookup, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
+    {
+        var connectionString = context.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        bool acquired;
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", IpEnrichmentLeaderLockKey);
+            acquired = (bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        if (!acquired)
+        {
+            _logger.LogDebug("Another instance already holds the IP-enrichment lock for this cycle; skipping.");
+            return;
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var candidateIps = await context.ReportRecords
+            .Select(r => r.SourceIp)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var cachedInfo = await IpInfoService.GetCachedAsync(context, candidateIps, cancellationToken).ConfigureAwait(false);
+
+        var toEnrich = candidateIps
+            .Where(ip => IpInfoService.NeedsLookup(cachedInfo.GetValueOrDefault(ip), nowUtc))
+            .Take(IpEnrichmentBatchSize)
+            .ToList();
+
+        foreach (var ip in toEnrich)
+        {
+            try
+            {
+                await IpInfoService.EnrichAsync(dbFactory, ipLookup, ip, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "IP enrichment failed for {SourceIp}; will retry next cycle.", ip);
+            }
         }
     }
 
