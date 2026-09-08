@@ -27,6 +27,8 @@ public static class NotificationSettingsService
         existing.MissingReportThresholdDays = updated.MissingReportThresholdDays;
         existing.CooldownMinutes = updated.CooldownMinutes;
         existing.MonitorIntervalSeconds = updated.MonitorIntervalSeconds;
+        existing.SuspiciousRejectMinVolume = updated.SuspiciousRejectMinVolume;
+        existing.SuspiciousRejectNonBenignPercent = updated.SuspiciousRejectNonBenignPercent;
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }

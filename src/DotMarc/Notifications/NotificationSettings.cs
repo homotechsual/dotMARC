@@ -16,4 +16,6 @@ public sealed class NotificationSettings
     public int MissingReportThresholdDays { get; set; } = 2;
     public int CooldownMinutes { get; set; } = 180;
     public int MonitorIntervalSeconds { get; set; } = 300;
+    public int SuspiciousRejectMinVolume { get; set; } = 10;
+    public int SuspiciousRejectNonBenignPercent { get; set; } = 50;
 }

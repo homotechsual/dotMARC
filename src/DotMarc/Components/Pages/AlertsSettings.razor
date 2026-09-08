@@ -56,6 +56,16 @@ else
             <MudItem xs="12" md="6">
                 <MudNumericField Label="Monitor interval (seconds)" @bind-Value="_settings.MonitorIntervalSeconds" Min="30" Max="86400" Variant="Variant.Outlined" />
             </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField Label="Suspicious reject minimum volume" @bind-Value="_settings.SuspiciousRejectMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined"
+                                  HelperText="Don't alert below this many rejected/quarantined messages in a domain's 30-day window." />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField Label="Suspicious reject non-benign %" @bind-Value="_settings.SuspiciousRejectNonBenignPercent" Min="1" Max="100" Variant="Variant.Outlined"
+                                  HelperText="Alert when at least this % of rejects/quarantines have no benign override reason (forwarder/mailing list/sampling)." />
+            </MudItem>
         </MudGrid>
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAsync">Save settings</MudButton>
