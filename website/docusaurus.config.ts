@@ -137,6 +137,7 @@ const config: Config = {
             {label: 'Blog', to: '/blog'},
             {label: 'Demo', to: 'https://demo.dotmarc.app/'},
             {label: 'GitHub', href: 'https://github.com/homotechsual/dotMARC'},
+            {label: 'License', to: '/license'},
           ],
         },
       ],
