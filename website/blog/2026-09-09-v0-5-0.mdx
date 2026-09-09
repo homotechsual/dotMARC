@@ -1,0 +1,57 @@
+---
+slug: v0-5-0
+title: "dotMARC v0.5.0: Google Cloud DNS, DMARC insights, and a real self-hosting story"
+description: A third DNS push provider (Google Cloud DNS), proactive IP enrichment and policy-override reason capture that turn a raw reject count into an actual explanation, and a one-command Docker + Caddy stack with Docker promoted to a first-class deployment path alongside Azure.
+authors: [mikey]
+tags: [release]
+---
+
+Since [`v0.4.0`](/blog/v0-4-0), dotMARC picked up a third DNS push provider, a genuinely new kind
+of insight into *why* mail gets rejected or quarantined instead of just that it did, and a
+self-hosting story that no longer assumes you already know how to wire up a reverse proxy.
+
+{/* truncate */}
+
+## Google Cloud DNS joins Cloudflare and Azure DNS
+
+DNS push now supports Google Cloud DNS alongside the existing Cloudflare and Azure DNS providers -
+same delegation model as the other two (the signed-in user's own permissions govern the push, not a
+standing credential dotMARC holds), with one difference worth calling out: dotMARC discovers the
+right Cloud DNS zone automatically across every GCP project you can see, rather than asking you to
+configure a project ID up front. See [DNS Provider Push](/docs/dns-provider-push) for how to
+register it - each provider now has its own linkable setup section instead of being buried in a
+single wall of text.
+
+## Why did this actually get rejected?
+
+DMARC aggregate reports carry more than a raw pass/fail: they carry *why* a receiver overrode its
+own policy - a forwarder tripping alignment, a mailing list rewriting headers, sampling, local
+policy, or genuinely nothing. dotMARC used to discard that detail entirely. Now it's captured for
+every report (and backfilled for reports you already have), and shown two new ways:
+
+- Each domain's Overview tab, and the main Dashboard, both show a breakdown of *why* rejected or
+  quarantined mail happened, not just how much of it there was - a domain that's 100% benign
+  forwarders reads very differently from one where nothing explains the rejects at all.
+- The Sources tab shows the same detail per source IP - the actual SPF/DKIM domain and result
+  behind each pass/fail on hover, plus who owns the IP.
+
+A new **Suspicious reject activity** alert uses this directly: it fires when a domain's reject
+volume looks like more than benign forwarding, not just when reject volume is high. IP ownership
+lookups are also proactive now - previously they only ran when someone opened a domain's Sources
+tab; now they run on a schedule regardless, so the data's already there when you go looking for it.
+
+## A Docker deployment that's actually a deployment
+
+Self-hosting docs used to say "put a reverse proxy in front of it" and leave the rest to you.
+`docker-compose.selfhosted.yml` is now a complete, ready-to-run stack - dotMARC, PostgreSQL, and
+Caddy for automatic HTTPS, wired together with nothing left to hand-edit beyond setting your
+hostname in `.env`. [Deploy with Docker](/docs/deploy-with-docker) is also now its own page, weighted
+the same as [Deploy to Azure](/docs/deploy-to-azure) rather than buried inside Getting Started -
+both are genuinely first-class paths, not a primary one and an afterthought. The setup-heavy pages
+(Entra app registrations, both deployment paths, each DNS provider) also got interactive checklists
+now, so you can tick off progress as you go instead of losing your place halfway through.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.5.0) for
+everything that shipped between these two tags, including the usual pile of fixes.
