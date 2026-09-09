@@ -1,0 +1,25 @@
+# Used by docker-compose.selfhosted.yml. DOTMARC_HOSTNAME is substituted from the environment
+# (set it in your .env file, e.g. DOTMARC_HOSTNAME=dotmarc.example.uk) - this file never needs
+# hand-editing.
+#
+# The global block below must come first (Caddyfile syntax requirement) - it enables optional
+# MTA-STS policy hosting for customer domains that opt in (see the "MTA-STS policy hosting"
+# section of the Getting Started docs). Harmless to leave in even if you never use that feature:
+# the "ask" endpoint only issues a certificate for a hostname whose CNAME already points here AND
+# whose owner has opted a domain in via the dashboard, so this block is inert until then.
+{
+	on_demand_tls {
+		ask http://app:8080/.well-known/mta-sts-ask
+	}
+}
+
+{$DOTMARC_HOSTNAME} {
+	reverse_proxy app:8080
+}
+
+:443 {
+	tls {
+		on_demand
+	}
+	reverse_proxy app:8080
+}

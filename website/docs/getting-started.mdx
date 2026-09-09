@@ -177,43 +177,39 @@ Open inbound access to TCP ports 80 and 443 in whatever firewall your provider u
 HTTPS certificate (via Let's Encrypt) with almost no configuration - the easiest option if you don't
 already run a reverse proxy for something else on this machine.
 
-This repo already ships everything Caddy needs - a `Caddyfile` and a `caddy` service in
-`docker-compose.yml` - it's just switched off by default (it's only needed for the optional
-MTA-STS hosting feature below, so it doesn't start on every `docker compose up`). To use it as your
-dashboard's reverse proxy too, two small edits to your own copy of those files:
+The repo ships a complete, ready-to-run stack for this: **`docker-compose.selfhosted.yml`**, a
+standalone alternative to the plain `docker-compose.yml` from step 1 that adds Caddy, already fully
+wired up. Nothing in it needs hand-editing - stop whatever you started in step 1 first
+(`docker compose down`), then add one more line to the same `.env` file from step 1:
 
-1. Open the repo's `Caddyfile` and add a block for your dashboard hostname at the **top**, above
-   whatever's already there:
+```txt title=".env"
+DOTMARC_HOSTNAME=dotmarc.example.uk
+```
 
-   ```txt title="Caddyfile"
-   dotmarc.example.uk {
-       reverse_proxy app:8080
-   }
+(Replace `dotmarc.example.uk` with your own hostname from step 2a - this is the only thing that
+changes between deployments; everything else in `docker-compose.selfhosted.yml` and its
+`Caddyfile.selfhosted` is generic.)
 
-   # ... the rest of the file (on_demand_tls block etc.) stays exactly as it is ...
-   ```
+Then run:
 
-   Replace `dotmarc.example.uk` with your own hostname from step 2a. That's genuinely the whole
-   config needed for this part: Caddy automatically requests and renews a certificate for the
-   hostname listed, and `reverse_proxy` already sends the `X-Forwarded-For`/`X-Forwarded-Proto`
-   headers dotMARC needs to know it's being reached over HTTPS - which is exactly what Entra's
-   redirect-URI check depends on (without it, sign-in fails with AADSTS50011).
+```powershell
+docker compose -f docker-compose.selfhosted.yml up -d
+```
 
-2. Open `docker-compose.yml` and delete the `profiles: ["mta-sts"]` line from the `caddy` service,
-   so it starts on every `docker compose up` rather than only when explicitly requested.
-
-Run `docker compose up` again to pick up the change. Within a few seconds, Caddy requests a
-certificate for your hostname automatically - this only succeeds once ports 80/443 are genuinely
+That's it. Caddy requests and renews a certificate for `DOTMARC_HOSTNAME` automatically, and
+already sends the `X-Forwarded-For`/`X-Forwarded-Proto` headers dotMARC needs to know it's being
+reached over HTTPS - which is exactly what Entra's redirect-URI check depends on (without it,
+sign-in fails with AADSTS50011). Certificate issuance only succeeds once ports 80/443 are genuinely
 reachable from the internet (step 2b), since that's how Let's Encrypt confirms you control the
 domain.
 
 :::tip[Already running Caddy, nginx, or Traefik for something else on this machine?]
 
-Leave the bundled `caddy` service switched off (skip the `profiles` edit above) and add the
-`dotmarc.example.uk { reverse_proxy app:8080 }` block to your *existing* reverse proxy's config
-instead - just make sure whatever's in front of dotMARC forwards `X-Forwarded-For` and
-`X-Forwarded-Proto`, and can reach the `app` container on port 8080 (either over the same Docker
-network, or by publishing that port and pointing your existing proxy at `localhost:8080`).
+Skip this file entirely and keep using the plain `docker-compose.yml` from step 1 (which only
+publishes port 8080, no TLS) - instead, point your *existing* reverse proxy at `app:8080` (if it's
+on the same Docker network) or `localhost:8080` (if you publish that port). Whatever you use just
+needs to forward `X-Forwarded-For` and `X-Forwarded-Proto`. `Caddyfile.selfhosted` in this repo is
+still a useful reference for the exact config shape, even if you're not running it directly.
 
 :::
 
@@ -233,24 +229,15 @@ dotMARC can host an [MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) policy on 
 behalf - serving `https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain they opt in to,
 so they don't have to host it themselves. This needs a small amount of extra infrastructure, since
 it means serving valid TLS for an open-ended, admin-growing set of hostnames dotMARC doesn't know
-about until a customer enables it - but if you followed step 2c above, it's already set up: the
-repo's `Caddyfile` ships with the on-demand-TLS block this feature needs (the part below whatever
-you added for your own dashboard hostname), and switching the `caddy` service on (removing its
-`profiles` line) covers both purposes with the one instance.
+about until a customer enables it - but if you followed step 2c above, there's nothing more to set
+up on the Caddy side: `Caddyfile.selfhosted` already includes the on-demand-TLS block this feature
+needs, permanently, whether or not you ever turn the feature on.
 
 1. Set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to - typically the
    same hostname you set up in step 2 above (e.g. `dotmarc.example.uk`).
-2. If you skipped step 2c because you're using a different reverse proxy, bring up the bundled
-   Caddy service specifically for this feature instead:
-
-   ```powershell
-   docker compose --profile mta-sts up
-   ```
-
-   This runs Caddy with only the on-demand-TLS block from the repo's `Caddyfile` (not your
-   dashboard hostname) - see step 2c's callout above for merging that block into your own reverse
-   proxy's config if you'd rather not run a second one.
-
+2. If you're using your own reverse proxy instead of `docker-compose.selfhosted.yml` (see step 2c's
+   callout), add the `on_demand_tls`/`:443` blocks from `Caddyfile.selfhosted` to your own Caddy
+   config - or the equivalent on-demand-certificate feature if you're not using Caddy.
 3. For each domain a customer wants hosted, they add one CNAME:
 
    ```txt

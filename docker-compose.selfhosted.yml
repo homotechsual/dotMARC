@@ -1,0 +1,69 @@
+# A complete, ready-to-run self-hosting stack: dotMARC + PostgreSQL + Caddy (automatic HTTPS via
+# Let's Encrypt), fully wired together. This is the file most self-hosters want - see "Getting
+# Started" in the docs (getting-started.mdx) for the full walkthrough: pointing a domain at this
+# host, and opening ports 80/443 to it (router port-forwarding for a home/office box, a firewall
+# rule for a cloud VPS).
+#
+# Run with:
+#   docker compose -f docker-compose.selfhosted.yml up -d
+#
+# Needs a .env file (or shell environment) next to this one, setting at least DOTMARC_HOSTNAME
+# plus the Graph__*/EntraId__* variables described in Getting Started - nothing in this file or
+# Caddyfile.selfhosted needs hand-editing.
+#
+# This is a standalone alternative to docker-compose.yml, not an add-on to it - use one or the
+# other, not both (both publish ports 80/443, so running both at once will fail to start).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: src/DotMarc/Dockerfile
+    environment:
+      ConnectionStrings__DotMarc: "Host=postgres;Database=dotmarc;Username=dotmarc;Password=${POSTGRES_PASSWORD:-dotmarc}"
+      Graph__ClientId: ${GRAPH_CLIENT_ID:?Set GRAPH_CLIENT_ID}
+      Graph__TenantId: ${GRAPH_TENANT_ID:?Set GRAPH_TENANT_ID}
+      Graph__ClientSecret: ${GRAPH_CLIENT_SECRET:?Set GRAPH_CLIENT_SECRET}
+      Graph__MailboxAddress: ${GRAPH_MAILBOX_ADDRESS:?Set GRAPH_MAILBOX_ADDRESS}
+      Graph__TlsrptMailboxAddress: ${GRAPH_TLSRPT_MAILBOX_ADDRESS:-}
+      EntraId__TenantId: ${ENTRAID_TENANT_ID:?Set ENTRAID_TENANT_ID}
+      EntraId__ClientId: ${ENTRAID_CLIENT_ID:?Set ENTRAID_CLIENT_ID}
+      EntraId__ClientSecret: ${ENTRAID_CLIENT_SECRET:?Set ENTRAID_CLIENT_SECRET}
+      InitialAdmins__Emails: ${INITIAL_ADMIN_EMAILS:-}
+      MtaSts__HostingHostname: ${MTA_STS_HOSTING_HOSTNAME:-}
+    # No ports published here - Caddy is the only thing exposed to the host in this stack, and
+    # reaches this service over the compose network at app:8080.
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOTMARC_HOSTNAME: ${DOTMARC_HOSTNAME:?Set DOTMARC_HOSTNAME, e.g. dotmarc.example.uk}
+    volumes:
+      - ./Caddyfile.selfhosted:/etc/caddy/Caddyfile:ro
+      - caddy-selfhosted-data:/data
+    depends_on:
+      - app
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: dotmarc
+      POSTGRES_USER: dotmarc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dotmarc}
+    volumes:
+      - dotmarc-selfhosted-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dotmarc -d dotmarc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dotmarc-selfhosted-postgres-data:
+  caddy-selfhosted-data:
