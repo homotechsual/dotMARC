@@ -1,0 +1,6 @@
+# Screenshot filenames stay the same across releases while their content changes (see
+# deploy-with-docker.mdx, dns-provider-push.mdx, getting-started.mdx). Cloudflare Pages'
+# default caching can otherwise leave a stale PNG at the edge or in a visitor's browser
+# after a redeploy - force a short, revalidated cache instead of relying on the default.
+/img/screenshots/*
+  Cache-Control: public, max-age=300, must-revalidate
