@@ -89,6 +89,12 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             // paired with PollingService's own pre-insert duplicate check, keeps that safe rather
             // than silently double-counting volume.
             entity.HasIndex(r => new { r.DomainId, r.ReportingOrg, r.ReportId }).IsUnique();
+
+            // Partial index: keeps the leader-locked auth-detail backfill cycle's "find rows still
+            // needing backfill" query cheap forever. Once the one-time historical backfill catches
+            // up, only genuinely-unbackfilled rows are ever indexed, so this stays small regardless
+            // of how large Reports grows overall.
+            entity.HasIndex(r => r.AuthDetailBackfilledUtc).HasFilter("\"AuthDetailBackfilledUtc\" IS NULL");
         });
 
         modelBuilder.Entity<ReportRecord>(entity =>
@@ -101,6 +107,10 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(r => r.Disposition).HasConversion<string>();
             entity.Property(r => r.SpfResult).HasConversion<string>();
             entity.Property(r => r.DkimResult).HasConversion<string>();
+
+            // Supports the leader-locked IP enrichment cycle's SELECT DISTINCT SourceIp scan over
+            // ReportRecords, which grows continuously with report volume.
+            entity.HasIndex(r => r.SourceIp);
         });
 
         modelBuilder.Entity<ReportRecordAuthDetail>(entity =>
