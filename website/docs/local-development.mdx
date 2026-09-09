@@ -21,6 +21,10 @@ dotnet test dotMARC.sln
 
 ## Local database-first flow
 
+Use this mode when you want to run the app itself from your IDE/`dotnet run` (for debugging,
+breakpoints, hot reload) but still need a real Postgres instance behind it, rather than building
+and running the whole thing in containers.
+
 To start just the database for local debugging:
 
 ```powershell
@@ -28,21 +32,42 @@ docker compose up postgres
 ```
 
 This publishes PostgreSQL on `localhost:5432` using the default development connection values from
-`src/DotMarc/appsettings.json`: database `dotmarc`, username `dotmarc`, and password `dotmarc`.
+`src/DotMarc/appsettings.json`: database `dotmarc`, username `dotmarc`, and password `dotmarc`. It
+keeps running in your terminal - leave it there, and use a second terminal for the next step (or
+add `-d` to run it in the background: `docker compose up -d postgres`).
 
-If you want to run the app directly on the host instead of using the container stack, use:
+Then, in a second terminal, run the app directly on the host instead of in a container:
 
 ```powershell
 dotnet run --project src/DotMarc/DotMarc.csproj
 ```
 
-The app expects the same PostgreSQL connection settings as the Docker Compose setup.
+The app expects the same PostgreSQL connection settings as the Docker Compose setup (it reads them
+from `src/DotMarc/appsettings.json` by default), so no extra configuration is needed for this mode.
+You'll still need the Graph/EntraId environment variables described in
+[Getting Started](./getting-started.mdx#configure) set for sign-in and mailbox polling to work -
+`dotnet run` reads environment variables the same way Docker Compose does.
 
 ## Full stack with Docker Compose
+
+Use this mode to build and run everything - dotMARC and PostgreSQL both - exactly as it would run
+in production, entirely inside containers:
 
 ```powershell
 docker compose up --build
 ```
 
-This starts dotMARC together with PostgreSQL in one command, using the repo's `docker-compose.yml`
-configuration and the environment variables described in [Getting Started](./getting-started.mdx).
+`--build` rebuilds the dotMARC image from your current source before starting (drop it on later
+runs if you haven't changed any code - `docker compose up` alone reuses the last build and starts
+faster). This uses the repo's `docker-compose.yml` configuration and the environment variables
+described in [Getting Started](./getting-started.mdx#configure) - set them in your shell or in a
+`.env` file next to `docker-compose.yml`, the same as described there.
+
+Once it's running, the dashboard is reachable at `http://localhost:8080`. Sign-in works over plain
+HTTP for local testing as long as your Entra dashboard app registration's redirect URI matches
+(`http://localhost:8080/signin-oidc`) - you don't need the reverse-proxy/HTTPS setup from Getting
+Started unless you're exposing this to anyone outside your own machine.
+
+To stop everything: `Ctrl+C` in the terminal it's running in, or `docker compose down` from
+another terminal (add `-v` to also delete the Postgres data volume and start completely fresh next
+time: `docker compose down -v`).
