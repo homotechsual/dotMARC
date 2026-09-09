@@ -354,7 +354,7 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 }
 
-app.UseStaticFiles();
+app.MapStaticAssets();
 
 app.UseAuthentication();
 app.UseAuthorization();
