@@ -1,0 +1,84 @@
+.widget {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1rem 0.5rem 0.5rem;
+  border-radius: 999px;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  box-shadow: 0 8px 24px rgba(38, 49, 65, 0.16);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.widgetDone {
+  background: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  transform: translateY(-2px);
+}
+
+.widgetDone .text {
+  color: white;
+}
+
+.ring {
+  --percent: 0%;
+  position: relative;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--ifm-color-primary) var(--percent), var(--ifm-color-emphasis-300) 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--ifm-background-surface-color);
+}
+
+.widgetDone .ring {
+  background: white;
+}
+
+.widgetDone .ring::before {
+  background: var(--ifm-color-primary);
+}
+
+.ringLabel {
+  position: relative;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: var(--ifm-color-primary);
+}
+
+.widgetDone .ringLabel {
+  color: white;
+}
+
+.text {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ifm-font-color-base);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .widget {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    padding: 0.4rem 0.8rem 0.4rem 0.4rem;
+  }
+
+  .text {
+    font-size: 0.72rem;
+  }
+}

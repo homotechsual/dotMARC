@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from 'react';
+import {useChecklistProgress} from './ChecklistProgressContext';
 import styles from './Checklist.module.css';
 
 export interface ChecklistProps {
@@ -16,6 +17,7 @@ export default function Checklist({id, items}: ChecklistProps): React.ReactEleme
   const storageKey = `dotmarc-docs-checklist:${id}`;
   const [checked, setChecked] = useState<boolean[]>(() => items.map(() => false));
   const [hydrated, setHydrated] = useState(false);
+  const pageProgress = useChecklistProgress();
 
   useEffect(() => {
     try {
@@ -49,6 +51,17 @@ export default function Checklist({id, items}: ChecklistProps): React.ReactEleme
 
   const completedCount = checked.filter(Boolean).length;
   const percent = items.length === 0 ? 0 : Math.round((completedCount / items.length) * 100);
+
+  useEffect(() => {
+    if (!hydrated) {
+      // Skip the pre-hydration render (always all-unchecked) so the page-wide widget doesn't
+      // briefly report 0 complete before localStorage has been read.
+      return undefined;
+    }
+    pageProgress?.registerChecklist(id, {completed: completedCount, total: items.length});
+    return () => pageProgress?.unregisterChecklist(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, completedCount, items.length, id]);
 
   return (
     <div className={styles.checklist}>
