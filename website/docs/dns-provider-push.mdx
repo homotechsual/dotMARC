@@ -1,0 +1,97 @@
+---
+sidebar_position: 8
+description: Let dotMARC push DNS records straight to Cloudflare, Azure DNS, or Google Cloud DNS instead of copying them in by hand.
+---
+
+import Checklist from '@site/src/components/Checklist';
+
+# DNS Provider Push
+
+If a domain's DNS is hosted on Cloudflare, Azure DNS, or Google Cloud DNS, dotMARC can push the
+MTA-STS CNAME or the DMARC TXT record straight there instead of you copying it in by hand. Each
+push is authenticated fresh through that provider's own consent screen, with nothing about that
+authentication stored.
+
+All three providers are independently optional and configured the same way regardless of how
+you're running dotMARC ([Docker](./deploy-with-docker.mdx) or [Azure](./deploy-to-azure.mdx)): sign
+in with an account holding the `DnsPushManage` permission and go to **Manage → DNS push settings**,
+enter the OAuth client ID/secret for whichever provider(s) you registered below, and save. Leave
+any of them unconfigured and dotMARC simply reports it can't find a configured push option when you
+try to use it - the push action itself still appears, it just won't succeed for an unconfigured
+provider.
+
+## Cloudflare
+
+Register a self-managed OAuth client at **Manage account** → **OAuth clients** → **Create OAuth
+client** in the Cloudflare dashboard. dotMARC's push flow is a confidential, server-side exchange
+with PKCE as defense in depth, not a public/PKCE-only client, so two of the form's defaults need
+changing:
+
+| Field | Value |
+| --- | --- |
+| Client Name | Anything recognizable, e.g. `dotMARC` |
+| Response Type | **Code** (the form may default to `Token` - that's the implicit flow, not what dotMARC uses) |
+| Grant type | **Authorization Code** |
+| Token Authentication Method | **client_secret_post** (the form may default to `None (PKCE)`, for public clients with no secret - dotMARC's callback sends the client secret as a token-exchange body parameter, so it needs a secret-bearing method) |
+| Redirect (Callback) URLs | `https://<your-deployment-host>/dns-push/cloudflare/callback` |
+| Client URL | Leave blank - only required to make a client *public*; dotMARC's stays private |
+
+On the next step, select two scopes and leave both **Required** (not optional): **Zone → DNS →
+Edit**, and **Zone → Zone → Read**. The second one is easy to miss since it isn't DNS-specific, but
+dotMARC needs it to resolve a domain name to its Cloudflare zone ID before it can push anything -
+`dns.write` alone can edit records inside a zone once it knows the ID, but can't look that ID up.
+Finish creating the client, then note its **Client ID** and **Client secret** - you'll enter both
+into dotMARC directly (see above), there's nothing to set as an environment variable or deployment
+parameter for this.
+
+<Checklist id="dns-provider-push-cloudflare" items={[
+  "Created the OAuth client with Response Type = Code",
+  "Set Token Authentication Method to client_secret_post",
+  "Added the /dns-push/cloudflare/callback redirect URL",
+  "Selected the required Zone > DNS > Edit and Zone > Zone > Read scopes",
+  "Entered the Client ID/secret into dotMARC's DNS push settings",
+]} />
+
+## Azure DNS
+
+Register a *third*, separate Entra app registration (do not reuse the mailbox or dashboard app from
+[Getting Started](./getting-started.mdx)). Go to **App registrations** → **New registration**, set
+**Supported account types** to the multitenant option (accounts in any organizational directory) -
+this flow lets each customer authorize a push into *their own* tenant, which is a different tenant
+than the one this app registration lives in, so it must not be restricted to a single tenant. Then
+**Authentication** → add a **Web** redirect URI of
+`https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API permissions** → add the
+delegated **Azure Service Management** → `user_impersonation` permission.
+
+<Checklist id="dns-provider-push-azure-dns" items={[
+  "Registered a separate, dedicated Entra app registration for this",
+  "Set Supported account types to multitenant",
+  "Added the /dns-push/azure-dns/callback Web redirect URI",
+  "Added the delegated Azure Service Management > user_impersonation permission",
+  "Entered the Client ID/secret into dotMARC's DNS push settings",
+]} />
+
+## Google Cloud DNS
+
+In a Google Cloud project, enable the **Cloud DNS API** and **Cloud Resource Manager API**, then
+create an OAuth client at **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth
+client ID** (application type **Web application**), with an authorized redirect URI of
+`https://<your-deployment-host>/dns-push/google-cloud-dns/callback`. On the **OAuth consent
+screen**, add both scopes dotMARC requests: `.../auth/ndev.clouddns.readwrite` (read/write access
+to Cloud DNS) and `.../auth/cloudplatformprojects.readonly` (lets dotMARC list the customer's
+projects to find which one holds the target zone - it never needs a project ID entered manually).
+
+The Cloud DNS write scope is a Google-classified "sensitive" scope, so while your own account can
+authorize while the app is in **Testing** mode (add it to the consent screen's test users list),
+any other customer will need the consent screen submitted for Google's verification first - a
+one-time review in Google Cloud Console that can take several days to turn around. Budget for that
+lead time before relying on this provider for a customer outside your own test-user allowlist.
+
+<Checklist id="dns-provider-push-google-cloud-dns" items={[
+  "Enabled the Cloud DNS API and Cloud Resource Manager API",
+  "Created the OAuth client (Web application type)",
+  "Added the /dns-push/google-cloud-dns/callback redirect URI",
+  "Added both required scopes on the OAuth consent screen",
+  "Added test users (or submitted for Google verification) as needed",
+  "Entered the Client ID/secret into dotMARC's DNS push settings",
+]} />

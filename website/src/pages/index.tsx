@@ -183,9 +183,9 @@ export default function Home(): ReactNode {
             </div>
             <div className="flex flex-wrap gap-3 lg:justify-end">
               <Link
-                to="/docs/getting-started"
+                to="/docs/deploy-with-docker"
                 className="inline-flex items-center justify-center rounded-full bg-[#e3594f] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#c9443a] hover:no-underline">
-                Read the docs
+                Deploy with Docker
               </Link>
               <Link
                 to="/docs/deploy-to-azure"

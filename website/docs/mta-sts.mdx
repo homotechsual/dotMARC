@@ -1,17 +1,46 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 description: How to enable MTA-STS policy hosting for a domain, what each status means, and how to troubleshoot it.
 ---
+
+import Checklist from '@site/src/components/Checklist';
 
 # MTA-STS
 
 [MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) tells receiving mail servers to require a
 valid, verified TLS connection when delivering to a domain. dotMARC can host the policy file on a
-domain's behalf, so nobody has to stand up their own hosting for it.
+domain's behalf, so nobody has to stand up their own hosting for it, serving
+`https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain that opts in below.
 
-This deployment needs to have MTA-STS hosting set up first, see [Getting
-Started](./getting-started.mdx#mta-sts-policy-hosting-optional) for the one-time infrastructure
-step. If it isn't, the domain's **MTA-STS** tab will tell you.
+This deployment needs to have MTA-STS hosting set up first (see below) - one-time infrastructure
+work, done once regardless of how many domains later opt in. If it isn't done yet, the domain's
+**MTA-STS** tab will tell you.
+
+## Hosting infrastructure (one-time)
+
+This needs a small amount of extra infrastructure, since it means serving valid TLS for an
+open-ended, admin-growing set of hostnames dotMARC doesn't know about until a customer enables it.
+What's needed depends on how this deployment runs:
+
+**With [Docker](./deploy-with-docker.mdx):** if you used `docker-compose.selfhosted.yml`, there's
+nothing more to do - `Caddyfile.selfhosted` already includes the on-demand-TLS block this feature
+needs, permanently, whether or not you ever turn the feature on. If you're using your own reverse
+proxy instead, add the `on_demand_tls`/`:443` blocks from `Caddyfile.selfhosted` to your own Caddy
+config - or the equivalent on-demand-certificate feature if you're not using Caddy.
+
+**On [Azure](./deploy-to-azure.mdx):** redeploy the Bicep template with `enableMtaStsHosting` set
+to `true` - this grants the Container App the extra permissions it needs to manage its own custom
+domains and certificates.
+
+Either way, set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to -
+typically this deployment's own hostname (its `*.azurecontainerapps.io` hostname on Azure - see the
+note further down on why).
+
+<Checklist id="mta-sts-hosting-infrastructure" items={[
+  "Set MtaSts__HostingHostname",
+  "Docker: using docker-compose.selfhosted.yml, or added the on_demand_tls blocks to an existing reverse proxy",
+  "Azure: redeployed with enableMtaStsHosting set to true",
+]} />
 
 ## Enabling a domain
 
@@ -52,8 +81,7 @@ When a received TLSRPT report contains failed TLS delivery sessions, dotMARC cre
 to the existing alert cooldown. A later TLSRPT report with no failed sessions resolves the alert
 automatically. See [Alerts](./alerts.mdx) for how delivery and the webhook payload work.
 
-If this deployment has DNS provider push configured (see [Getting
-Started](./getting-started.mdx#dns-provider-push-optional)), a small push button also appears in
+If this deployment has [DNS provider push](./dns-provider-push.mdx) configured, a small push button also appears in
 the row for any domain waiting on DNS, in addition to (not instead of) the manual CNAME
 instructions above. Clicking it detects the domain's DNS provider and either starts the push flow,
 authorizing via that provider's own consent screen with nothing stored, or shows a message

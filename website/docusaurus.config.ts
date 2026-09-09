@@ -126,6 +126,7 @@ const config: Config = {
           title: 'Docs',
           items: [
             {label: 'Getting Started', to: '/docs/getting-started'},
+            {label: 'Deploy with Docker', to: '/docs/deploy-with-docker'},
             {label: 'Deploy to Azure', to: '/docs/deploy-to-azure'},
             {label: 'Permissions & Access', to: '/docs/permissions-and-access'},
           ],

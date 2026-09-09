@@ -3,6 +3,8 @@ sidebar_position: 3
 description: Deploy dotMARC to Azure Container Apps using the included Bicep template.
 ---
 
+import Checklist from '@site/src/components/Checklist';
+
 # Deploy to Azure
 
 `infra/main.bicep` provisions everything needed to run dotMARC on Azure:
@@ -16,7 +18,7 @@ description: Deploy dotMARC to Azure Container Apps using the included Bicep tem
   `Key Vault Secrets User` role.
 * Optionally (`enableMtaStsHosting`), two narrowly-scoped custom RBAC roles letting the Container
   App manage its own custom domains and managed certificates, for [MTA-STS policy
-  hosting](./getting-started.mdx#mta-sts-policy-hosting-optional). Exact permissions:
+  hosting](./mta-sts.mdx#hosting-infrastructure-one-time). Exact permissions:
 
   | Role | Scope | Actions |
   | --- | --- | --- |
@@ -33,6 +35,14 @@ Before deploying, complete the two Entra app registrations described in
 [Getting Started](./getting-started.mdx), the Bicep template takes the same non-secret client
 IDs/tenant IDs as deployment parameters, and the client secrets are set into Key Vault after
 deployment (see below).
+
+<Checklist id="deploy-to-azure" items={[
+  "Completed the two Entra app registrations (Getting Started)",
+  "Filled in infra/main.parameters.json or prepared --parameters overrides (step 1)",
+  "Ran az deployment group create (step 2)",
+  "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 3)",
+  "Populated the three Key Vault secrets and restarted the revision (step 4)",
+]} />
 
 ## 1. Fill in the parameters
 
@@ -177,3 +187,8 @@ MSYS's path conversion, `MissingSubscription` errors on `az role assignment crea
 usual symptom. Set `export MSYS_NO_PATHCONV=1` first.
 
 :::
+
+Want to host MTA-STS policies for customer domains? See [MTA-STS: hosting infrastructure](./mta-sts.mdx#hosting-infrastructure-one-time)
+for the one-time `enableMtaStsHosting` setup - each domain you later enable also needs an extra
+domain-ownership TXT record Container Apps requires that a self-hosted deployment doesn't, covered
+in [MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain).
