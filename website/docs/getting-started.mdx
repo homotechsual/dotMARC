@@ -37,7 +37,10 @@ dotMARC needs **two separate** Entra app registrations: do not reuse one for bot
 
 1. **App registrations** → **New registration**, name it e.g. `dotmarc-dashboard`.
 2. **Authentication** → add a **Web** platform redirect URI:
-   `https://<your-deployment-host>/signin-oidc`.
+   `https://<your-deployment-host>/signin-oidc`. On the same page, under **Implicit grant and
+   hybrid flows**, check **ID tokens** - Microsoft.Identity.Web's OIDC middleware requests an
+   `id_token` as part of its hybrid authorization-code flow, and without this box checked sign-in
+   fails at the Entra consent step (the redirect back to `/signin-oidc` never happens).
 3. **Certificates & secrets** → create a client secret. Microsoft.Identity.Web wires this app up
    via the standard confidential-client authorization-code flow, so the token exchange after
    sign-in needs this secret even though the app itself is only used for interactive sign-in.
