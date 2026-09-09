@@ -117,13 +117,26 @@ domain:
   }}
 />
 
-Drill into any domain for a 30-day pass/quarantine/reject chart and its DMARC record status:
+Drill into any domain for a 30-day pass/quarantine/reject chart, its DMARC record status, and a
+breakdown of why any rejected/quarantined mail happened - a benign forwarder tripping alignment
+reads very differently from no reason given at all:
 
 <ThemedImage
-  alt="dotMARC domain detail page showing a 30-day pass/fail chart for aurora-retail.example"
+  alt="dotMARC domain detail page showing a 30-day pass/fail chart and reject/quarantine reason breakdown for cobalt-freight.example"
   sources={{
     light: useBaseUrl('/img/screenshots/domain-detail.png'),
     dark: useBaseUrl('/img/screenshots/domain-detail-dark.png'),
+  }}
+/>
+
+The Sources tab breaks that down further per source IP, with the actual SPF/DKIM domain and result
+behind each pass/fail on hover, plus who owns the IP:
+
+<ThemedImage
+  alt="dotMARC Sources tab showing per-source volume, SPF/DKIM results, reject reason, and IP ownership"
+  sources={{
+    light: useBaseUrl('/img/screenshots/sources-tab.png'),
+    dark: useBaseUrl('/img/screenshots/sources-tab-dark.png'),
   }}
 />
 

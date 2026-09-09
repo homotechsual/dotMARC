@@ -4,6 +4,8 @@ description: Let dotMARC push DNS records straight to Cloudflare, Azure DNS, or 
 ---
 
 import Checklist from '@site/src/components/Checklist';
+import ThemedImage from '@theme/ThemedImage';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 
 # DNS Provider Push
 
@@ -19,6 +21,14 @@ enter the OAuth client ID/secret for whichever provider(s) you registered below,
 any of them unconfigured and dotMARC simply reports it can't find a configured push option when you
 try to use it - the push action itself still appears, it just won't succeed for an unconfigured
 provider.
+
+<ThemedImage
+  alt="dotMARC DNS push settings page showing Cloudflare, Azure DNS, and Google Cloud DNS configuration fields"
+  sources={{
+    light: useBaseUrl('/img/screenshots/dns-push-settings.png'),
+    dark: useBaseUrl('/img/screenshots/dns-push-settings-dark.png'),
+  }}
+/>
 
 ## Cloudflare
 
