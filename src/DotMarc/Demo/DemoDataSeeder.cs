@@ -115,12 +115,16 @@ public static class DemoDataSeeder
                     DateRangeBeginUtc = reportSeed.DateRangeBeginUtc,
                     DateRangeEndUtc = reportSeed.DateRangeEndUtc,
                     RawXml = "<!-- demo data: no raw report retained -->",
-                    ReceivedUtc = reportSeed.DateRangeEndUtc
+                    ReceivedUtc = reportSeed.DateRangeEndUtc,
+                    // Demo reports have no real RawXml to backfill from - mark them handled
+                    // immediately so the auth-detail backfill cycle never wastes a cycle trying
+                    // (and failing) to re-parse this placeholder XML.
+                    AuthDetailBackfilledUtc = reportSeed.DateRangeEndUtc
                 };
 
                 foreach (var recordSeed in reportSeed.Records)
                 {
-                    report.Records.Add(new ReportRecord
+                    var record = new ReportRecord
                     {
                         Report = report,
                         SourceIp = recordSeed.SourceIp,
@@ -129,7 +133,31 @@ public static class DemoDataSeeder
                         SpfResult = recordSeed.SpfResult,
                         DkimResult = recordSeed.DkimResult,
                         HeaderFrom = domainSeed.Name
-                    });
+                    };
+
+                    foreach (var reasonSeed in recordSeed.OverrideReasons ?? [])
+                    {
+                        record.OverrideReasons.Add(new ReportRecordPolicyOverrideReason
+                        {
+                            Type = reasonSeed.Type,
+                            Comment = reasonSeed.Comment
+                        });
+                    }
+
+                    foreach (var detailSeed in recordSeed.AuthDetails ?? [])
+                    {
+                        record.AuthDetails.Add(new ReportRecordAuthDetail
+                        {
+                            Mechanism = detailSeed.Mechanism,
+                            Domain = detailSeed.Domain,
+                            Result = detailSeed.Result,
+                            Selector = detailSeed.Selector,
+                            Scope = detailSeed.Scope,
+                            HumanResult = detailSeed.HumanResult
+                        });
+                    }
+
+                    report.Records.Add(record);
                 }
 
                 domain.Reports.Add(report);

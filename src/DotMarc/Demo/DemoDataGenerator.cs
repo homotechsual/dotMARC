@@ -33,7 +33,18 @@ public static class DemoDataGenerator
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.Active,
                 mtaStsDetail: "Policy is live and being enforced.",
-                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 0, 0]),
+                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 0, 0],
+                // Even a healthy p=reject domain sees the occasional forwarder trip alignment -
+                // shows the "benign override" bucket in the reason-breakdown panels alongside
+                // Cobalt Freight's "no reason given" one, rather than every domain landing in the
+                // same bucket.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordOverrideReasons: [new(DmarcPolicyOverrideType.TrustedForwarder, "Recognized email forwarding service")],
+                failingRecordAuthDetails:
+                [
+                    new(DmarcAuthMechanism.Spf, "relay.trusted-forwarder.example", DmarcMechanismResult.Fail),
+                    new(DmarcAuthMechanism.Dkim, "aurora-retail.example", DmarcMechanismResult.Fail, Selector: "selector1")
+                ]),
             BuildDomain(random, nowUtc, sortOrder: 1, name: "shop.aurora-retail.example", groupName: "Aurora Retail",
                 orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.996,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
@@ -63,7 +74,16 @@ public static class DemoDataGenerator
                 mxCheckDetail: "MX target(s) do not resolve: mail.cobalt-freight.example",
                 dkimSelectors: ["selector1"],
                 dkimCheckStatus: DkimCheckStatus.Missing,
-                dkimCheckDetail: "No DKIM record found for selector(s): selector1"),
+                dkimCheckDetail: "No DKIM record found for selector(s): selector1",
+                // The "problem worth investigating" domain: its failing source gets no override
+                // reason at all, so the reason-breakdown panels correctly bucket it as "no reason
+                // given" - the signal that this doesn't look like benign forwarding.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordAuthDetails:
+                [
+                    new(DmarcAuthMechanism.Spf, "bounce.thirdparty-marketing.example", DmarcMechanismResult.Fail),
+                    new(DmarcAuthMechanism.Dkim, "thirdparty-marketing.example", DmarcMechanismResult.Fail)
+                ]),
             BuildDomain(random, nowUtc, sortOrder: 4, name: "fleet.cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com"], passRateForDay: _ => 0.98,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays - 4,
@@ -105,7 +125,10 @@ public static class DemoDataGenerator
         string? mxCheckDetail = null,
         List<string>? dkimSelectors = null,
         DkimCheckStatus dkimCheckStatus = DkimCheckStatus.NotConfigured,
-        string? dkimCheckDetail = null)
+        string? dkimCheckDetail = null,
+        DispositionResult? forcedFailingDisposition = null,
+        List<DemoOverrideReasonSeed>? failingRecordOverrideReasons = null,
+        List<DemoAuthDetailSeed>? failingRecordAuthDetails = null)
     {
         var reports = new List<DemoReportSeed>();
         DateTimeOffset? lastReportReceivedUtc = null;
@@ -129,8 +152,10 @@ public static class DemoDataGenerator
 
                 if (failingVolume > 0)
                 {
+                    var disposition = forcedFailingDisposition
+                        ?? (failingVolume > totalVolume / 4 ? DispositionResult.Quarantine : DispositionResult.None);
                     records.Add(new DemoRecordSeed(ProblemSourceIp(sortOrder), failingVolume, AuthResult.Fail, AuthResult.Fail,
-                        failingVolume > totalVolume / 4 ? DispositionResult.Quarantine : DispositionResult.None));
+                        disposition, failingRecordOverrideReasons, failingRecordAuthDetails));
                 }
 
                 reports.Add(new DemoReportSeed(org, $"demo-{name}-{org}-{day:D3}", rangeBegin, rangeEnd, records));

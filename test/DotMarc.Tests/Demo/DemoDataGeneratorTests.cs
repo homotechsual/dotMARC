@@ -361,7 +361,60 @@ public sealed class DemoDataGeneratorTests
                 Disposition = rec.Disposition,
                 SpfResult = rec.SpfResult,
                 DkimResult = rec.DkimResult,
-                HeaderFrom = domain.Name
+                HeaderFrom = domain.Name,
+                OverrideReasons = (rec.OverrideReasons ?? [])
+                    .Select(reason => new ReportRecordPolicyOverrideReason { Type = reason.Type, Comment = reason.Comment })
+                    .ToList(),
+                AuthDetails = (rec.AuthDetails ?? [])
+                    .Select(detail => new ReportRecordAuthDetail
+                    {
+                        Mechanism = detail.Mechanism,
+                        Domain = detail.Domain,
+                        Result = detail.Result,
+                        Selector = detail.Selector,
+                        Scope = detail.Scope,
+                        HumanResult = detail.HumanResult
+                    })
+                    .ToList()
             }).ToList()
         }).ToList();
+
+    [Fact]
+    public void AuroraRetail_QuarantinedVolume_IsBucketedAsBenignOverride()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == "aurora-retail.example");
+
+        var breakdown = DomainStatistics.GetReasonBreakdown(ToReports(domain));
+
+        Assert.True(breakdown.Total > 0, "expected some quarantined volume to demonstrate the reason-breakdown panel");
+        Assert.Equal(breakdown.Total, breakdown.BenignOverride);
+        Assert.Equal(0, breakdown.NoReasonGiven);
+    }
+
+    [Fact]
+    public void CobaltFreight_QuarantinedVolume_IsBucketedAsNoReasonGiven()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == "cobalt-freight.example");
+
+        var breakdown = DomainStatistics.GetReasonBreakdown(ToReports(domain));
+
+        Assert.True(breakdown.Total > 0, "expected some quarantined volume to demonstrate the reason-breakdown panel");
+        Assert.Equal(breakdown.Total, breakdown.NoReasonGiven);
+        Assert.Equal(0, breakdown.BenignOverride);
+    }
+
+    [Fact]
+    public void CobaltFreight_FailingSource_HasAuthDetailAttached()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(d => d.Name == "cobalt-freight.example");
+
+        var sources = DomainStatistics.GetSourceAggregates(ToReports(domain));
+        var problemSource = sources.Single(s => s.Disposition == DispositionResult.Quarantine);
+
+        Assert.Contains(problemSource.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Spf && d.Result == DmarcMechanismResult.Fail);
+        Assert.Contains(problemSource.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Dkim && d.Result == DmarcMechanismResult.Fail);
+    }
 }

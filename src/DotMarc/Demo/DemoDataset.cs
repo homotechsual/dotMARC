@@ -87,7 +87,19 @@ public sealed record DemoRecordSeed(
     int MessageCount,
     AuthResult SpfResult,
     AuthResult DkimResult,
-    DispositionResult Disposition);
+    DispositionResult Disposition,
+    List<DemoOverrideReasonSeed>? OverrideReasons = null,
+    List<DemoAuthDetailSeed>? AuthDetails = null);
+
+public sealed record DemoOverrideReasonSeed(DmarcPolicyOverrideType Type, string? Comment = null);
+
+public sealed record DemoAuthDetailSeed(
+    DmarcAuthMechanism Mechanism,
+    string Domain,
+    DmarcMechanismResult Result,
+    string? Selector = null,
+    string? Scope = null,
+    string? HumanResult = null);
 
 public sealed record DemoPollCycleSeed(
     DateTimeOffset PolledUtc,
