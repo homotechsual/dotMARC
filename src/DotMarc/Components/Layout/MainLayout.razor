@@ -72,11 +72,13 @@
             @Body
         </MudContainer>
         <footer class="dotmarc-footer">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                dotMARC is free software licensed under the
-                <MudLink Href="https://dotmarc.app/license" Target="_blank">GNU Affero General Public License v3.0</MudLink>.
-                <MudLink Href="https://github.com/homotechsual/dotMARC" Target="_blank">Source code</MudLink>.
-            </MudText>
+            <MudContainer MaxWidth="MaxWidth.Large">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    © @_currentYear dotMARC. Free software licensed under the
+                    <MudLink Href="https://dotmarc.app/license" Target="_blank" Color="Color.Primary">GNU Affero General Public License v3.0</MudLink>.
+                    <MudLink Href="https://github.com/homotechsual/dotMARC" Target="_blank" Color="Color.Primary">Source code</MudLink>.
+                </MudText>
+            </MudContainer>
         </footer>
     </MudMainContent>
 </MudLayout>
@@ -137,6 +139,7 @@
     };
 
     private bool _isDarkMode;
+    private readonly int _currentYear = DateTime.UtcNow.Year;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

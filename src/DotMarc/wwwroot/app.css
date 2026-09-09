@@ -25,6 +25,8 @@ html {
 }
 
 .dotmarc-footer {
-    padding: 1rem 1.5rem 1.5rem;
+    margin-top: 1rem;
+    padding: 1rem 0 1.5rem;
+    border-top: 1px solid var(--mud-palette-lines-default);
     text-align: center;
 }
