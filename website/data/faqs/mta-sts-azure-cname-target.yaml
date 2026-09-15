@@ -1,0 +1,16 @@
+question: Why does the MTA-STS CNAME need to point at *.azurecontainerapps.io instead of my own custom domain?
+answer: |
+  This only applies to the Azure deployment path, and it's an Azure restriction, not a choice
+  dotMARC makes. Azure's free managed certificates require the CNAME to point directly at the
+  Container App's own generated `*.azurecontainerapps.io` hostname, and explicitly refuse to issue
+  or renew a certificate through any intermediate CNAME - including another custom domain already
+  bound to the same app.
+
+  So even if you have a nicer custom domain pointed at this deployment, `mta-sts.<domain>` still
+  needs to CNAME straight to the generated hostname shown on the domain's MTA-STS tab. Self-hosted
+  deployments using the bundled Caddy setup don't have this restriction, since they aren't using
+  Azure's managed certificates.
+
+  See [MTA-STS: TLS reporting](/docs/mta-sts#tls-reporting) for the full hosting details.
+category: DMARC & MTA-STS
+order: 2

@@ -1,0 +1,16 @@
+question: The DNS push button says it "couldn't find a configured push option" - what does that mean?
+answer: |
+  This message covers two different situations, and it's worth telling them apart before you go
+  looking for a bug:
+
+  - **The domain's DNS provider wasn't recognized.** dotMARC only detects Cloudflare, Azure DNS,
+    and Google Cloud DNS - a domain hosted elsewhere shows this same message, and the record needs
+    adding manually.
+  - **The provider was recognized, but isn't configured on this deployment.** The push action
+    itself always appears regardless of configuration; it only fails at click-time if that
+    provider's OAuth client ID/secret haven't been entered under **Manage → DNS push settings**.
+
+  Either way, the manual DNS instructions shown alongside the push button always work as a
+  fallback. See [DNS Provider Push](/docs/dns-provider-push) for how to configure each provider.
+category: DNS provider push
+order: 1

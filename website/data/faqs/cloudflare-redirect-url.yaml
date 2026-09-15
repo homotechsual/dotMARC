@@ -1,0 +1,11 @@
+question: Why won't Cloudflare let me click Next after I type the redirect (callback) URL?
+answer: |
+  Typing the URL into the **Redirect (Callback) URLs** field isn't enough on its own - you have to
+  press **Enter** to actually add it to the list before Cloudflare will let you continue. Nothing
+  in the form visually prompts you to do this, so it's easy to sit there wondering why **Next**
+  won't respond even though the field looks filled in.
+
+  See [DNS Provider Push: Cloudflare](/docs/dns-provider-push#cloudflare) for the full OAuth client
+  setup.
+category: Cloudflare DNS push
+order: 1

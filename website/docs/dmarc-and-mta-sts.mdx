@@ -1,0 +1,121 @@
+---
+sidebar_position: 1.5
+description: What DMARC, the DMARC authorization record, and MTA-STS/TLSRPT actually check for, and exactly what needs to exist in DNS for each to go green.
+---
+
+import Checklist from '@site/src/components/Checklist';
+
+# DMARC & MTA-STS overview
+
+Every monitored domain's **Overview** tab shows a health checklist: DMARC record, DMARC
+authorization record, TLS reporting record, MTA-STS, SPF, MX, DKIM, DNS provider. This page
+explains what each of these is actually protecting against and what needs to exist in DNS for it
+to go green - useful background before or alongside the hands-on setup in [Getting
+Started](./getting-started.mdx) and [MTA-STS](./mta-sts.mdx).
+
+## SPF and DKIM
+
+DMARC doesn't do anything on its own - it's a policy layer on top of two older mechanisms, and
+receivers use both to decide whether a message "authenticates" as being from your domain:
+
+* **SPF** (RFC 7208) publishes which mail servers are allowed to send for your domain, as a
+  `v=spf1 ...` TXT record at the domain apex. dotMARC's SPF check confirms exactly one such record
+  exists and starts with the right prefix - it doesn't evaluate `include:`/`redirect=` chains or
+  the 10-DNS-lookup limit those can hit.
+* **DKIM** (RFC 6376) signs outgoing mail with a private key, verified against a public key
+  published at `<selector>._domainkey.<domain>`. Because selectors are provider-specific strings
+  with no DNS-discoverable convention, dotMARC can't guess yours - the DKIM check only runs once
+  you've told it which selector(s) to look for.
+
+A message can fail SPF or DKIM individually and still pass DMARC (it only needs one of the two to
+align with the visible From: domain) - which is exactly why DMARC aggregate reports are useful:
+they show you real-world pass/fail combinations you'd otherwise never see.
+
+## The DMARC record
+
+The record that turns monitoring on is a TXT record at `_dmarc.<domain>`:
+
+```txt
+v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@example.uk
+```
+
+* `p=` is the policy told to receivers for mail that fails SPF/DKIM alignment: `none` (monitor
+  only), `quarantine` (send to spam), or `reject`. Most domains start at `none` and tighten once
+  reports confirm legitimate senders all pass.
+* `rua=` is where aggregate reports get sent. For dotMARC to see anything, this has to point at the
+  mailbox address it polls (`Graph__MailboxAddress`).
+
+dotMARC's **DMARC record** check confirms a record exists, starts with `v=DMARC1`, and that its
+`rua=` matches the configured mailbox - not just that a DMARC record exists at all.
+
+## The DMARC authorization record
+
+This is the one that doesn't turn up much when you search for it, because it's not really called
+one thing: RFC 7489 §7.1 calls the mechanism **external destination verification**; other vendors
+call it a third-party authorization record. dotMARC's health checklist just calls it the "DMARC
+authorization record" since that's what it does - authorizes a report destination.
+
+**Why it exists:** anyone could put `rua=mailto:you@yourcompany.com` in *their* DMARC record,
+making every receiving mail server that enforces your domain's mail policy start emailing your
+mailbox aggregate reports about *their* domain. To stop that, the RFC requires the report
+*destination*'s domain to explicitly agree to receive reports for the *monitored* domain, whenever
+those two domains differ - by publishing its own TXT record:
+
+```txt
+<monitored-domain>._report._dmarc.<mailbox-domain> TXT "v=DMARC1"
+```
+
+**Why it matters for dotMARC specifically:** the normal shape here is one dotMARC deployment
+polling a single mailbox on the deployment's own domain (or an MSP's domain) while monitoring many
+customers' domains. That mailbox's domain will almost always differ from the domain being
+monitored - which means this record is required for essentially every domain you add, and without
+it, most receivers will simply decline to send that domain's reports to you at all, even though the
+domain's own `_dmarc` record looks perfectly correct.
+
+If the mailbox's domain and the monitored domain are the same, dotMARC's check reports **Not
+applicable** and skips it entirely - the RFC doesn't require self-authorization. (dotMARC checks
+for an exact domain match rather than the RFC's broader "organizational domain" match; in practice
+this only matters if you're monitoring a subdomain of the mailbox's own domain, an unusual setup
+for this kind of deployment.)
+
+When the check reports **Missing**, the domain's Overview tab shows a **Push authorization record
+via your DNS provider** button (needs [DNS Provider Push](./dns-provider-push.mdx) configured for
+that domain's provider) alongside the record to add manually.
+
+## MTA-STS and TLSRPT
+
+These two are about transport security rather than sender authentication - they don't affect
+whether DMARC passes or fails, but they're part of the same "is this domain's mail properly locked
+down" picture:
+
+* **MTA-STS** (RFC 8461) tells receivers to require a valid, verified TLS connection when
+  delivering mail to your domain, closing the door on downgrade/interception attacks against
+  unencrypted SMTP. dotMARC can host the policy file for you.
+* **TLSRPT** (RFC 8460) is the reporting half - senders report back when a TLS connection to your
+  domain failed, so you find out about a broken MTA-STS policy or expired certificate instead of
+  mail just silently failing to arrive.
+
+See [MTA-STS](./mta-sts.mdx) for the full setup: the one-time hosting infrastructure, the CNAME per
+domain, and what each status on the checklist means.
+
+## Putting it all together
+
+For a typical monitored domain, fully green means:
+
+| Record | Where | Purpose |
+| --- | --- | --- |
+| SPF | `<domain>` TXT | Declares which servers may send for this domain |
+| DKIM | `<selector>._domainkey.<domain>` TXT | Lets receivers verify signed mail wasn't tampered with |
+| DMARC | `_dmarc.<domain>` TXT | Declares policy and where to send aggregate reports |
+| DMARC authorization | `<domain>._report._dmarc.<mailbox-domain>` TXT | Authorizes reports to be sent to a mailbox on another domain (skip if same domain) |
+| MTA-STS | `mta-sts.<domain>` CNAME + hosted policy | Requires verified TLS for inbound mail |
+| TLSRPT | `_smtp._tls.<domain>` TXT | Reports TLS delivery failures back to you |
+
+<Checklist id="dmarc-and-mta-sts-overview" items={[
+  "SPF record published (single v=spf1 TXT at the domain apex)",
+  "DKIM selector(s) published and known to dotMARC",
+  "DMARC record published with rua= pointing at dotMARC's polled mailbox",
+  "DMARC authorization record published at the mailbox's domain (unless mailbox and monitored domain match)",
+  "MTA-STS enabled and CNAME resolving (if you want it)",
+  "TLSRPT record published (if you want TLS failure reporting)",
+]} />

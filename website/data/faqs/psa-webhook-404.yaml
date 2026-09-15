@@ -1,0 +1,13 @@
+question: I copied dotMARC's webhook URL into HaloPSA but it 404s - why?
+answer: |
+  The webhook secret only takes effect once it's actually saved. If you click **Generate new
+  webhook secret** and copy the shown URL into HaloPSA before clicking **Save PSA settings**, that
+  URL 404s until the save actually happens.
+
+  Click **Save PSA settings** first, then copy the URL into HaloPSA's outbound webhook
+  configuration (triggered on ticket status change).
+
+  See [PSA integration: Configure dotMARC](/docs/psa-integration#configure-dotmarc) for the full
+  setup sequence.
+category: Alerts & PSA integration
+order: 2

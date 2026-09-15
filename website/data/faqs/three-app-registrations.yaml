@@ -1,0 +1,21 @@
+question: Why do I need three separate app registrations instead of reusing one?
+answer: |
+  dotMARC needs up to three Entra app registrations, and each one exists for a different reason
+  that reuse would break:
+
+  - **Mailbox access** (`dotmarc-mailbox`) is an app-only registration with Microsoft Graph
+    `Mail.Read`, restricted via an Exchange Application Access Policy to just the DMARC reports
+    mailbox. It never handles a user sign-in.
+  - **Dashboard sign-in** (`dotmarc-dashboard`) is a delegated registration used purely for
+    interactive OIDC sign-in - it needs no Graph mail permissions at all, just `User.Read`.
+  - **Azure DNS push** (if you use it) is a *third*, separate registration, and it must be
+    multitenant - it lets each customer authorize a push into **their own** Azure tenant, a
+    different tenant than the one this app registration lives in. A single-tenant registration
+    (or reusing either of the above) can't do that.
+
+  Mixing permissions across these means either over-granting mail access to something used for
+  sign-in, or scoping a delegated-consent flow so narrowly it can't authorize a different tenant.
+  See [Getting Started](/docs/getting-started) and
+  [DNS Provider Push: Azure DNS](/docs/dns-provider-push#azure-dns) for the exact setup of each.
+category: Entra & authentication
+order: 3

@@ -1,0 +1,16 @@
+question: An alert fired but no HaloPSA ticket was created for it - why not?
+answer: |
+  A domain only gets a ticket if it can be routed to a Halo client. That routing comes from the
+  **Halo Client** set on the domain's Group (in **Manage groups**), or an individual override on
+  the domain itself (in **Manage domains**). A domain with no Group, or a Group with no Halo Client
+  set, simply doesn't get a ticket - same as leaving the generic webhook URL blank, this is silent
+  by design, not an error.
+
+  Also worth checking: the **Halo Client** column only appears on Manage Groups/Manage Domains once
+  HaloPSA is both enabled *and* has a saved client secret - enabling the integration alone isn't
+  enough to see or set it.
+
+  See [PSA integration: Route tickets to the right client](/docs/psa-integration#route-tickets-to-the-right-client)
+  for how mapping works.
+category: Alerts & PSA integration
+order: 4

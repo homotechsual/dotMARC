@@ -1,0 +1,15 @@
+question: Which Cloudflare permissions does dotMARC's OAuth client actually need?
+answer: |
+  On the permissions step (labeled **DNS & Zones** in Cloudflare's picker), tick **Edit** for both
+  **DNS** and **Zone**. The Zone one is easy to skip since it isn't DNS-specific, but dotMARC needs
+  it to resolve a domain name to its Cloudflare zone ID before it can push anything - DNS access
+  alone can edit records inside a zone once it knows the ID, but can't look that ID up.
+
+  There's a second step you might miss entirely: it only appears **after** you click **Continue**
+  on the first permissions step, and lists the permissions you just picked with a **Required**
+  toggle next to each. Leave both marked **Required**, not optional.
+
+  See [DNS Provider Push: Cloudflare](/docs/dns-provider-push#cloudflare) for the full OAuth client
+  setup.
+category: Cloudflare DNS push
+order: 2

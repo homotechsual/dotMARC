@@ -1,0 +1,23 @@
+question: My Exchange Application Access Policy isn't restricting mailbox access the way I expected
+answer: |
+  Exchange requires an Application Access Policy's scope to be a **security principal**, such as a
+  mail-enabled security group - it cannot be scoped directly to the mailbox itself. Passing the
+  mailbox address (or its GUID) to `-PolicyScopeGroupId` doesn't restrict anything the way you'd
+  expect.
+
+  The fix is to create a dedicated mail-enabled security group, add just the DMARC reports mailbox
+  to it, and scope the policy to that group's `ObjectId`:
+
+  ```powershell
+  Connect-ExchangeOnline -Organization <your-tenant>
+
+  $group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
+  Add-DistributionGroupMember -Identity $group.Identity -Member "dmarc-reports@example.uk"
+
+  New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId $group.ObjectId -AccessRight RestrictAccess -Description "dotMARC: restrict to DMARC reports mailbox only"
+  ```
+
+  See [Getting Started: Mailbox access](/docs/getting-started#1-mailbox-access-app-only) for the
+  full mailbox app setup.
+category: Entra & authentication
+order: 4

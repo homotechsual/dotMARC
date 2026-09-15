@@ -1,0 +1,16 @@
+question: Google Cloud DNS push works for me but not for a colleague - why?
+answer: |
+  The Cloud DNS write scope dotMARC requests is classified by Google as a **sensitive** scope.
+  While the OAuth consent screen is in **Testing** mode, only accounts explicitly added to that
+  screen's test users list can complete authorization - everyone else gets blocked by Google
+  before they ever reach dotMARC.
+
+  To let anyone outside your test-user allowlist use this provider, the consent screen needs to be
+  submitted for Google's verification - a one-time review that can take several days. Until that's
+  done (or the colleague is added as a test user), this is expected behavior, not a
+  misconfiguration on dotMARC's side.
+
+  See [DNS Provider Push: Google Cloud DNS](/docs/dns-provider-push#google-cloud-dns) for the full
+  setup and verification notes.
+category: DNS provider push
+order: 2

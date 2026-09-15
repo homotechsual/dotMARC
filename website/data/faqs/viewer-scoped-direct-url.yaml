@@ -1,0 +1,13 @@
+question: Can a Viewer scoped to a Group see other domains by navigating to the URL directly?
+answer: |
+  No. A Viewer restricted to specific Groups is enforced at the data-query level, not just hidden
+  in the UI's navigation - so a domain outside their scoped Groups isn't reachable even by guessing
+  or bookmarking its direct URL.
+
+  An unscoped Viewer grant (no Groups selected when the role was assigned) sees every domain, same
+  as before per-Group scoping existed - scoping is opt-in per grant, not a default restriction.
+
+  See [Permissions & Access](/docs/permissions-and-access#granting-access) for how scoped grants
+  work.
+category: Permissions & access
+order: 1

@@ -1,0 +1,26 @@
+question: What is a "DMARC authorization record"?
+answer: |
+  It's the record RFC 7489 §7.1 calls **external destination verification** - dotMARC's health
+  checklist just calls it a "DMARC authorization record" because that's what it does. It's easy to
+  come up empty searching for that exact phrase, since different tools call the same mechanism
+  different things (some say "third-party authorization record").
+
+  Anyone could put `rua=mailto:you@yourcompany.com` in *their own* DMARC record, making receivers
+  start emailing your mailbox aggregate reports about *their* domain. To stop that, when a DMARC
+  record's `rua=` mailbox is on a different domain than the one being monitored, that mailbox's
+  domain must publish its own TXT record agreeing to receive them:
+
+  ```txt
+  <monitored-domain>._report._dmarc.<mailbox-domain> TXT "v=DMARC1"
+  ```
+
+  Because dotMARC's reports mailbox normally lives on the deployment's own (or MSP's) domain rather
+  than each customer's domain, this record is needed for essentially every domain you monitor -
+  without it, most receivers simply won't send that domain's reports to you, even though its own
+  `_dmarc` record looks correct. When the check reports **Missing**, the domain's Overview tab can
+  push the record for you via [DNS Provider Push](/docs/dns-provider-push).
+
+  See [DMARC & MTA-STS overview](/docs/dmarc-and-mta-sts#the-dmarc-authorization-record) for the
+  full explanation.
+category: DMARC & MTA-STS
+order: 1

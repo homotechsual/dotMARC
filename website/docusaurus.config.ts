@@ -3,6 +3,8 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import plausiblePlugin from '@homotechsual/docusaurus-plugin-plausible';
 import type {PluginOptions as PlausiblePluginOptions} from '@homotechsual/docusaurus-plugin-plausible';
+import faqsPlugin from '@homotechsual/docusaurus-plugin-faqs';
+import type {PluginOptions as FaqsPluginOptions} from '@homotechsual/docusaurus-plugin-faqs';
 
 const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = require('./lib/ImageRenderers.cjs');
 const ogPlugin = require('@homotechsual/docusaurus-og');
@@ -92,6 +94,13 @@ const config: Config = {
       },
     ],
     './src/plugins/featureRequests/FeatureRequestsPlugin',
+    [
+      faqsPlugin,
+      {
+        path: 'data/faqs',
+        routeBasePath: 'faqs',
+      } satisfies FaqsPluginOptions,
+    ],
   ],
 
   themeConfig: {
@@ -109,6 +118,7 @@ const config: Config = {
       },
       items: [
         {to: '/docs/getting-started', label: 'Docs', position: 'left'},
+        {to: '/faqs', label: 'FAQs', position: 'left'},
         {to: '/blog', label: 'Blog', position: 'left'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
         {to: '/feedback', label: 'Feedback & Feature Requests', position: 'left'},
@@ -129,6 +139,7 @@ const config: Config = {
             {label: 'Deploy with Docker', to: '/docs/deploy-with-docker'},
             {label: 'Deploy to Azure', to: '/docs/deploy-to-azure'},
             {label: 'Permissions & Access', to: '/docs/permissions-and-access'},
+            {label: 'FAQs', to: '/faqs'},
           ],
         },
         {

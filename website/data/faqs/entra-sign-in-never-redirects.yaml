@@ -1,0 +1,15 @@
+question: Sign-in redirects to Entra but never comes back to dotMARC - what's wrong?
+answer: |
+  This is almost always a missing checkbox on the dashboard app registration, not a bug in
+  dotMARC. On that app registration's **Authentication** page, under **Implicit grant and hybrid
+  flows**, **ID tokens** has to be checked.
+
+  Microsoft.Identity.Web's OIDC middleware requests an `id_token` as part of its hybrid
+  authorization-code flow. Without that box checked, sign-in fails at the Entra consent step and
+  the redirect back to `/signin-oidc` simply never happens - there's no error page, it just doesn't
+  come back.
+
+  See [Getting Started: Dashboard sign-in](/docs/getting-started#2-dashboard-sign-in-delegated) for
+  the full app registration setup.
+category: Entra & authentication
+order: 1

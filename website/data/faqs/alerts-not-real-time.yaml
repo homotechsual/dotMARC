@@ -1,0 +1,16 @@
+question: Does dotMARC page me the moment something breaks?
+answer: |
+  No, by design. dotMARC is a dashboard you check and an alert feed you get notified through, not
+  a paging system - there's no push notification or real-time delivery path.
+
+  Alerts are raised on a poll cycle: `MissedReport` fires once a domain has gone longer than the
+  configured **missing report threshold** (default 2 days) without a DMARC report, checked every
+  **monitor interval** (default 300 seconds). `TlsrptFailure` fires when a polled TLSRPT report
+  contains failed sessions. Both can take up to one interval/threshold window to notice a problem,
+  by design - DMARC aggregate reports themselves are typically daily, so faster polling wouldn't
+  surface anything sooner anyway.
+
+  See [Alerts](/docs/alerts#alert-settings) for all the delivery and timing settings, and
+  [Scope](/docs/scope) for what's deliberately not built.
+category: Alerts & PSA integration
+order: 1

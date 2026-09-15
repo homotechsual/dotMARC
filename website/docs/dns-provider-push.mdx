@@ -46,10 +46,20 @@ changing:
 | Redirect (Callback) URLs | `https://<your-deployment-host>/dns-push/cloudflare/callback` |
 | Client URL | Leave blank - only required to make a client *public*; dotMARC's stays private |
 
-On the next step, select two scopes and leave both **Required** (not optional): **Zone → DNS →
-Edit**, and **Zone → Zone → Read**. The second one is easy to miss since it isn't DNS-specific, but
-dotMARC needs it to resolve a domain name to its Cloudflare zone ID before it can push anything -
-`dns.write` alone can edit records inside a zone once it knows the ID, but can't look that ID up.
+:::tip[Redirect URL field]
+Typing the URL isn't enough - you have to press **Enter** to actually add it to the list before
+Cloudflare will let you continue. It's easy to sit there wondering why **Next** won't respond
+because nothing visually prompts you to do this.
+:::
+
+On the next step (labeled **DNS & Zones** in Cloudflare's permission picker), tick **Edit** for
+both **DNS** and **Zone**. The Zone one is easy to skip since it isn't DNS-specific, but dotMARC
+needs it to resolve a domain name to its Cloudflare zone ID before it can push anything - DNS
+access alone can edit records inside a zone once it knows the ID, but can't look that ID up.
+
+After you click **Continue** on that step, a **second** step appears listing the permissions you
+just picked with a **Required** toggle next to each - this doesn't show up until you continue past
+the first step, so don't go looking for it there. Leave both marked **Required** (not optional).
 Finish creating the client, then note its **Client ID** and **Client secret** - you'll enter both
 into dotMARC directly (see above), there's nothing to set as an environment variable or deployment
 parameter for this.
@@ -57,8 +67,9 @@ parameter for this.
 <Checklist id="dns-provider-push-cloudflare" items={[
   "Created the OAuth client with Response Type = Code",
   "Set Token Authentication Method to client_secret_post",
-  "Added the /dns-push/cloudflare/callback redirect URL",
-  "Selected the required Zone > DNS > Edit and Zone > Zone > Read scopes",
+  "Added the /dns-push/cloudflare/callback redirect URL, pressing Enter to add it",
+  "Ticked DNS > Edit and Zone > Edit under DNS & Zones",
+  "Continued to the second permissions step and left both marked Required",
   "Entered the Client ID/secret into dotMARC's DNS push settings",
 ]} />
 
