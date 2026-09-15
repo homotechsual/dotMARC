@@ -1,0 +1,49 @@
+name: Canny Changelog Backfill
+
+# One-off, manually triggered workflow to publish Canny changelog entries for releases that
+# shipped before automatic publishing (release.yml's canny-changelog job) existed. Uses the same
+# CANNY_API_KEY repository secret as that job - set it up there first if you haven't already.
+#
+# Each run posts a NEW changelog entry per version listed; Canny's API has no dedupe/idempotency
+# key, so only list versions that don't already have an entry in Canny, or you'll get duplicates.
+# Notifications default OFF here (unlike the live per-release job) so backfilling old releases
+# doesn't email every Canny subscriber a burst of notifications about months-old news.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: "Space-separated versions to backfill"
+        required: true
+        type: string
+        default: "0.1.0 0.2.0 0.3.0 0.4.0 0.5.0"
+      notify:
+        description: "Email Canny subscribers for each backfilled entry"
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Publish changelog entries to Canny
+        env:
+          CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
+          NOTIFY: ${{ inputs.notify }}
+        run: |
+          set -euo pipefail
+          for version in ${{ inputs.versions }}; do
+            echo "::group::Publishing $version"
+            VERSION="$version" node website/scripts/publish-canny-changelog.mjs
+            echo "::endgroup::"
+          done

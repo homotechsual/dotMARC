@@ -218,3 +218,27 @@ jobs:
 
             - GHCR: `${{ needs.publish-images.outputs.ghcr_image }}:${{ needs.publish-images.outputs.version }}`
             - Docker Hub: `${{ needs.publish-images.outputs.dockerhub_image }}:${{ needs.publish-images.outputs.version }}`
+
+  # One-time setup required before this job can succeed: create an API key in Canny (Settings ->
+  # API) and add it as the CANNY_API_KEY repository secret. Only runs for an actual tag push (see
+  # `release` above), never for a workflow_dispatch re-run, so re-running this workflow can't post
+  # a duplicate changelog entry.
+  canny-changelog:
+    name: Publish Canny changelog entry
+    needs: [publish-images, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Publish changelog entry to Canny
+        env:
+          VERSION: ${{ needs.publish-images.outputs.version }}
+          CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
+        run: node website/scripts/publish-canny-changelog.mjs
