@@ -1,0 +1,19 @@
+{
+    "npmSafetyGuard.phantomIgnoreList": [
+        "@docusaurus/ComponentCreator",
+        "@docusaurus/Head",
+        "@docusaurus/Link",
+        "@docusaurus/plugin-content-docs",
+        "@docusaurus/theme-common",
+        "@docusaurus/useBaseUrl",
+        "@docusaurus/utils",
+        "@homotechsual/docusaurus-plugin-faqs",
+        "@site/src",
+        "@theme/Layout",
+        "@theme/ThemedImage",
+        "J:\\\\Projects\\\\dotMARC\\\\website\\\\.docusaurus\\\\docusaurus-plugin-css-cascade-layers\\\\default\\\\layers.css",
+        "J:\\\\Projects\\\\dotMARC\\\\website\\\\node_modules\\\\",
+        "J:\\\\Projects\\\\dotMARC\\\\website\\\\node_modules\\\\infima\\\\dist\\\\css\\\\default\\\\default.css",
+        "J:\\\\Projects\\\\dotMARC\\\\website\\\\src\\\\css\\\\custom.css"
+    ]
+}
