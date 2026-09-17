@@ -109,20 +109,64 @@ else
         </MudPaper>
     }
 
-    <MudTable Items="_rows" Hover="true" T="DashboardDomainRow" CustomHeader="true">
+    <MudTable Items="_rows" Hover="true" T="DashboardDomainRow" CustomHeader="true" Filter="RowMatchesFilters">
         <HeaderContent>
             <tr>
-                <MudTh rowspan="2">Domain</MudTh>
-                <MudTh rowspan="2">Report Status</MudTh>
-                <MudTh rowspan="2">Pass rate (30d)</MudTh>
-                <MudTh rowspan="2">Last report</MudTh>
-                <MudTh rowspan="2">Monitored</MudTh>
-                <MudTh colspan="2" Style="text-align:center">DNS Status</MudTh>
+                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Name)">Domain</MudTableSortLabel></MudTh>
+                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Status)">Report Status</MudTableSortLabel></MudTh>
+                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.PassRate ?? -1)">Pass rate (30d)</MudTableSortLabel></MudTh>
+                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
+                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
+                <MudTh colspan="2" Style="text-align:center; position:relative">
+                    DNS Status
+                    <MudIconButton Icon="@Icons.Material.Filled.FilterList" Size="Size.Small" Color="@(_showFilters ? Color.Primary : Color.Default)"
+                                   OnClick="@(() => _showFilters = !_showFilters)" Style="position:absolute; right:0; top:50%; transform:translateY(-50%);" title="Toggle column filters" />
+                </MudTh>
             </tr>
             <tr>
-                <MudTh>DMARC</MudTh>
-                <MudTh>MTA-STS</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus))">DMARC</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus))">MTA-STS</MudTableSortLabel></MudTh>
             </tr>
+            @if (_showFilters)
+            {
+            <tr>
+                <MudTh><MudTextField T="string" @bind-Value="_domainFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                <MudTh>
+                    <MudSelect T="string" Value="_statusFilter" ValueChanged="@(v => _statusFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var status in _rows.Select(r => r.Status).Distinct().OrderBy(s => s))
+                        {
+                            <MudSelectItem T="string" Value="status">@status</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+                <MudTh>
+                    <MudNumericField T="double?" @bind-Value="_minPassRatePercentFilter" Placeholder="Min %" Margin="Margin.Dense" Min="0" Max="100" />
+                </MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_lastReportFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                <MudTh>
+                    <MudSelect T="bool?" Value="_monitoredFilter" ValueChanged="@(v => _monitoredFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                    </MudSelect>
+                </MudTh>
+                <MudTh>
+                    <MudSelect T="string" Value="_dmarcFilter" ValueChanged="@(v => _dmarcFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var label in _rows.Select(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus)).Distinct().OrderBy(l => l))
+                        {
+                            <MudSelectItem T="string" Value="label">@label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+                <MudTh>
+                    <MudSelect T="string" Value="_mtaStsFilter" ValueChanged="@(v => _mtaStsFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var label in _rows.Select(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus)).Distinct().OrderBy(l => l))
+                        {
+                            <MudSelectItem T="string" Value="label">@label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+            </tr>
+            }
         </HeaderContent>
         <RowTemplate>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
@@ -203,7 +247,53 @@ else
     private int? _selectedTagId;
     private List<int>? _scopedGroupIds;
 
+    private string? _domainFilter;
+    private string? _statusFilter;
+    private double? _minPassRatePercentFilter;
+    private string? _lastReportFilter;
+    private bool? _monitoredFilter;
+    private string? _dmarcFilter;
+    private string? _mtaStsFilter;
+    private bool _showFilters;
+
     private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
+
+    private bool RowMatchesFilters(DashboardDomainRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(_domainFilter) && !row.Name.Contains(_domainFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_statusFilter is not null && row.Status != _statusFilter)
+        {
+            return false;
+        }
+        if (_minPassRatePercentFilter is { } minPercent && (row.PassRate ?? 0) * 100 < minPercent)
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_lastReportFilter))
+        {
+            var text = row.LastReportReceivedUtc is { } last ? last.ToString("g") : "never";
+            if (!text.Contains(_lastReportFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        if (_monitoredFilter is { } monitored && row.IsMonitored != monitored)
+        {
+            return false;
+        }
+        if (_dmarcFilter is not null && DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus) != _dmarcFilter)
+        {
+            return false;
+        }
+        if (_mtaStsFilter is not null && MtaStsStatusPresentation.GetLabel(row.MtaStsStatus) != _mtaStsFilter)
+        {
+            return false;
+        }
+        return true;
+    }
 
     protected override async Task OnInitializedAsync()
     {

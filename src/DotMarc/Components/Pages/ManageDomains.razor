@@ -40,20 +40,70 @@
 }
 else
 {
-    <MudTable Items="_domains" Hover="true" T="DomainRow">
+    <MudTable Items="_domains" Hover="true" T="DomainRow" CustomHeader="true" Filter="RowMatchesFilters">
         <HeaderContent>
-            <MudTh></MudTh>
-            <MudTh>Domain</MudTh>
-            <MudTh>Groups</MudTh>
-            <MudTh>Tags</MudTh>
-            @if (_haloConfigured)
+            <tr>
+                <MudTh></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.Name)">Domain</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.GroupIds.Count)">Groups</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.TagIds.Count)">Tags</MudTableSortLabel></MudTh>
+                @if (_haloConfigured)
+                {
+                    <MudTh>Halo Client override</MudTh>
+                }
+                <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.ReportCount)">Reports</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
+                <MudTh>
+                    <MudIconButton Icon="@Icons.Material.Filled.FilterList" Size="Size.Small" Color="@(_showFilters ? Color.Primary : Color.Default)"
+                                   OnClick="@(() => _showFilters = !_showFilters)" title="Toggle column filters" />
+                </MudTh>
+            </tr>
+            @if (_showFilters)
             {
-                <MudTh>Halo Client override</MudTh>
+            <tr>
+                <MudTh></MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_domainFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                <MudTh>
+                    <MudSelect T="int?" Value="_groupFilter" ValueChanged="@(v => _groupFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var group in _allGroups)
+                        {
+                            <MudSelectItem T="int?" Value="group.Id">@group.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+                <MudTh>
+                    <MudSelect T="int?" Value="_tagFilter" ValueChanged="@(v => _tagFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var tag in _allTags)
+                        {
+                            <MudSelectItem T="int?" Value="tag.Id">@tag.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+                @if (_haloConfigured)
+                {
+                    <MudTh>
+                        <MudSelect T="int?" Value="_haloClientFilter" ValueChanged="@(v => _haloClientFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var haloClient in _haloClients)
+                            {
+                                <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                }
+                <MudTh>
+                    <MudSelect T="bool?" Value="_monitoredFilter" ValueChanged="@(v => _monitoredFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                    </MudSelect>
+                </MudTh>
+                <MudTh>
+                    <MudNumericField T="int?" @bind-Value="_minReportCountFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" />
+                </MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_lastReportFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                <MudTh></MudTh>
+            </tr>
             }
-            <MudTh>Monitored</MudTh>
-            <MudTh>Reports</MudTh>
-            <MudTh>Last report</MudTh>
-            <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd Style="width: 2.5rem;">
@@ -154,6 +204,52 @@ else
     private bool _haloConfigured;
     private string _newDomainName = "";
     private string? _addError;
+
+    private string? _domainFilter;
+    private int? _groupFilter;
+    private int? _tagFilter;
+    private int? _haloClientFilter;
+    private bool? _monitoredFilter;
+    private int? _minReportCountFilter;
+    private string? _lastReportFilter;
+    private bool _showFilters;
+
+    private bool RowMatchesFilters(DomainRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(_domainFilter) && !row.Name.Contains(_domainFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_groupFilter is { } groupId && !row.GroupIds.Contains(groupId))
+        {
+            return false;
+        }
+        if (_tagFilter is { } tagId && !row.TagIds.Contains(tagId))
+        {
+            return false;
+        }
+        if (_haloClientFilter is { } haloClientId && row.HaloClientId != haloClientId)
+        {
+            return false;
+        }
+        if (_monitoredFilter is { } monitored && row.IsMonitored != monitored)
+        {
+            return false;
+        }
+        if (_minReportCountFilter is { } minReports && row.ReportCount < minReports)
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_lastReportFilter))
+        {
+            var text = row.LastReportReceivedUtc is { } last ? last.ToString("g") : "never";
+            if (!text.Contains(_lastReportFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
