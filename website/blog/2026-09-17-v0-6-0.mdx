@@ -1,0 +1,34 @@
+---
+slug: v0-6-0
+title: "dotMARC v0.6.0: sortable, filterable domain tables"
+description: Every column on the Dashboard and Manage Domains tables can now be sorted, plus a per-column filter row (hidden behind a small toggle) for narrowing down domain, status, and DMARC/MTA-STS columns directly.
+authors: [mikey]
+tags: [release]
+---
+
+Since [`v0.5.0`](/blog/v0-5-0), the Dashboard and Manage Domains tables have picked up the two
+things people ask for first once they're managing more than a handful of domains: sorting and
+filtering.
+
+{/* truncate */}
+
+## Sort by any column
+
+Every column on both tables, Domain, Report Status, Pass rate, Last report, Monitored, DMARC,
+MTA-STS on the Dashboard, and Domain, Groups, Tags, Halo Client override, Monitored, Reports, Last
+report on Manage Domains, is now sortable by clicking its header. The combined DMARC column sorts
+by the same label it displays (own record and authorization status together), so it groups
+domains the way you'd expect rather than by a raw internal status code.
+
+## Per-column filters, tucked out of the way until you need them
+
+A small funnel icon in the header toggles a filter row for every column: text search for Domain and
+Last report, dropdowns for Report Status, Monitored, DMARC, and MTA-STS populated from whatever
+values are actually present, and a minimum threshold for Pass rate and Reports. The row is hidden
+by default so it doesn't clutter either table for the common case of just a few domains, and the
+funnel icon highlights when filters are active even while the row's collapsed.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.6.0) for
+everything that shipped between these two tags, including the usual pile of fixes.
