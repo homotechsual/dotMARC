@@ -60,7 +60,15 @@ async function canny(endpoint, body = {}) {
   if (!response.ok) {
     throw new Error(`${endpoint} failed (${response.status}): ${text.slice(0, 500)}`);
   }
-  return text ? JSON.parse(text) : {};
+  if (!text) {
+    return {};
+  }
+  // Some Canny write endpoints (posts/update) reply with the bare text "success", not JSON.
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {raw: text};
+  }
 }
 
 async function listAll(endpoint, key, params = {}) {
