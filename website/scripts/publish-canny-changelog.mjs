@@ -5,7 +5,8 @@
  *
  * The blog post is already the curated changelog content for a release - this converts its MDX
  * to the plain Markdown Canny's API expects and posts it, rather than duplicating that writeup
- * by hand in Canny too.
+ * by hand in Canny too. Ideas on the board tagged with the release's version (and already marked
+ * complete) are linked to the entry, so their voters are told the idea shipped.
  *
  * Usage:
  *   VERSION=0.5.0 CANNY_API_KEY=... node website/scripts/publish-canny-changelog.mjs
@@ -16,6 +17,8 @@ import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const SITE_URL = 'https://dotmarc.app';
+// The feedback board's widget token, the same board sync-canny-roadmap.mjs works on.
+const BOARD_TOKEN = '15f43ba5-535f-4bba-bee3-1776018d433b';
 const BLOG_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'blog');
 
 function fail(message) {
@@ -114,6 +117,62 @@ if (await entryExists(title)) {
   process.exit(0);
 }
 
+async function cannyPost(endpoint, body = {}) {
+  const apiResponse = await fetch(`https://canny.io/api/v1/${endpoint}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({apiKey, ...body}),
+  });
+  const text = await apiResponse.text();
+  if (!apiResponse.ok) {
+    throw new Error(`${endpoint} failed (${apiResponse.status}): ${text.slice(0, 300)}`);
+  }
+  return text ? JSON.parse(text) : {};
+}
+
+// The ideas tagged with this release's version tag (see sync-canny-roadmap.mjs) are linked to the
+// entry, which is what makes Canny tell their voters the idea shipped. Only ideas already marked
+// complete are linked: a tag is a target, so an idea that slipped to a later release must not be
+// announced as shipped. Linking is a bonus, so a failure here publishes the entry without links
+// rather than blocking the release announcement.
+async function findShippedIdeaIds() {
+  try {
+    const boards = (await cannyPost('boards/list')).boards ?? [];
+    const board =
+      boards.find((candidate) => (candidate.token ?? candidate.boardToken) === BOARD_TOKEN) ??
+      (boards.length === 1 ? boards[0] : undefined);
+    if (!board) {
+      throw new Error('could not identify the feedback board');
+    }
+
+    const versionTag = `v${version}`;
+    const ideas = [];
+    for (let skip = 0; ; ) {
+      const page = await cannyPost('posts/list', {boardID: board.id, limit: 100, skip});
+      ideas.push(...(page.posts ?? []));
+      if (!page.hasMore || (page.posts ?? []).length === 0) {
+        break;
+      }
+      skip += page.posts.length;
+    }
+
+    const tagged = ideas.filter((idea) => (idea.tags ?? []).some((tag) => tag.name.toLowerCase() === versionTag));
+    const shipped = tagged.filter((idea) => idea.status === 'complete');
+    for (const idea of tagged.filter((candidate) => candidate.status !== 'complete')) {
+      console.log(`[canny-changelog] Not linking "${idea.title}" (tagged ${versionTag} but status is "${idea.status}")`);
+    }
+    for (const idea of shipped) {
+      console.log(`[canny-changelog] Linking "${idea.title}"`);
+    }
+    return shipped.map((idea) => idea.id);
+  } catch (error) {
+    console.warn(`[canny-changelog] Could not look up ideas to link, publishing without links: ${error.message}`);
+    return [];
+  }
+}
+
+const postIDs = await findShippedIdeaIds();
+
 const response = await fetch('https://canny.io/api/v1/entries/create', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
@@ -124,6 +183,7 @@ const response = await fetch('https://canny.io/api/v1/entries/create', {
     published: true,
     notify,
     ...(publishedOn ? {publishedOn} : {}),
+    ...(postIDs.length > 0 ? {postIDs} : {}),
   }),
 });
 
@@ -134,5 +194,5 @@ if (!response.ok || !result.id) {
 
 console.log(
   `[canny-changelog] Published entry ${result.id} for ${slug}: "${title}" ` +
-    `(notify=${notify}, publishedOn=${publishedOn ?? 'now'})`,
+    `(notify=${notify}, publishedOn=${publishedOn ?? 'now'}, linkedIdeas=${postIDs.length})`,
 );
