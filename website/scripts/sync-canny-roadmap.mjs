@@ -27,7 +27,8 @@ const DEFAULT_BOARD_TOKEN = '15f43ba5-535f-4bba-bee3-1776018d433b';
 const apiKey = process.env.CANNY_API_KEY;
 const dryRun = (process.env.DRY_RUN ?? 'true') !== 'false';
 // How to treat the description of a post that already exists: leave it alone, add the target
-// release line above the current text, or replace it with the description from the roadmap file.
+// release line above the current text, or replace it with the description from the roadmap file
+// (the original wording is kept underneath as "Original request:").
 const updateMode = process.env.UPDATE_MODE ?? 'none';
 if (!['none', 'prepend', 'replace'].includes(updateMode)) {
   console.error(`[canny-roadmap] UPDATE_MODE must be none, prepend or replace (got "${updateMode}")`);
@@ -182,10 +183,14 @@ for (const idea of roadmap) {
       const currentDetails = existing.details ?? '';
       let updatedDetails;
       if (updateMode !== 'none' && idea.version && !RELEASE_LINE.test(currentDetails)) {
-        updatedDetails =
-          updateMode === 'replace' || !currentDetails.trim()
-            ? fullDetails
-            : `${releaseLabel}: ${idea.version}\n\n${currentDetails}`;
+        const original = currentDetails.trim();
+        // Replacing keeps the original wording underneath, unless it only repeats the title.
+        const keepOriginal = original && normalizeTitle(original) !== normalizeTitle(existing.title);
+        if (updateMode === 'prepend' && original) {
+          updatedDetails = `${releaseLabel}: ${idea.version}\n\n${currentDetails}`;
+        } else {
+          updatedDetails = keepOriginal ? `${fullDetails}\n\nOriginal request: ${original}` : fullDetails;
+        }
       }
 
       const pendingChanges = [
