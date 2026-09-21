@@ -101,17 +101,6 @@ if (!board) {
 }
 log(`Using board "${board.name}" (${board.id})`);
 
-let authorId = process.env.AUTHOR_ID;
-if (!authorId) {
-  const admins = await listAdmins();
-  if (admins.length !== 1) {
-    const candidates = admins.map((admin) => `${admin.id} (${admin.name})`).join(', ') || 'none found';
-    fail(`Expected exactly one Canny admin to author posts, found ${admins.length}: ${candidates}. Set AUTHOR_ID.`);
-  }
-  authorId = admins[0].id;
-  log('Authoring posts as the only Canny admin');
-}
-
 const existingPosts = await listAll('posts/list', 'posts', {boardID: board.id});
 log(`Existing posts on the board (${existingPosts.length}):`);
 for (const post of existingPosts) {
@@ -119,6 +108,27 @@ for (const post of existingPosts) {
   log(`  - [${post.status}] ${post.title}${tagNames ? ` (tags: ${tagNames})` : ''}`);
 }
 const existingByTitle = new Map(existingPosts.map((post) => [normalizeTitle(post.title), post]));
+
+let authorId = process.env.AUTHOR_ID;
+if (!authorId) {
+  // users/list does not necessarily include the account admins, so fall back to admins who have
+  // authored or been recorded as the creator of an existing post.
+  const adminsById = new Map((await listAdmins()).map((admin) => [admin.id, admin]));
+  const postAdmins = existingPosts.flatMap((post) => [post.author, post.by]).filter((user) => user?.isAdmin);
+  for (const admin of postAdmins) {
+    adminsById.set(admin.id, admin);
+  }
+  if (adminsById.size !== 1) {
+    const candidates = [...adminsById.values()].map((admin) => `${admin.id} (${admin.name})`).join(', ') || 'none found';
+    const sampleAuthorKeys = Object.keys(existingPosts[0]?.author ?? {}).join(', ') || 'no posts to inspect';
+    fail(
+      `Expected exactly one Canny admin to author posts, found ${adminsById.size}: ${candidates}. ` +
+        `Post author fields seen: ${sampleAuthorKeys}. Set AUTHOR_ID.`,
+    );
+  }
+  authorId = [...adminsById.keys()][0];
+  log('Authoring posts as the only Canny admin found');
+}
 
 const boardTags = (await listAll('tags/list', 'tags', {boardID: board.id})).filter(
   (tag) => !tag.boardID || tag.boardID === board.id,
