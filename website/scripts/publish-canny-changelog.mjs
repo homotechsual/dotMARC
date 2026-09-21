@@ -52,7 +52,9 @@ const publishedOn = dateMatch ? `${dateMatch[1]}T12:00:00.000Z` : undefined;
 
 const notify = (process.env.NOTIFY ?? 'true') !== 'false';
 
-const raw = readFileSync(join(BLOG_DIR, file), 'utf8');
+// Normalise line endings: a post authored on Windows can be committed with CRLF, which the
+// frontmatter and blank-line patterns below would otherwise not match.
+const raw = readFileSync(join(BLOG_DIR, file), 'utf8').replace(/\r\n/g, '\n');
 
 const frontmatterMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
 if (!frontmatterMatch) {
@@ -82,6 +84,35 @@ const markdown = body
   .replace(/\]\((\/(?:docs|blog)\/[^)]*)\)/g, `](${SITE_URL}$1)`)
   .replace(/\n{3,}/g, '\n\n')
   .trim();
+
+// Canny's create call has no idempotency key, so re-running a release (or backfilling one that was
+// also added by hand) would post a duplicate entry and, with notify on, email subscribers twice.
+// Fails closed: if the existing entries can't be listed, nothing is posted.
+async function entryExists(entryTitle) {
+  for (let skip = 0; ; ) {
+    const listResponse = await fetch('https://canny.io/api/v1/entries/list', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({apiKey, limit: 100, skip}),
+    });
+    const page = await listResponse.json();
+    if (!listResponse.ok || !Array.isArray(page.entries)) {
+      fail(`Could not list existing Canny entries (${listResponse.status}): ${JSON.stringify(page).slice(0, 300)}`);
+    }
+    if (page.entries.some((entry) => entry.title === entryTitle)) {
+      return true;
+    }
+    if (!page.hasMore || page.entries.length === 0) {
+      return false;
+    }
+    skip += page.entries.length;
+  }
+}
+
+if (await entryExists(title)) {
+  console.log(`[canny-changelog] "${title}" already exists in Canny, nothing to publish`);
+  process.exit(0);
+}
 
 const response = await fetch('https://canny.io/api/v1/entries/create', {
   method: 'POST',

@@ -3,7 +3,8 @@
 /**
  * Makes sure every idea in canny-roadmap.json exists on the Canny board, tagged with its target
  * version and set to its intended status. Safe to re-run: posts are matched by title, and an
- * existing post is never edited beyond having its version tag added if that is missing.
+ * existing post keeps its title and status, and only has its version tag added if that is missing
+ * (plus, opt-in via UPDATE_MODE, its description).
  *
  * Canny has no native target version field, so the version is expressed as a tag (for internal
  * filtering and roadmap definitions) and as a "Target release" line at the top of the description
@@ -25,6 +26,15 @@ const DEFAULT_BOARD_TOKEN = '15f43ba5-535f-4bba-bee3-1776018d433b';
 
 const apiKey = process.env.CANNY_API_KEY;
 const dryRun = (process.env.DRY_RUN ?? 'true') !== 'false';
+// How to treat the description of a post that already exists: leave it alone, add the target
+// release line above the current text, or replace it with the description from the roadmap file.
+const updateMode = process.env.UPDATE_MODE ?? 'none';
+if (!['none', 'prepend', 'replace'].includes(updateMode)) {
+  console.error(`[canny-roadmap] UPDATE_MODE must be none, prepend or replace (got "${updateMode}")`);
+  process.exit(1);
+}
+const notifyVoters = process.env.NOTIFY_VOTERS === 'true';
+const RELEASE_LINE = /^(Target release|Released in):/;
 
 function log(message) {
   console.log(`[canny-roadmap] ${message}`);
@@ -157,19 +167,55 @@ for (const idea of roadmap) {
   const existing = existingByTitle.get(normalizeTitle(idea.title));
   const versionTagId = idea.version ? tagIdByName.get(idea.version.toLowerCase()) : undefined;
 
+  const releaseLabel = idea.status === 'complete' ? 'Released in' : 'Target release';
+  const fullDetails = idea.version ? `${releaseLabel}: ${idea.version}\n\n${idea.details}` : idea.details;
+
   try {
     if (existing) {
-      const hasVersionTag =
-        !idea.version ||
-        (existing.tags ?? []).some((tag) => tag.name.toLowerCase() === idea.version.toLowerCase());
-      if (hasVersionTag) {
-        log(`EXISTS   ${idea.title}`);
-      } else if (dryRun || !versionTagId) {
-        log(`Would tag existing post "${idea.title}" with ${idea.version}`);
-      } else {
-        await canny('posts/add_tag', {postID: existing.id, tagID: versionTagId});
-        log(`TAGGED   ${idea.title} -> ${idea.version}`);
+      const needsTag =
+        Boolean(idea.version) &&
+        !(existing.tags ?? []).some((tag) => tag.name.toLowerCase() === idea.version.toLowerCase());
+      // Statuses are otherwise the board owner's to manage; the only move made here is to mark
+      // something complete once the roadmap file says it has shipped.
+      const needsCompletion = idea.status === 'complete' && existing.status !== 'complete';
+
+      const currentDetails = existing.details ?? '';
+      let updatedDetails;
+      if (updateMode !== 'none' && idea.version && !RELEASE_LINE.test(currentDetails)) {
+        updatedDetails =
+          updateMode === 'replace' || !currentDetails.trim()
+            ? fullDetails
+            : `${releaseLabel}: ${idea.version}\n\n${currentDetails}`;
       }
+
+      const pendingChanges = [
+        needsTag ? 'add version tag' : '',
+        updatedDetails ? `${updateMode} description` : '',
+        needsCompletion ? `mark complete${notifyVoters ? ' and notify voters' : ''}` : '',
+      ]
+        .filter(Boolean)
+        .join(' + ');
+
+      if (dryRun) {
+        log(`${pendingChanges ? `Would ${pendingChanges} on` : 'EXISTS  '} "${existing.title}"`);
+        log(`    current description (${currentDetails.length} chars): ${JSON.stringify(currentDetails.slice(0, 240))}`);
+        continue;
+      }
+      if (needsTag && versionTagId) {
+        await canny('posts/add_tag', {postID: existing.id, tagID: versionTagId});
+      }
+      if (updatedDetails) {
+        await canny('posts/update', {postID: existing.id, details: updatedDetails});
+      }
+      if (needsCompletion) {
+        await canny('posts/change_status', {
+          changerID: authorId,
+          postID: existing.id,
+          shouldNotifyVoters: notifyVoters,
+          status: 'complete',
+        });
+      }
+      log(`${pendingChanges ? `UPDATED  (${pendingChanges})` : 'EXISTS  '} ${existing.title}`);
       continue;
     }
 
@@ -178,12 +224,11 @@ for (const idea of roadmap) {
       continue;
     }
 
-    const details = idea.version ? `Target release: ${idea.version}\n\n${idea.details}` : idea.details;
     const created = await canny('posts/create', {
       authorID: authorId,
       boardID: board.id,
       title: idea.title,
-      details,
+      details: fullDetails,
     });
     if (versionTagId) {
       await canny('posts/add_tag', {postID: created.id, tagID: versionTagId});

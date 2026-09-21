@@ -13,6 +13,20 @@ on:
         required: true
         type: boolean
         default: true
+      update_details:
+        description: "For posts that already exist: leave the description, add the target release line above it, or replace it"
+        required: true
+        type: choice
+        options:
+          - none
+          - prepend
+          - replace
+        default: none
+      notify_voters:
+        description: "Email voters when an existing post is moved to complete"
+        required: true
+        type: boolean
+        default: false
       author_id:
         description: "Canny user ID to author new posts (only needed if the board has several admins)"
         required: false
@@ -35,5 +49,7 @@ jobs:
         env:
           CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
+          UPDATE_MODE: ${{ inputs.update_details }}
+          NOTIFY_VOTERS: ${{ inputs.notify_voters }}
           AUTHOR_ID: ${{ inputs.author_id }}
         run: node website/scripts/sync-canny-roadmap.mjs

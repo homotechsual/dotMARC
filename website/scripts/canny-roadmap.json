@@ -1,7 +1,15 @@
 [
   {
-    "title": "Alert when a domain's DNS health check regresses",
+    "title": "Column Sorting",
     "version": "v0.6.0",
+    "status": "complete",
+    "details": [
+      "Every column on the Dashboard and Manage Domains tables can be sorted by clicking its header, and a per-column filter row (hidden behind a small toggle) narrows the tables by domain, status, DMARC and MTA-STS values."
+    ]
+  },
+  {
+    "title": "Widen alerting beyond MissedReport / TLSRPTFailure",
+    "version": "v0.7.0",
     "status": "planned",
     "details": [
       "Today dotMARC raises alerts for missed DMARC reports and TLS reporting failures. The domain health checklist already checks the DMARC record, DMARC authorization record, TLS reporting record, MTA-STS, SPF, MX and DKIM, but a check going from OK to broken only shows up if someone happens to open that domain.",
@@ -10,7 +18,7 @@
     ]
   },
   {
-    "title": "Bulk domain import (CSV or pasted list)",
+    "title": "Allow bulk domain onboarding with CSV or paste-a-list imports",
     "version": "v0.7.0",
     "status": "planned",
     "details": [
@@ -20,7 +28,7 @@
     ]
   },
   {
-    "title": "Push SPF and DKIM records to your DNS provider",
+    "title": "Extend DNS Provider push to cover SPF and DKIM record pushes",
     "version": "v0.7.0",
     "status": "planned",
     "details": [
@@ -30,7 +38,7 @@
     ]
   },
   {
-    "title": "Audit log of administrative actions",
+    "title": "Audit logging for all changes / configuration alterations and access.",
     "version": "v0.8.0",
     "status": "planned",
     "details": [
@@ -40,7 +48,7 @@
     ]
   },
   {
-    "title": "Public REST API",
+    "title": "Add a public API",
     "version": "v0.8.0",
     "status": "planned",
     "details": [
@@ -50,7 +58,7 @@
     ]
   },
   {
-    "title": "Scheduled client report export (PDF and email digest)",
+    "title": "Add scheduled client report export (PDF and email digest)",
     "version": "v0.9.0",
     "status": "planned",
     "details": [
@@ -60,7 +68,7 @@
     ]
   },
   {
-    "title": "Branded client portal view",
+    "title": "Add a branded client portal view",
     "version": "v0.9.0",
     "status": "planned",
     "details": [
@@ -69,7 +77,7 @@
     ]
   },
   {
-    "title": "ConnectWise PSA integration",
+    "title": "Add ConnectWise PSA support",
     "version": "v0.9.0",
     "status": "planned",
     "details": [
@@ -79,7 +87,7 @@
     ]
   },
   {
-    "title": "Autotask PSA integration",
+    "title": "Add Autotask PSA support",
     "version": "v0.9.0",
     "status": "planned",
     "details": [
@@ -89,7 +97,7 @@
     ]
   },
   {
-    "title": "Slack alert delivery",
+    "title": "Add Slack alert delivery",
     "version": "v0.9.0",
     "status": "planned",
     "details": [
@@ -98,7 +106,7 @@
     ]
   },
   {
-    "title": "Multi-tenant mailbox ingestion (admin consent instead of app registrations)",
+    "title": "Support multi-tenant mailbox ingestion (admin consent instead of app registrations)",
     "version": "v1.0.0",
     "status": "planned",
     "details": [
@@ -107,7 +115,7 @@
     ]
   },
   {
-    "title": "Multi-tenant dashboard sign-in",
+    "title": "Support multi-tenant dashboard sign-in",
     "version": "v1.0.0",
     "status": "planned",
     "details": [
@@ -116,7 +124,7 @@
     ]
   },
   {
-    "title": "Forensic (RUF) report support",
+    "title": "Add forensic (RUF) report support",
     "version": null,
     "status": "under review",
     "details": [
@@ -125,7 +133,7 @@
     ]
   },
   {
-    "title": "Long-term historical rollups",
+    "title": "Add long-term historical rollups",
     "version": null,
     "status": "under review",
     "details": [
@@ -134,7 +142,7 @@
     ]
   },
   {
-    "title": "Sign in with providers other than Entra ID",
+    "title": "Support sign-in with providers other than Entra ID",
     "version": null,
     "status": "under review",
     "details": [
@@ -143,7 +151,7 @@
     ]
   },
   {
-    "title": "Read DMARC reports from IMAP or Google Workspace mailboxes",
+    "title": "Support reading DMARC reports from IMAP or Google Workspace mailboxes",
     "version": null,
     "status": "under review",
     "details": [
