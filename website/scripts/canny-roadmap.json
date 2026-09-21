@@ -1,0 +1,154 @@
+[
+  {
+    "title": "Alert when a domain's DNS health check regresses",
+    "version": "v0.6.0",
+    "status": "planned",
+    "details": [
+      "Today dotMARC raises alerts for missed DMARC reports and TLS reporting failures. The domain health checklist already checks the DMARC record, DMARC authorization record, TLS reporting record, MTA-STS, SPF, MX and DKIM, but a check going from OK to broken only shows up if someone happens to open that domain.",
+      "Proposal: raise an alert when a health check that was previously OK becomes missing or misconfigured, for example an SPF record deleted during a DNS migration or the DMARC authorization record removed. The alert would resolve automatically once the check passes again, respect the existing cooldown, and be delivered through the same channels as other alerts (Teams, generic webhook and HaloPSA tickets).",
+      "Why it matters: a DNS change on the client side can silently break reporting or authentication, and today you usually find out days later when reports stop arriving."
+    ]
+  },
+  {
+    "title": "Bulk domain import (CSV or pasted list)",
+    "version": "v0.7.0",
+    "status": "planned",
+    "details": [
+      "Domains are currently added one at a time from Manage domains, which is slow when onboarding a client with dozens of domains or an MSP's whole customer base.",
+      "Proposal: import many domains at once from a CSV file or a pasted list (one per line), with optional columns for Group and Tags. Show a preview before committing that flags invalid names and duplicates, then create the domains and start their DNS health checks straight away.",
+      "Why it matters: onboarding effort should not grow one domain at a time as your client list grows."
+    ]
+  },
+  {
+    "title": "Push SPF and DKIM records to your DNS provider",
+    "version": "v0.7.0",
+    "status": "planned",
+    "details": [
+      "DNS provider push can already create or repair the DMARC, DMARC authorization, TLS reporting and MTA-STS records on Cloudflare, Azure DNS and Google Cloud DNS. SPF and DKIM problems are detected and shown on the domain health checklist, but still have to be fixed by hand.",
+      "Proposal: extend the same one-click push to SPF (creating a record, or merging in a missing include without clobbering existing mechanisms and while keeping exactly one SPF record) and to DKIM records supplied by your mail platform, such as selector CNAME records.",
+      "Why it matters: SPF and DKIM are among the most common reasons DMARC fails, so they are where a one-click fix helps most."
+    ]
+  },
+  {
+    "title": "Audit log of administrative actions",
+    "version": "v0.8.0",
+    "status": "planned",
+    "details": [
+      "dotMARC lets you grant other people (including client contacts) access, change alert and PSA settings, configure DNS provider credentials and push DNS records. There is currently no record of who did what.",
+      "Proposal: an audit log that records administrative actions with who, what and when, for example access granted or revoked, role changes, settings changes, domains added or removed, and DNS records pushed. Viewable and filterable behind its own permission, with export.",
+      "Why it matters: once other people have access to your dashboard you need to be able to answer who changed something, and many customers and security questionnaires expect it."
+    ]
+  },
+  {
+    "title": "Public REST API",
+    "version": "v0.8.0",
+    "status": "planned",
+    "details": [
+      "Every integration in dotMARC today is outbound: it calls Cloudflare, Azure DNS, Google Cloud DNS, HaloPSA, Teams and webhooks. Nothing outside can call in.",
+      "Proposal: a documented, authenticated REST API covering domains, groups, tags, alerts and report summaries, using API keys whose permissions follow the existing role model (so a key can be read-only or scoped to specific Groups), with an OpenAPI description.",
+      "Why it matters: it enables scripted bulk operations, custom client reporting and integrations with tools dotMARC does not support natively, without needing a built-in integration for each one."
+    ]
+  },
+  {
+    "title": "Scheduled client report export (PDF and email digest)",
+    "version": "v0.9.0",
+    "status": "planned",
+    "details": [
+      "MSPs typically hand each client a regular summary of their email authentication posture. dotMARC is currently a dashboard you have to open, so there is no report you can send.",
+      "Proposal: generate a per-Group or per-domain report (pass rate trends, top failing sources, reject and quarantine reasons, DNS health status) as a PDF, and optionally email it to chosen recipients on a schedule such as monthly.",
+      "This is separate from alerting, which already exists."
+    ]
+  },
+  {
+    "title": "Branded client portal view",
+    "version": "v0.9.0",
+    "status": "planned",
+    "details": [
+      "Group-scoped Viewer access already lets a client sign in and see only their own domains, but it still looks like your internal dashboard.",
+      "Proposal: per-Group branding (logo, colours and display name) and a simplified client-facing layout that leads with a plain-language summary, so the read-only client view is something you can present as part of your service."
+    ]
+  },
+  {
+    "title": "ConnectWise PSA integration",
+    "version": "v0.9.0",
+    "status": "planned",
+    "details": [
+      "dotMARC can open and close HaloPSA tickets from alerts, and resolve an alert when a tech closes the ticket. HaloPSA is the only PSA supported today.",
+      "Proposal: the same two-way sync for ConnectWise Manage. Create a ticket when an alert fires, close it when the alert resolves, resolve the alert when the ticket is closed, with per-Group company mapping.",
+      "Vote for this if ConnectWise is your PSA."
+    ]
+  },
+  {
+    "title": "Autotask PSA integration",
+    "version": "v0.9.0",
+    "status": "planned",
+    "details": [
+      "dotMARC can open and close HaloPSA tickets from alerts, and resolve an alert when a tech closes the ticket. HaloPSA is the only PSA supported today.",
+      "Proposal: the same two-way sync for Datto Autotask. Create a ticket when an alert fires, close it when the alert resolves, resolve the alert when the ticket is closed, with per-Group company mapping.",
+      "Vote for this if Autotask is your PSA."
+    ]
+  },
+  {
+    "title": "Slack alert delivery",
+    "version": "v0.9.0",
+    "status": "planned",
+    "details": [
+      "Alerts are delivered to Microsoft Teams and/or a generic webhook today.",
+      "Proposal: a native Slack delivery option using an incoming webhook URL, formatted like the Teams card with the domain, alert type and message, alongside the existing options."
+    ]
+  },
+  {
+    "title": "Multi-tenant mailbox ingestion (admin consent instead of app registrations)",
+    "version": "v1.0.0",
+    "status": "planned",
+    "details": [
+      "Setting up dotMARC currently means registering your own Entra app for mailbox access, granting it Mail.Read, and running Exchange PowerShell to scope an Application Access Policy to the reports mailbox. That is reasonable for a technical team self-hosting, but it is a lot of manual work for everyone else.",
+      "Proposal: support a single multi-tenant Entra app, the same pattern dotMARC already uses for Azure DNS push, where an administrator grants consent for their own tenant and picks the reports mailbox, instead of every deployment needing its own app registration and PowerShell scoping. The goal is onboarding in minutes rather than an afternoon."
+    ]
+  },
+  {
+    "title": "Multi-tenant dashboard sign-in",
+    "version": "v1.0.0",
+    "status": "planned",
+    "details": [
+      "Dashboard sign-in is configured against a single Entra tenant, which typically means external people such as client contacts have to be invited as guests before they can sign in.",
+      "Proposal: support a multi-tenant sign-in app so people can use their own work accounts from other Entra tenants, with access still controlled by dotMARC's own roles and per-email grants."
+    ]
+  },
+  {
+    "title": "Forensic (RUF) report support",
+    "version": null,
+    "status": "under review",
+    "details": [
+      "dotMARC deliberately ingests only aggregate (RUA) reports today. Forensic (RUF) reports contain per-message failure samples and can carry personal data, and many receivers do not send them at all, which is why they are currently out of scope.",
+      "This idea is here to gauge demand. If you would use forensic reports, vote and comment with what you would need around retention and redaction."
+    ]
+  },
+  {
+    "title": "Long-term historical rollups",
+    "version": null,
+    "status": "under review",
+    "details": [
+      "Reports are retained and queryable, but there is no rollup pipeline that summarises older raw data, so long-range trends (12 months and beyond) get heavier to query over time.",
+      "Vote if you need year-over-year trend views, and comment on how long you need to keep data."
+    ]
+  },
+  {
+    "title": "Sign in with providers other than Entra ID",
+    "version": null,
+    "status": "under review",
+    "details": [
+      "Dashboard sign-in is Microsoft Entra ID only.",
+      "Proposal: generic OpenID Connect support so teams can use Google Workspace, Okta or another identity provider. Vote and comment with which provider you would need."
+    ]
+  },
+  {
+    "title": "Read DMARC reports from IMAP or Google Workspace mailboxes",
+    "version": null,
+    "status": "under review",
+    "details": [
+      "Reports are currently collected from a Microsoft 365 mailbox through Microsoft Graph, which limits dotMARC to Microsoft 365 environments.",
+      "Proposal: additional ingestion sources such as IMAP and the Gmail API. Vote and comment with which mailbox type you would need."
+    ]
+  }
+]

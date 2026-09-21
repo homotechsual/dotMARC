@@ -1,0 +1,39 @@
+name: Canny Roadmap Sync
+
+# Makes sure every idea in website/scripts/canny-roadmap.json exists on the Canny board with its
+# target version tag and status. Uses the same CANNY_API_KEY repository secret as the changelog
+# jobs. Idempotent: existing posts are matched by title and never edited (beyond adding a missing
+# version tag), so re-running is safe. Runs as a dry run unless dry_run is unticked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would change"
+        required: true
+        type: boolean
+        default: true
+      author_id:
+        description: "Canny user ID to author new posts (only needed if the board has several admins)"
+        required: false
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Sync roadmap ideas to Canny
+        env:
+          CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          AUTHOR_ID: ${{ inputs.author_id }}
+        run: node website/scripts/sync-canny-roadmap.mjs
