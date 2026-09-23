@@ -63,15 +63,71 @@ public static class DomainStatistics
         reportsInWindow
             .SelectMany(r => r.Records)
             .GroupBy(r => r.SourceIp)
-            .Select(g => new SourceAggregate(
-                g.Key,
-                g.Sum(r => r.MessageCount),
-                CombineAuthResult(g.Select(r => r.SpfResult)),
-                CombineAuthResult(g.Select(r => r.DkimResult)),
-                CombineDisposition(g.Select(r => r.Disposition)),
-                g.SelectMany(r => r.OverrideReasons).Select(o => o.Type).Distinct().ToList(),
-                g.SelectMany(r => r.AuthDetails).Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).Distinct().ToList()))
+            .Select(g =>
+            {
+                var spfResult = CombineAuthResult(g.Select(r => r.SpfResult));
+                var dkimResult = CombineAuthResult(g.Select(r => r.DkimResult));
+                var disposition = CombineDisposition(g.Select(r => r.Disposition));
+                var overrideReasonTypes = g.SelectMany(r => r.OverrideReasons).Select(o => o.Type).Distinct().ToList();
+                var authDetails = g.SelectMany(r => r.AuthDetails).Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).Distinct().ToList();
+
+                return new SourceAggregate(
+                    g.Key,
+                    g.Sum(r => r.MessageCount),
+                    spfResult,
+                    dkimResult,
+                    disposition,
+                    overrideReasonTypes,
+                    authDetails,
+                    overrideReasonTypes.Count == 0
+                        ? InferFailureReason(disposition, spfResult, dkimResult, g.First().HeaderFrom, authDetails)
+                        : null);
+            })
             .ToList();
+
+    /// <summary>When a receiver's report omits an explicit &lt;reason&gt;, works out a plain-English
+    /// explanation from the raw per-mechanism auth_results instead of leaving the source
+    /// unexplained ("no reason given" tells an operator nothing they can act on). Only meaningful
+    /// when the message was actually rejected/quarantined by DMARC (neither check aligned) - a
+    /// passing message, or one where a policy override already supplied its own reason, needs no
+    /// extrapolation. Domain alignment here is a same-or-subdomain heuristic (not a strict
+    /// RFC 7489 org-domain lookup, which would need a public suffix list), so treat the result as
+    /// a best-effort explanation rather than an authoritative alignment verdict.</summary>
+    private static string? InferFailureReason(DispositionResult disposition, AuthResult spfResult, AuthResult dkimResult, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
+    {
+        if (disposition == DispositionResult.None || spfResult == AuthResult.Pass || dkimResult == AuthResult.Pass)
+        {
+            return null;
+        }
+
+        return $"SPF: {ExplainMechanism(DmarcAuthMechanism.Spf, headerFrom, authDetails)}. DKIM: {ExplainMechanism(DmarcAuthMechanism.Dkim, headerFrom, authDetails)}.";
+    }
+
+    private static string ExplainMechanism(DmarcAuthMechanism mechanism, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
+    {
+        var matching = authDetails.Where(d => d.Mechanism == mechanism).ToList();
+        if (matching.Count == 0)
+        {
+            return mechanism == DmarcAuthMechanism.Spf
+                ? "sender not covered by SPF (no SPF check reported for this source)"
+                : "no DKIM signature present";
+        }
+
+        var passing = matching.FirstOrDefault(d => d.Result == DmarcMechanismResult.Pass);
+        if (passing is not null)
+        {
+            return IsAligned(passing.Domain, headerFrom)
+                ? "passed"
+                : $"passed for {passing.Domain}, which doesn't align with the From: domain ({headerFrom})";
+        }
+
+        return $"failed ({string.Join(", ", matching.Select(d => d.Result).Distinct())})";
+    }
+
+    private static bool IsAligned(string mechanismDomain, string headerFrom) =>
+        string.Equals(mechanismDomain, headerFrom, StringComparison.OrdinalIgnoreCase)
+        || headerFrom.EndsWith("." + mechanismDomain, StringComparison.OrdinalIgnoreCase)
+        || mechanismDomain.EndsWith("." + headerFrom, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Buckets every Reject/Quarantine record's message volume by why it was
     /// disposed-against - the direct signal for "does this look like benign forwarding or a real
@@ -136,8 +192,10 @@ public static class DomainStatistics
         type is DmarcPolicyOverrideType.Forwarded or DmarcPolicyOverrideType.SampledOut or DmarcPolicyOverrideType.TrustedForwarder or DmarcPolicyOverrideType.MailingList;
 }
 
-/// <summary>One source IP's aggregated activity within the report window.</summary>
-public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult SpfResult, AuthResult DkimResult, DispositionResult Disposition, IReadOnlyList<DmarcPolicyOverrideType> OverrideReasonTypes, IReadOnlyList<AuthDetailSummary> AuthDetails);
+/// <summary>One source IP's aggregated activity within the report window. InferredReason is only
+/// populated when the receiver gave no override reason but the source still failed DMARC -
+/// see DomainStatistics.InferFailureReason.</summary>
+public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult SpfResult, AuthResult DkimResult, DispositionResult Disposition, IReadOnlyList<DmarcPolicyOverrideType> OverrideReasonTypes, IReadOnlyList<AuthDetailSummary> AuthDetails, string? InferredReason);
 
 /// <summary>One distinct (mechanism, domain, result) combination seen for a source in-window -
 /// deduplicated so a source failing the same way on every report doesn't repeat itself.</summary>

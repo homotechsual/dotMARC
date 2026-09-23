@@ -494,7 +494,7 @@ else
         _passRate = DomainStatistics.GetPassRate(_domain.Reports);
 
         _sources = DomainStatistics.GetSourceAggregates(_domain.Reports)
-            .Select(a => new SourceRow(a.SourceIp, a.Volume, a.SpfResult.ToString(), a.DkimResult.ToString(), a.Disposition.ToString(), a.OverrideReasonTypes, a.AuthDetails))
+            .Select(a => new SourceRow(a.SourceIp, a.Volume, a.SpfResult.ToString(), a.DkimResult.ToString(), a.Disposition.ToString(), a.OverrideReasonTypes, a.AuthDetails, a.InferredReason))
             .OrderByDescending(s => s.Volume)
             .ToList();
 
@@ -1109,7 +1109,7 @@ else
     public void OnDnsPushPopupBlocked() =>
         Snackbar.Add("Your browser blocked the pop-up. Allow pop-ups for this site and try again, or add the record manually.", Severity.Warning);
 
-    private sealed class SourceRow(string sourceIp, int volume, string spfResult, string dkimResult, string disposition, IReadOnlyList<DmarcPolicyOverrideType> overrideReasonTypes, IReadOnlyList<AuthDetailSummary> authDetails)
+    private sealed class SourceRow(string sourceIp, int volume, string spfResult, string dkimResult, string disposition, IReadOnlyList<DmarcPolicyOverrideType> overrideReasonTypes, IReadOnlyList<AuthDetailSummary> authDetails, string? inferredReason)
     {
         public string SourceIp { get; } = sourceIp;
         public int Volume { get; } = volume;
@@ -1118,13 +1118,17 @@ else
         public string Disposition { get; } = disposition;
         public IReadOnlyList<DmarcPolicyOverrideType> OverrideReasonTypes { get; } = overrideReasonTypes;
         public IReadOnlyList<AuthDetailSummary> AuthDetails { get; } = authDetails;
+        public string? InferredReason { get; } = inferredReason;
         public string? Organization { get; set; }
         public string? Country { get; set; }
         public bool IsEnrichmentPending { get; set; } = true;
 
-        public string ReasonSummary => OverrideReasonTypes.Count == 0
-            ? ""
-            : string.Join(", ", OverrideReasonTypes.Select(t => t.ToString()));
+        // Prefer the receiver's own reason when it gave one; otherwise fall back to our
+        // extrapolated explanation (marked "Inferred" so it's not mistaken for receiver-reported
+        // data) rather than showing nothing at all.
+        public string ReasonSummary => OverrideReasonTypes.Count > 0
+            ? string.Join(", ", OverrideReasonTypes.Select(t => t.ToString()))
+            : InferredReason is { } inferred ? $"Inferred: {inferred}" : "";
 
         public string AuthDetailTooltip(DmarcAuthMechanism mechanism)
         {
