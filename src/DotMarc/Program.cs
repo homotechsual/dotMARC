@@ -354,7 +354,12 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 }
 
-app.MapStaticAssets();
+// FallbackPolicy below requires an authenticated user with a permission claim on every endpoint
+// by default. Without AllowAnonymous, static assets inherit that policy too - the very first
+// unauthenticated request (before anyone has signed in or picked a demo persona) gets its CSS/JS
+// requests redirected by the auth challenge to the login/demo page, so the browser receives that
+// page's HTML instead of the asset it asked for ("Unexpected token '<'" in the console).
+app.MapStaticAssets().AllowAnonymous();
 
 app.UseAuthentication();
 app.UseAuthorization();
