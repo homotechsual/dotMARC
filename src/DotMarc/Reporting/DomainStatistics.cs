@@ -134,12 +134,14 @@ public static class DomainStatistics
     /// spoofing attempt". Disposition == None records are excluded (nothing to explain). A record
     /// with multiple reason entries buckets by priority: Benign wins if any entry is
     /// Forwarded/SampledOut/TrustedForwarder/MailingList (one benign explanation is enough), else
-    /// LocalPolicy wins if any entry is LocalPolicy, else Other. No reason at all is the least
-    /// benign-looking signal, since a real receiver usually only omits &lt;reason&gt; when
-    /// disposition matches assessment exactly.</summary>
+    /// LocalPolicy wins if any entry is LocalPolicy, else Other. With no explicit reason at all,
+    /// this falls back to InferredAuthFailure when the record has per-mechanism AuthDetails to
+    /// explain the failure from (see InferFailureReason/ExplainMechanism), and only to the
+    /// genuinely uninformative NoReasonGiven bucket when it doesn't - e.g. a report ingested
+    /// before AuthDetails existed, or not yet caught up by PollingService's backfill cycle.</summary>
     public static ReasonBreakdown GetReasonBreakdown(IEnumerable<Report> reportsInWindow)
     {
-        int benign = 0, localPolicy = 0, other = 0, noReason = 0;
+        int benign = 0, localPolicy = 0, other = 0, inferredAuthFailure = 0, noReason = 0;
 
         foreach (var record in reportsInWindow.SelectMany(r => r.Records).Where(r => r.Disposition != DispositionResult.None))
         {
@@ -147,7 +149,14 @@ public static class DomainStatistics
 
             if (reasonTypes.Count == 0)
             {
-                noReason += record.MessageCount;
+                if (record.AuthDetails.Count > 0)
+                {
+                    inferredAuthFailure += record.MessageCount;
+                }
+                else
+                {
+                    noReason += record.MessageCount;
+                }
             }
             else if (reasonTypes.Any(IsBenignOverride))
             {
@@ -163,7 +172,7 @@ public static class DomainStatistics
             }
         }
 
-        return new ReasonBreakdown(benign, localPolicy, other, noReason);
+        return new ReasonBreakdown(benign, localPolicy, other, noReason, inferredAuthFailure);
     }
 
     /// <summary>Same bucketing as the single-domain overload, summed across every supplied
@@ -202,8 +211,10 @@ public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult Spf
 public sealed record AuthDetailSummary(DmarcAuthMechanism Mechanism, string Domain, DmarcMechanismResult Result);
 
 /// <summary>Reject/Quarantine message volume in a window, bucketed by why it happened. See
-/// DomainStatistics.GetReasonBreakdown for the bucketing rules.</summary>
-public sealed record ReasonBreakdown(int BenignOverride, int LocalPolicy, int Other, int NoReasonGiven)
+/// DomainStatistics.GetReasonBreakdown for the bucketing rules. InferredAuthFailure defaults to 0
+/// so every pre-existing 4-arg call site (tests, PollingService's empty-breakdown fallback) still
+/// compiles unchanged.</summary>
+public sealed record ReasonBreakdown(int BenignOverride, int LocalPolicy, int Other, int NoReasonGiven, int InferredAuthFailure = 0)
 {
-    public int Total => BenignOverride + LocalPolicy + Other + NoReasonGiven;
+    public int Total => BenignOverride + LocalPolicy + Other + NoReasonGiven + InferredAuthFailure;
 }

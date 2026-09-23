@@ -96,7 +96,7 @@ public sealed class AlertingService : IAlertingService
     private async Task CheckSuspiciousRejectActivityAsync(DotMarcDbContext context, NotificationSettings settings, Domain domain, CancellationToken cancellationToken)
     {
         var breakdown = DomainStatistics.GetReasonBreakdown(domain.Reports);
-        var nonBenign = breakdown.LocalPolicy + breakdown.Other + breakdown.NoReasonGiven;
+        var nonBenign = breakdown.LocalPolicy + breakdown.Other + breakdown.InferredAuthFailure + breakdown.NoReasonGiven;
         var nonBenignPercent = breakdown.Total == 0 ? 0 : (double)nonBenign / breakdown.Total * 100;
 
         if (breakdown.Total >= settings.SuspiciousRejectMinVolume && nonBenignPercent >= settings.SuspiciousRejectNonBenignPercent)
