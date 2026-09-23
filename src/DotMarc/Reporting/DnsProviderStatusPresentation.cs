@@ -13,7 +13,10 @@ public static class DnsProviderStatusPresentation
     {
         DetectedDnsProvider.Cloudflare or DetectedDnsProvider.AzureDns or DetectedDnsProvider.GoogleCloudDns => Color.Success,
         DetectedDnsProvider.Unknown => Color.Warning,
-        _ => Color.Default
+        DetectedDnsProvider.NotChecked => Color.Default,
+        // Recognized but with no auto-push integration - worth distinguishing from both "all set"
+        // (Success) and "couldn't identify it at all" (Warning).
+        _ => Color.Info
     };
 
     public static string GetLabel(DetectedDnsProvider provider) => provider switch
@@ -21,7 +24,17 @@ public static class DnsProviderStatusPresentation
         DetectedDnsProvider.Cloudflare => "Cloudflare",
         DetectedDnsProvider.AzureDns => "Azure DNS",
         DetectedDnsProvider.GoogleCloudDns => "Google Cloud DNS",
-        DetectedDnsProvider.Unknown => "Not recognized",
+        DetectedDnsProvider.Microsoft365 => "Microsoft 365",
+        DetectedDnsProvider.AmazonRoute53 => "Amazon Route 53",
+        DetectedDnsProvider.GoDaddy => "GoDaddy",
+        DetectedDnsProvider.Namecheap => "Namecheap",
+        DetectedDnsProvider.DigitalOcean => "DigitalOcean",
+        DetectedDnsProvider.Ovh => "OVH",
+        DetectedDnsProvider.Gandi => "Gandi",
+        DetectedDnsProvider.Ns1 => "NS1",
+        DetectedDnsProvider.DnsMadeEasy => "DNS Made Easy",
+        DetectedDnsProvider.Vercel => "Vercel",
+        DetectedDnsProvider.Unknown => "Not recognised",
         _ => "Not checked yet"
     };
 }

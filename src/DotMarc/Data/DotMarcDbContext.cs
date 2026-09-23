@@ -74,6 +74,15 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
                     (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
                     c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
                     c => c.ToList()));
+
+            entity.Property(d => d.DnsNameservers)
+                .HasConversion(
+                    nameservers => nameservers.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
         });
 
         modelBuilder.Entity<Report>(entity =>

@@ -520,6 +520,7 @@ public sealed class PollingService : BackgroundService
         domain.DnsProvider = result.Provider;
         domain.DnsZone = result.ZoneName;
         domain.DnsProviderCheckedUtc = DateTimeOffset.UtcNow;
+        domain.DnsNameservers = result.Nameservers.ToList();
     }
 
     /// <summary>Runs a DNS provider/zone check for every domain whose last check

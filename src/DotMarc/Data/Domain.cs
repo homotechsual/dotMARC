@@ -48,6 +48,7 @@ public sealed class Domain
     public DetectedDnsProvider DnsProvider { get; set; }
     public string? DnsZone { get; set; }
     public DateTimeOffset? DnsProviderCheckedUtc { get; set; }
+    public List<string> DnsNameservers { get; set; } = [];
 
     public List<Report> Reports { get; set; } = [];
     public List<TlsrptReport> TlsrptReports { get; set; } = [];

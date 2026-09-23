@@ -31,6 +31,20 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
     // zone - accepted, not fixable without a different kind of signal than NS suffix matching.
     private static readonly string[] GoogleCloudDnsNsSuffixes = [".googledomains.com"];
 
+    // These providers have no push integration (Program.cs's push endpoints and
+    // DetectedDnsProviderExtensions.ToProviderKey() only know Cloudflare/Azure/GoogleCloudDns), but
+    // recognizing them still turns an unhelpful "Not recognized" into an actionable "this domain is
+    // on GoDaddy - add the record there yourself" for the operator reading the Overview tab.
+    private static readonly string[] Microsoft365NsSuffixes = [".bdm.microsoftonline.com"];
+    private static readonly string[] GoDaddyNsSuffixes = [".domaincontrol.com"];
+    private static readonly string[] NamecheapNsSuffixes = [".registrar-servers.com"];
+    private static readonly string[] DigitalOceanNsSuffixes = [".digitalocean.com"];
+    private static readonly string[] OvhNsSuffixes = [".ovh.net"];
+    private static readonly string[] GandiNsSuffixes = [".gandi.net"];
+    private static readonly string[] Ns1NsSuffixes = [".nsone.net"];
+    private static readonly string[] DnsMadeEasyNsSuffixes = [".dnsmadeeasy.com"];
+    private static readonly string[] VercelNsSuffixes = [".vercel-dns.com"];
+
     private readonly HttpClient _http;
 
     public DnsProviderDetector(HttpClient http) => _http = http;
@@ -44,26 +58,7 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
 
             if (nsHosts.Count > 0)
             {
-                foreach (var host in nsHosts)
-                {
-                    if (CloudflareNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        return new DnsProviderDetectionResult(DetectedDnsProvider.Cloudflare, candidate);
-                    }
-                    if (AzureDnsNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        return new DnsProviderDetectionResult(DetectedDnsProvider.AzureDns, candidate);
-                    }
-                    if (GoogleCloudDnsNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        return new DnsProviderDetectionResult(DetectedDnsProvider.GoogleCloudDns, candidate);
-                    }
-                }
-
-                // NS records exist at this candidate but match no known provider - this IS the
-                // zone (a real delegation, just to an unrecognized nameserver), so stop walking
-                // rather than treating it as "not delegated yet" and searching further up.
-                return new DnsProviderDetectionResult(DetectedDnsProvider.Unknown, candidate);
+                return new DnsProviderDetectionResult(DetectProvider(nsHosts), candidate, nsHosts);
             }
 
             var nextDot = candidate.IndexOf('.');
@@ -74,7 +69,77 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
             candidate = candidate[(nextDot + 1)..];
         }
 
-        return new DnsProviderDetectionResult(DetectedDnsProvider.Unknown, domainName);
+        return new DnsProviderDetectionResult(DetectedDnsProvider.Unknown, domainName, []);
+    }
+
+    // Amazon Route 53's nameserver hostnames (e.g. "ns-1234.awsdns-56.org.") vary their TLD
+    // (.com/.net/.org/.co.uk) and shard number, so - unlike every other provider here - there's no
+    // single fixed suffix to match; "awsdns-" appearing anywhere in the host is Route 53's stable
+    // signature across all of them.
+    private static bool IsAmazonRoute53Host(string host) => host.Contains(".awsdns-", StringComparison.OrdinalIgnoreCase);
+
+    private static DetectedDnsProvider DetectProvider(List<string> nsHosts)
+    {
+        foreach (var host in nsHosts)
+        {
+            if (CloudflareNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Cloudflare;
+            }
+            if (AzureDnsNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.AzureDns;
+            }
+            if (GoogleCloudDnsNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.GoogleCloudDns;
+            }
+            if (Microsoft365NsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Microsoft365;
+            }
+            if (IsAmazonRoute53Host(host))
+            {
+                return DetectedDnsProvider.AmazonRoute53;
+            }
+            if (GoDaddyNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.GoDaddy;
+            }
+            if (NamecheapNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Namecheap;
+            }
+            if (DigitalOceanNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.DigitalOcean;
+            }
+            if (OvhNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Ovh;
+            }
+            if (GandiNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Gandi;
+            }
+            if (Ns1NsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Ns1;
+            }
+            if (DnsMadeEasyNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.DnsMadeEasy;
+            }
+            if (VercelNsSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return DetectedDnsProvider.Vercel;
+            }
+        }
+
+        // NS records exist at this candidate but match no known provider - this IS the zone (a
+        // real delegation, just to an unrecognized nameserver), so the caller stops walking rather
+        // than treating it as "not delegated yet" and searching further up.
+        return DetectedDnsProvider.Unknown;
     }
 
     private async Task<List<string>> QueryNsHostsAsync(string name, CancellationToken cancellationToken)

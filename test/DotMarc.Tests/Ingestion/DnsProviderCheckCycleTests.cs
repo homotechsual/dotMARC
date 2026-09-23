@@ -46,7 +46,7 @@ public sealed class DnsProviderCheckCycleTests : IAsyncLifetime
         context.Domains.Add(new Domain { Name = "services.wrc.wales", FirstSeenUtc = DateTimeOffset.UtcNow });
         await context.SaveChangesAsync();
 
-        var detector = new FakeDnsProviderDetector { Result = new(DetectedDnsProvider.AzureDns, "wrc.wales") };
+        var detector = new FakeDnsProviderDetector { Result = new(DetectedDnsProvider.AzureDns, "wrc.wales", ["ns1-05.azure-dns.com"]) };
         var service = CreateService(context);
         await service.RunDnsProviderCheckCycleAsync(context, detector, CancellationToken.None);
 
@@ -55,6 +55,7 @@ public sealed class DnsProviderCheckCycleTests : IAsyncLifetime
         Assert.Equal(DetectedDnsProvider.AzureDns, domain.DnsProvider);
         Assert.Equal("wrc.wales", domain.DnsZone);
         Assert.NotNull(domain.DnsProviderCheckedUtc);
+        Assert.Equal(["ns1-05.azure-dns.com"], domain.DnsNameservers);
     }
 
     [Fact]

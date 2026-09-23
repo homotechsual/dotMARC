@@ -59,6 +59,47 @@ public sealed class DnsProviderDetectorTests
     }
 
     [Fact]
+    public async Task DetectAsync_ReturnsMicrosoft365_ForTheBdmNsSuffix()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":2,"data":"ns1.bdm.microsoftonline.com."},{"type":2,"data":"ns2.bdm.microsoftonline.com."}]}
+            """;
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(DetectedDnsProvider.Microsoft365, result.Provider);
+    }
+
+    [Theory]
+    [InlineData("ns-123.awsdns-45.com.")]
+    [InlineData("ns-678.awsdns-90.co.uk.")]
+    public async Task DetectAsync_ReturnsAmazonRoute53_ForAnyAwsdnsHost(string nsHost)
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBody = $$"""
+            {"Status":0,"Answer":[{"type":2,"data":"{{nsHost}}"}]}
+            """;
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(DetectedDnsProvider.AmazonRoute53, result.Provider);
+    }
+
+    [Fact]
+    public async Task DetectAsync_ReturnsTheRawNsHosts_AlongsideTheDetectedProvider()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":2,"data":"ana.ns.cloudflare.com."},{"type":2,"data":"bob.ns.cloudflare.com."}]}
+            """;
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(["ana.ns.cloudflare.com", "bob.ns.cloudflare.com"], result.Nameservers);
+    }
+
+    [Fact]
     public async Task DetectAsync_ReturnsUnknown_ForAnUnrecognizedProvider()
     {
         var (detector, handler) = CreateDetector();

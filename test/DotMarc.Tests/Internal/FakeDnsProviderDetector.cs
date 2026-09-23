@@ -5,7 +5,7 @@ namespace DotMarc.Tests.Internal;
 
 internal sealed class FakeDnsProviderDetector : IDnsProviderDetector
 {
-    public DnsProviderDetectionResult Result { get; set; } = new(DetectedDnsProvider.Unknown, "");
+    public DnsProviderDetectionResult Result { get; set; } = new(DetectedDnsProvider.Unknown, "", []);
     public bool ShouldThrow { get; set; }
     public List<string> CheckedDomains { get; } = [];
 

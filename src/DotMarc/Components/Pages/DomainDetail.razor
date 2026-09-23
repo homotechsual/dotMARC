@@ -273,6 +273,12 @@ else
                                       CheckedUtc="_domain.DnsProviderCheckedUtc"
                                       Detail="@(_domain.DnsZone is { } zone ? $"Zone: {zone}" : null)">
                     <ActionContent>
+                        @if (_domain.DnsNameservers.Count > 0)
+                        {
+                            <MudTooltip Text="@string.Join(", ", _domain.DnsNameservers)" Arrow="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.Info" Size="Size.Small" title="Configured nameservers" />
+                            </MudTooltip>
+                        }
                         <AuthorizeView Policy="DomainsEdit" Context="dnsProviderAuthState">
                             <Authorized>
                                 @if (_isRecheckingDnsProvider)
@@ -1029,6 +1035,7 @@ else
             _domain!.DnsProvider = domain.DnsProvider;
             _domain.DnsZone = domain.DnsZone;
             _domain.DnsProviderCheckedUtc = domain.DnsProviderCheckedUtc;
+            _domain.DnsNameservers = domain.DnsNameservers;
         }
         finally
         {

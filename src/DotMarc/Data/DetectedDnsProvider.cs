@@ -10,5 +10,15 @@ public enum DetectedDnsProvider
     Unknown,
     Cloudflare,
     AzureDns,
-    GoogleCloudDns
+    GoogleCloudDns,
+    Microsoft365,
+    AmazonRoute53,
+    GoDaddy,
+    Namecheap,
+    DigitalOcean,
+    Ovh,
+    Gandi,
+    Ns1,
+    DnsMadeEasy,
+    Vercel
 }
