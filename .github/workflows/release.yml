@@ -23,6 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Validate version, release notes, and tag
+        env:
+          VERSION: ${{ github.event.inputs.version || github.ref_name }}
+        run: node scripts/release.mjs check "$VERSION" --allow-existing-tag
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:

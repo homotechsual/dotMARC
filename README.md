@@ -84,6 +84,27 @@ Docker volume (`dotmarc-postgres-data`). Set the seven required environment vari
 setup steps above (or put them in a `.env` file next to `docker-compose.yml` compose reads that
 automatically).
 
+### Cut a release
+
+Release metadata lives in `Directory.Build.props`. Prepare the next version with the release
+helper; it updates the project version and creates the matching release-notes post and slug:
+
+```powershell
+node scripts/release.mjs prepare 0.7.0
+```
+
+Edit the generated post, then create the release commit and annotated tag only after its contents
+are ready:
+
+```powershell
+node scripts/release.mjs tag 0.7.0
+git push origin main v0.7.0
+```
+
+The tag command refuses unrelated worktree changes, duplicate slugs, missing release notes, or an
+existing tag. The release workflow repeats the metadata check before building images. The app
+footer reads the compiled project version and links it to the corresponding post on the website.
+
 ### Reverse proxy / TLS termination
 
 The container listens on plain HTTP on port 8080; it expects a TLS-terminating reverse proxy

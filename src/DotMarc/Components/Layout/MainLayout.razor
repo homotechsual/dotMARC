@@ -4,6 +4,7 @@
 @using Microsoft.JSInterop
 @using DotMarc.Demo
 @using Microsoft.Extensions.Options
+@using System.Reflection
 @inject IJSRuntime Js
 @inject IOptions<DemoOptions> DemoOptions
 
@@ -76,6 +77,7 @@
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     © @_currentYear dotMARC. Free software licensed under the
                     <MudLink Href="https://dotmarc.app/license" Target="_blank" Color="Color.Primary">GNU Affero General Public License v3.0</MudLink>.
+                    <MudLink Href="@_releaseNotesUrl" Target="_blank" Color="Color.Primary">v@_version</MudLink>.
                     <MudLink Href="https://github.com/homotechsual/dotMARC" Target="_blank" Color="Color.Primary">Source code</MudLink>.
                 </MudText>
             </MudContainer>
@@ -140,6 +142,8 @@
 
     private bool _isDarkMode;
     private readonly int _currentYear = DateTime.UtcNow.Year;
+    private static readonly string _version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+    private static readonly string _releaseNotesUrl = $"https://dotmarc.app/blog/v{_version.Replace('.', '-')}";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
