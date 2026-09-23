@@ -54,7 +54,7 @@ first; the log lists what it would change.
 | Input | Meaning |
 | --- | --- |
 | `dry_run` | Default on. Reports what would change and writes nothing. |
-| `update_details` | For ideas that already exist: `none` leaves the description alone, `prepend` adds the release line above it, `replace` swaps in the description from the JSON and keeps the original text underneath as "Original request:". |
+| `update_details` | For ideas that already exist: `none` leaves the description alone (apart from the release line change described below), `prepend` adds the release line above it, `replace` swaps in the description from the JSON and keeps the original text underneath as "Original request:". |
 | `notify_voters` | Default off. Whether moving an idea to complete emails its voters. Leave it off if the changelog entry is going to notify them anyway. |
 | `author_id` | Only needed if the board has more than one Canny admin, so the script cannot pick the author itself. |
 
@@ -65,6 +65,9 @@ What the sync does, and deliberately does not do:
 - For an existing idea it only ever adds a missing version tag, optionally rewrites the description
   (per `update_details`), and moves the status to **complete** when the JSON says so. It never
   changes any other status, since statuses are otherwise yours to manage on the board.
+- When the JSON says an idea is complete and its description still opens with "Target release:
+  vX", that first line is changed to "Released in: vX" regardless of `update_details`. Only that
+  line is touched; the rest of the description is left as it is.
 - It creates any idea that has no matching post, along with its version tag, and sets its status.
 - It is safe to re-run: a second run with no JSON changes makes no writes.
 
@@ -129,8 +132,8 @@ complete ideas tagged with that version.
 - **Re-running does not add links after the fact.** The duplicate check means a second run skips an
   entry that already exists. If you forgot to mark an idea complete before tagging, fix the entry in
   Canny's changelog editor.
-- **The release line is not rewritten when an idea ships.** An idea whose description already
-  begins with "Target release:" keeps that wording after it is marked complete, because the sync
-  treats any existing release line as done.
+- **Marking an idea complete directly in Canny leaves its release line as "Target release".** The
+  line is only changed to "Released in" by the sync, so set the idea to `complete` in the JSON and
+  run the sync (or edit the line by hand) if you want the public wording to match.
 - **Roadmap columns and public visibility of tags are Canny settings**, not something these scripts
   can change.
