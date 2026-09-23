@@ -38,6 +38,16 @@
     ]
   },
   {
+    "title": "Infer a reason for rejected or quarantined mail when the receiver gives none",
+    "version": "v0.7.0",
+    "status": "in progress",
+    "details": [
+      "DMARC aggregate reports can explain why a receiver overrode its policy, but many receivers omit the reason entirely. A rejected or quarantined source with no reason shows as unexplained, which tells an operator nothing they can act on.",
+      "In progress: when a report gives no reason, dotMARC works out a plain-English explanation from the raw SPF and DKIM results in the report. For example, that no DKIM signature was present, that SPF passed for a different domain than the From: address (so it does not align), or that a check failed outright. It appears on the Sources tab marked as Inferred, so it is never mistaken for a reason the receiver reported, and it is only shown when the receiver gave no reason of its own.",
+      "Domain alignment is judged with a same-domain-or-subdomain check rather than a full public suffix lookup, so treat the explanation as a best-effort pointer rather than an authoritative verdict."
+    ]
+  },
+  {
     "title": "Audit logging for all changes / configuration alterations and access.",
     "version": "v0.8.0",
     "status": "planned",
