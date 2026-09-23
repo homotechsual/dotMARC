@@ -4,8 +4,8 @@ name: Canny Changelog Backfill
 # shipped before automatic publishing (release.yml's canny-changelog job) existed. Uses the same
 # CANNY_API_KEY repository secret as that job - set it up there first if you haven't already.
 #
-# Each run posts a NEW changelog entry per version listed; Canny's API has no dedupe/idempotency
-# key, so only list versions that don't already have an entry in Canny, or you'll get duplicates.
+# Canny's API has no idempotency key, so the publish script itself skips any version whose entry
+# title already exists in Canny; listing a version that was already published is harmless.
 # Notifications default OFF here (unlike the live per-release job) so backfilling old releases
 # doesn't email every Canny subscriber a burst of notifications about months-old news.
 

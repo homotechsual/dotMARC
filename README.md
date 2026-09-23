@@ -105,6 +105,10 @@ The tag command refuses unrelated worktree changes, duplicate slugs, missing rel
 existing tag. The release workflow repeats the metadata check before building images. The app
 footer reads the compiled project version and links it to the corresponding post on the website.
 
+Pushing the tag also publishes the release post to Canny as a changelog entry and links the
+shipped ideas to it. Mark those ideas complete in Canny before you push the tag; see
+[Releasing](https://dotmarc.app/docs/releasing) for what is automated and what is not.
+
 ### Reverse proxy / TLS termination
 
 The container listens on plain HTTP on port 8080; it expects a TLS-terminating reverse proxy

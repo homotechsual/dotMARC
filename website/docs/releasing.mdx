@@ -1,0 +1,136 @@
+---
+sidebar_position: 4.5
+description: How a dotMARC release is cut, and how the Canny board and changelog are kept in step with it, including which parts are automated.
+---
+
+# Releasing
+
+This page is for maintainers. It covers how a release is cut and how the public Canny board (ideas
+and roadmap) and Canny changelog fit around it, with an explicit split between what runs by itself
+and what you still do by hand.
+
+## What is automated
+
+| Step | Done by | Trigger |
+| --- | --- | --- |
+| Bump the version, draft and tag the release post | You, with `scripts/release.mjs` | Manual |
+| Validate metadata, test, build and publish images, create the GitHub release | `release.yml` | Automatic on a `v*.*.*` tag push |
+| Publish the Canny changelog entry | `release.yml`, job `canny-changelog` | Automatic, after the images and GitHub release succeed |
+| Link shipped ideas to that entry | Same job | Automatic, using each idea's tag and status in Canny at that moment |
+| Mark an idea complete | You | Manual: in Canny, or via the roadmap sync workflow |
+| Create ideas, add version tags | Roadmap sync workflow | Manual dispatch |
+| Email voters that their idea shipped | Canny | When the changelog entry is published with notifications on |
+
+The two things people tend to assume are automatic but are not: **ideas are never marked complete
+for you**, and **nothing runs the roadmap sync on release**. Because the link step only picks up
+ideas that are already complete, marking them complete has to happen before you push the tag.
+
+## How ideas are organised on the board
+
+Canny has no release or version field on ideas, so a target release is expressed three ways:
+
+- A **version tag** such as `v0.7.0` on the idea. Tags are only visible to Canny admins, so this is
+  for your own filtering and for the changelog linking below.
+- A **"Target release: v0.7.0" line** at the top of the description (or "Released in: v0.6.0" once
+  shipped). This is what a public visitor actually sees.
+- The **status**: `planned`, `in progress`, `complete`, or `under review` for ideas with no version.
+
+No ETAs are set, since they would be public promises. Public roadmap columns follow status and are
+configured in Canny's own settings; nothing here touches them.
+
+The source of truth for ideas we create or track is `website/scripts/canny-roadmap.json`. Each entry
+has a `title`, a `version` (or `null`), a `status`, and `details` (a list of paragraphs).
+
+## Marking an idea complete
+
+There are two ways, and either works for the changelog linking.
+
+**In Canny.** Change the idea's status to Complete in the Canny UI. This is the quickest option.
+
+**Through the roadmap sync.** Set `"status": "complete"` on the idea in `canny-roadmap.json`, push
+it, then run the **Canny Roadmap Sync** workflow from the Actions tab. Run it with `dry_run` ticked
+first; the log lists what it would change.
+
+| Input | Meaning |
+| --- | --- |
+| `dry_run` | Default on. Reports what would change and writes nothing. |
+| `update_details` | For ideas that already exist: `none` leaves the description alone, `prepend` adds the release line above it, `replace` swaps in the description from the JSON and keeps the original text underneath as "Original request:". |
+| `notify_voters` | Default off. Whether moving an idea to complete emails its voters. Leave it off if the changelog entry is going to notify them anyway. |
+| `author_id` | Only needed if the board has more than one Canny admin, so the script cannot pick the author itself. |
+
+What the sync does, and deliberately does not do:
+
+- It matches ideas to existing posts by **title** (trimmed, case-insensitive). A match is never
+  duplicated.
+- For an existing idea it only ever adds a missing version tag, optionally rewrites the description
+  (per `update_details`), and moves the status to **complete** when the JSON says so. It never
+  changes any other status, since statuses are otherwise yours to manage on the board.
+- It creates any idea that has no matching post, along with its version tag, and sets its status.
+- It is safe to re-run: a second run with no JSON changes makes no writes.
+
+## Changelog publishing and idea linking
+
+The `canny-changelog` job in `release.yml` runs `website/scripts/publish-canny-changelog.mjs` once
+the images and GitHub release have succeeded. It only runs for a real tag push, never for a manual
+re-run of the workflow. For the tagged version it does the following:
+
+1. **Finds the release post** in `website/blog/` by its `slug` (`v0.7.0` becomes `v0-7-0`), so the
+   post must exist at the tagged commit. `release.mjs tag` guarantees that.
+2. **Converts MDX to Markdown**: drops `import` lines and the `{/* truncate */}` marker, turns
+   `<ThemedImage>` into a plain Markdown image (light variant), rewrites relative `/docs/` and
+   `/blog/` links to absolute `https://dotmarc.app/...` links, and tolerates CRLF line endings.
+3. **Skips if it already exists.** Canny's create call has no idempotency key, so the script lists
+   existing entries and stops if one has the same title. If it cannot list them, it posts nothing.
+4. **Finds ideas to link**: every idea on the board that is tagged `v0.7.0` **and** has status
+   `complete`. Ideas tagged with the version but not complete are skipped and logged with their
+   status, because a tag is only a target and an idea that slipped must not be announced as shipped.
+5. **Creates the entry** as published, dated with the release post's filename date, with the
+   matching ideas passed as `postIDs`. Notifications default on (`NOTIFY=false` turns them off).
+
+Linking is a bonus, not a gate. If the idea lookup fails, the entry is published without links and
+a warning is logged. The job only fails outright if the post cannot be found or parsed, the existing
+entries cannot be listed, or Canny rejects the entry.
+
+## Cutting a release, step by step
+
+1. **Settle the ideas.** For everything shipping in this release, make sure it carries the version
+   tag and is marked complete (see above). Anything that slipped should be re-tagged to a later
+   version, or it will simply be skipped and logged.
+2. **Prepare.** `node scripts/release.mjs prepare 0.7.0` bumps `Directory.Build.props` and creates
+   the release post.
+3. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with
+   unrelated working tree changes, a missing or placeholder post, or an existing tag.
+4. **Push.** `git push origin main v0.7.0`. Everything from here is automatic.
+5. **Check the run.** In the `canny-changelog` job log, look for one `Linking "..."` line per shipped
+   idea and a final `Published entry ... linkedIdeas=N` line. A `Not linking "..."` line means an
+   idea was tagged for this version but was not complete at the time.
+
+## Backfilling or republishing
+
+The **Canny Changelog Backfill** workflow runs the same script for a list of versions you give it.
+It defaults to notifications off, so publishing old releases does not email subscribers. Because of
+the duplicate check it is harmless to list a version that is already in Canny. It also links
+complete ideas tagged with that version.
+
+## Setup
+
+- The `CANNY_API_KEY` repository secret (Canny settings, API) is used by all three workflows.
+- Both scripts identify the board by its widget token, which must match `BOARD_TOKEN` in
+  `website/src/plugins/featureRequests/FeatureRequestsPage.tsx`.
+- To try the sync locally: `CANNY_API_KEY=... DRY_RUN=true node website/scripts/sync-canny-roadmap.mjs`.
+  The changelog script has no dry-run mode and posts for real, so test changes to it against a
+  mocked `fetch` rather than the live API.
+
+## Known limitations
+
+- **Renaming an idea in Canny breaks the match.** The sync finds ideas by title, so if you rename
+  one on the board, update its `title` in `canny-roadmap.json` too, or the next sync creates a
+  duplicate.
+- **Re-running does not add links after the fact.** The duplicate check means a second run skips an
+  entry that already exists. If you forgot to mark an idea complete before tagging, fix the entry in
+  Canny's changelog editor.
+- **The release line is not rewritten when an idea ships.** An idea whose description already
+  begins with "Target release:" keeps that wording after it is marked complete, because the sync
+  treats any existing release line as done.
+- **Roadmap columns and public visibility of tags are Canny settings**, not something these scripts
+  can change.
