@@ -36,6 +36,7 @@ if (!['none', 'prepend', 'replace'].includes(updateMode)) {
 }
 const notifyVoters = process.env.NOTIFY_VOTERS === 'true';
 const RELEASE_LINE = /^(Target release|Released in):/;
+const TARGET_LINE = /^Target release:[^\n]*/;
 
 function log(message) {
   console.log(`[canny-roadmap] ${message}`);
@@ -190,6 +191,7 @@ for (const idea of roadmap) {
 
       const currentDetails = existing.details ?? '';
       let updatedDetails;
+      let detailsChange = '';
       if (updateMode !== 'none' && idea.version && !RELEASE_LINE.test(currentDetails)) {
         const original = currentDetails.trim();
         // Replacing keeps the original wording underneath, unless it only repeats the title.
@@ -199,11 +201,17 @@ for (const idea of roadmap) {
         } else {
           updatedDetails = keepOriginal ? `${fullDetails}\n\nOriginal request: ${original}` : fullDetails;
         }
+        detailsChange = `${updateMode} description`;
+      } else if (idea.status === 'complete' && idea.version && TARGET_LINE.test(currentDetails)) {
+        // Once an idea has shipped its "Target release" line becomes "Released in", whatever the
+        // update mode. Only that first line is touched, and only when it still says "Target release".
+        updatedDetails = currentDetails.replace(TARGET_LINE, `Released in: ${idea.version}`);
+        detailsChange = 'change release line to "Released in"';
       }
 
       const pendingChanges = [
         needsTag ? 'add version tag' : '',
-        updatedDetails ? `${updateMode} description` : '',
+        updatedDetails ? detailsChange : '',
         needsCompletion ? `mark complete${notifyVoters ? ' and notify voters' : ''}` : '',
       ]
         .filter(Boolean)
