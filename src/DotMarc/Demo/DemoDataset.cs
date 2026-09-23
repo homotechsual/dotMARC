@@ -42,7 +42,10 @@ public sealed record DemoDomainSeed(
     string? MxCheckDetail = null,
     List<string>? DkimSelectors = null,
     DkimCheckStatus DkimCheckStatus = DkimCheckStatus.NotConfigured,
-    string? DkimCheckDetail = null);
+    string? DkimCheckDetail = null,
+    DetectedDnsProvider DnsProvider = DetectedDnsProvider.NotChecked,
+    string? DnsZone = null,
+    List<string>? DnsNameservers = null);
 
 public sealed record DemoTlsrptReportSeed(
     string ReportingOrg,

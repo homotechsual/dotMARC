@@ -97,7 +97,11 @@ public static class DemoDataSeeder
                 DkimSelectors = domainSeed.DkimSelectors ?? [],
                 DkimCheckStatus = domainSeed.DkimCheckStatus,
                 DkimCheckedUtc = domainSeed.DkimCheckStatus == DkimCheckStatus.NotConfigured ? null : domainSeed.FirstSeenUtc,
-                DkimCheckDetail = domainSeed.DkimCheckDetail
+                DkimCheckDetail = domainSeed.DkimCheckDetail,
+                DnsProvider = domainSeed.DnsProvider,
+                DnsProviderCheckedUtc = domainSeed.DnsProvider == DetectedDnsProvider.NotChecked ? null : domainSeed.FirstSeenUtc,
+                DnsZone = domainSeed.DnsZone,
+                DnsNameservers = domainSeed.DnsNameservers ?? []
             };
 
             if (domainSeed.GroupName is not null)

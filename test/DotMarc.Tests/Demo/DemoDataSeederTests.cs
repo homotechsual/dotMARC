@@ -43,8 +43,8 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
 
         using var verify = CreateContext();
-        Assert.Equal(7, await verify.Domains.CountAsync());
-        Assert.Equal(4, await verify.Groups.CountAsync());
+        Assert.Equal(25, await verify.Domains.CountAsync());
+        Assert.Equal(12, await verify.Groups.CountAsync());
         Assert.True(await verify.Reports.CountAsync() > 0);
         Assert.True(await verify.ReportRecords.CountAsync() > 0);
     }
@@ -84,7 +84,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         }
 
         using var verify = CreateContext();
-        Assert.Equal(7, await verify.Domains.CountAsync());
+        Assert.Equal(25, await verify.Domains.CountAsync());
         Assert.Equal(2, await verify.Roles.CountAsync());
         Assert.Equal(2, await verify.UserAccesses.CountAsync());
     }
@@ -186,7 +186,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
 
         using (var verifyBaseline = CreateContext())
         {
-            Assert.Equal(7, await verifyBaseline.Domains.CountAsync());
+            Assert.Equal(25, await verifyBaseline.Domains.CountAsync());
         }
 
         var validDataset = SampleDataset();
@@ -207,7 +207,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         }
 
         using var verify = CreateContext();
-        Assert.Equal(7, await verify.Domains.CountAsync());
+        Assert.Equal(25, await verify.Domains.CountAsync());
         Assert.Equal(2, await verify.UserAccesses.CountAsync());
     }
 }

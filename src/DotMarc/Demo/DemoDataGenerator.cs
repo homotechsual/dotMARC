@@ -16,6 +16,28 @@ public static class DemoDataGenerator
     public static readonly int HistoryDays = (int)DomainStatistics.ReportWindow.TotalDays;
     public const int RawPollCycleDays = 7;
 
+    // Sample nameservers per recognized provider, for the DNS provider row's "configured
+    // nameservers" tooltip - see DnsProviderDetector's own suffix lists for where these patterns
+    // come from. Unknown gets a made-up registrar host (recognized as "checked, but no known
+    // provider matched" rather than the NotChecked default), NotChecked gets none at all.
+    private static readonly Dictionary<DetectedDnsProvider, List<string>> DnsNameserverSamples = new()
+    {
+        [DetectedDnsProvider.Cloudflare] = ["ana.ns.cloudflare.com", "bob.ns.cloudflare.com"],
+        [DetectedDnsProvider.AzureDns] = ["ns1-01.azure-dns.com", "ns2-01.azure-dns.net", "ns3-01.azure-dns.org", "ns4-01.azure-dns.info"],
+        [DetectedDnsProvider.GoogleCloudDns] = ["ns-cloud-a1.googledomains.com", "ns-cloud-a2.googledomains.com"],
+        [DetectedDnsProvider.Microsoft365] = ["ns1.bdm.microsoftonline.com", "ns2.bdm.microsoftonline.com"],
+        [DetectedDnsProvider.AmazonRoute53] = ["ns-1234.awsdns-56.org", "ns-567.awsdns-12.com"],
+        [DetectedDnsProvider.GoDaddy] = ["ns1.domaincontrol.com", "ns2.domaincontrol.com"],
+        [DetectedDnsProvider.Namecheap] = ["dns1.registrar-servers.com", "dns2.registrar-servers.com"],
+        [DetectedDnsProvider.DigitalOcean] = ["ns1.digitalocean.com", "ns2.digitalocean.com", "ns3.digitalocean.com"],
+        [DetectedDnsProvider.Ovh] = ["dns17.ovh.net", "ns17.ovh.net"],
+        [DetectedDnsProvider.Gandi] = ["ns-142-a.gandi.net", "ns-6-b.gandi.net", "ns-64-c.gandi.net"],
+        [DetectedDnsProvider.Ns1] = ["dns1.p01.nsone.net", "dns2.p01.nsone.net"],
+        [DetectedDnsProvider.DnsMadeEasy] = ["ns1.dnsmadeeasy.com", "ns2.dnsmadeeasy.com"],
+        [DetectedDnsProvider.Vercel] = ["ns1.vercel-dns.com", "ns2.vercel-dns.com"],
+        [DetectedDnsProvider.Unknown] = ["dns1.some-registrar.example", "dns2.some-registrar.example"],
+    };
+
     public static DemoDataset Generate(Random random, DateTimeOffset nowUtc)
     {
         var groups = new List<DemoGroupSeed>
@@ -24,6 +46,14 @@ public static class DemoDataGenerator
             new("Brightline Legal"),
             new("Cobalt Freight"),
             new("Driftwood Media"),
+            new("Emberwood Finance"),
+            new("Solstice Health"),
+            new("Ironclad Manufacturing"),
+            new("Willowmere Retail"),
+            new("Palmwood Logistics"),
+            new("Brackenfield Media"),
+            new("Thistledown Consulting"),
+            new("Quarrystone Insurance"),
         };
 
         var domains = new List<DemoDomainSeed>
@@ -36,21 +66,23 @@ public static class DemoDataGenerator
                 tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 0, 0],
                 // Even a healthy p=reject domain sees the occasional forwarder trip alignment -
                 // shows the "benign override" bucket in the reason-breakdown panels alongside
-                // Cobalt Freight's "no reason given" one, rather than every domain landing in the
-                // same bucket.
+                // Cobalt Freight's "inferred SPF/DKIM failure" one and Palmwood's "no reason
+                // given" one, rather than every domain landing in the same bucket.
                 forcedFailingDisposition: DispositionResult.Quarantine,
                 failingRecordOverrideReasons: [new(DmarcPolicyOverrideType.TrustedForwarder, "Recognized email forwarding service")],
                 failingRecordAuthDetails:
                 [
                     new(DmarcAuthMechanism.Spf, "relay.trusted-forwarder.example", DmarcMechanismResult.Fail),
                     new(DmarcAuthMechanism.Dkim, "aurora-retail.example", DmarcMechanismResult.Fail, Selector: "selector1")
-                ]),
+                ],
+                dnsProvider: DetectedDnsProvider.Cloudflare, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Cloudflare]),
             BuildDomain(random, nowUtc, sortOrder: 1, name: "shop.aurora-retail.example", groupName: "Aurora Retail",
                 orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.996,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Testing, mtaStsStatus: MtaStsStatus.Active,
                 mtaStsDetail: "Policy is live in testing mode.",
-                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 4, 0]),
+                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 4, 0],
+                dnsProvider: DetectedDnsProvider.Cloudflare, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Cloudflare]),
             BuildDomain(random, nowUtc, sortOrder: 2, name: "brightline-legal.example", groupName: "Brightline Legal",
                 orgs: ["google.com", "outlook.com"], passRateForDay: day => Lerp(0.93, 0.995, day / (double)(HistoryDays - 1)),
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
@@ -59,7 +91,8 @@ public static class DemoDataGenerator
                 tlsrptCheckStatus: TlsrptCheckStatus.MissingOwnRecord,
                 tlsrptCheckDetail: "No TXT record found at _smtp._tls.brightline-legal.example",
                 spfCheckStatus: SpfCheckStatus.MissingRecord,
-                spfCheckDetail: "No SPF (v=spf1) TXT record found at brightline-legal.example"),
+                spfCheckDetail: "No SPF (v=spf1) TXT record found at brightline-legal.example",
+                dnsProvider: DetectedDnsProvider.GoDaddy, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.GoDaddy]),
             BuildDomain(random, nowUtc, sortOrder: 3, name: "cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.87,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
@@ -76,27 +109,128 @@ public static class DemoDataGenerator
                 dkimCheckStatus: DkimCheckStatus.Missing,
                 dkimCheckDetail: "No DKIM record found for selector(s): selector1",
                 // The "problem worth investigating" domain: its failing source gets no override
-                // reason at all, so the reason-breakdown panels correctly bucket it as "no reason
-                // given" - the signal that this doesn't look like benign forwarding.
+                // reason at all, but DOES carry per-mechanism AuthDetails, so
+                // DomainStatistics.GetReasonBreakdown now buckets it as "inferred SPF/DKIM
+                // failure" rather than the uninformative "no reason given" - and its Sources tab
+                // row shows the extrapolated "sender not covered by SPF"-style explanation.
                 forcedFailingDisposition: DispositionResult.Quarantine,
                 failingRecordAuthDetails:
                 [
                     new(DmarcAuthMechanism.Spf, "bounce.thirdparty-marketing.example", DmarcMechanismResult.Fail),
                     new(DmarcAuthMechanism.Dkim, "thirdparty-marketing.example", DmarcMechanismResult.Fail)
-                ]),
+                ],
+                dnsProvider: DetectedDnsProvider.AzureDns, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.AzureDns]),
             BuildDomain(random, nowUtc, sortOrder: 4, name: "fleet.cobalt-freight.example", groupName: "Cobalt Freight",
                 orgs: ["google.com"], passRateForDay: _ => 0.98,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays - 4,
                 mtaStsEnabled: true, mtaStsMode: MtaStsMode.Testing, mtaStsStatus: MtaStsStatus.PendingDns,
-                mtaStsDetail: "Waiting for mta-sts.fleet.cobalt-freight.example to resolve."),
+                mtaStsDetail: "Waiting for mta-sts.fleet.cobalt-freight.example to resolve.",
+                dnsProvider: DetectedDnsProvider.AzureDns, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.AzureDns]),
             BuildDomain(random, nowUtc, sortOrder: 5, name: "driftwood-media.example", groupName: "Driftwood Media",
                 orgs: ["yahoo.com", "protonmail.com"], passRateForDay: _ => 0.85,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 dmarcAuthorizationCheckStatus: DmarcAuthorizationCheckStatus.Missing,
-                dmarcAuthorizationCheckDetail: "No TXT record found at driftwood-media.example._report._dmarc.nova-msp.example"),
+                dmarcAuthorizationCheckDetail: "No TXT record found at driftwood-media.example._report._dmarc.nova-msp.example",
+                dnsProvider: DetectedDnsProvider.Namecheap, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Namecheap]),
             BuildDomain(random, nowUtc, sortOrder: 6, name: "driftwood-events.example", groupName: null,
                 orgs: ["google.com"], passRateForDay: _ => 0.97,
-                status: DmarcCheckStatus.NotChecked, detail: null, daysOfHistory: HistoryDays),
+                status: DmarcCheckStatus.NotChecked, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Unknown, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Unknown]),
+            BuildDomain(random, nowUtc, sortOrder: 7, name: "emberwood-finance.example", groupName: "Emberwood Finance",
+                orgs: ["outlook.com", "google.com"], passRateForDay: _ => 0.995,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                mtaStsEnabled: true, mtaStsMode: MtaStsMode.Enforce, mtaStsStatus: MtaStsStatus.Active,
+                mtaStsDetail: "Policy is live and being enforced.",
+                tlsrptCheckStatus: TlsrptCheckStatus.Ok, tlsrptDailyFailedSessions: [0, 0, 0, 0, 0],
+                forcedFailingDisposition: DispositionResult.Reject,
+                failingRecordOverrideReasons: [new(DmarcPolicyOverrideType.LocalPolicy, "Held for manual review")],
+                dnsProvider: DetectedDnsProvider.Microsoft365, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Microsoft365]),
+            BuildDomain(random, nowUtc, sortOrder: 8, name: "payments.emberwood-finance.example", groupName: "Emberwood Finance",
+                orgs: ["outlook.com"], passRateForDay: _ => 0.999,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Microsoft365, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Microsoft365]),
+            BuildDomain(random, nowUtc, sortOrder: 9, name: "solstice-health.example", groupName: "Solstice Health",
+                orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.92,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordOverrideReasons: [new(DmarcPolicyOverrideType.Other, "Receiver-specific heuristic")],
+                dnsProvider: DetectedDnsProvider.GoogleCloudDns, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.GoogleCloudDns]),
+            BuildDomain(random, nowUtc, sortOrder: 10, name: "portal.solstice-health.example", groupName: "Solstice Health",
+                orgs: ["google.com"], passRateForDay: _ => 0.94,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.GoogleCloudDns, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.GoogleCloudDns]),
+            BuildDomain(random, nowUtc, sortOrder: 11, name: "ironclad-manufacturing.example", groupName: "Ironclad Manufacturing",
+                orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.9,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                // A second flavor of "inferred, not receiver-supplied" reason: SPF/DKIM both
+                // technically pass a check, but for a domain that doesn't align with the
+                // message's From: - shows ExplainMechanism's alignment-mismatch wording rather
+                // than its "failed"/"not covered" wording.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordAuthDetails:
+                [
+                    new(DmarcAuthMechanism.Spf, "mail.unrelated-sender.example", DmarcMechanismResult.Pass),
+                    new(DmarcAuthMechanism.Dkim, "unrelated-sender.example", DmarcMechanismResult.Pass, Selector: "s1")
+                ],
+                dnsProvider: DetectedDnsProvider.AmazonRoute53, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.AmazonRoute53]),
+            BuildDomain(random, nowUtc, sortOrder: 12, name: "supply.ironclad-manufacturing.example", groupName: "Ironclad Manufacturing",
+                orgs: ["google.com"], passRateForDay: _ => 0.96,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.AmazonRoute53, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.AmazonRoute53]),
+            BuildDomain(random, nowUtc, sortOrder: 13, name: "ironclad-parts.example", groupName: "Ironclad Manufacturing",
+                orgs: ["outlook.com"], passRateForDay: _ => 0.93,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.AmazonRoute53, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.AmazonRoute53]),
+            BuildDomain(random, nowUtc, sortOrder: 14, name: "willowmere-retail.example", groupName: "Willowmere Retail",
+                orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.98,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Vercel, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Vercel]),
+            BuildDomain(random, nowUtc, sortOrder: 15, name: "shop.willowmere-retail.example", groupName: "Willowmere Retail",
+                orgs: ["google.com"], passRateForDay: _ => 0.99,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Vercel, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Vercel]),
+            BuildDomain(random, nowUtc, sortOrder: 16, name: "cdn.willowmere-retail.example", groupName: "Willowmere Retail",
+                orgs: ["google.com"], passRateForDay: _ => 0.9,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.DigitalOcean, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.DigitalOcean]),
+            BuildDomain(random, nowUtc, sortOrder: 17, name: "palmwood-logistics.example", groupName: "Palmwood Logistics",
+                orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.88,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                // The genuinely uninformative case: no override reason AND no AuthDetails, so
+                // this stays in "no reason given" even after today's inference work - the
+                // realistic shape of a report ingested before AuthDetail backfill caught up.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                dnsProvider: DetectedDnsProvider.Ns1, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Ns1]),
+            BuildDomain(random, nowUtc, sortOrder: 18, name: "dispatch.palmwood-logistics.example", groupName: "Palmwood Logistics",
+                orgs: ["google.com"], passRateForDay: _ => 0.95,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Ns1, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Ns1]),
+            BuildDomain(random, nowUtc, sortOrder: 19, name: "brackenfield-media.example", groupName: "Brackenfield Media",
+                orgs: ["yahoo.com", "protonmail.com"], passRateForDay: _ => 0.91,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Gandi, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Gandi]),
+            BuildDomain(random, nowUtc, sortOrder: 20, name: "brackenfield-studio.example", groupName: "Brackenfield Media",
+                orgs: ["google.com"], passRateForDay: _ => 0.97,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Gandi, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Gandi]),
+            BuildDomain(random, nowUtc, sortOrder: 21, name: "thistledown-consulting.example", groupName: "Thistledown Consulting",
+                orgs: ["outlook.com", "google.com"], passRateForDay: _ => 0.995,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Ovh, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Ovh]),
+            BuildDomain(random, nowUtc, sortOrder: 22, name: "quarrystone-insurance.example", groupName: "Quarrystone Insurance",
+                orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.94,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordOverrideReasons: [new(DmarcPolicyOverrideType.MailingList, "Subscriber newsletter relay")],
+                dnsProvider: DetectedDnsProvider.DnsMadeEasy, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.DnsMadeEasy]),
+            BuildDomain(random, nowUtc, sortOrder: 23, name: "oldworld-imports.example", groupName: null,
+                orgs: ["yahoo.com"], passRateForDay: _ => 0.8,
+                status: DmarcCheckStatus.MissingOwnRecord,
+                detail: "No TXT record found at _dmarc.oldworld-imports.example", daysOfHistory: HistoryDays),
+            BuildDomain(random, nowUtc, sortOrder: 24, name: "northstar-nonprofit.example", groupName: null,
+                orgs: ["google.com"], passRateForDay: _ => 0.99,
+                status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                dnsProvider: DetectedDnsProvider.Unknown, dnsNameservers: ["dns1.legacy-registrar.example", "dns2.legacy-registrar.example"]),
         };
 
         return new DemoDataset(
@@ -109,6 +243,7 @@ public static class DemoDataGenerator
     }
 
     private static double Lerp(double from, double to, double t) => from + ((to - from) * t);
+
 
     private static DemoDomainSeed BuildDomain(
         Random random, DateTimeOffset nowUtc, int sortOrder, string name, string? groupName,
@@ -128,7 +263,10 @@ public static class DemoDataGenerator
         string? dkimCheckDetail = null,
         DispositionResult? forcedFailingDisposition = null,
         List<DemoOverrideReasonSeed>? failingRecordOverrideReasons = null,
-        List<DemoAuthDetailSeed>? failingRecordAuthDetails = null)
+        List<DemoAuthDetailSeed>? failingRecordAuthDetails = null,
+        DetectedDnsProvider dnsProvider = DetectedDnsProvider.NotChecked,
+        string? dnsZone = null,
+        List<string>? dnsNameservers = null)
     {
         var reports = new List<DemoReportSeed>();
         DateTimeOffset? lastReportReceivedUtc = null;
@@ -184,7 +322,10 @@ public static class DemoDataGenerator
             MxCheckDetail: mxCheckDetail,
             DkimSelectors: dkimSelectors ?? [],
             DkimCheckStatus: dkimCheckStatus,
-            DkimCheckDetail: dkimCheckDetail);
+            DkimCheckDetail: dkimCheckDetail,
+            DnsProvider: dnsProvider,
+            DnsZone: dnsZone ?? (dnsProvider == DetectedDnsProvider.NotChecked ? null : name),
+            DnsNameservers: dnsNameservers ?? []);
     }
 
     /// <summary>One report per entry in dailyFailedSessions, oldest first, covering that many
