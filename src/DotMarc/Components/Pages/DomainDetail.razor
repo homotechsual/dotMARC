@@ -496,6 +496,9 @@ else
             .ThenInclude(r => r.Policies)
             .ThenInclude(policy => policy.FailureDetails)
             .Include(d => d.Groups)
+            // Several sibling collections (auth details, override reasons, TLSRPT policies, groups)
+            // in one result would multiply rows and repeat every report's RawXml on each of them.
+            .AsSplitQuery()
             .SingleOrDefaultAsync(d => d.Name == DomainName);
 
         if (_domain is null)

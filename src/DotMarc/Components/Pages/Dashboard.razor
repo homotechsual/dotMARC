@@ -348,6 +348,10 @@ else
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
             .ThenInclude(rec => rec.AuthDetails)
+            // Two sibling collections under each record (override reasons and auth details) would
+            // otherwise be joined into one result, multiplying rows and repeating every report's
+            // RawXml on each of them.
+            .AsSplitQuery()
             .AsQueryable();
 
         if (_selectedGroupId is { } groupId)

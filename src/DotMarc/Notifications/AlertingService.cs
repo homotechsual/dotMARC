@@ -53,6 +53,9 @@ public sealed class AlertingService : IAlertingService
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= reasonWindowCutoffUtc))
             .ThenInclude(r => r.Records)
             .ThenInclude(rec => rec.AuthDetails)
+            // Sibling collections under each record: split so they aren't joined into one
+            // row-multiplying result that repeats every report's RawXml.
+            .AsSplitQuery()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
