@@ -14,7 +14,7 @@ namespace DotMarc.Notifications;
 public sealed class HaloPsaTokenCache
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
-    private readonly Dictionary<(string AuthServerUrl, string ClientId), (string Token, DateTimeOffset ExpiresAtUtc)> _tokensByKey = new();
+    private readonly Dictionary<(string AuthServerUrl, string ClientId), (string Token, DateTimeOffset ExpiresAtUtc, string? GrantedScope)> _tokensByKey = new();
 
     public async Task<string> GetTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, CancellationToken cancellationToken)
     {
@@ -27,8 +27,8 @@ public sealed class HaloPsaTokenCache
                 return cached.Token;
             }
 
-            var (token, expiresAtUtc) = await AcquireTokenAsync(httpClient, settings, clientSecret, cancellationToken).ConfigureAwait(false);
-            _tokensByKey[key] = (token, expiresAtUtc);
+            var (token, expiresAtUtc, grantedScope) = await AcquireTokenAsync(httpClient, settings, clientSecret, cancellationToken).ConfigureAwait(false);
+            _tokensByKey[key] = (token, expiresAtUtc, grantedScope);
             return token;
         }
         finally
@@ -36,6 +36,12 @@ public sealed class HaloPsaTokenCache
             _lock.Release();
         }
     }
+
+    /// <summary>The scope Halo said it granted the cached token, or null when there is no token yet or
+    /// Halo didn't report one. A 403 on a call usually means the token lacks the scope the endpoint needs,
+    /// and this is the only place that shows what Halo actually granted.</summary>
+    public string? GrantedScopeFor(HaloPsaSettings settings) =>
+        _tokensByKey.TryGetValue(KeyFor(settings), out var cached) ? cached.GrantedScope : null;
 
     /// <summary>Drops the cached token for this settings' credentials, e.g. after a 401 - the next
     /// <see cref="GetTokenAsync"/> call for the same key acquires a fresh one instead of reusing a
@@ -56,7 +62,7 @@ public sealed class HaloPsaTokenCache
 
     private static (string, string) KeyFor(HaloPsaSettings settings) => (settings.AuthServerUrl!, settings.ClientId!);
 
-    private static async Task<(string Token, DateTimeOffset ExpiresAtUtc)> AcquireTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, CancellationToken cancellationToken)
+    private static async Task<(string Token, DateTimeOffset ExpiresAtUtc, string? GrantedScope)> AcquireTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.AuthServerUrl!.TrimEnd('/')}/token")
         {
@@ -80,7 +86,7 @@ public sealed class HaloPsaTokenCache
         var payload = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // Refresh a minute early so a call starting right before expiry doesn't race a 401.
-        return (payload!.AccessToken, DateTimeOffset.UtcNow.AddSeconds(payload.ExpiresInSeconds - 60));
+        return (payload!.AccessToken, DateTimeOffset.UtcNow.AddSeconds(payload.ExpiresInSeconds - 60), payload.Scope);
     }
 
     /// <summary>Halo's token endpoint explains a rejection in an OAuth error body (invalid_scope,
@@ -113,5 +119,6 @@ public sealed class HaloPsaTokenCache
 
     private sealed record TokenResponse(
         [property: JsonPropertyName("access_token")] string AccessToken,
-        [property: JsonPropertyName("expires_in")] int ExpiresInSeconds);
+        [property: JsonPropertyName("expires_in")] int ExpiresInSeconds,
+        [property: JsonPropertyName("scope")] string? Scope = null);
 }

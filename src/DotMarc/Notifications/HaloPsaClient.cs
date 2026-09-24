@@ -159,14 +159,14 @@ public sealed class HaloPsaClient : IHaloPsaClient
             response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
         }
 
-        await ThrowIfNotSuccessAsync(response, method, relativePath, cancellationToken).ConfigureAwait(false);
+        await ThrowIfNotSuccessAsync(response, method, relativePath, _tokenCache.GrantedScopeFor(settings), cancellationToken).ConfigureAwait(false);
         return response;
     }
 
     /// <summary>A bare "400 Bad Request" says nothing about which field Halo objected to, so the
     /// error carries the start of Halo's own explanation. The request body is deliberately not
     /// included; Halo's error responses describe the problem and don't echo credentials.</summary>
-    private static async Task ThrowIfNotSuccessAsync(HttpResponseMessage response, HttpMethod method, string relativePath, CancellationToken cancellationToken)
+    private static async Task ThrowIfNotSuccessAsync(HttpResponseMessage response, HttpMethod method, string relativePath, string? grantedScope, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
         {
@@ -176,9 +176,21 @@ public sealed class HaloPsaClient : IHaloPsaClient
         var status = response.StatusCode;
         var reason = response.ReasonPhrase;
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var challenge = string.Join(", ", response.Headers.WwwAuthenticate.Select(header => header.ToString()));
         response.Dispose();
 
         var explanation = string.IsNullOrWhiteSpace(body) ? "" : $" Halo said: {(body.Length <= 300 ? body : body[..300] + "...")}";
+        if (!string.IsNullOrWhiteSpace(challenge))
+        {
+            explanation += $" Halo's challenge: {challenge}.";
+        }
+
+        // Halo often answers a permission problem with an empty 403, so say what the token was granted.
+        if (status is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+        {
+            explanation += $" Scope granted to the token: {(string.IsNullOrWhiteSpace(grantedScope) ? "not reported by Halo" : grantedScope)}.";
+        }
+
         throw new HttpRequestException($"HaloPSA returned {(int)status} {reason} for {method} {relativePath}.{explanation}", null, status);
     }
 

@@ -103,6 +103,36 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task AForbiddenApiCall_SaysWhichScopeHaloGrantedTheToken()
+    {
+        // Halo answers a permission problem with an empty 403, so the granted scope is the only clue.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600,"scope":"edit:tickets read:tickets"}""");
+        handler.ResponseBodies.Enqueue("");
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.Forbidden);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListClientsAsync(Settings));
+
+        Assert.Contains("403", exception.Message);
+        Assert.Contains("Scope granted to the token: edit:tickets read:tickets.", exception.Message);
+    }
+
+    [Fact]
+    public async Task AForbiddenApiCall_WhenHaloReportsNoScope_SaysSo()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("");
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.Forbidden);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListClientsAsync(Settings));
+
+        Assert.Contains("Scope granted to the token: not reported by Halo.", exception.Message);
+    }
+
+    [Fact]
     public async Task ARejectedTokenRequest_ThrowsWithHalosOAuthErrorInTheMessage()
     {
         var (client, handler) = CreateClient();
