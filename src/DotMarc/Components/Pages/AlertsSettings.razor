@@ -101,7 +101,7 @@ else
                               HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
             <MudItem xs="12" md="6" Class="d-flex align-center">
-                <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses from Halo</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses / agents from Halo</MudButton>
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
@@ -124,6 +124,16 @@ else
                     @foreach (var status in _haloStatuses)
                     {
                         <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="int" Label="Assign new tickets to" @bind-Value="AssignedAgentSelection" Variant="Variant.Outlined"
+                           HelperText="Halo won't close a ticket nobody is assigned to. Pick an agent, or don't assign if Halo assigns tickets itself (round robin, a rule or the ticket type's default).">
+                    <MudSelectItem T="int" Value="@DontAssignAgent">Don't assign (Halo decides)</MudSelectItem>
+                    @foreach (var agent in _haloAgents)
+                    {
+                        <MudSelectItem T="int" Value="@agent.Id">@agent.Name</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -227,6 +237,22 @@ else
     private List<HaloTicketType> _haloTicketTypes = [];
     private List<HaloTicketStatus> _haloStatuses = [];
     private List<HaloPriority> _haloPriorities = [];
+    private List<HaloAgent> _haloAgents = [];
+
+    // MudSelect can't offer a null item, so "don't assign" is 0 here and null on the saved settings.
+    private const int DontAssignAgent = 0;
+
+    private int AssignedAgentSelection
+    {
+        get => _haloSettings?.AssignedAgentId ?? DontAssignAgent;
+        set
+        {
+            if (_haloSettings is not null)
+            {
+                _haloSettings.AssignedAgentId = value == DontAssignAgent ? null : value;
+            }
+        }
+    }
     private bool _webhookSecretJustGenerated;
 
     private string WebhookUrl => _haloSettings?.WebhookSecret is { Length: > 0 } secret
@@ -266,7 +292,7 @@ else
             _haloTicketTypes = (await HaloPsaClient.ListTicketTypesAsync(_haloSettings)).ToList();
             _haloStatuses = (await HaloPsaClient.ListStatusesAsync(_haloSettings)).ToList();
             _haloPriorities = (await HaloPsaClient.ListPrioritiesAsync(_haloSettings)).ToList();
-            Snackbar.Add("Loaded ticket types, priorities, and statuses from Halo.", Severity.Success);
+            await LoadHaloAgentsAsync();
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
         {
@@ -286,6 +312,23 @@ else
         {
             Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
             ShowHaloError("Couldn't load options from HaloPSA. Check the account details and client secret are saved, then try again. See Manage > Server logs for the details.");
+        }
+    }
+
+    // Listing agents needs a scope the Halo application may not allow. That mustn't undo the lists that
+    // did load, so it reports its own problem and leaves "don't assign" and any saved agent in place.
+    private async Task LoadHaloAgentsAsync()
+    {
+        try
+        {
+            _haloAgents = (await HaloPsaClient.ListAgentsAsync(_haloSettings!)).ToList();
+            Snackbar.Add("Loaded ticket types, priorities, statuses and agents from Halo.", Severity.Success);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA agents failed");
+            Snackbar.Add("Loaded ticket types, priorities and statuses from Halo.", Severity.Success);
+            ShowHaloError($"Couldn't load the Halo agents to assign tickets to, so that list is empty. Allow the read:agents permission on the Halo API application to choose one. {exception.Message}");
         }
     }
 

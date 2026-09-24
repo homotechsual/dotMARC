@@ -23,6 +23,9 @@ public sealed class HaloPsaClient : IHaloPsaClient
     // Matches what HttpContent.ReadFromJsonAsync used before these reads went through ReadJsonAsync.
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Halo's built-in "Unassigned" agent, which every ticket without an assignee carries.</summary>
+    private const int UnassignedAgentId = 1;
+
     public async Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Client", null, cancellationToken).ConfigureAwait(false);
@@ -42,6 +45,20 @@ public sealed class HaloPsaClient : IHaloPsaClient
         using var response = await SendAsync(HttpMethod.Get, settings, "Status", null, cancellationToken).ConfigureAwait(false);
         var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "Status", cancellationToken).ConfigureAwait(false);
         return payload?.Select(e => new HaloTicketStatus(e.Id, e.Name)).ToList() ?? [];
+    }
+
+    /// <summary>Enabled agents a ticket can be assigned to. Halo's built-in "Unassigned" agent (id 1) is left
+    /// out, since choosing no agent is its own option. Needs the read:agents scope, so it signs in
+    /// separately: an application that doesn't allow the scope fails here and nowhere else.</summary>
+    public async Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, settings, "Agent", null, cancellationToken, HaloPsaTokenCache.AgentScope).ConfigureAwait(false);
+        var entries = await ReadJsonAsync<List<AgentEntry>>(response, "Agent", cancellationToken).ConfigureAwait(false) ?? [];
+        return entries
+            .Where(entry => entry.Id != UnassignedAgentId && !entry.IsDisabled)
+            .Select(entry => new HaloAgent(entry.Id, entry.Name))
+            .OrderBy(agent => agent.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>GET /api/Priority doesn't return a plain list of priorities: it returns one row per
@@ -131,7 +148,7 @@ public sealed class HaloPsaClient : IHaloPsaClient
 
     public async Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
     {
-        var ticket = new CreateTicketRequest(title, $"{message}\n\nDomain: {domainName}\nAlert type: {alertType}\nRaised automatically by dotMARC.", haloClientId, settings.TicketTypeId, settings.DefaultPriorityId);
+        var ticket = new CreateTicketRequest(title, $"{message}\n\nDomain: {domainName}\nAlert type: {alertType}\nRaised automatically by dotMARC.", haloClientId, settings.TicketTypeId, settings.DefaultPriorityId, settings.AssignedAgentId);
 
         // Halo's POST endpoints take an array of records, even for a single ticket; a bare object is
         // refused with "requires a JSON array".
@@ -150,28 +167,42 @@ public sealed class HaloPsaClient : IHaloPsaClient
 
     public async Task CloseTicketAsync(HaloPsaSettings settings, string ticketId, string note, CancellationToken cancellationToken = default)
     {
+        // Halo looks an update up by the ticket's type and client as well as its id, and answers "Record not
+        // found" when they're missing, so read them from the ticket itself. That also stays right when someone
+        // has moved the ticket to another client since dotMARC created it. The agent is deliberately left alone:
+        // whoever the ticket is assigned to keeps it.
+        using var ticketResponse = await SendAsync(HttpMethod.Get, settings, $"Tickets/{ticketId}", null, cancellationToken).ConfigureAwait(false);
+        var ticket = await ReadJsonAsync<JsonElement>(ticketResponse, $"Tickets/{ticketId}", cancellationToken).ConfigureAwait(false);
+        if (ticket.ValueKind != JsonValueKind.Object
+            || !ticket.TryGetProperty("tickettype_id", out var ticketTypeElement) || !TryGetWholeNumber(ticketTypeElement, out var ticketTypeId)
+            || !ticket.TryGetProperty("client_id", out var clientElement) || !TryGetWholeNumber(clientElement, out var haloClientId))
+        {
+            throw new InvalidDataException($"HaloPSA's ticket {ticketId} didn't include its ticket type and client, which closing it needs. It began: {Truncate(ticket.ToString())}");
+        }
+
+        var update = new CloseTicketRequest(int.Parse(ticketId), settings.ClosedStatusId, ticketTypeId, haloClientId, note);
+
         // Halo updates a ticket by posting the changed fields, with the ticket's id, to Tickets.
-        var update = new CloseTicketRequest(int.Parse(ticketId), settings.ClosedStatusId, note);
         using var response = await SendAsync(HttpMethod.Post, settings, "Tickets", new[] { update }, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, CancellationToken cancellationToken, string scope = HaloPsaTokenCache.TicketScope)
     {
         var clientSecret = await _secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("HaloPSA client secret is not configured.");
 
-        var response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
+        var response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, scope, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             // The cached token may have been revoked early on Halo's side. Invalidate it and retry
             // exactly once with a freshly-acquired token - never more, to avoid looping forever
             // against a persistently-invalid credential.
             response.Dispose();
-            await _tokenCache.InvalidateAsync(settings, cancellationToken).ConfigureAwait(false);
-            response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
+            await _tokenCache.InvalidateAsync(settings, scope, cancellationToken).ConfigureAwait(false);
+            response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, scope, cancellationToken).ConfigureAwait(false);
         }
 
-        await ThrowIfNotSuccessAsync(response, method, relativePath, _tokenCache.GrantedScopeFor(settings), cancellationToken).ConfigureAwait(false);
+        await ThrowIfNotSuccessAsync(response, method, relativePath, _tokenCache.GrantedScopeFor(settings, scope), cancellationToken).ConfigureAwait(false);
         return response;
     }
 
@@ -206,9 +237,9 @@ public sealed class HaloPsaClient : IHaloPsaClient
         throw new HttpRequestException($"HaloPSA returned {(int)status} {reason} for {method} {relativePath}.{explanation}", null, status);
     }
 
-    private async Task<HttpResponseMessage> SendOnceAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, string clientSecret, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendOnceAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, string clientSecret, string scope, CancellationToken cancellationToken)
     {
-        var token = await _tokenCache.GetTokenAsync(_httpClient, settings, clientSecret, cancellationToken).ConfigureAwait(false);
+        var token = await _tokenCache.GetTokenAsync(_httpClient, settings, clientSecret, scope, cancellationToken).ConfigureAwait(false);
 
         using var request = new HttpRequestMessage(method, $"{settings.ResourceServerUrl!.TrimEnd('/')}/{relativePath}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -247,9 +278,24 @@ public sealed class HaloPsaClient : IHaloPsaClient
         [property: JsonPropertyName("details")] string Details,
         [property: JsonPropertyName("client_id")] int ClientId,
         [property: JsonPropertyName("tickettype_id")] int? TicketTypeId,
-        [property: JsonPropertyName("priority_id")] int? PriorityId);
+        [property: JsonPropertyName("priority_id")] int? PriorityId,
+        [property: JsonPropertyName("agent_id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AgentId);
     private sealed record CloseTicketRequest(
         [property: JsonPropertyName("id")] int Id,
         [property: JsonPropertyName("status_id")] int? StatusId,
+        [property: JsonPropertyName("tickettype_id")] int TicketTypeId,
+        [property: JsonPropertyName("client_id")] int ClientId,
         [property: JsonPropertyName("note")] string Note);
+
+    private sealed class AgentEntry
+    {
+        [JsonPropertyName("id"), JsonConverter(typeof(FlexibleInt32Converter))]
+        public int Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "";
+
+        [JsonPropertyName("isdisabled")]
+        public bool IsDisabled { get; set; }
+    }
 }

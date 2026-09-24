@@ -23,6 +23,7 @@ public static class HaloPsaSettingsService
         existing.TicketTypeId = updated.TicketTypeId;
         existing.DefaultPriorityId = updated.DefaultPriorityId;
         existing.ClosedStatusId = updated.ClosedStatusId;
+        existing.AssignedAgentId = updated.AssignedAgentId;
         existing.WebhookSecret = updated.WebhookSecret;
 
         if (!string.IsNullOrWhiteSpace(newClientSecret))

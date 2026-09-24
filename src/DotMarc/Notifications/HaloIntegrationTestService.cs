@@ -164,7 +164,11 @@ public sealed class HaloIntegrationTestService(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogWarning(exception, "HaloPSA integration test: closing ticket {TicketId} failed", ticketId);
-            Report(CloseStep, HaloTestOutcome.Failed, $"Ticket #{ticketId} was created but couldn't be closed: {exception.Message} Check the closed status, and close the ticket by hand in Halo.");
+            // Halo won't close a ticket nobody is assigned to, and says so in its own words.
+            var advice = exception.Message.Contains("assign", StringComparison.OrdinalIgnoreCase)
+                ? "Halo needs the ticket assigned to someone before it can be closed: choose an agent under \"Assign new tickets to\", or set up Halo to assign new tickets itself. Then close this ticket by hand in Halo."
+                : "Check the closed status, and close the ticket by hand in Halo.";
+            Report(CloseStep, HaloTestOutcome.Failed, $"Ticket #{ticketId} was created but couldn't be closed: {exception.Message} {advice}");
             return Finish();
         }
 

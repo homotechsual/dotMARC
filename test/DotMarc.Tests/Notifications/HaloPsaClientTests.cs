@@ -177,23 +177,144 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
-    public async Task CloseTicketAsync_PostsAnArrayToTicketsWithTheIdAndClosedStatus()
+    public async Task CloseTicketAsync_ReadsTheTicketThenPostsAnArrayWithItsTypeClientAndTheClosedStatus()
     {
-        // Halo updates a ticket by posting an array holding the ticket's id and changed fields to Tickets.
+        // Halo answers "Record not found" to an update that lacks the ticket's type and client, so they
+        // are read from the ticket itself. The agent is never sent: whoever holds the ticket keeps it.
         var (client, handler) = CreateClient();
         handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
-        handler.ResponseBody = "{}";
+        handler.ResponseBodies.Enqueue("""{"id":4242,"tickettype_id":23,"client_id":29,"agent_id":3}""");
+        handler.ResponseBodies.Enqueue("{}");
         var settings = Settings;
         settings.ClosedStatusId = 9;
 
         await client.CloseTicketAsync(settings, "4242", "Resolved automatically by dotMARC.");
 
-        Assert.Equal(2, handler.Requests.Count);
-        Assert.Equal("https://contoso.halopsa.com/api/Tickets", handler.Requests[1].RequestUri!.ToString());
-        using var sent = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.Equal(3, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[1].Method);
+        Assert.Equal("https://contoso.halopsa.com/api/Tickets/4242", handler.Requests[1].RequestUri!.ToString());
+        Assert.Equal(HttpMethod.Post, handler.Requests[2].Method);
+        Assert.Equal("https://contoso.halopsa.com/api/Tickets", handler.Requests[2].RequestUri!.ToString());
+        using var sent = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[2]);
         var update = Assert.Single(sent.RootElement.EnumerateArray());
         Assert.Equal(4242, update.GetProperty("id").GetInt32());
         Assert.Equal(9, update.GetProperty("status_id").GetInt32());
+        Assert.Equal(23, update.GetProperty("tickettype_id").GetInt32());
+        Assert.Equal(29, update.GetProperty("client_id").GetInt32());
+        Assert.False(update.TryGetProperty("agent_id", out _));
+    }
+
+    [Fact]
+    public async Task CloseTicketAsync_WhenTheTicketHasNoTypeOrClient_SaysWhatHaloSent()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242}""");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            client.CloseTicketAsync(Settings, "4242", "note"));
+
+        Assert.Contains("ticket type and client", exception.Message);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task CloseTicketAsync_WhenHaloRefusesBecauseNobodyIsAssigned_QuotesHalosReason()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242,"tickettype_id":23,"client_id":29}""");
+        handler.ResponseBodies.Enqueue("\"Please assign this Ticket these before closing it.\"");
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.BadRequest);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.CloseTicketAsync(Settings, "4242", "note"));
+
+        Assert.Contains("Please assign this Ticket", exception.Message);
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_AssignsTheConfiguredAgent()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242}""");
+        var settings = Settings;
+        settings.AssignedAgentId = 3;
+
+        await client.CreateTicketAsync(settings, 7, "contoso.io", "MissedReport", "t", "m");
+
+        using var sent = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.Equal(3, Assert.Single(sent.RootElement.EnumerateArray()).GetProperty("agent_id").GetInt32());
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_WithNoConfiguredAgent_LeavesAssignmentToHalo()
+    {
+        // No agent_id at all, so Halo's own routing (round robin, a rule, the type's default) decides.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242}""");
+
+        await client.CreateTicketAsync(Settings, 7, "contoso.io", "MissedReport", "t", "m");
+
+        using var sent = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.False(Assert.Single(sent.RootElement.EnumerateArray()).TryGetProperty("agent_id", out _));
+    }
+
+    [Fact]
+    public async Task ListAgentsAsync_ReturnsEnabledAgentsByName_WithoutTheUnassignedAgent()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600,"scope":"edit:tickets read:tickets read:customers read:agents"}""");
+        handler.ResponseBodies.Enqueue("""
+            [{"id":1,"name":"Unassigned","isdisabled":false},
+             {"id":5,"name":"zara","isdisabled":false},
+             {"id":3,"name":"Mikey O'Toole","isdisabled":false},
+             {"id":9,"name":"Left The Company","isdisabled":true}]
+            """);
+
+        var agents = await client.ListAgentsAsync(Settings);
+
+        Assert.Equal(["Mikey O'Toole", "zara"], agents.Select(agent => agent.Name));
+        Assert.Equal("https://contoso.halopsa.com/api/Agent", handler.Requests[1].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task ListAgentsAsync_SignsInWithTheAgentsScope_ButOtherCallsDoNot()
+    {
+        // read:agents is asked for only when listing agents: an application that doesn't allow it must
+        // still be able to sign in for everything else (Halo rejects the whole request over one bad scope).
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"agent-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("[]");
+        handler.ResponseBodies.Enqueue("""{"access_token":"ticket-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("[]");
+
+        await client.ListAgentsAsync(Settings);
+        await client.ListStatusesAsync(Settings);
+
+        var agentTokenRequest = WebUtility.UrlDecode(handler.RequestBodies[0]);
+        var ticketTokenRequest = WebUtility.UrlDecode(handler.RequestBodies[2]);
+        Assert.Contains("scope=edit:tickets read:tickets read:customers read:agents", agentTokenRequest);
+        Assert.Contains("scope=edit:tickets read:tickets read:customers", ticketTokenRequest);
+        Assert.DoesNotContain("read:agents", ticketTokenRequest);
+        Assert.Equal("Bearer agent-token", handler.Requests[1].Headers.Authorization!.ToString());
+        Assert.Equal("Bearer ticket-token", handler.Requests[3].Headers.Authorization!.ToString());
+    }
+
+    [Fact]
+    public async Task ListAgentsAsync_WhenTheApplicationDoesNotAllowTheScope_SaysWhatHaloRejected()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"error":"invalid_scope","error_description":"The specified 'scope' parameter is not valid."}""");
+        handler.StatusCodes.Enqueue(HttpStatusCode.BadRequest);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListAgentsAsync(Settings));
+
+        Assert.Contains("invalid_scope", exception.Message);
     }
 
     [Fact]
@@ -373,13 +494,13 @@ public sealed class HaloPsaClientTests
         handler.ResponseBodies.Enqueue("""{"access_token":"stale-token","expires_in":3600}"""); // initial token
         handler.ResponseBodies.Enqueue("{}"); // rejected ticket call, body unused
         handler.ResponseBodies.Enqueue("""{"access_token":"fresh-token","expires_in":3600}"""); // refreshed token
-        handler.ResponseBodies.Enqueue("{}"); // retried close call succeeds
+        handler.ResponseBodies.Enqueue("[]"); // retried call succeeds
         handler.StatusCodes.Enqueue(HttpStatusCode.OK); // token
         handler.StatusCodes.Enqueue(HttpStatusCode.Unauthorized); // ticket call rejected
         handler.StatusCodes.Enqueue(HttpStatusCode.OK); // token refresh
         handler.StatusCodes.Enqueue(HttpStatusCode.OK); // ticket call retried
 
-        await client.CloseTicketAsync(Settings, "4242", "Resolved automatically by dotMARC.");
+        await client.ListStatusesAsync(Settings);
 
         Assert.Equal(4, handler.Requests.Count);
         Assert.Equal(2, handler.Requests.Count(r => r.RequestUri!.ToString().EndsWith("/token")));

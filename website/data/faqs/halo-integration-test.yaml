@@ -9,6 +9,9 @@ answer: |
   It uses the settings you have **saved**, so save first. It leaves one closed `[dotMARC test]` ticket in
   Halo and doesn't touch any real alert.
 
+  If the close step says Halo needs the ticket assigned first, set **Assign new tickets to** (or make
+  Halo assign new tickets itself). Halo won't close a ticket nobody is assigned to.
+
   See [PSA integration: Test the whole integration](/docs/psa-integration#test-the-whole-integration)
   for the full walkthrough.
 category: Alerts & PSA integration

@@ -13,12 +13,20 @@ namespace DotMarc.Notifications;
 /// cache entry rather than reusing a token minted from stale credentials for up to an hour.</summary>
 public sealed class HaloPsaTokenCache
 {
-    private readonly SemaphoreSlim _lock = new(1, 1);
-    private readonly Dictionary<(string AuthServerUrl, string ClientId), (string Token, DateTimeOffset ExpiresAtUtc, string? GrantedScope)> _tokensByKey = new();
+    /// <summary>What every ticket call needs. Halo rejects the whole request with invalid_scope if any one
+    /// scope is unknown or not allowed on the application, so this stays the minimum that works.</summary>
+    public const string TicketScope = "edit:tickets read:tickets read:customers";
 
-    public async Task<string> GetTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, CancellationToken cancellationToken)
+    /// <summary>Listing agents needs one more scope. It's requested only for that call, so an application
+    /// that doesn't allow it can still sign in, create tickets and load every other list.</summary>
+    public const string AgentScope = TicketScope + " read:agents";
+
+    private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly Dictionary<(string AuthServerUrl, string ClientId, string Scope), (string Token, DateTimeOffset ExpiresAtUtc, string? GrantedScope)> _tokensByKey = new();
+
+    public async Task<string> GetTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, string scope, CancellationToken cancellationToken)
     {
-        var key = KeyFor(settings);
+        var key = KeyFor(settings, scope);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -27,7 +35,7 @@ public sealed class HaloPsaTokenCache
                 return cached.Token;
             }
 
-            var (token, expiresAtUtc, grantedScope) = await AcquireTokenAsync(httpClient, settings, clientSecret, cancellationToken).ConfigureAwait(false);
+            var (token, expiresAtUtc, grantedScope) = await AcquireTokenAsync(httpClient, settings, clientSecret, scope, cancellationToken).ConfigureAwait(false);
             _tokensByKey[key] = (token, expiresAtUtc, grantedScope);
             return token;
         }
@@ -40,15 +48,15 @@ public sealed class HaloPsaTokenCache
     /// <summary>The scope Halo said it granted the cached token, or null when there is no token yet or
     /// Halo didn't report one. A 403 on a call usually means the token lacks the scope the endpoint needs,
     /// and this is the only place that shows what Halo actually granted.</summary>
-    public string? GrantedScopeFor(HaloPsaSettings settings) =>
-        _tokensByKey.TryGetValue(KeyFor(settings), out var cached) ? cached.GrantedScope : null;
+    public string? GrantedScopeFor(HaloPsaSettings settings, string scope) =>
+        _tokensByKey.TryGetValue(KeyFor(settings, scope), out var cached) ? cached.GrantedScope : null;
 
     /// <summary>Drops the cached token for this settings' credentials, e.g. after a 401 - the next
     /// <see cref="GetTokenAsync"/> call for the same key acquires a fresh one instead of reusing a
     /// token Halo has already rejected.</summary>
-    public async Task InvalidateAsync(HaloPsaSettings settings, CancellationToken cancellationToken)
+    public async Task InvalidateAsync(HaloPsaSettings settings, string scope, CancellationToken cancellationToken)
     {
-        var key = KeyFor(settings);
+        var key = KeyFor(settings, scope);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -60,9 +68,9 @@ public sealed class HaloPsaTokenCache
         }
     }
 
-    private static (string, string) KeyFor(HaloPsaSettings settings) => (settings.AuthServerUrl!, settings.ClientId!);
+    private static (string, string, string) KeyFor(HaloPsaSettings settings, string scope) => (settings.AuthServerUrl!, settings.ClientId!, scope);
 
-    private static async Task<(string Token, DateTimeOffset ExpiresAtUtc, string? GrantedScope)> AcquireTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, CancellationToken cancellationToken)
+    private static async Task<(string Token, DateTimeOffset ExpiresAtUtc, string? GrantedScope)> AcquireTokenAsync(HttpClient httpClient, HaloPsaSettings settings, string clientSecret, string scope, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.AuthServerUrl!.TrimEnd('/')}/token")
         {
@@ -71,9 +79,7 @@ public sealed class HaloPsaTokenCache
                 ["grant_type"] = "client_credentials",
                 ["client_id"] = settings.ClientId!,
                 ["client_secret"] = clientSecret,
-                // Halo rejects the whole request with invalid_scope if any one scope is unknown
-                // (read:teams is not a Halo scope, and nothing here calls a teams endpoint).
-                ["scope"] = "edit:tickets read:tickets read:customers"
+                ["scope"] = scope
             })
         };
 

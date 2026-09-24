@@ -18,5 +18,10 @@ public sealed class HaloPsaSettings
     public int? TicketTypeId { get; set; }
     public int? DefaultPriorityId { get; set; }
     public int? ClosedStatusId { get; set; }
+
+    /// <summary>The Halo agent new tickets are assigned to. Null means dotMARC doesn't assign, so Halo's
+    /// own routing (round robin, the ticket type's default, a rule) decides. Halo refuses to close a ticket
+    /// nobody is assigned to, so an installation that doesn't assign here needs Halo to do it.</summary>
+    public int? AssignedAgentId { get; set; }
     public string? WebhookSecret { get; set; }
 }

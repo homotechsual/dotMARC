@@ -16,6 +16,10 @@ In HaloPSA, go to **Configuration → Integrations → HaloPSA API** and create 
 with these scopes: `edit:tickets`, `read:tickets`, `read:customers`. Note its
 account name, auth server URL, resource server URL, client ID, and client secret.
 
+Also allow `read:agents` if you want to pick the agent new tickets are assigned to from a list (see
+[Who tickets are assigned to](#who-tickets-are-assigned-to)). It is only used to load that list, so
+leaving it out never stops tickets being created or closed.
+
 ## Configure dotMARC
 
 From **Alert settings**, in the **PSA integration (HaloPSA)** section: enable it, fill in the
@@ -38,6 +42,27 @@ If loading the options fails, the message shown quotes what HaloPSA answered (an
 full detail, including the exception, is under **Manage → Server logs** (see
 [Server logs](./server-logs.mdx)).
 
+## Who tickets are assigned to
+
+Halo will not close a ticket that nobody is assigned to, and answers with "Please assign this Ticket
+these before closing it." A ticket created through the API is unassigned unless something assigns it,
+so this matters: without an assignee, dotMARC can open tickets but can't close them when an alert
+resolves.
+
+**Assign new tickets to** decides who that is:
+
+* **Don't assign (Halo decides)** is the default. dotMARC sends no agent, so Halo's own routing assigns
+  the ticket: round robin, an assignment rule, or the ticket type's default agent. Use this when your
+  Halo already assigns new tickets, and check with [the test](#test-the-whole-integration) that a
+  ticket really does end up assigned.
+* **A named agent** assigns every ticket dotMARC creates to that agent. The list shows enabled agents
+  and is loaded with the other options, which needs the `read:agents` scope on the API application.
+  If Halo refuses that scope, the other lists still load and the message says which permission to allow.
+
+The assignment is made when the ticket is created and is never changed by dotMARC afterwards, so a
+technician who takes a ticket over keeps it. When dotMARC closes a ticket it reads the ticket's own
+type and client from Halo and sends them back with the new status, which Halo requires for an update.
+
 ## Test the whole integration
 
 Under the PSA settings on **Alert settings**, **Test the integration** runs the whole ticket lifecycle
@@ -49,9 +74,10 @@ against your live Halo tenant, so you can watch it work instead of waiting for a
 2. **Pick an alert and Halo client.** It takes the most recent alert, and the Halo client that alert's
    domain is mapped to through its Group. If the domain has no client mapped, or there are no alerts yet,
    it asks you to choose a Halo client to test with.
-3. **Create a ticket.** A ticket titled `[dotMARC test] ...` is created with your ticket type and default
-   priority. If Halo objects, the message quotes what it said.
-4. **Close the ticket.** It's closed using your closed status.
+3. **Create a ticket.** A ticket titled `[dotMARC test] ...` is created with your ticket type, default
+   priority and, if you chose one, agent. If Halo objects, the message quotes what it said.
+4. **Close the ticket.** It's closed using your closed status. If Halo says the ticket needs assigning
+   first, the message points you at **Assign new tickets to**.
 5. **Wait for Halo's webhook.** Halo should call the webhook URL when the ticket's status changes. The
    test waits up to 30 seconds and tells you exactly what arrived: a call with the closed status, a
    different status, a body dotMARC couldn't read, a call with the wrong secret, or nothing at all.

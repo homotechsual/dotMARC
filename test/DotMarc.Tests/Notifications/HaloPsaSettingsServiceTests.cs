@@ -65,6 +65,23 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_KeepsTheAssignedAgent_AndCanClearItBackToDontAssign()
+    {
+        await using var context = CreateContext();
+        var secretStore = CreateSecretStore();
+        await HaloPsaSettingsService.SaveAsync(context, secretStore, new HaloPsaSettings { AssignedAgentId = 3 }, newClientSecret: null);
+
+        await using var afterAssign = CreateContext();
+        Assert.Equal(3, (await HaloPsaSettingsService.GetAsync(afterAssign)).AssignedAgentId);
+
+        await using var clearContext = CreateContext();
+        await HaloPsaSettingsService.SaveAsync(clearContext, secretStore, new HaloPsaSettings { AssignedAgentId = null }, newClientSecret: null);
+
+        await using var afterClear = CreateContext();
+        Assert.Null((await HaloPsaSettingsService.GetAsync(afterClear)).AssignedAgentId);
+    }
+
+    [Fact]
     public async Task SaveAsync_StoresTheSecretAndMarksItConfigured_WhenProvided()
     {
         await using var context = CreateContext();

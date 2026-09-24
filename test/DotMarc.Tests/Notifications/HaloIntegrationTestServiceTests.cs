@@ -119,6 +119,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         public Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketType>>([]);
         public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
         public Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloPriority>>([]);
+        public Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloAgent>>([]);
 
         public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
         {
@@ -313,6 +314,22 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         Assert.Contains("#4242", step.Detail);
         Assert.Contains("by hand", step.Detail);
         Assert.Contains("status_id is not valid", step.Detail);
+    }
+
+    [Fact]
+    public async Task Run_PointsAtTheAgentSetting_WhenHaloWontCloseAnUnassignedTicket()
+    {
+        await SeedSettingsAsync();
+        await SeedAlertAsync(mappedHaloClientId: 7);
+        _halo.CloseFailure = new HttpRequestException("HaloPSA returned 400 Bad Request for POST Tickets. Halo said: \"Please assign this Ticket these before closing it.\"");
+
+        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+
+        var step = run.Steps.Last();
+        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Contains("Please assign this Ticket", step.Detail);
+        Assert.Contains("Assign new tickets to", step.Detail);
+        Assert.Contains("by hand", step.Detail);
     }
 
     [Fact]
