@@ -16,10 +16,6 @@ In HaloPSA, go to **Configuration → Integrations → HaloPSA API** and create 
 with these scopes: `edit:tickets`, `read:tickets`, `read:customers`. Note its
 account name, auth server URL, resource server URL, client ID, and client secret.
 
-Also allow `read:agents` if you want to pick the agent new tickets are assigned to from a list (see
-[Who tickets are assigned to](#who-tickets-are-assigned-to)). It is only used to load that list, so
-leaving it out never stops tickets being created or closed.
-
 ## Configure dotMARC
 
 From **Alert settings**, in the **PSA integration (HaloPSA)** section: enable it, fill in the
@@ -56,8 +52,9 @@ resolves.
   Halo already assigns new tickets, and check with [the test](#test-the-whole-integration) that a
   ticket really does end up assigned.
 * **A named agent** assigns every ticket dotMARC creates to that agent. The list shows enabled agents
-  and is loaded with the other options, which needs the `read:agents` scope on the API application.
-  If Halo refuses that scope, the other lists still load and the message says which permission to allow.
+  and is loaded with the other options. Halo has no API scope for agents, so whether the list loads
+  depends on the role of the agent the API application signs in as. If Halo refuses, the other lists
+  still load and the message quotes Halo's answer.
 
 The assignment is made when the ticket is created and is never changed by dotMARC afterwards, so a
 technician who takes a ticket over keeps it. When dotMARC closes a ticket it reads the ticket's own

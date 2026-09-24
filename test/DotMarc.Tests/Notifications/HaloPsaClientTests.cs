@@ -268,7 +268,7 @@ public sealed class HaloPsaClientTests
     public async Task ListAgentsAsync_ReturnsEnabledAgentsByName_WithoutTheUnassignedAgent()
     {
         var (client, handler) = CreateClient();
-        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600,"scope":"edit:tickets read:tickets read:customers read:agents"}""");
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600,"scope":"edit:tickets read:tickets read:customers"}""");
         handler.ResponseBodies.Enqueue("""
             [{"id":1,"name":"Unassigned","isdisabled":false},
              {"id":5,"name":"zara","isdisabled":false},
@@ -283,38 +283,37 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
-    public async Task ListAgentsAsync_SignsInWithTheAgentsScope_ButOtherCallsDoNot()
+    public async Task ListAgentsAsync_SignsInLikeEveryOtherCall_BecauseHaloHasNoScopeForAgents()
     {
-        // read:agents is asked for only when listing agents: an application that doesn't allow it must
-        // still be able to sign in for everything else (Halo rejects the whole request over one bad scope).
+        // Halo rejects the whole token request over any scope it doesn't know, and it has no scope for
+        // agents: what an API agent can list is down to its role. So no extra scope is ever asked for.
         var (client, handler) = CreateClient();
-        handler.ResponseBodies.Enqueue("""{"access_token":"agent-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
         handler.ResponseBodies.Enqueue("[]");
-        handler.ResponseBodies.Enqueue("""{"access_token":"ticket-token","expires_in":3600}""");
         handler.ResponseBodies.Enqueue("[]");
 
         await client.ListAgentsAsync(Settings);
         await client.ListStatusesAsync(Settings);
 
-        var agentTokenRequest = WebUtility.UrlDecode(handler.RequestBodies[0]);
-        var ticketTokenRequest = WebUtility.UrlDecode(handler.RequestBodies[2]);
-        Assert.Contains("scope=edit:tickets read:tickets read:customers read:agents", agentTokenRequest);
-        Assert.Contains("scope=edit:tickets read:tickets read:customers", ticketTokenRequest);
-        Assert.DoesNotContain("read:agents", ticketTokenRequest);
-        Assert.Equal("Bearer agent-token", handler.Requests[1].Headers.Authorization!.ToString());
-        Assert.Equal("Bearer ticket-token", handler.Requests[3].Headers.Authorization!.ToString());
+        Assert.Single(handler.Requests, request => request.RequestUri!.ToString().EndsWith("/token"));
+        Assert.Contains("scope=edit:tickets read:tickets read:customers", WebUtility.UrlDecode(handler.RequestBodies[0]));
+        Assert.DoesNotContain("agents", WebUtility.UrlDecode(handler.RequestBodies[0]));
     }
 
     [Fact]
-    public async Task ListAgentsAsync_WhenTheApplicationDoesNotAllowTheScope_SaysWhatHaloRejected()
+    public async Task ListAgentsAsync_WhenTheApiAgentMayNotViewAgents_SaysWhatHaloAnswered()
     {
         var (client, handler) = CreateClient();
-        handler.ResponseBodies.Enqueue("""{"error":"invalid_scope","error_description":"The specified 'scope' parameter is not valid."}""");
-        handler.StatusCodes.Enqueue(HttpStatusCode.BadRequest);
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("");
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.Forbidden);
 
         var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListAgentsAsync(Settings));
 
-        Assert.Contains("invalid_scope", exception.Message);
+        Assert.Equal(HttpStatusCode.Forbidden, exception.StatusCode);
+        Assert.Contains("403", exception.Message);
+        Assert.Contains("GET Agent", exception.Message);
     }
 
     [Fact]

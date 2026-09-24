@@ -48,11 +48,11 @@ public sealed class HaloPsaClient : IHaloPsaClient
     }
 
     /// <summary>Enabled agents a ticket can be assigned to. Halo's built-in "Unassigned" agent (id 1) is left
-    /// out, since choosing no agent is its own option. Needs the read:agents scope, so it signs in
-    /// separately: an application that doesn't allow the scope fails here and nowhere else.</summary>
+    /// out, since choosing no agent is its own option. Halo has no scope for agents, so whether this
+    /// works is down to the API agent's role.</summary>
     public async Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Get, settings, "Agent", null, cancellationToken, HaloPsaTokenCache.AgentScope).ConfigureAwait(false);
+        using var response = await SendAsync(HttpMethod.Get, settings, "Agent", null, cancellationToken).ConfigureAwait(false);
         var entries = await ReadJsonAsync<List<AgentEntry>>(response, "Agent", cancellationToken).ConfigureAwait(false) ?? [];
         return entries
             .Where(entry => entry.Id != UnassignedAgentId && !entry.IsDisabled)
@@ -186,23 +186,23 @@ public sealed class HaloPsaClient : IHaloPsaClient
         using var response = await SendAsync(HttpMethod.Post, settings, "Tickets", new[] { update }, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, CancellationToken cancellationToken, string scope = HaloPsaTokenCache.TicketScope)
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, CancellationToken cancellationToken)
     {
         var clientSecret = await _secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("HaloPSA client secret is not configured.");
 
-        var response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, scope, cancellationToken).ConfigureAwait(false);
+        var response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             // The cached token may have been revoked early on Halo's side. Invalidate it and retry
             // exactly once with a freshly-acquired token - never more, to avoid looping forever
             // against a persistently-invalid credential.
             response.Dispose();
-            await _tokenCache.InvalidateAsync(settings, scope, cancellationToken).ConfigureAwait(false);
-            response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, scope, cancellationToken).ConfigureAwait(false);
+            await _tokenCache.InvalidateAsync(settings, cancellationToken).ConfigureAwait(false);
+            response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
         }
 
-        await ThrowIfNotSuccessAsync(response, method, relativePath, _tokenCache.GrantedScopeFor(settings, scope), cancellationToken).ConfigureAwait(false);
+        await ThrowIfNotSuccessAsync(response, method, relativePath, _tokenCache.GrantedScopeFor(settings), cancellationToken).ConfigureAwait(false);
         return response;
     }
 
@@ -237,9 +237,9 @@ public sealed class HaloPsaClient : IHaloPsaClient
         throw new HttpRequestException($"HaloPSA returned {(int)status} {reason} for {method} {relativePath}.{explanation}", null, status);
     }
 
-    private async Task<HttpResponseMessage> SendOnceAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, string clientSecret, string scope, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendOnceAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, string clientSecret, CancellationToken cancellationToken)
     {
-        var token = await _tokenCache.GetTokenAsync(_httpClient, settings, clientSecret, scope, cancellationToken).ConfigureAwait(false);
+        var token = await _tokenCache.GetTokenAsync(_httpClient, settings, clientSecret, cancellationToken).ConfigureAwait(false);
 
         using var request = new HttpRequestMessage(method, $"{settings.ResourceServerUrl!.TrimEnd('/')}/{relativePath}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

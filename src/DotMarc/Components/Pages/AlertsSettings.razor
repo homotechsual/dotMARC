@@ -315,7 +315,7 @@ else
         }
     }
 
-    // Listing agents needs a scope the Halo application may not allow. That mustn't undo the lists that
+    // Halo only lets an API agent whose role can see agents list them. That mustn't undo the lists that
     // did load, so it reports its own problem and leaves "don't assign" and any saved agent in place.
     private async Task LoadHaloAgentsAsync()
     {
@@ -328,7 +328,7 @@ else
         {
             Logger.LogWarning(exception, "Loading HaloPSA agents failed");
             Snackbar.Add("Loaded ticket types, priorities and statuses from Halo.", Severity.Success);
-            ShowHaloError($"Couldn't load the Halo agents to assign tickets to, so that list is empty. Allow the read:agents permission on the Halo API application to choose one. {exception.Message}");
+            ShowHaloError($"Couldn't load the Halo agents to assign tickets to, so that list is empty. The API agent's role in Halo may not be allowed to view agents. {exception.Message}");
         }
     }
 
