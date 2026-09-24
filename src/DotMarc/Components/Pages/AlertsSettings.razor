@@ -7,6 +7,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject ILogger<AlertsSettings> Logger
 @inject IHaloPsaClient HaloPsaClient
 @inject ISecretStore SecretStoreAccessor
 @inject NavigationManager NavigationManager
@@ -187,9 +188,22 @@ else
             _haloPriorities = (await HaloPsaClient.ListPrioritiesAsync(_haloSettings)).ToList();
             Snackbar.Add("Loaded ticket types, priorities, and statuses from Halo.", Severity.Success);
         }
-        catch (Exception)
+        catch (HttpRequestException exception)
         {
-            Snackbar.Add("Couldn't reach HaloPSA - save your account/credentials first, then try again.", Severity.Error);
+            // Covers both HaloPSA answering with an error (the message carries its OAuth error or
+            // status code) and genuine network failures (the message carries the connection error).
+            Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
+            Snackbar.Add($"Couldn't load options from HaloPSA. {exception.Message}", Severity.Error);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
+            Snackbar.Add($"{exception.Message} Save your client secret first, then try again.", Severity.Error);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
+            Snackbar.Add("Couldn't load options from HaloPSA. Check the account details and client secret are saved, then try again (the server log has the details).", Severity.Error);
         }
     }
 

@@ -1,5 +1,6 @@
 // src/DotMarc/Notifications/HaloPsaTokenCache.cs
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DotMarc.Notifications;
@@ -64,17 +65,51 @@ public sealed class HaloPsaTokenCache
                 ["grant_type"] = "client_credentials",
                 ["client_id"] = settings.ClientId!,
                 ["client_secret"] = clientSecret,
-                ["scope"] = "edit:tickets read:tickets read:customers read:teams"
+                // Halo rejects the whole request with invalid_scope if any one scope is unknown
+                // (read:teams is not a Halo scope, and nothing here calls a teams endpoint).
+                ["scope"] = "edit:tickets read:tickets read:customers"
             })
         };
 
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(await DescribeRejectionAsync(response, cancellationToken).ConfigureAwait(false), null, response.StatusCode);
+        }
+
         var payload = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // Refresh a minute early so a call starting right before expiry doesn't race a 401.
         return (payload!.AccessToken, DateTimeOffset.UtcNow.AddSeconds(payload.ExpiresInSeconds - 60));
     }
+
+    /// <summary>Halo's token endpoint explains a rejection in an OAuth error body (invalid_scope,
+    /// invalid_client, and so on). Surfacing it turns an opaque "400" into something an admin can act
+    /// on. The body describes the error only and never echoes the client secret back.</summary>
+    private static async Task<string> DescribeRejectionAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var summary = $"HaloPSA rejected the token request ({(int)response.StatusCode} {response.ReasonPhrase})";
+        try
+        {
+            var rejection = await response.Content.ReadFromJsonAsync<TokenRejection>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(rejection?.Error))
+            {
+                return string.IsNullOrWhiteSpace(rejection.Description)
+                    ? $"{summary}: {rejection.Error}"
+                    : $"{summary}: {rejection.Error} - {rejection.Description}";
+            }
+        }
+        catch (JsonException)
+        {
+            // Not an OAuth error body, so the status code alone will have to do.
+        }
+
+        return summary;
+    }
+
+    private sealed record TokenRejection(
+        [property: JsonPropertyName("error")] string? Error,
+        [property: JsonPropertyName("error_description")] string? Description);
 
     private sealed record TokenResponse(
         [property: JsonPropertyName("access_token")] string AccessToken,

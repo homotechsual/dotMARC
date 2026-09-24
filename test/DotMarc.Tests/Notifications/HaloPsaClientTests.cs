@@ -49,6 +49,51 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task TheTokenRequest_AsksOnlyForScopesHaloRecognises()
+    {
+        // Halo rejects the whole token request with invalid_scope if any one scope is unknown,
+        // and read:teams is not a Halo scope - so that combination must never be sent again.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = """[{"id":1,"name":"Low"}]""";
+
+        await client.ListPrioritiesAsync(Settings);
+
+        var tokenRequestBody = System.Net.WebUtility.UrlDecode(handler.RequestBodies[0]);
+        Assert.Contains("grant_type=client_credentials", tokenRequestBody);
+        Assert.Contains("scope=edit:tickets read:tickets read:customers", tokenRequestBody);
+        Assert.DoesNotContain("read:teams", tokenRequestBody);
+    }
+
+    [Fact]
+    public async Task ARejectedTokenRequest_ThrowsWithHalosOAuthErrorInTheMessage()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"error":"invalid_scope","error_description":"The specified 'scope' parameter is not valid."}""");
+        handler.StatusCodes.Enqueue(HttpStatusCode.BadRequest);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListPrioritiesAsync(Settings));
+
+        Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
+        Assert.Contains("invalid_scope", exception.Message);
+        Assert.Contains("The specified 'scope' parameter is not valid.", exception.Message);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ARejectedTokenRequest_WithNoOAuthBody_StillReportsTheStatusCode()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("not json");
+        handler.StatusCodes.Enqueue(HttpStatusCode.BadGateway);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListPrioritiesAsync(Settings));
+
+        Assert.Equal(HttpStatusCode.BadGateway, exception.StatusCode);
+        Assert.Contains("502", exception.Message);
+    }
+
+    [Fact]
     public async Task CreateTicketAsync_ReusesTheCachedToken_WithinItsLifetime()
     {
         var (client, handler) = CreateClient();

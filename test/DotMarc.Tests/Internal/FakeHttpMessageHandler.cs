@@ -8,6 +8,10 @@ namespace DotMarc.Tests.Internal;
 public sealed class FakeHttpMessageHandler : HttpMessageHandler
 {
     public List<HttpRequestMessage> Requests { get; } = [];
+
+    /// <summary>The body of each request, read as it was sent - the request (and its content) is
+    /// usually disposed by the caller by the time a test inspects <see cref="Requests"/>.</summary>
+    public List<string> RequestBodies { get; } = [];
     public string ResponseBody { get; set; } = "{}";
     public HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
 
@@ -21,15 +25,16 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
     /// <see cref="StatusCode"/> for any further calls.</summary>
     public Queue<HttpStatusCode> StatusCodes { get; } = new();
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Requests.Add(request);
+        RequestBodies.Add(request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken));
         var body = ResponseBodies.Count > 0 ? ResponseBodies.Dequeue() : ResponseBody;
         var statusCode = StatusCodes.Count > 0 ? StatusCodes.Dequeue() : StatusCode;
         var response = new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
-        return Task.FromResult(response);
+        return response;
     }
 }
