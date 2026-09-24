@@ -1,0 +1,49 @@
+---
+sidebar_position: 11
+description: Read dotMARC's recent server log entries from inside the app, to diagnose a failed integration call without access to the host's logs.
+---
+
+# Server logs
+
+dotMARC keeps its most recent log entries in memory and shows them under **Manage → Server logs**, so
+an error you hit in the app (a failed HaloPSA call, a rejected DNS push) can be diagnosed without
+needing access to the host's own logs.
+
+## What you see
+
+The page lists the latest entries, newest first, with the time (UTC), level, source and message. An
+entry that carries an exception has an expandable **Exception** section.
+
+* **Minimum level**: Error, Warning (the default) or Information.
+* **Search**: matches the message, the source (the logger's name) and the exception text, ignoring case.
+* **Auto-refresh**: reloads the list every five seconds while you watch something happen.
+* **Copy shown entries**: copies what's on screen, handy for a bug report.
+
+Up to 2,000 entries are kept, and up to the latest 500 matching entries are shown.
+
+## What is kept
+
+Warnings and errors are always kept, along with informational messages from dotMARC itself and the
+app's start and stop messages. Framework chatter, such as every database command or every outbound
+HTTP request, is deliberately left out: at dotMARC's polling rate it would push the entries worth
+reading out of the buffer within minutes.
+
+## Things worth knowing
+
+* **It's a live view, not an archive.** Entries live in memory, so they reset whenever the app
+  restarts or is redeployed, and only the instance you're connected to is shown (the page names it).
+  For history, or for several instances, use your host's own log tooling. On Azure Container Apps
+  the console output is in the environment's Log Analytics workspace.
+* **Known secrets are masked.** A webhook secret in a URL, OAuth tokens and client secrets in a query
+  string or form, and bearer tokens are replaced with `[redacted]` before an entry is stored. This is
+  a safety net for those shapes rather than a guarantee, and nothing in dotMARC should log a secret in
+  the first place.
+* **Access is its own permission.** `LogsView` is part of the built-in Admin role and can be added
+  to a custom role from **Manage Access** (see [Permissions & Access](./permissions-and-access.mdx)).
+  Logs can contain internal detail, so grant it sparingly.
+* **Demo instances don't capture logs.** Visitors to a demo can take the Admin persona, so the page
+  says logging is off there instead of showing anything.
+
+For an example of what this is for, see the HaloPSA setup notes in [PSA integration](./psa-integration.mdx):
+when loading Halo's ticket options fails, the error shown in the app quotes what Halo answered, and
+the full detail is here.

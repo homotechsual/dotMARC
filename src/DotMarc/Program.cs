@@ -79,6 +79,15 @@ builder.Services.AddOptions<DotMarc.Demo.DemoOptions>()
 var demoOptions = new DotMarc.Demo.DemoOptions();
 builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
 
+// Recent server log entries, held in memory for the Server logs page. Never captured on a demo
+// instance: its visitors can take the Admin persona, and a log holds server internals.
+var serverLogStore = new DotMarc.ServerLogs.InMemoryLogStore(isCapturing: !demoOptions.Enabled);
+builder.Services.AddSingleton(serverLogStore);
+if (serverLogStore.IsCapturing)
+{
+    builder.Logging.AddProvider(new DotMarc.ServerLogs.InMemoryLoggerProvider(serverLogStore));
+}
+
 builder.Services.AddSingleton<IPsaTicketService, PsaTicketService>();
 builder.Services.AddSingleton<IAlertingService, AlertingService>();
 

@@ -1,0 +1,118 @@
+@page "/logs"
+@attribute [Authorize(Policy = "LogsView")]
+@implements IDisposable
+@using DotMarc.ServerLogs
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Logging
+@inject InMemoryLogStore LogStore
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - Server logs</PageTitle>
+<MudText Typo="Typo.h4" Class="mb-2">Server logs</MudText>
+
+@if (!LogStore.IsCapturing)
+{
+    <MudAlert Severity="Severity.Info">Server logs aren't captured on demo instances.</MudAlert>
+}
+else
+{
+    var entries = LogStore.Query(_minimumLevel, _search, MaxShown);
+
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        This instance (@Environment.MachineName) has @LogStore.Count recent entries in memory@(LogStore.OldestTimestampUtc is { } oldest ? $", the oldest from {oldest:yyyy-MM-dd HH:mm:ss} UTC" : "").
+        They reset when the app restarts or is redeployed, and other instances' entries aren't included.
+        Warnings and errors are always kept, plus informational messages from dotMARC itself. Secrets in URLs and
+        tokens are redacted.
+    </MudAlert>
+
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-3">
+        <MudSelect T="LogLevel" @bind-Value="_minimumLevel" Label="Minimum level" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:210px">
+            <MudSelectItem T="LogLevel" Value="LogLevel.Error">Error and above</MudSelectItem>
+            <MudSelectItem T="LogLevel" Value="LogLevel.Warning">Warning and above</MudSelectItem>
+            <MudSelectItem T="LogLevel" Value="LogLevel.Information">Information and above</MudSelectItem>
+        </MudSelect>
+        <MudTextField T="string" @bind-Value="_search" Label="Search" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" Clearable="true" Style="min-width:260px" />
+        <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="SetAutoRefresh" Label="Auto-refresh" Color="Color.Primary" />
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Refresh">Refresh</MudButton>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync">Copy shown entries</MudButton>
+    </MudStack>
+
+    @if (entries.Count == 0)
+    {
+        <MudText Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(_search) ? "No entries at this level yet." : "No entries at this level match the search.")</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">
+            Showing @entries.Count (newest first@(entries.Count == MaxShown ? $", limited to the latest {MaxShown}" : "")).
+        </MudText>
+        <MudTable T="LogEntry" Items="entries" Dense="true" Hover="true" Breakpoint="Breakpoint.None">
+            <HeaderContent>
+                <MudTh>Time (UTC)</MudTh>
+                <MudTh>Level</MudTh>
+                <MudTh>Source</MudTh>
+                <MudTh>Message</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd Style="white-space:nowrap">@context.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="LevelColor(context.Level)">@context.Level</MudChip></MudTd>
+                <MudTd Style="overflow-wrap:anywhere"><MudText Typo="Typo.caption">@context.Category</MudText></MudTd>
+                <MudTd Style="overflow-wrap:anywhere; white-space:pre-wrap">
+                    @context.Message
+                    @if (context.Exception is not null)
+                    {
+                        <details class="mt-1">
+                            <summary>Exception</summary>
+                            <pre style="white-space:pre-wrap; overflow-wrap:anywhere; font-size:0.75rem">@context.Exception</pre>
+                        </details>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+@code {
+    private const int MaxShown = 500;
+
+    private LogLevel _minimumLevel = LogLevel.Warning;
+    private string? _search;
+    private bool _autoRefresh;
+    private System.Threading.Timer? _timer;
+
+    private static Color LevelColor(LogLevel level) => level switch
+    {
+        LogLevel.Critical or LogLevel.Error => Color.Error,
+        LogLevel.Warning => Color.Warning,
+        LogLevel.Information => Color.Info,
+        _ => Color.Default
+    };
+
+    private void Refresh()
+    {
+        // The click itself re-renders the page, which re-reads the store.
+    }
+
+    private void SetAutoRefresh(bool enabled)
+    {
+        _autoRefresh = enabled;
+        _timer?.Dispose();
+        _timer = enabled
+            ? new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5))
+            : null;
+    }
+
+    private async Task CopyAsync()
+    {
+        var entries = LogStore.Query(_minimumLevel, _search, MaxShown);
+        var text = string.Join(
+            "\n\n",
+            entries.Select(e => $"{e.TimestampUtc:yyyy-MM-dd HH:mm:ss}Z {e.Level} {e.Category}\n{e.Message}{(e.Exception is null ? "" : "\n" + e.Exception)}"));
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        Snackbar.Add($"Copied {entries.Count} entries.", Severity.Success);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
