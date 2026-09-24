@@ -344,6 +344,9 @@ else
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
             .ThenInclude(r => r.Records)
             .ThenInclude(rec => rec.OverrideReasons)
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Records)
+            .ThenInclude(rec => rec.AuthDetails)
             .AsQueryable();
 
         if (_selectedGroupId is { } groupId)

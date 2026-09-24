@@ -50,6 +50,9 @@ public sealed class AlertingService : IAlertingService
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= reasonWindowCutoffUtc))
             .ThenInclude(r => r.Records)
             .ThenInclude(rec => rec.OverrideReasons)
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= reasonWindowCutoffUtc))
+            .ThenInclude(r => r.Records)
+            .ThenInclude(rec => rec.AuthDetails)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
