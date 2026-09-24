@@ -222,5 +222,14 @@
       "The Dashboard, domain pages and alerting checks loaded every report's full raw XML, and joined related data in a way that multiplied rows and repeated that XML on each of them.",
       "The raw XML is now only read when something actually needs it, and the related data is loaded separately, so these pages should move much less data. What you see is unchanged."
     ]
+  },
+  {
+    "title": "Add a HaloPSA integration test that runs the whole ticket lifecycle",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "Until now the only way to know the HaloPSA integration worked was to wait for a real alert, with no way to see where it went wrong.",
+      "Alert settings now has a Test the integration button. It creates a clearly marked test ticket from the most recent alert's details, closes it using your closed status, then waits for Halo to call the webhook back, showing each step as it goes. When something fails, the message says what Halo answered or what to check, such as a wrong webhook secret or a status that does not match your closed status. It uses your saved settings, leaves one closed [dotMARC test] ticket in Halo, and does not touch any real alert. A list of recent calls to the webhook shows what Halo has actually sent."
+    ]
   }
 ]
