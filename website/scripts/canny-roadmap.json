@@ -40,10 +40,10 @@
   {
     "title": "Infer a reason for rejected or quarantined mail when the receiver gives none",
     "version": "v0.7.0",
-    "status": "in progress",
+    "status": "complete",
     "details": [
       "DMARC aggregate reports can explain why a receiver overrode its policy, but many receivers omit the reason entirely. A rejected or quarantined source with no reason shows as unexplained, which tells an operator nothing they can act on.",
-      "In progress: when a report gives no reason, dotMARC works out a plain-English explanation from the raw SPF and DKIM results in the report. For example, that no DKIM signature was present, that SPF passed for a different domain than the From: address (so it does not align), or that a check failed outright. It appears on the Sources tab marked as Inferred, so it is never mistaken for a reason the receiver reported, and it is only shown when the receiver gave no reason of its own.",
+      "When a report gives no reason, dotMARC works out a plain-English explanation from the raw SPF and DKIM results in the report. For example, that no DKIM signature was present, that SPF passed for a different domain than the From: address (so it does not align), or that a check failed outright. It appears on the Sources tab marked as Inferred, so it is never mistaken for a reason the receiver reported, and it is only shown when the receiver gave no reason of its own.",
       "Domain alignment is judged with a same-domain-or-subdomain check rather than a full public suffix lookup, so treat the explanation as a best-effort pointer rather than an authoritative verdict."
     ]
   },
@@ -167,6 +167,60 @@
     "details": [
       "Reports are currently collected from a Microsoft 365 mailbox through Microsoft Graph, which limits dotMARC to Microsoft 365 environments.",
       "Proposal: additional ingestion sources such as IMAP and the Gmail API. Vote and comment with which mailbox type you would need."
+    ]
+  },
+  {
+    "title": "Add server logs inside the app",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "Diagnosing a failed integration call, such as a HaloPSA request or a DNS push, used to need access to the host's own logs.",
+      "dotMARC now keeps its most recent warnings, errors and its own informational messages in memory and shows them under Manage > Server logs, newest first, with level and text filters, auto-refresh and a copy button. Known secrets in URLs and tokens are redacted, access is its own LogsView permission (part of the built-in Admin role), and entries reset when the app restarts. Nothing is captured on demo instances."
+    ]
+  },
+  {
+    "title": "Recognise more DNS providers and show a domain's nameservers",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "DNS provider detection used to recognise only Cloudflare, Azure DNS and Google Cloud DNS, and everything else showed as not recognised.",
+      "It now also recognises Microsoft 365, Amazon Route 53, GoDaddy, Namecheap, DigitalOcean, OVH, Gandi, NS1, DNS Made Easy and Vercel, and the DNS provider row shows the domain's actual configured nameservers on hover, even when the provider is not recognised. One-click DNS push still works only for Cloudflare, Azure DNS and Google Cloud DNS."
+    ]
+  },
+  {
+    "title": "Show first-seen dates, trends and known senders on the Sources tab",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "The Sources tab now shows when each source was first seen (with a New badge for sources first seen in the last 7 days, judged from the source's whole history rather than just the 30-day window) and a 7-day volume sparkline per source, so a long-running low-grade sender is easy to tell apart from a brand new spike.",
+      "Recommendations now name a known email service such as SendGrid, Mailgun or Salesforce when the failing domain matches one, instead of just \"a third-party sender\", and the suspicious reject activity alert breaks down how much of the volume was SPF-only, DKIM-only, or both."
+    ]
+  },
+  {
+    "title": "Fix HaloPSA sign-in and priority loading",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "The HaloPSA integration could not authenticate, because dotMARC asked Halo for a scope it does not have, and the priority list failed to load, because Halo returns one row per priority per SLA rather than a plain list.",
+      "Both are fixed: priorities are read from Halo's priorityid, de-duplicated across SLAs, and hidden ones are skipped. Errors now quote what Halo actually answered and stay on screen until dismissed, and the webhook URL can be copied with a click."
+    ]
+  },
+  {
+    "title": "Read DMARC reports that use capitalised or non-standard values",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "Reports from some receivers write values such as Fail (capitalised) or \"no policy\" where the DMARC schema expects lowercase values, and were rejected, left unread and retried on every poll.",
+      "They are now read: capitalised values are normalised and \"no policy\" is treated as none, while genuinely unknown values are still rejected. Known limitation: a report that uses the sampled_out override reason still cannot be read, because of a bug in the DMARC report library dotMARC uses."
+    ]
+  },
+  {
+    "title": "Make the Dashboard and domain pages load faster",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "The Dashboard, domain pages and alerting checks loaded every report's full raw XML, and joined related data in a way that multiplied rows and repeated that XML on each of them.",
+      "The raw XML is now only read when something actually needs it, and the related data is loaded separately, so these pages should move much less data. What you see is unchanged."
     ]
   }
 ]
