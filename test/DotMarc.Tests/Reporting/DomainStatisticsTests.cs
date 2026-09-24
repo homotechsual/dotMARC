@@ -234,4 +234,57 @@ public class DomainStatisticsTests
         Assert.Equal(50, breakdown.NoReasonGiven);
         Assert.Equal(50, breakdown.Total);
     }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsAsInferredSpfFailure_WhenOnlySpfHasAnyAuthDetail()
+    {
+        var record = Record("198.51.100.70", 12, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Spf, Domain = "contoso.io", Result = DmarcMechanismResult.Fail });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(12, breakdown.InferredSpfFailure);
+        Assert.Equal(0, breakdown.InferredDkimFailure);
+        Assert.Equal(0, breakdown.InferredBothFailure);
+        Assert.Equal(0, breakdown.NoReasonGiven);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsAsInferredDkimFailure_WhenOnlyDkimHasAnyAuthDetail()
+    {
+        var record = Record("198.51.100.71", 8, AuthResult.Fail, AuthResult.Fail, DispositionResult.Quarantine);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "contoso.io", Result = DmarcMechanismResult.Fail, Selector = "default" });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(8, breakdown.InferredDkimFailure);
+        Assert.Equal(0, breakdown.InferredSpfFailure);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsAsInferredBothFailure_WhenBothMechanismsFailed()
+    {
+        var record = Record("198.51.100.72", 5, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Spf, Domain = "bad.example", Result = DmarcMechanismResult.Fail });
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bad.example", Result = DmarcMechanismResult.Fail });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(5, breakdown.InferredBothFailure);
+    }
+
+    [Fact]
+    public void GetReasonBreakdown_BucketsAsInferredBothFailure_WhenAMechanismPassedButIsMisaligned()
+    {
+        var record = Record("198.51.100.73", 7, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Spf, Domain = "esp.example", Result = DmarcMechanismResult.Pass });
+        var report = ReportWith(record);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown([report]);
+
+        Assert.Equal(7, breakdown.InferredBothFailure);
+    }
 }

@@ -497,7 +497,7 @@ public class PollingServiceTests : IAsyncLifetime
         }
 
         var breakdown = Assert.Single(alertingService.FlaggedReasonBreakdowns);
-        Assert.Equal(25, breakdown.InferredAuthFailure);
+        Assert.Equal(25, breakdown.InferredSpfFailure);
         Assert.Equal(25, breakdown.Total);
     }
 

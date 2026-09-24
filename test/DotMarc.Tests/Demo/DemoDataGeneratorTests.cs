@@ -393,7 +393,7 @@ public sealed class DemoDataGeneratorTests
     }
 
     [Fact]
-    public void CobaltFreight_QuarantinedVolume_IsBucketedAsInferredAuthFailure()
+    public void CobaltFreight_QuarantinedVolume_IsBucketedAsInferredBothFailure()
     {
         var dataset = Generate();
         var domain = dataset.Domains.Single(d => d.Name == "cobalt-freight.example");
@@ -401,7 +401,7 @@ public sealed class DemoDataGeneratorTests
         var breakdown = DomainStatistics.GetReasonBreakdown(ToReports(domain));
 
         Assert.True(breakdown.Total > 0, "expected some quarantined volume to demonstrate the reason-breakdown panel");
-        Assert.Equal(breakdown.Total, breakdown.InferredAuthFailure);
+        Assert.Equal(breakdown.Total, breakdown.InferredBothFailure);
         Assert.Equal(0, breakdown.BenignOverride);
         Assert.Equal(0, breakdown.NoReasonGiven);
     }
@@ -416,7 +416,7 @@ public sealed class DemoDataGeneratorTests
 
         Assert.True(breakdown.Total > 0, "expected some quarantined volume to demonstrate the reason-breakdown panel");
         Assert.Equal(breakdown.Total, breakdown.NoReasonGiven);
-        Assert.Equal(0, breakdown.InferredAuthFailure);
+        Assert.Equal(0, breakdown.InferredBothFailure);
     }
 
     [Fact]

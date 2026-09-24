@@ -94,16 +94,17 @@ else
             <MudGrid>
                 <MudItem xs="12" sm="5">
                     <MudChart ChartType="ChartType.Donut" T="double"
-                              ChartSeries="@([new double[] { _summary.ReasonBreakdown.BenignOverride, _summary.ReasonBreakdown.LocalPolicy, _summary.ReasonBreakdown.Other, _summary.ReasonBreakdown.InferredAuthFailure, _summary.ReasonBreakdown.NoReasonGiven }])"
-                              ChartLabels="@(new[] { "Benign override", "Local policy", "Other", "SPF/DKIM failure (inferred)", "No reason given" })"
+                              ChartSeries="@([new double[] { _summary.ReasonBreakdown.BenignOverride, _summary.ReasonBreakdown.LocalPolicy, _summary.ReasonBreakdown.Other, _summary.ReasonBreakdown.InferredSpfFailure, _summary.ReasonBreakdown.InferredDkimFailure, _summary.ReasonBreakdown.InferredBothFailure, _summary.ReasonBreakdown.NoReasonGiven }])"
+                              ChartLabels="@(new[] { "Benign override", "Local policy", "Other", "SPF failure (inferred)", "DKIM failure (inferred)", "SPF & DKIM failure (inferred)", "No reason given" })"
                               Width="220px" Height="220px" />
                 </MudItem>
                 <MudItem xs="12" sm="7" Class="d-flex align-center">
                     <MudText Typo="Typo.body2">
                         Of @_summary.ReasonBreakdown.Total rejected/quarantined messages: @_summary.ReasonBreakdown.BenignOverride benign
                         override (forwarders/mailing lists), @_summary.ReasonBreakdown.LocalPolicy local policy,
-                        @_summary.ReasonBreakdown.Other other, @_summary.ReasonBreakdown.InferredAuthFailure with an inferred
-                        SPF/DKIM failure, @_summary.ReasonBreakdown.NoReasonGiven no reason given.
+                        @_summary.ReasonBreakdown.Other other, @_summary.ReasonBreakdown.InferredSpfFailure with an inferred SPF-only
+                        failure, @_summary.ReasonBreakdown.InferredDkimFailure with an inferred DKIM-only failure,
+                        @_summary.ReasonBreakdown.InferredBothFailure with both inferred failing, @_summary.ReasonBreakdown.NoReasonGiven no reason given.
                     </MudText>
                 </MudItem>
             </MudGrid>

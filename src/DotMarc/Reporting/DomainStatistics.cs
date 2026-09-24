@@ -86,13 +86,13 @@ public static class DomainStatistics
             .ToList();
 
     /// <summary>When a receiver's report omits an explicit &lt;reason&gt;, works out a plain-English
-    /// explanation from the raw per-mechanism auth_results instead of leaving the source
-    /// unexplained ("no reason given" tells an operator nothing they can act on). Only meaningful
-    /// when the message was actually rejected/quarantined by DMARC (neither check aligned) - a
-    /// passing message, or one where a policy override already supplied its own reason, needs no
-    /// extrapolation. Domain alignment here is a same-or-subdomain heuristic (not a strict
-    /// RFC 7489 org-domain lookup, which would need a public suffix list), so treat the result as
-    /// a best-effort explanation rather than an authoritative alignment verdict.</summary>
+    /// explanation - and a concrete next step - from the raw per-mechanism auth_results instead of
+    /// leaving the source unexplained ("no reason given" tells an operator nothing they can act
+    /// on). Only meaningful when the message was actually rejected/quarantined by DMARC (neither
+    /// check aligned) - a passing message, or one where a policy override already supplied its own
+    /// reason, needs no extrapolation. Domain alignment here is a same-or-subdomain heuristic (not
+    /// a strict RFC 7489 org-domain lookup, which would need a public suffix list), so treat the
+    /// result as a best-effort explanation rather than an authoritative alignment verdict.</summary>
     private static string? InferFailureReason(DispositionResult disposition, AuthResult spfResult, AuthResult dkimResult, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
     {
         if (disposition == DispositionResult.None || spfResult == AuthResult.Pass || dkimResult == AuthResult.Pass)
@@ -100,28 +100,52 @@ public static class DomainStatistics
             return null;
         }
 
-        return $"SPF: {ExplainMechanism(DmarcAuthMechanism.Spf, headerFrom, authDetails)}. DKIM: {ExplainMechanism(DmarcAuthMechanism.Dkim, headerFrom, authDetails)}.";
+        var spfOutcome = ClassifyMechanism(DmarcAuthMechanism.Spf, headerFrom, authDetails);
+        var dkimOutcome = ClassifyMechanism(DmarcAuthMechanism.Dkim, headerFrom, authDetails);
+
+        return $"SPF: {ExplainMechanism(DmarcAuthMechanism.Spf, spfOutcome, headerFrom, authDetails)}. " +
+               $"DKIM: {ExplainMechanism(DmarcAuthMechanism.Dkim, dkimOutcome, headerFrom, authDetails)}. " +
+               BuildRecommendation(spfOutcome, dkimOutcome);
     }
 
-    private static string ExplainMechanism(DmarcAuthMechanism mechanism, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
+    private static string ExplainMechanism(DmarcAuthMechanism mechanism, MechanismOutcome outcome, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
     {
-        var matching = authDetails.Where(d => d.Mechanism == mechanism).ToList();
-        if (matching.Count == 0)
+        if (outcome == MechanismOutcome.NotCovered)
         {
             return mechanism == DmarcAuthMechanism.Spf
                 ? "sender not covered by SPF (no SPF check reported for this source)"
                 : "no DKIM signature present";
         }
 
-        var passing = matching.FirstOrDefault(d => d.Result == DmarcMechanismResult.Pass);
-        if (passing is not null)
+        var matching = authDetails.Where(d => d.Mechanism == mechanism).ToList();
+        if (outcome == MechanismOutcome.Misaligned)
         {
-            return IsAligned(passing.Domain, headerFrom)
-                ? "passed"
-                : $"passed for {passing.Domain}, which doesn't align with the From: domain ({headerFrom})";
+            var passing = matching.First(d => d.Result == DmarcMechanismResult.Pass);
+            return $"passed for {passing.Domain}, which doesn't align with the From: domain ({headerFrom})";
         }
 
         return $"failed ({string.Join(", ", matching.Select(d => d.Result).Distinct())})";
+    }
+
+    /// <summary>Per-mechanism outcome behind both the human-readable explanation and the
+    /// SPF/DKIM/Both reason-breakdown bucketing - Misaligned means the raw check actually passed
+    /// (for a domain other than the header-from one), the most common shape of a legitimate
+    /// third-party sender that hasn't configured alignment, as distinct from Failed (a real
+    /// negative result) or NotCovered (the report says nothing about this mechanism at all).
+    /// InferFailureReason's Pass short-circuit guarantees this is never called for a mechanism
+    /// that actually aligned, so an unaligned Pass here always means Misaligned, never a false
+    /// "everything's fine".</summary>
+    private enum MechanismOutcome { NotCovered, Misaligned, Failed }
+
+    private static MechanismOutcome ClassifyMechanism(DmarcAuthMechanism mechanism, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
+    {
+        var matching = authDetails.Where(d => d.Mechanism == mechanism).ToList();
+        if (matching.Count == 0)
+        {
+            return MechanismOutcome.NotCovered;
+        }
+
+        return matching.Any(d => d.Result == DmarcMechanismResult.Pass) ? MechanismOutcome.Misaligned : MechanismOutcome.Failed;
     }
 
     private static bool IsAligned(string mechanismDomain, string headerFrom) =>
@@ -129,19 +153,73 @@ public static class DomainStatistics
         || headerFrom.EndsWith("." + mechanismDomain, StringComparison.OrdinalIgnoreCase)
         || mechanismDomain.EndsWith("." + headerFrom, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Attributes a failing record to SPF, DKIM, or Both - the same three reason-
+    /// breakdown buckets InferAuthFailureCategory feeds. SPF/DKIM apply only when one mechanism
+    /// has a definite negative signal (Failed) and the other has none at all (NotCovered) - the
+    /// one case where a single mechanism is cleanly "to blame". Misalignment on either mechanism,
+    /// or both mechanisms having a verdict, always lands in Both: a misaligned sender needs both
+    /// records looked at together, and two simultaneous real failures aren't attributable to one
+    /// mechanism over the other.</summary>
+    private static AuthFailureCategory ClassifyFailureCategory(MechanismOutcome spf, MechanismOutcome dkim)
+    {
+        if (spf == MechanismOutcome.Misaligned || dkim == MechanismOutcome.Misaligned)
+        {
+            return AuthFailureCategory.Both;
+        }
+        if (spf == MechanismOutcome.Failed && dkim == MechanismOutcome.NotCovered)
+        {
+            return AuthFailureCategory.Spf;
+        }
+        if (dkim == MechanismOutcome.Failed && spf == MechanismOutcome.NotCovered)
+        {
+            return AuthFailureCategory.Dkim;
+        }
+        return AuthFailureCategory.Both;
+    }
+
+    private enum AuthFailureCategory { Spf, Dkim, Both }
+
+    /// <summary>The one-line "what should I actually do about this" that turns the SPF/DKIM
+    /// explanation into something actionable rather than just diagnostic.</summary>
+    private static string BuildRecommendation(MechanismOutcome spf, MechanismOutcome dkim)
+    {
+        if (spf == MechanismOutcome.Misaligned || dkim == MechanismOutcome.Misaligned)
+        {
+            return "Recommendation: this looks like a third-party sender (e.g. a marketing or " +
+                   "helpdesk platform) that passed its own check but isn't aligned with your domain - " +
+                   "ask them to enable sending on your behalf with proper SPF/DKIM alignment, or add " +
+                   "their required DNS records yourself if you control the sending domain.";
+        }
+        if (spf == MechanismOutcome.NotCovered && dkim == MechanismOutcome.NotCovered)
+        {
+            return "Recommendation: neither mechanism reported any data for this source - confirm you " +
+                   "recognize it at all before assuming it's a legitimate sender you simply forgot to authorize.";
+        }
+
+        return ClassifyFailureCategory(spf, dkim) switch
+        {
+            AuthFailureCategory.Spf => "Recommendation: if you recognize this source, add its IP (or its " +
+                "provider's SPF include) to your SPF record; if you don't, treat this as unauthorized.",
+            AuthFailureCategory.Dkim => "Recommendation: if you recognize this sender, ask them to enable " +
+                "DKIM signing (or configure the selector they provide); if you don't, treat this as unauthorized.",
+            _ => "Recommendation: both SPF and DKIM failed outright for this source - this looks like an " +
+                 "unauthorized sender rather than a configuration gap."
+        };
+    }
+
     /// <summary>Buckets every Reject/Quarantine record's message volume by why it was
     /// disposed-against - the direct signal for "does this look like benign forwarding or a real
     /// spoofing attempt". Disposition == None records are excluded (nothing to explain). A record
     /// with multiple reason entries buckets by priority: Benign wins if any entry is
     /// Forwarded/SampledOut/TrustedForwarder/MailingList (one benign explanation is enough), else
     /// LocalPolicy wins if any entry is LocalPolicy, else Other. With no explicit reason at all,
-    /// this falls back to InferredAuthFailure when the record has per-mechanism AuthDetails to
-    /// explain the failure from (see InferFailureReason/ExplainMechanism), and only to the
-    /// genuinely uninformative NoReasonGiven bucket when it doesn't - e.g. a report ingested
-    /// before AuthDetails existed, or not yet caught up by PollingService's backfill cycle.</summary>
+    /// this falls back to SPF/DKIM/Both (see ClassifyFailureCategory) when the record has
+    /// per-mechanism AuthDetails to attribute the failure from, and only to the genuinely
+    /// uninformative NoReasonGiven bucket when it doesn't - e.g. a report ingested before
+    /// AuthDetails existed, or not yet caught up by PollingService's backfill cycle.</summary>
     public static ReasonBreakdown GetReasonBreakdown(IEnumerable<Report> reportsInWindow)
     {
-        int benign = 0, localPolicy = 0, other = 0, inferredAuthFailure = 0, noReason = 0;
+        int benign = 0, localPolicy = 0, other = 0, noReason = 0, spfFailure = 0, dkimFailure = 0, bothFailure = 0;
 
         foreach (var record in reportsInWindow.SelectMany(r => r.Records).Where(r => r.Disposition != DispositionResult.None))
         {
@@ -151,7 +229,23 @@ public static class DomainStatistics
             {
                 if (record.AuthDetails.Count > 0)
                 {
-                    inferredAuthFailure += record.MessageCount;
+                    var authDetails = record.AuthDetails.Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).ToList();
+                    var category = ClassifyFailureCategory(
+                        ClassifyMechanism(DmarcAuthMechanism.Spf, record.HeaderFrom, authDetails),
+                        ClassifyMechanism(DmarcAuthMechanism.Dkim, record.HeaderFrom, authDetails));
+
+                    switch (category)
+                    {
+                        case AuthFailureCategory.Spf:
+                            spfFailure += record.MessageCount;
+                            break;
+                        case AuthFailureCategory.Dkim:
+                            dkimFailure += record.MessageCount;
+                            break;
+                        default:
+                            bothFailure += record.MessageCount;
+                            break;
+                    }
                 }
                 else
                 {
@@ -172,7 +266,7 @@ public static class DomainStatistics
             }
         }
 
-        return new ReasonBreakdown(benign, localPolicy, other, noReason, inferredAuthFailure);
+        return new ReasonBreakdown(benign, localPolicy, other, noReason, spfFailure, dkimFailure, bothFailure);
     }
 
     /// <summary>Same bucketing as the single-domain overload, summed across every supplied
@@ -211,10 +305,10 @@ public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult Spf
 public sealed record AuthDetailSummary(DmarcAuthMechanism Mechanism, string Domain, DmarcMechanismResult Result);
 
 /// <summary>Reject/Quarantine message volume in a window, bucketed by why it happened. See
-/// DomainStatistics.GetReasonBreakdown for the bucketing rules. InferredAuthFailure defaults to 0
-/// so every pre-existing 4-arg call site (tests, PollingService's empty-breakdown fallback) still
-/// compiles unchanged.</summary>
-public sealed record ReasonBreakdown(int BenignOverride, int LocalPolicy, int Other, int NoReasonGiven, int InferredAuthFailure = 0)
+/// DomainStatistics.GetReasonBreakdown for the bucketing rules. The three Inferred* fields default
+/// to 0 so every pre-existing 4-arg call site (tests, PollingService's empty-breakdown fallback)
+/// still compiles unchanged.</summary>
+public sealed record ReasonBreakdown(int BenignOverride, int LocalPolicy, int Other, int NoReasonGiven, int InferredSpfFailure = 0, int InferredDkimFailure = 0, int InferredBothFailure = 0)
 {
-    public int Total => BenignOverride + LocalPolicy + Other + NoReasonGiven + InferredAuthFailure;
+    public int Total => BenignOverride + LocalPolicy + Other + NoReasonGiven + InferredSpfFailure + InferredDkimFailure + InferredBothFailure;
 }

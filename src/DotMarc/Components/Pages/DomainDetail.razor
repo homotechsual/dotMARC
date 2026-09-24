@@ -72,7 +72,9 @@ else
                             <MudText Typo="Typo.body2">
                                 Of @breakdown.Total rejected/quarantined messages: @breakdown.BenignOverride benign override
                                 (forwarders/mailing lists), @breakdown.LocalPolicy local policy, @breakdown.Other other,
-                                @breakdown.InferredAuthFailure with an inferred SPF/DKIM failure, @breakdown.NoReasonGiven no reason given.
+                                @breakdown.InferredSpfFailure with an inferred SPF-only failure, @breakdown.InferredDkimFailure
+                                with an inferred DKIM-only failure, @breakdown.InferredBothFailure with both inferred failing,
+                                @breakdown.NoReasonGiven no reason given.
                             </MudText>
                         </MudItem>
                     </MudGrid>
@@ -411,7 +413,7 @@ else
     private string[] _xAxisLabels = [];
     private ReasonBreakdown? _reasonBreakdown;
     private double[] _reasonData = [];
-    private string[] _reasonLabels = ["Benign override", "Local policy", "Other", "SPF/DKIM failure (inferred)", "No reason given"];
+    private string[] _reasonLabels = ["Benign override", "Local policy", "Other", "SPF failure (inferred)", "DKIM failure (inferred)", "SPF & DKIM failure (inferred)", "No reason given"];
     private bool _isPushingDmarcRecord;
     private bool _isPushingDmarcAuthRecord;
     private bool _isRecheckingDmarc;
@@ -566,7 +568,7 @@ else
         ];
 
         _reasonBreakdown = DomainStatistics.GetReasonBreakdown(_domain.Reports);
-        _reasonData = [_reasonBreakdown.BenignOverride, _reasonBreakdown.LocalPolicy, _reasonBreakdown.Other, _reasonBreakdown.InferredAuthFailure, _reasonBreakdown.NoReasonGiven];
+        _reasonData = [_reasonBreakdown.BenignOverride, _reasonBreakdown.LocalPolicy, _reasonBreakdown.Other, _reasonBreakdown.InferredSpfFailure, _reasonBreakdown.InferredDkimFailure, _reasonBreakdown.InferredBothFailure, _reasonBreakdown.NoReasonGiven];
     }
 
     private async Task EnrichSourceInBackgroundAsync(SourceRow source)
