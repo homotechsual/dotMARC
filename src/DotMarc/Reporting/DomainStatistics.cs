@@ -105,7 +105,7 @@ public static class DomainStatistics
 
         return $"SPF: {ExplainMechanism(DmarcAuthMechanism.Spf, spfOutcome, headerFrom, authDetails)}. " +
                $"DKIM: {ExplainMechanism(DmarcAuthMechanism.Dkim, dkimOutcome, headerFrom, authDetails)}. " +
-               BuildRecommendation(spfOutcome, dkimOutcome);
+               BuildRecommendation(spfOutcome, dkimOutcome, authDetails);
     }
 
     private static string ExplainMechanism(DmarcAuthMechanism mechanism, MechanismOutcome outcome, string headerFrom, IReadOnlyList<AuthDetailSummary> authDetails)
@@ -179,15 +179,48 @@ public static class DomainStatistics
 
     private enum AuthFailureCategory { Spf, Dkim, Both }
 
+    /// <summary>Hostname suffixes of well-known email service providers, matched against whatever
+    /// domain SPF/DKIM auth_results actually reported for a source - a known name turns "some
+    /// third party you don't recognize" into "this is Salesforce, go check their alignment docs",
+    /// a much shorter path to a fix. Deliberately doesn't suggest exact SPF include/DKIM selector
+    /// values: those vary by the sender's own account/region and change over time, so a literal
+    /// recommendation here could go stale or be outright wrong - naming the provider is the safe,
+    /// durable part of this signal.</summary>
+    private static readonly (string Suffix, string Name)[] KnownEmailServiceProviders =
+    [
+        (".sendgrid.net", "SendGrid"),
+        (".mailgun.org", "Mailgun"),
+        (".mcsv.net", "Mailchimp"),
+        (".mandrillapp.com", "Mandrill (Mailchimp Transactional)"),
+        (".salesforce.com", "Salesforce"),
+        (".exacttarget.com", "Salesforce Marketing Cloud"),
+        (".zendesk.com", "Zendesk"),
+        (".hubspotemail.net", "HubSpot"),
+        (".freshdesk.com", "Freshdesk"),
+        (".constantcontact.com", "Constant Contact"),
+        (".sparkpostmail.com", "SparkPost"),
+        (".postmarkapp.com", "Postmark"),
+        (".amazonses.com", "Amazon SES"),
+    ];
+
+    private static string? IdentifyKnownEsp(IReadOnlyList<AuthDetailSummary> authDetails) =>
+        KnownEmailServiceProviders
+            .Where(p => authDetails.Any(d => d.Domain.EndsWith(p.Suffix, StringComparison.OrdinalIgnoreCase)))
+            .Select(p => p.Name)
+            .FirstOrDefault();
+
     /// <summary>The one-line "what should I actually do about this" that turns the SPF/DKIM
     /// explanation into something actionable rather than just diagnostic.</summary>
-    private static string BuildRecommendation(MechanismOutcome spf, MechanismOutcome dkim)
+    private static string BuildRecommendation(MechanismOutcome spf, MechanismOutcome dkim, IReadOnlyList<AuthDetailSummary> authDetails)
     {
+        var knownEsp = IdentifyKnownEsp(authDetails);
+        var espClause = knownEsp is null ? "a third-party sender (e.g. a marketing or helpdesk platform)" : $"{knownEsp}";
+
         if (spf == MechanismOutcome.Misaligned || dkim == MechanismOutcome.Misaligned)
         {
-            return "Recommendation: this looks like a third-party sender (e.g. a marketing or " +
-                   "helpdesk platform) that passed its own check but isn't aligned with your domain - " +
-                   "ask them to enable sending on your behalf with proper SPF/DKIM alignment, or add " +
+            return $"Recommendation: this looks like {espClause} that passed its own check but isn't " +
+                   "aligned with your domain - ask them to enable sending on your behalf with proper " +
+                   "SPF/DKIM alignment (check their alignment setup docs for the exact records), or add " +
                    "their required DNS records yourself if you control the sending domain.";
         }
         if (spf == MechanismOutcome.NotCovered && dkim == MechanismOutcome.NotCovered)
@@ -198,10 +231,10 @@ public static class DomainStatistics
 
         return ClassifyFailureCategory(spf, dkim) switch
         {
-            AuthFailureCategory.Spf => "Recommendation: if you recognize this source, add its IP (or its " +
-                "provider's SPF include) to your SPF record; if you don't, treat this as unauthorized.",
-            AuthFailureCategory.Dkim => "Recommendation: if you recognize this sender, ask them to enable " +
-                "DKIM signing (or configure the selector they provide); if you don't, treat this as unauthorized.",
+            AuthFailureCategory.Spf => $"Recommendation: if you recognize this source{(knownEsp is null ? "" : $" ({knownEsp})")}, " +
+                "add its IP (or its provider's SPF include) to your SPF record; if you don't, treat this as unauthorized.",
+            AuthFailureCategory.Dkim => $"Recommendation: if you recognize this sender{(knownEsp is null ? "" : $" ({knownEsp})")}, " +
+                "ask them to enable DKIM signing (or configure the selector they provide); if you don't, treat this as unauthorized.",
             _ => "Recommendation: both SPF and DKIM failed outright for this source - this looks like an " +
                  "unauthorized sender rather than a configuration gap."
         };
@@ -273,6 +306,28 @@ public static class DomainStatistics
     /// domain's in-window reports - mirrors GetOverallPassRate's existing multi-domain shape.</summary>
     public static ReasonBreakdown GetReasonBreakdown(IEnumerable<IEnumerable<Report>> perDomainReportsInWindow) =>
         GetReasonBreakdown(perDomainReportsInWindow.SelectMany(reports => reports));
+
+    /// <summary>Per-source daily message volume for the last trendDays days (oldest first,
+    /// ending "today" in nowUtc's timezone) - the data behind the Sources tab's per-row trend
+    /// indicator, letting an operator see at a glance whether a source's bad volume is growing,
+    /// shrinking, or a one-off blip, without needing a separate chart per row. Reads only from the
+    /// already-loaded reportsInWindow (the same 30-day window everything else on the page uses),
+    /// so this never needs its own database round-trip.</summary>
+    public static Dictionary<string, int[]> GetSourceDailyVolumes(IEnumerable<Report> reportsInWindow, int trendDays, DateTimeOffset? nowUtc = null)
+    {
+        var end = (nowUtc ?? DateTimeOffset.UtcNow).UtcDateTime.Date;
+        var start = end.AddDays(-(trendDays - 1));
+
+        return reportsInWindow
+            .SelectMany(r => r.Records.Select(rec => new { rec.SourceIp, rec.MessageCount, Date = r.ReceivedUtc.UtcDateTime.Date }))
+            .Where(x => x.Date >= start && x.Date <= end)
+            .GroupBy(x => x.SourceIp)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var byDay = g.GroupBy(x => x.Date).ToDictionary(d => d.Key, d => d.Sum(x => x.MessageCount));
+                return Enumerable.Range(0, trendDays).Select(i => byDay.TryGetValue(start.AddDays(i), out var v) ? v : 0).ToArray();
+            });
+    }
 
     private static bool IsPassing(ReportRecord record) =>
         record.SpfResult == AuthResult.Pass || record.DkimResult == AuthResult.Pass;

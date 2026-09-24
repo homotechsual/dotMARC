@@ -155,6 +155,32 @@ public class DomainStatisticsTests
     }
 
     [Fact]
+    public void GetSourceAggregates_InferredReason_NamesAKnownEmailServiceProvider_WhenAuthDetailDomainMatches()
+    {
+        var record = Record("198.51.100.75", 9, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Spf, Domain = "bounce.sendgrid.net", Result = DmarcMechanismResult.Pass });
+        var report = ReportWith(record);
+
+        var source = DomainStatistics.GetSourceAggregates([report]).Single();
+
+        Assert.Contains("SendGrid", source.InferredReason);
+    }
+
+    [Fact]
+    public void GetSourceDailyVolumes_BucketsVolumeByDayAcrossTheTrendWindow()
+    {
+        var now = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        var reportToday = ReportWith(Record("198.51.100.80", 10, AuthResult.Pass, AuthResult.Pass));
+        reportToday.ReceivedUtc = now;
+        var reportTwoDaysAgo = ReportWith(Record("198.51.100.80", 4, AuthResult.Pass, AuthResult.Pass));
+        reportTwoDaysAgo.ReceivedUtc = now.AddDays(-2);
+
+        var volumes = DomainStatistics.GetSourceDailyVolumes([reportToday, reportTwoDaysAgo], trendDays: 3, nowUtc: now);
+
+        Assert.Equal([4, 0, 10], volumes["198.51.100.80"]);
+    }
+
+    [Fact]
     public void GetWindowCutoffUtc_Is30DaysBeforeNow()
     {
         var now = new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero);

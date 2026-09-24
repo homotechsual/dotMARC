@@ -104,13 +104,36 @@ public sealed class AlertingService : IAlertingService
 
         if (breakdown.Total >= settings.SuspiciousRejectMinVolume && nonBenignPercent >= settings.SuspiciousRejectNonBenignPercent)
         {
-            var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding.";
+            var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding." +
+                BuildInferredBreakdownClause(breakdown);
             await EnsureAlertAsync(context, settings, domain.Name, "SuspiciousRejectActivity", "Warning", "Reject activity looks like more than benign forwarding", message, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             await ResolveAlertAsync(domain.Name, "SuspiciousRejectActivity", cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Appends a short "of that, X had inferred SPF/DKIM issues" clause when any of the
+    /// three inferred buckets are non-zero, so the alert itself points at which mechanism to
+    /// investigate first instead of sending the reader to the dashboard for that.</summary>
+    private static string BuildInferredBreakdownClause(ReasonBreakdown breakdown)
+    {
+        var parts = new List<string>();
+        if (breakdown.InferredSpfFailure > 0)
+        {
+            parts.Add($"{breakdown.InferredSpfFailure} an inferred SPF-only failure");
+        }
+        if (breakdown.InferredDkimFailure > 0)
+        {
+            parts.Add($"{breakdown.InferredDkimFailure} an inferred DKIM-only failure");
+        }
+        if (breakdown.InferredBothFailure > 0)
+        {
+            parts.Add($"{breakdown.InferredBothFailure} both SPF and DKIM failing or misaligned");
+        }
+
+        return parts.Count == 0 ? "" : $" Of that: {string.Join(", ", parts)}.";
     }
 
     public async Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default)

@@ -341,6 +341,8 @@ else
                 <HeaderContent>
                     <MudTh>Source IP</MudTh>
                     <MudTh>Volume</MudTh>
+                    <MudTh>7d trend</MudTh>
+                    <MudTh>First seen</MudTh>
                     <MudTh>SPF</MudTh>
                     <MudTh>DKIM</MudTh>
                     <MudTh>Disposition</MudTh>
@@ -351,6 +353,32 @@ else
                 <RowTemplate>
                     <MudTd>@context.SourceIp</MudTd>
                     <MudTd>@context.Volume</MudTd>
+                    <MudTd>
+                        @if (context.DailyVolumes.Length > 0)
+                        {
+                            var max = Math.Max(1, context.DailyVolumes.Max());
+                            <MudTooltip Text="@string.Join(" → ", context.DailyVolumes)" Arrow="true">
+                                <div class="d-flex align-end" style="gap:2px; height:24px;">
+                                    @foreach (var day in context.DailyVolumes)
+                                    {
+                                        <div style="@($"width:4px; background:var(--mud-palette-primary); height:{Math.Max(2, day * 24 / max)}px;")"></div>
+                                    }
+                                </div>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        @if (context.IsNewSource)
+                        {
+                            <MudTooltip Text="@($"First seen {context.FirstSeenUtc:yyyy-MM-dd}")" Arrow="true">
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small">New</MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            @(context.FirstSeenUtc is { } firstSeen ? firstSeen.ToString("yyyy-MM-dd") : "—")
+                        }
+                    </MudTd>
                     <MudTd>
                         <MudTooltip Text="@context.AuthDetailTooltip(DmarcAuthMechanism.Spf)" Arrow="true">
                             <span>@context.SpfResult</span>
@@ -499,6 +527,31 @@ else
             .Select(a => new SourceRow(a.SourceIp, a.Volume, a.SpfResult.ToString(), a.DkimResult.ToString(), a.Disposition.ToString(), a.OverrideReasonTypes, a.AuthDetails, a.InferredReason))
             .OrderByDescending(s => s.Volume)
             .ToList();
+
+        // First-seen is across the source's ENTIRE history for this domain, not just the 30-day
+        // window everything else here uses - a source that's been sending for a year reads very
+        // differently from one that showed up for the first time this week, and the windowed
+        // Reports already Include()d above can't tell the two apart. Projected straight to a
+        // (SourceIp, MIN(ReceivedUtc)) pair rather than loading full report/record graphs, since
+        // that's all this needs.
+        var firstSeenBySource = await db.ReportRecords
+            .Where(rr => rr.Report.DomainId == _domain.Id)
+            .GroupBy(rr => rr.SourceIp)
+            .Select(g => new { SourceIp = g.Key, FirstSeenUtc = g.Min(rr => rr.Report.ReceivedUtc) })
+            .ToDictionaryAsync(x => x.SourceIp, x => x.FirstSeenUtc);
+
+        var dailyVolumesBySource = DomainStatistics.GetSourceDailyVolumes(_domain.Reports, trendDays: 7);
+        foreach (var source in _sources)
+        {
+            if (firstSeenBySource.TryGetValue(source.SourceIp, out var firstSeenUtc))
+            {
+                source.FirstSeenUtc = firstSeenUtc;
+            }
+            if (dailyVolumesBySource.TryGetValue(source.SourceIp, out var dailyVolumes))
+            {
+                source.DailyVolumes = dailyVolumes;
+            }
+        }
 
         // Blazor Server's default prerendering means OnInitializedAsync genuinely runs twice on
         // every cold page load: once for the static prerender pass (no live circuit, no
@@ -1124,6 +1177,15 @@ else
         public string? Organization { get; set; }
         public string? Country { get; set; }
         public bool IsEnrichmentPending { get; set; } = true;
+        public DateTimeOffset? FirstSeenUtc { get; set; }
+        public int[] DailyVolumes { get; set; } = [];
+
+        // A source whose earliest-ever report (across all history, not just this 30-day window)
+        // is itself within the last week is brand new to this domain - the single highest-signal
+        // fact for "is this bad volume actually new, or a long-running thing I've already looked
+        // at and dismissed." Deliberately tighter than the 30-day reporting window itself, or
+        // every source in a domain younger than 30 days would read as "new" forever.
+        public bool IsNewSource => FirstSeenUtc is { } firstSeen && firstSeen >= DateTimeOffset.UtcNow.AddDays(-7);
 
         // Prefer the receiver's own reason when it gave one; otherwise fall back to our
         // extrapolated explanation (marked "Inferred" so it's not mistaken for receiver-reported
