@@ -188,24 +188,31 @@ else
             _haloPriorities = (await HaloPsaClient.ListPrioritiesAsync(_haloSettings)).ToList();
             Snackbar.Add("Loaded ticket types, priorities, and statuses from Halo.", Severity.Success);
         }
-        catch (HttpRequestException exception)
+        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
         {
-            // Covers both HaloPSA answering with an error (the message carries its OAuth error or
-            // status code) and genuine network failures (the message carries the connection error).
+            // HttpRequestException covers HaloPSA answering with an error (the message carries its
+            // OAuth error or status code) and genuine network failures (the connection error).
+            // InvalidDataException is a response that wasn't the shape dotMARC expects, and its
+            // message quotes the start of what Halo sent.
             Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
-            Snackbar.Add($"Couldn't load options from HaloPSA. {exception.Message}", Severity.Error);
+            ShowHaloError($"Couldn't load options from HaloPSA. {exception.Message}");
         }
         catch (InvalidOperationException exception)
         {
             Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
-            Snackbar.Add($"{exception.Message} Save your client secret first, then try again.", Severity.Error);
+            ShowHaloError($"{exception.Message} Save your client secret first, then try again.");
         }
         catch (Exception exception)
         {
             Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
-            Snackbar.Add("Couldn't load options from HaloPSA. Check the account details and client secret are saved, then try again (the server log has the details).", Severity.Error);
+            ShowHaloError("Couldn't load options from HaloPSA. Check the account details and client secret are saved, then try again. See Manage > Server logs for the details.");
         }
     }
+
+    // Stays on screen until dismissed: these messages can be long, and a few seconds isn't enough
+    // to read (or copy) them.
+    private void ShowHaloError(string message) =>
+        Snackbar.Add(message, Severity.Error, config => config.RequireInteraction = true);
 
     private Task GenerateWebhookSecretAsync()
     {

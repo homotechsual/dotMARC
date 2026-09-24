@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DotMarc.Notifications;
@@ -19,32 +20,53 @@ public sealed class HaloPsaClient : IHaloPsaClient
         _tokenCache = tokenCache;
     }
 
+    // Matches what HttpContent.ReadFromJsonAsync used before these reads went through ReadJsonAsync.
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Client", null, cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<ClientListResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var payload = await ReadJsonAsync<ClientListResponse>(response, "Client", cancellationToken).ConfigureAwait(false);
         return payload?.Clients.Select(c => new HaloClient(c.Id, c.Name)).ToList() ?? [];
     }
 
     public async Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "TicketType", null, cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<List<IdNameEntry>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "TicketType", cancellationToken).ConfigureAwait(false);
         return payload?.Select(e => new HaloTicketType(e.Id, e.Name)).ToList() ?? [];
     }
 
     public async Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Status", null, cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<List<IdNameEntry>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "Status", cancellationToken).ConfigureAwait(false);
         return payload?.Select(e => new HaloTicketStatus(e.Id, e.Name)).ToList() ?? [];
     }
 
     public async Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Priority", null, cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<List<IdNameEntry>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "Priority", cancellationToken).ConfigureAwait(false);
         return payload?.Select(e => new HaloPriority(e.Id, e.Name)).ToList() ?? [];
+    }
+
+    /// <summary>Reads one of the lookup lists. When Halo's answer isn't the shape dotMARC expects,
+    /// the error says so along with the start of what Halo actually sent, so a mismatch can be
+    /// diagnosed from the message alone instead of a bare "could not be converted". These endpoints
+    /// return only ids and names (no secrets), so quoting the opening is safe.</summary>
+    private static async Task<T?> ReadJsonAsync<T>(HttpResponseMessage response, string resource, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return JsonSerializer.Deserialize<T>(body, JsonOptions);
+        }
+        catch (JsonException exception)
+        {
+            var sample = body.Length <= 300 ? body : body[..300] + "...";
+            throw new InvalidDataException($"HaloPSA's {resource} response wasn't in the expected format. {exception.Message} It began: {sample}", exception);
+        }
     }
 
     public async Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
@@ -96,7 +118,9 @@ public sealed class HaloPsaClient : IHaloPsaClient
         return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
-    private sealed record IdNameEntry([property: JsonPropertyName("id")] int Id, [property: JsonPropertyName("name")] string Name);
+    private sealed record IdNameEntry(
+        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleInt32Converter))] int Id,
+        [property: JsonPropertyName("name")] string Name);
     private sealed record ClientListResponse([property: JsonPropertyName("clients")] List<IdNameEntry> Clients);
     private sealed record CreateTicketRequest(
         [property: JsonPropertyName("summary")] string Summary,

@@ -151,6 +151,54 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task ListPrioritiesAsync_AcceptsIdsWrittenAsNumbersStringsOrDecimals()
+    {
+        // GET /api/Priority returns its ids as strings, and Halo writes some ids as 3.0 elsewhere.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = """[{"id":"1","name":"Low"},{"id":"2.0","name":"Medium"},{"id":3.0,"name":"High"},{"id":4,"name":"Critical"}]""";
+
+        var priorities = await client.ListPrioritiesAsync(Settings);
+
+        Assert.Equal([1, 2, 3, 4], priorities.Select(p => p.Id));
+        Assert.Equal(["Low", "Medium", "High", "Critical"], priorities.Select(p => p.Name));
+    }
+
+    [Theory]
+    [InlineData("""[{"id":"abc-123","name":"Low"}]""", "abc-123")]
+    [InlineData("""[{"id":"3.5","name":"Low"}]""", "3.5")]
+    [InlineData("""[{"id":"","name":"Low"}]""", "not a number")]
+    [InlineData("""[{"id":null,"name":"Low"}]""", "expected")]
+    public async Task ListPrioritiesAsync_WithAnIdItCannotUse_ThrowsShowingWhatHaloSent(string body, string expectedInMessage)
+    {
+        // Refusing (rather than guessing) matters: a wrong id would later be sent back to Halo as a
+        // ticket's priority. The message quotes the start of the response so the shape is visible.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = body;
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => client.ListPrioritiesAsync(Settings));
+
+        Assert.Contains("Priority", exception.Message);
+        Assert.Contains(expectedInMessage, exception.Message);
+        Assert.Contains("It began:", exception.Message);
+        Assert.Contains(body[..12], exception.Message);
+    }
+
+    [Fact]
+    public async Task ListPrioritiesAsync_WithAnUnexpectedShape_ThrowsWithATruncatedSample()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = "{\"unexpected\":\"" + new string('x', 1000) + "\"}";
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => client.ListPrioritiesAsync(Settings));
+
+        Assert.Contains("It began: {\"unexpected\":\"xxx", exception.Message);
+        Assert.True(exception.Message.Length < 700, "the sample of the response should be truncated");
+    }
+
+    [Fact]
     public async Task DifferentSettings_WithDifferentClientIds_EachAcquireTheirOwnToken()
     {
         // A shared token cache, as HaloPsaClient normally gets via DI - this is what proves a
