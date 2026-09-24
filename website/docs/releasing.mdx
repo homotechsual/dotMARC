@@ -62,9 +62,14 @@ What the sync does, and deliberately does not do:
 
 - It matches ideas to existing posts by **title** (trimmed, case-insensitive). A match is never
   duplicated.
-- For an existing idea it only ever adds a missing version tag, optionally rewrites the description
-  (per `update_details`), and moves the status to **complete** when the JSON says so. It never
-  changes any other status, since statuses are otherwise yours to manage on the board.
+- For an existing idea it only ever brings the version tag in line with the JSON, optionally
+  rewrites the description (per `update_details`), and moves the status to **complete** when the
+  JSON says so. It never changes any other status, since statuses are otherwise yours to manage on
+  the board.
+- **Moving an idea to another release** is a one-line change: edit its `version` in the JSON and run
+  the sync. The new version tag is added, any other tag shaped like a version (`v0.7.0`) is removed
+  so the idea isn't listed under two releases, and a "Target release: vX" line in its description is
+  updated to match. Other tags, such as "In Dev", are never touched.
 - When the JSON says an idea is complete and its description still opens with "Target release:
   vX", that first line is changed to "Released in: vX" regardless of `update_details`. Only that
   line is touched; the rest of the description is left as it is.
@@ -97,8 +102,9 @@ entries cannot be listed, or Canny rejects the entry.
 ## Cutting a release, step by step
 
 1. **Settle the ideas.** For everything shipping in this release, make sure it carries the version
-   tag and is marked complete (see above). Anything that slipped should be re-tagged to a later
-   version, or it will simply be skipped and logged.
+   tag and is marked complete (see above). Anything that slipped should be moved to a later
+   version (change its `version` in the JSON and run the sync), or it will simply be skipped and
+   logged.
 2. **Prepare.** `node scripts/release.mjs prepare 0.7.0` bumps `Directory.Build.props` and creates
    the release post.
 3. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with

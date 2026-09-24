@@ -9,7 +9,7 @@
   },
   {
     "title": "Widen alerting beyond MissedReport / TLSRPTFailure",
-    "version": "v0.7.0",
+    "version": "v0.8.0",
     "status": "planned",
     "details": [
       "Today dotMARC raises alerts for missed DMARC reports and TLS reporting failures. The domain health checklist already checks the DMARC record, DMARC authorization record, TLS reporting record, MTA-STS, SPF, MX and DKIM, but a check going from OK to broken only shows up if someone happens to open that domain.",
@@ -19,7 +19,7 @@
   },
   {
     "title": "Allow bulk domain onboarding with CSV or paste-a-list imports",
-    "version": "v0.7.0",
+    "version": "v0.8.0",
     "status": "planned",
     "details": [
       "Domains are currently added one at a time from Manage domains, which is slow when onboarding a client with dozens of domains or an MSP's whole customer base.",
@@ -29,7 +29,7 @@
   },
   {
     "title": "Extend DNS Provider push to cover SPF and DKIM record pushes",
-    "version": "v0.7.0",
+    "version": "v0.8.0",
     "status": "planned",
     "details": [
       "DNS provider push can already create or repair the DMARC, DMARC authorization, TLS reporting and MTA-STS records on Cloudflare, Azure DNS and Google Cloud DNS. SPF and DKIM problems are detected and shown on the domain health checklist, but still have to be fixed by hand.",

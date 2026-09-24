@@ -3,8 +3,9 @@
 /**
  * Makes sure every idea in canny-roadmap.json exists on the Canny board, tagged with its target
  * version and set to its intended status. Safe to re-run: posts are matched by title, and an
- * existing post keeps its title and status, and only has its version tag added if that is missing
- * (plus, opt-in via UPDATE_MODE, its description).
+ * existing post keeps its title and status, and only has its version tag brought in line with the
+ * roadmap file (the target version added, any other version tag removed), its release line kept in
+ * step, and, opt-in via UPDATE_MODE, its description.
  *
  * Canny has no native target version field, so the version is expressed as a tag (for internal
  * filtering and roadmap definitions) and as a "Target release" line at the top of the description
@@ -37,6 +38,7 @@ if (!['none', 'prepend', 'replace'].includes(updateMode)) {
 const notifyVoters = process.env.NOTIFY_VOTERS === 'true';
 const RELEASE_LINE = /^(Target release|Released in):/;
 const TARGET_LINE = /^Target release:[^\n]*/;
+const VERSION_TAG = /^v\d+\.\d+\.\d+$/i;
 
 function log(message) {
   console.log(`[canny-roadmap] ${message}`);
@@ -185,6 +187,14 @@ for (const idea of roadmap) {
       const needsTag =
         Boolean(idea.version) &&
         !(existing.tags ?? []).some((tag) => tag.name.toLowerCase() === idea.version.toLowerCase());
+      // Moving an idea to a different release: drop its old version tag(s) so it isn't listed under
+      // two releases. Only tags shaped like a version are touched; any other tag (for example
+      // "In Dev") belongs to the board owner and is left alone.
+      const staleVersionTags = idea.version
+        ? (existing.tags ?? []).filter(
+            (tag) => VERSION_TAG.test(tag.name) && tag.name.toLowerCase() !== idea.version.toLowerCase(),
+          )
+        : [];
       // Statuses are otherwise the board owner's to manage; the only move made here is to mark
       // something complete once the roadmap file says it has shipped.
       const needsCompletion = idea.status === 'complete' && existing.status !== 'complete';
@@ -207,10 +217,18 @@ for (const idea of roadmap) {
         // update mode. Only that first line is touched, and only when it still says "Target release".
         updatedDetails = currentDetails.replace(TARGET_LINE, `Released in: ${idea.version}`);
         detailsChange = 'change release line to "Released in"';
+      } else if (idea.version && idea.status !== 'complete') {
+        // The idea moved to another release, so its public "Target release" line must follow.
+        const currentTarget = currentDetails.match(/^Target release:\s*(\S+)/);
+        if (currentTarget && currentTarget[1].toLowerCase() !== idea.version.toLowerCase()) {
+          updatedDetails = currentDetails.replace(TARGET_LINE, `Target release: ${idea.version}`);
+          detailsChange = `change target release to ${idea.version}`;
+        }
       }
 
       const pendingChanges = [
         needsTag ? 'add version tag' : '',
+        staleVersionTags.length > 0 ? `remove ${staleVersionTags.map((tag) => tag.name).join(', ')} tag` : '',
         updatedDetails ? detailsChange : '',
         needsCompletion ? `mark complete${notifyVoters ? ' and notify voters' : ''}` : '',
       ]
@@ -224,6 +242,9 @@ for (const idea of roadmap) {
       }
       if (needsTag && versionTagId) {
         await canny('posts/add_tag', {postID: existing.id, tagID: versionTagId});
+      }
+      for (const staleTag of staleVersionTags) {
+        await canny('posts/remove_tag', {postID: existing.id, tagID: staleTag.id});
       }
       if (updatedDetails) {
         await canny('posts/update', {postID: existing.id, details: updatedDetails});
