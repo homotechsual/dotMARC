@@ -148,6 +148,8 @@ else
 }
 
 builder.Services.AddSingleton<HaloPsaTokenCache>();
+builder.Services.AddSingleton<HaloWebhookActivity>();
+builder.Services.AddTransient<HaloIntegrationTestService>();
 builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
 
 // Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
@@ -754,7 +756,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
 // 400 a malformed body regardless of whether the secret is even right. The secret check has to
 // happen first, and body parsing happens only after it passes, inside the handler.
 app.MapPost("/integrations/halopsa/webhook/{secret}", async (
-    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, ILogger<Program> logger) =>
+    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, ILogger<Program> logger) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var settings = await context.HaloPsaSettings.SingleAsync();
@@ -762,6 +764,7 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
     if (string.IsNullOrEmpty(settings.WebhookSecret) ||
         !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(settings.WebhookSecret)))
     {
+        webhookActivity.Record(HaloWebhookDelivery.WrongSecret);
         return Results.NotFound();
     }
 
@@ -775,17 +778,20 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
         // Nothing a retry from Halo would fix - log it and 200 rather than surfacing a failure
         // status that could trigger a retry storm.
         logger.LogWarning(ex, "Received an unparseable HaloPSA webhook payload.");
+        webhookActivity.Record(HaloWebhookDelivery.Unreadable);
         return Results.Ok();
     }
 
     if (payload is null)
     {
         logger.LogWarning("Received an empty HaloPSA webhook payload.");
+        webhookActivity.Record(HaloWebhookDelivery.Unreadable);
         return Results.Ok();
     }
 
     if (!HaloWebhookStatusMatcher.IsClosedStatus(payload, settings))
     {
+        webhookActivity.Record(HaloWebhookDelivery.OtherStatus, payload.TicketId, payload.StatusId);
         return Results.Ok();
     }
 
@@ -800,6 +806,7 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
         await context.SaveChangesAsync();
     }
 
+    webhookActivity.Record(HaloWebhookDelivery.ClosedStatus, payload.TicketId, payload.StatusId, resolvedAnAlert: alert is not null);
     return Results.Ok();
 }).AllowAnonymous();
 

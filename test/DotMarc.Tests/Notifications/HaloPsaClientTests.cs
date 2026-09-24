@@ -66,6 +66,43 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task ARejectedApiCall_ThrowsWithHalosExplanationInTheMessage()
+    {
+        // A bare "400 Bad Request" doesn't say which field Halo objected to, so the error carries the
+        // start of Halo's own answer.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"message":"priority_id 99 is not valid"}""");
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.BadRequest);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.CreateTicketAsync(Settings, haloClientId: 7, "contoso.io", "MissedReport", "t", "m"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
+        Assert.Contains("400", exception.Message);
+        Assert.Contains("Tickets", exception.Message);
+        Assert.Contains("priority_id 99 is not valid", exception.Message);
+    }
+
+    [Fact]
+    public async Task ARejectedApiCall_WithAnEmptyBody_StillReportsTheStatus()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("");
+        handler.StatusCodes.Enqueue(HttpStatusCode.OK);
+        handler.StatusCodes.Enqueue(HttpStatusCode.Forbidden);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.CreateTicketAsync(Settings, 7, "contoso.io", "MissedReport", "t", "m"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, exception.StatusCode);
+        Assert.Contains("403", exception.Message);
+        Assert.DoesNotContain("Halo said", exception.Message);
+    }
+
+    [Fact]
     public async Task ARejectedTokenRequest_ThrowsWithHalosOAuthErrorInTheMessage()
     {
         var (client, handler) = CreateClient();

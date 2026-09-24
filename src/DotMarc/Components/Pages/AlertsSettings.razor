@@ -10,6 +10,8 @@
 @inject IJSRuntime Js
 @inject ILogger<AlertsSettings> Logger
 @inject IHaloPsaClient HaloPsaClient
+@inject HaloIntegrationTestService HaloTester
+@inject HaloWebhookActivity WebhookActivity
 @inject ISecretStore SecretStoreAccessor
 @inject NavigationManager NavigationManager
 
@@ -142,6 +144,80 @@ else
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveHaloSettingsAsync">Save PSA settings</MudButton>
     </MudPaper>
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">Test the integration</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Checks the whole lifecycle against your live Halo tenant, using the <b>saved</b> settings: it creates a clearly
+            marked test ticket from the most recent alert's details, closes it, then waits for Halo to call the webhook above.
+            Real alerts are not touched. This proves Halo's side works; resolving an alert from the webhook is covered by
+            automated tests.
+        </MudText>
+
+        @if (_testNeedsClient)
+        {
+            <MudSelect T="int?" @bind-Value="_testHaloClientId" Label="Halo client to test with" Variant="Variant.Outlined" Class="mb-3" Clearable="true">
+                @foreach (var testClient in _testClients)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)testClient.Id)">@testClient.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_testRunning" OnClick="RunHaloTestAsync"
+                   StartIcon="@Icons.Material.Filled.PlayArrow">@(_testRunning ? "Testing..." : "Run the full test")</MudButton>
+
+        @if (_testSteps.Count > 0)
+        {
+            <div class="mt-3">
+                @foreach (var step in _testSteps)
+                {
+                    <div class="d-flex align-start mb-2" style="gap: 0.75rem;">
+                        @if (step.Outcome == HaloTestOutcome.Running)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@StepIcon(step.Outcome)" Color="@StepColor(step.Outcome)" />
+                        }
+                        <div>
+                            <MudText Typo="Typo.subtitle2">@step.Name</MudText>
+                            <MudText Typo="Typo.body2" Style="overflow-wrap:anywhere">@step.Detail</MudText>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_testRun is { } finishedRun && !_testRunning)
+        {
+            @if (finishedRun.Succeeded)
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-2">The whole lifecycle worked: Halo accepted the ticket, closed it, and called the webhook back.</MudAlert>
+            }
+            else if (!finishedRun.NeedsClientChoice)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-2">Not everything passed. The step marked with a warning or error above says what to check; the details are also in Manage > Server logs.</MudAlert>
+            }
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4">Recent calls to the webhook</MudText>
+        @{
+            var recentWebhookCalls = WebhookActivity.Recent(5);
+        }
+        @if (recentWebhookCalls.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">None since the app last started.</MudText>
+        }
+        else
+        {
+            @foreach (var call in recentWebhookCalls)
+            {
+                <MudText Typo="Typo.body2">@call.ReceivedUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC: @DescribeWebhookCall(call)</MudText>
+            }
+        }
+    </MudPaper>
 }
 
 @code {
@@ -217,6 +293,98 @@ else
     // to read (or copy) them.
     private void ShowHaloError(string message) =>
         Snackbar.Add(message, Severity.Error, config => config.RequireInteraction = true);
+
+    private bool _testRunning;
+    private bool _testNeedsClient;
+    private int? _testHaloClientId;
+    private List<HaloClient> _testClients = [];
+    private readonly List<HaloTestStep> _testSteps = [];
+    private HaloTestRun? _testRun;
+
+    private async Task RunHaloTestAsync()
+    {
+        _testRunning = true;
+        _testRun = null;
+        _testSteps.Clear();
+        try
+        {
+            var progress = new Progress<HaloTestStep>(step =>
+            {
+                var index = _testSteps.FindIndex(existing => existing.Name == step.Name);
+                if (index >= 0)
+                {
+                    _testSteps[index] = step;
+                }
+                else
+                {
+                    _testSteps.Add(step);
+                }
+
+                _ = InvokeAsync(StateHasChanged);
+            });
+
+            _testRun = await HaloTester.RunAsync(_testHaloClientId, progress, null, CancellationToken.None);
+
+            // The progress callbacks are posted asynchronously, so take the final list from the
+            // run itself rather than trusting they have all landed.
+            _testSteps.Clear();
+            _testSteps.AddRange(_testRun.Steps);
+            _testNeedsClient = _testRun.NeedsClientChoice;
+            if (_testNeedsClient && _testClients.Count == 0)
+            {
+                await LoadTestClientsAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "The HaloPSA integration test failed unexpectedly");
+            Snackbar.Add($"The test couldn't run: {exception.Message}", Severity.Error, config => config.RequireInteraction = true);
+        }
+        finally
+        {
+            _testRunning = false;
+        }
+    }
+
+    private async Task LoadTestClientsAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var savedSettings = await HaloPsaSettingsService.GetAsync(db);
+            _testClients = (await HaloPsaClient.ListClientsAsync(savedSettings)).OrderBy(c => c.Name).ToList();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA clients for the integration test failed");
+            ShowHaloError($"Couldn't load the Halo clients to choose from. {exception.Message}");
+        }
+    }
+
+    private static string StepIcon(HaloTestOutcome outcome) => outcome switch
+    {
+        HaloTestOutcome.Passed => Icons.Material.Filled.CheckCircle,
+        HaloTestOutcome.Warning => Icons.Material.Filled.Warning,
+        HaloTestOutcome.Failed => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+
+    private static Color StepColor(HaloTestOutcome outcome) => outcome switch
+    {
+        HaloTestOutcome.Passed => Color.Success,
+        HaloTestOutcome.Warning => Color.Warning,
+        HaloTestOutcome.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string DescribeWebhookCall(HaloWebhookReceipt call) => call.Delivery switch
+    {
+        HaloWebhookDelivery.ClosedStatus => $"ticket #{call.TicketId} closed (status {call.StatusId}){(call.ResolvedAnAlert ? ", resolved an alert" : "")}",
+        HaloWebhookDelivery.OtherStatus => $"ticket #{call.TicketId}, status {call.StatusId} (not the closed status, ignored)",
+        HaloWebhookDelivery.Unreadable => "the body wasn't understood",
+        HaloWebhookDelivery.WrongSecret => "wrong secret (answered 404)",
+        _ => "received"
+    };
 
     private Task OnWebhookUrlKeyDown(KeyboardEventArgs args) =>
         args.Key == "Enter" ? CopyWebhookUrlAsync() : Task.CompletedTask;

@@ -38,6 +38,34 @@ If loading the options fails, the message shown quotes what HaloPSA answered (an
 full detail, including the exception, is under **Manage → Server logs** (see
 [Server logs](./server-logs.mdx)).
 
+## Test the whole integration
+
+Under the PSA settings on **Alert settings**, **Test the integration** runs the whole ticket lifecycle
+against your live Halo tenant, so you can watch it work instead of waiting for a real alert. It uses the
+**saved** settings, exactly as real alerts do, and reports each step as it goes:
+
+1. **Check settings.** Everything the integration needs must be saved. A warning here just means ticket
+   sync is still switched off.
+2. **Pick an alert and Halo client.** It takes the most recent alert, and the Halo client that alert's
+   domain is mapped to through its Group. If the domain has no client mapped, or there are no alerts yet,
+   it asks you to choose a Halo client to test with.
+3. **Create a ticket.** A ticket titled `[dotMARC test] ...` is created with your ticket type and default
+   priority. If Halo objects, the message quotes what it said.
+4. **Close the ticket.** It's closed using your closed status.
+5. **Wait for Halo's webhook.** Halo should call the webhook URL when the ticket's status changes. The
+   test waits up to 30 seconds and tells you exactly what arrived: a call with the closed status, a
+   different status, a body dotMARC couldn't read, a call with the wrong secret, or nothing at all.
+
+When all five pass, Halo's side of the integration works end to end. A few things to know:
+
+* It leaves one closed ticket in Halo, titled `[dotMARC test] ...`. Delete it if you like.
+* The test ticket isn't linked to a real alert, so nothing on the Alerts page changes and no real ticket
+  is touched. Resolving an alert when its ticket closes uses the same webhook, and is covered by
+  dotMARC's automated tests.
+* Below the test, **Recent calls to the webhook** lists the last few calls Halo has made since the app
+  last started. A call with the wrong secret is listed as such, which is the usual reason a webhook
+  seems to do nothing (see [Server logs](./server-logs.mdx) for the matching log entry).
+
 ## Route tickets to the right client
 
 Tickets need to land against the right Halo client (company). From **Manage groups**, each Group

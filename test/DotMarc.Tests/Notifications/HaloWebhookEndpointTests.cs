@@ -6,6 +6,7 @@ using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DotMarc.Tests.Notifications;
@@ -83,6 +84,72 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         // table's only row.
         var alert = await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242");
         Assert.True(alert.IsResolved);
+    }
+
+    private HaloWebhookReceipt LatestReceipt() =>
+        _factory!.Services.GetRequiredService<HaloWebhookActivity>().Recent(1).Single();
+
+    [Fact]
+    public async Task ClosedStatusPayload_IsRecordedAsHavingResolvedAnAlert()
+    {
+        using var client = _factory!.CreateClient();
+
+        await client.PostAsJsonAsync("/integrations/halopsa/webhook/the-webhook-secret", new { ticket_id = 4242, status_id = 9 });
+
+        var receipt = LatestReceipt();
+        Assert.Equal(HaloWebhookDelivery.ClosedStatus, receipt.Delivery);
+        Assert.Equal(4242, receipt.TicketId);
+        Assert.Equal(9, receipt.StatusId);
+        Assert.True(receipt.ResolvedAnAlert);
+    }
+
+    [Fact]
+    public async Task ClosedStatusPayload_ForATicketWithNoAlert_IsRecordedAsNotResolvingAnything()
+    {
+        // This is what the integration test's own ticket looks like: closed, but linked to no alert.
+        using var client = _factory!.CreateClient();
+
+        await client.PostAsJsonAsync("/integrations/halopsa/webhook/the-webhook-secret", new { ticket_id = 555, status_id = 9 });
+
+        var receipt = LatestReceipt();
+        Assert.Equal(HaloWebhookDelivery.ClosedStatus, receipt.Delivery);
+        Assert.False(receipt.ResolvedAnAlert);
+    }
+
+    [Fact]
+    public async Task UnrelatedStatusChange_IsRecordedAsOtherStatus()
+    {
+        using var client = _factory!.CreateClient();
+
+        await client.PostAsJsonAsync("/integrations/halopsa/webhook/the-webhook-secret", new { ticket_id = 4242, status_id = 3 });
+
+        var receipt = LatestReceipt();
+        Assert.Equal(HaloWebhookDelivery.OtherStatus, receipt.Delivery);
+        Assert.Equal(3, receipt.StatusId);
+    }
+
+    [Fact]
+    public async Task MalformedBody_IsRecordedAsUnreadable()
+    {
+        using var client = _factory!.CreateClient();
+
+        using var content = new StringContent("this is not json", System.Text.Encoding.UTF8, "application/json");
+        await client.PostAsync("/integrations/halopsa/webhook/the-webhook-secret", content);
+
+        Assert.Equal(HaloWebhookDelivery.Unreadable, LatestReceipt().Delivery);
+    }
+
+    [Fact]
+    public async Task WrongSecret_IsRecordedWithoutAnyTicketDetails()
+    {
+        using var client = _factory!.CreateClient();
+
+        await client.PostAsJsonAsync("/integrations/halopsa/webhook/wrong-secret", new { ticket_id = 4242, status_id = 9 });
+
+        var receipt = LatestReceipt();
+        Assert.Equal(HaloWebhookDelivery.WrongSecret, receipt.Delivery);
+        Assert.Null(receipt.TicketId);
+        Assert.Null(receipt.StatusId);
     }
 
     [Fact]

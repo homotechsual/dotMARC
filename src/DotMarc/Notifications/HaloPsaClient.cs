@@ -159,8 +159,27 @@ public sealed class HaloPsaClient : IHaloPsaClient
             response = await SendOnceAsync(method, settings, relativePath, body, clientSecret, cancellationToken).ConfigureAwait(false);
         }
 
-        response.EnsureSuccessStatusCode();
+        await ThrowIfNotSuccessAsync(response, method, relativePath, cancellationToken).ConfigureAwait(false);
         return response;
+    }
+
+    /// <summary>A bare "400 Bad Request" says nothing about which field Halo objected to, so the
+    /// error carries the start of Halo's own explanation. The request body is deliberately not
+    /// included; Halo's error responses describe the problem and don't echo credentials.</summary>
+    private static async Task ThrowIfNotSuccessAsync(HttpResponseMessage response, HttpMethod method, string relativePath, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var status = response.StatusCode;
+        var reason = response.ReasonPhrase;
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        response.Dispose();
+
+        var explanation = string.IsNullOrWhiteSpace(body) ? "" : $" Halo said: {(body.Length <= 300 ? body : body[..300] + "...")}";
+        throw new HttpRequestException($"HaloPSA returned {(int)status} {reason} for {method} {relativePath}.{explanation}", null, status);
     }
 
     private async Task<HttpResponseMessage> SendOnceAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, string clientSecret, CancellationToken cancellationToken)
