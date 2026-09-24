@@ -38,6 +38,99 @@ public sealed class DotMarcDbContextTests : IAsyncLifetime
         return new DotMarcDbContext(options);
     }
 
+    private async Task SeedReportWithRawXmlAsync(string rawXml)
+    {
+        await using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", IsMonitored = true, FirstSeenUtc = DateTimeOffset.UtcNow };
+        context.Reports.Add(new Report
+        {
+            Domain = domain,
+            ReportingOrg = "google.com",
+            ReportId = "raw-1",
+            DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            DateRangeEndUtc = DateTimeOffset.UtcNow,
+            RawXml = rawXml,
+            ReceivedUtc = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Reports_DoNotSelectTheRawXmlColumn_UnlessTheQueryIncludesIt()
+    {
+        // The raw XML is the widest column and nothing on the dashboard, domain pages or alerting
+        // reads it, so ordinary report queries (including the graph loads those pages do) must not
+        // select it.
+        await using var context = CreateContext();
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-30);
+
+        var plainReports = context.Reports.AsNoTracking().ToQueryString();
+        var dashboardGraph = context.Domains
+            .AsNoTracking()
+            .Include(d => d.Reports.Where(r => r.ReceivedUtc >= cutoff))
+            .ThenInclude(r => r.Records)
+            .ThenInclude(rec => rec.AuthDetails)
+            .AsSplitQuery()
+            .ToQueryString();
+        var withRaw = context.Reports.AsNoTracking().Include(r => r.Raw).ToQueryString();
+
+        Assert.DoesNotContain("\"RawXml\"", plainReports);
+        Assert.DoesNotContain("\"RawXml\"", dashboardGraph);
+        Assert.Contains("\"RawXml\"", withRaw);
+    }
+
+    [Fact]
+    public async Task ReportRawXml_RoundTripsWhenIncluded_AndFailsLoudlyWhenItWasNotLoaded()
+    {
+        await SeedReportWithRawXmlAsync("<feedback>original</feedback>");
+
+        await using var context = CreateContext();
+
+        var notLoaded = await context.Reports.AsNoTracking().SingleAsync();
+        Assert.Null(notLoaded.Raw);
+        var failure = Assert.Throws<InvalidOperationException>(() => notLoaded.RawXml);
+        Assert.Contains("Include(r => r.Raw)", failure.Message);
+
+        var loaded = await context.Reports.AsNoTracking().Include(r => r.Raw).SingleAsync();
+        Assert.Equal("<feedback>original</feedback>", loaded.RawXml);
+    }
+
+    [Fact]
+    public async Task UpdatingAReportWithoutItsRawXmlLoaded_LeavesTheStoredXmlIntact()
+    {
+        // The auth-detail backfill and similar code update a report's other columns without ever
+        // loading the raw XML; that must not blank or drop it.
+        await SeedReportWithRawXmlAsync("<feedback>keep me</feedback>");
+
+        await using (var context = CreateContext())
+        {
+            var report = await context.Reports.SingleAsync();
+            report.AuthDetailBackfilledUtc = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        await using var verify = CreateContext();
+        var reloaded = await verify.Reports.AsNoTracking().Include(r => r.Raw).SingleAsync();
+        Assert.NotNull(reloaded.AuthDetailBackfilledUtc);
+        Assert.Equal("<feedback>keep me</feedback>", reloaded.RawXml);
+    }
+
+    [Fact]
+    public async Task DeletingADomain_RemovesItsReports_EvenWhenTheirRawXmlWasNeverLoaded()
+    {
+        await SeedReportWithRawXmlAsync("<feedback/>");
+
+        await using (var context = CreateContext())
+        {
+            var domain = await context.Domains.Include(d => d.Reports).SingleAsync();
+            context.Domains.Remove(domain);
+            await context.SaveChangesAsync();
+        }
+
+        await using var verify = CreateContext();
+        Assert.Empty(await verify.Reports.ToListAsync());
+    }
+
     [Fact]
     public void CanInsertAndQuery_DomainWithReportAndRecords()
     {

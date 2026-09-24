@@ -104,6 +104,20 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             // up, only genuinely-unbackfilled rows are ever indexed, so this stays small regardless
             // of how large Reports grows overall.
             entity.HasIndex(r => r.AuthDetailBackfilledUtc).HasFilter("\"AuthDetailBackfilledUtc\" IS NULL");
+
+            // The raw XML is the same row, mapped as a separate entity (table splitting) so it is
+            // only read when a query includes it. Every report has one, hence required.
+            entity.HasOne(r => r.Raw)
+                .WithOne()
+                .HasForeignKey<ReportRawXml>(raw => raw.Id);
+            entity.Navigation(r => r.Raw).IsRequired();
+        });
+
+        modelBuilder.Entity<ReportRawXml>(entity =>
+        {
+            entity.ToTable("Reports");
+            entity.HasKey(raw => raw.Id);
+            entity.Property(raw => raw.Xml).HasColumnName("RawXml");
         });
 
         modelBuilder.Entity<ReportRecord>(entity =>

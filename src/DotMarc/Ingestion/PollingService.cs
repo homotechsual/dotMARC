@@ -666,7 +666,10 @@ public sealed class PollingService : BackgroundService
             return;
         }
 
+        // Include(Raw): the backfill re-parses each report's stored XML, which ordinary report
+        // queries deliberately don't load.
         var candidateReports = await context.Reports
+            .Include(r => r.Raw)
             .Include(r => r.Records)
             .Where(r => r.AuthDetailBackfilledUtc == null)
             .OrderBy(r => r.Id)
