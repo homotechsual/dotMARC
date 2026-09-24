@@ -44,23 +44,82 @@ public sealed class HaloPsaClient : IHaloPsaClient
         return payload?.Select(e => new HaloTicketStatus(e.Id, e.Name)).ToList() ?? [];
     }
 
+    /// <summary>GET /api/Priority doesn't return a plain list of priorities: it returns one row per
+    /// priority per SLA. Each row's own <c>id</c> is a GUID; the number a ticket's <c>priority_id</c>
+    /// takes is <c>priorityid</c>, which repeats across SLAs. So this de-duplicates on
+    /// <c>priorityid</c> and skips hidden rows, giving one selectable entry per priority.</summary>
     public async Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Priority", null, cancellationToken).ConfigureAwait(false);
-        var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "Priority", cancellationToken).ConfigureAwait(false);
-        return payload?.Select(e => new HaloPriority(e.Id, e.Name)).ToList() ?? [];
+        var entries = await ReadJsonAsync<List<PriorityEntry>>(response, "Priority", cancellationToken, ResolvePriorityIds).ConfigureAwait(false) ?? [];
+        return entries
+            .Where(e => !e.IsHidden)
+            .GroupBy(e => e.ResolvedId)
+            .Select(group => new HaloPriority(group.Key, group.First().Name))
+            .OrderBy(priority => priority.Id)
+            .ToList();
+    }
+
+    private static void ResolvePriorityIds(List<PriorityEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.PriorityId is { } priorityId)
+            {
+                entry.ResolvedId = priorityId;
+            }
+            else if (TryGetWholeNumber(entry.Id, out var id))
+            {
+                // No priorityid: treat a numeric id as the priority's number.
+                entry.ResolvedId = id;
+            }
+            else
+            {
+                throw new JsonException($"The priority \"{entry.Name}\" has neither a priorityid nor a numeric id.");
+            }
+        }
+    }
+
+    private static bool TryGetWholeNumber(JsonElement element, out int value)
+    {
+        value = 0;
+        decimal number = 0;
+        const System.Globalization.NumberStyles style = System.Globalization.NumberStyles.AllowLeadingSign | System.Globalization.NumberStyles.AllowDecimalPoint
+            | System.Globalization.NumberStyles.AllowLeadingWhite | System.Globalization.NumberStyles.AllowTrailingWhite;
+
+        var parsed = element.ValueKind switch
+        {
+            JsonValueKind.Number => element.TryGetDecimal(out number),
+            JsonValueKind.String => decimal.TryParse(element.GetString(), style, System.Globalization.CultureInfo.InvariantCulture, out number),
+            _ => false
+        };
+
+        if (!parsed || number != decimal.Truncate(number) || number < int.MinValue || number > int.MaxValue)
+        {
+            return false;
+        }
+
+        value = (int)number;
+        return true;
     }
 
     /// <summary>Reads one of the lookup lists. When Halo's answer isn't the shape dotMARC expects,
     /// the error says so along with the start of what Halo actually sent, so a mismatch can be
     /// diagnosed from the message alone instead of a bare "could not be converted". These endpoints
-    /// return only ids and names (no secrets), so quoting the opening is safe.</summary>
-    private static async Task<T?> ReadJsonAsync<T>(HttpResponseMessage response, string resource, CancellationToken cancellationToken)
+    /// return only ids and names (no secrets), so quoting the opening is safe. A JsonException
+    /// thrown by <paramref name="validate"/> is reported the same way.</summary>
+    private static async Task<T?> ReadJsonAsync<T>(HttpResponseMessage response, string resource, CancellationToken cancellationToken, Action<T>? validate = null)
     {
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return JsonSerializer.Deserialize<T>(body, JsonOptions);
+            var value = JsonSerializer.Deserialize<T>(body, JsonOptions);
+            if (value is not null)
+            {
+                validate?.Invoke(value);
+            }
+
+            return value;
         }
         catch (JsonException exception)
         {
@@ -116,6 +175,24 @@ public sealed class HaloPsaClient : IHaloPsaClient
         }
 
         return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed class PriorityEntry
+    {
+        [JsonPropertyName("id")]
+        public JsonElement Id { get; set; }
+
+        [JsonPropertyName("priorityid"), JsonConverter(typeof(FlexibleInt32Converter))]
+        public int? PriorityId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "";
+
+        [JsonPropertyName("ishidden")]
+        public bool IsHidden { get; set; }
+
+        [JsonIgnore]
+        public int ResolvedId { get; set; }
     }
 
     private sealed record IdNameEntry(

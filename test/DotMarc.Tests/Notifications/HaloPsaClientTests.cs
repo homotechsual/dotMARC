@@ -164,12 +164,36 @@ public sealed class HaloPsaClientTests
         Assert.Equal(["Low", "Medium", "High", "Critical"], priorities.Select(p => p.Name));
     }
 
+    [Fact]
+    public async Task ListPrioritiesAsync_UsesPriorityIdRatherThanTheRowGuid_AndCollapsesTheSlaRows()
+    {
+        // The real shape of GET /api/Priority: one row per priority per SLA. Each row's "id" is a
+        // GUID; the number a ticket's priority_id takes is "priorityid". Hidden rows aren't selectable.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = """
+            [
+              {"id":"c183eb27-0a8a-4380-59fa-08d5c0811dad","slaid":2,"priorityid":1,"name":"Urgent","fixtime":48.0,"ishidden":false,"colour":"#f44e3b"},
+              {"id":"0d2f7a10-1111-4222-8333-444455556666","slaid":3,"priorityid":1,"name":"Urgent","fixtime":24.0,"ishidden":false},
+              {"id":"9a9a9a9a-1111-4222-8333-444455556666","slaid":2,"priorityid":2,"name":"High","ishidden":false},
+              {"id":"1b1b1b1b-1111-4222-8333-444455556666","slaid":3,"priorityid":2,"name":"High","ishidden":false},
+              {"id":"7c7c7c7c-1111-4222-8333-444455556666","slaid":2,"priorityid":9,"name":"Retired","ishidden":true}
+            ]
+            """;
+
+        var priorities = await client.ListPrioritiesAsync(Settings);
+
+        Assert.Equal([1, 2], priorities.Select(p => p.Id));
+        Assert.Equal(["Urgent", "High"], priorities.Select(p => p.Name));
+    }
+
     [Theory]
-    [InlineData("""[{"id":"abc-123","name":"Low"}]""", "abc-123")]
-    [InlineData("""[{"id":"3.5","name":"Low"}]""", "3.5")]
-    [InlineData("""[{"id":"","name":"Low"}]""", "not a number")]
-    [InlineData("""[{"id":null,"name":"Low"}]""", "expected")]
-    public async Task ListPrioritiesAsync_WithAnIdItCannotUse_ThrowsShowingWhatHaloSent(string body, string expectedInMessage)
+    [InlineData("""[{"id":"abc-123","name":"Low"}]""")]
+    [InlineData("""[{"id":"3.5","name":"Low"}]""")]
+    [InlineData("""[{"id":"","name":"Low"}]""")]
+    [InlineData("""[{"id":null,"name":"Low"}]""")]
+    [InlineData("""[{"name":"Low"}]""")]
+    public async Task ListPrioritiesAsync_WithNoUsablePriorityNumber_ThrowsShowingWhatHaloSent(string body)
     {
         // Refusing (rather than guessing) matters: a wrong id would later be sent back to Halo as a
         // ticket's priority. The message quotes the start of the response so the shape is visible.
@@ -180,9 +204,9 @@ public sealed class HaloPsaClientTests
         var exception = await Assert.ThrowsAsync<InvalidDataException>(() => client.ListPrioritiesAsync(Settings));
 
         Assert.Contains("Priority", exception.Message);
-        Assert.Contains(expectedInMessage, exception.Message);
+        Assert.Contains("neither a priorityid nor a numeric id", exception.Message);
         Assert.Contains("It began:", exception.Message);
-        Assert.Contains(body[..12], exception.Message);
+        Assert.Contains(body[..10], exception.Message);
     }
 
     [Fact]
