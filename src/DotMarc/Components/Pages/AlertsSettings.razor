@@ -7,6 +7,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject IJSRuntime Js
 @inject ILogger<AlertsSettings> Logger
 @inject IHaloPsaClient HaloPsaClient
 @inject ISecretStore SecretStoreAccessor
@@ -125,8 +126,11 @@ else
                 </MudSelect>
             </MudItem>
             <MudItem xs="12">
-                <MudTextField Label="Webhook URL" ReadOnly="true" Value="@WebhookUrl" Variant="Variant.Outlined"
-                              HelperText="Point HaloPSA's outbound webhook (on ticket status change) at this URL." />
+                <div @onclick="CopyWebhookUrlAsync" @onkeydown="OnWebhookUrlKeyDown" style="cursor: copy;" title="Click to copy">
+                    <MudTextField Label="Webhook URL" ReadOnly="true" Value="@WebhookUrl" Variant="Variant.Outlined"
+                                  Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                                  HelperText="Click to copy. Point HaloPSA's outbound webhook (on ticket status change) at this URL." />
+                </div>
             </MudItem>
             <MudItem xs="12" Class="d-flex align-center" Style="gap: 0.5rem;">
                 <MudButton Variant="Variant.Outlined" OnClick="GenerateWebhookSecretAsync">Generate new webhook secret</MudButton>
@@ -213,6 +217,41 @@ else
     // to read (or copy) them.
     private void ShowHaloError(string message) =>
         Snackbar.Add(message, Severity.Error, config => config.RequireInteraction = true);
+
+    private Task OnWebhookUrlKeyDown(KeyboardEventArgs args) =>
+        args.Key == "Enter" ? CopyWebhookUrlAsync() : Task.CompletedTask;
+
+    private async Task CopyWebhookUrlAsync()
+    {
+        if (_haloSettings?.WebhookSecret is not { Length: > 0 })
+        {
+            Snackbar.Add("Generate a webhook secret first.", Severity.Info);
+            return;
+        }
+
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", WebhookUrl);
+        }
+        catch (JSException)
+        {
+            // The clipboard API is only available in a secure context (HTTPS or localhost) and can
+            // be refused by the browser, so there has to be a manual way out.
+            Snackbar.Add("Couldn't copy automatically. Select the URL and copy it manually.", Severity.Warning);
+            return;
+        }
+
+        if (_webhookSecretJustGenerated)
+        {
+            // A URL copied before saving 404s until the secret is persisted (see the note beside
+            // the Generate button), so say so at the moment it matters.
+            Snackbar.Add("Copied, but this secret isn't saved yet. Click Save PSA settings before using the URL in HaloPSA.", Severity.Warning);
+        }
+        else
+        {
+            Snackbar.Add("Webhook URL copied.", Severity.Success);
+        }
+    }
 
     private Task GenerateWebhookSecretAsync()
     {
