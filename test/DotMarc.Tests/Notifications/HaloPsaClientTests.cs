@@ -177,16 +177,67 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
-    public async Task CloseTicketAsync_PostsToTheTicketWithTheClosedStatus()
+    public async Task CloseTicketAsync_PostsAnArrayToTicketsWithTheIdAndClosedStatus()
     {
+        // Halo updates a ticket by posting an array holding the ticket's id and changed fields to Tickets.
         var (client, handler) = CreateClient();
         handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
         handler.ResponseBody = "{}";
+        var settings = Settings;
+        settings.ClosedStatusId = 9;
 
-        await client.CloseTicketAsync(Settings, "4242", "Resolved automatically by dotMARC.");
+        await client.CloseTicketAsync(settings, "4242", "Resolved automatically by dotMARC.");
 
         Assert.Equal(2, handler.Requests.Count);
-        Assert.Contains("Tickets", handler.Requests[1].RequestUri!.ToString());
+        Assert.Equal("https://contoso.halopsa.com/api/Tickets", handler.Requests[1].RequestUri!.ToString());
+        using var sent = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[1]);
+        var update = Assert.Single(sent.RootElement.EnumerateArray());
+        Assert.Equal(4242, update.GetProperty("id").GetInt32());
+        Assert.Equal(9, update.GetProperty("status_id").GetInt32());
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_PostsAnArrayHoldingOneTicket()
+    {
+        // Halo refuses a bare object with "requires a JSON array".
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242}""");
+
+        await client.CreateTicketAsync(Settings, haloClientId: 7, "contoso.io", "MissedReport", "Missing report", "m");
+
+        using var sent = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[1]);
+        var ticket = Assert.Single(sent.RootElement.EnumerateArray());
+        Assert.Equal("Missing report", ticket.GetProperty("summary").GetString());
+        Assert.Equal(7, ticket.GetProperty("client_id").GetInt32());
+        Assert.Equal(5, ticket.GetProperty("tickettype_id").GetInt32());
+        Assert.Equal(2, ticket.GetProperty("priority_id").GetInt32());
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_AcceptsTheCreatedTicketWrappedInAnArray()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""[{"id":4243,"summary":"x"}]""");
+
+        var ticketId = await client.CreateTicketAsync(Settings, 7, "contoso.io", "MissedReport", "t", "m");
+
+        Assert.Equal("4243", ticketId);
+    }
+
+    [Fact]
+    public async Task CreateTicketAsync_WhenTheResponseHasNoId_SaysWhatHaloSent()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"summary":"x"}""");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            client.CreateTicketAsync(Settings, 7, "contoso.io", "MissedReport", "t", "m"));
+
+        Assert.Contains("didn't include the ticket's id", exception.Message);
+        Assert.Contains("\"summary\"", exception.Message);
     }
 
     [Fact]

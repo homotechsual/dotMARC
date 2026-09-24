@@ -103,6 +103,8 @@ public sealed class HaloPsaClient : IHaloPsaClient
         return true;
     }
 
+    private static string Truncate(string text) => text.Length <= 300 ? text : text[..300] + "...";
+
     /// <summary>Reads one of the lookup lists. When Halo's answer isn't the shape dotMARC expects,
     /// the error says so along with the start of what Halo actually sent, so a mismatch can be
     /// diagnosed from the message alone instead of a bare "could not be converted". These endpoints
@@ -123,24 +125,34 @@ public sealed class HaloPsaClient : IHaloPsaClient
         }
         catch (JsonException exception)
         {
-            var sample = body.Length <= 300 ? body : body[..300] + "...";
-            throw new InvalidDataException($"HaloPSA's {resource} response wasn't in the expected format. {exception.Message} It began: {sample}", exception);
+            throw new InvalidDataException($"HaloPSA's {resource} response wasn't in the expected format. {exception.Message} It began: {Truncate(body)}", exception);
         }
     }
 
     public async Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
     {
-        var body = new CreateTicketRequest(title, $"{message}\n\nDomain: {domainName}\nAlert type: {alertType}\nRaised automatically by dotMARC.", haloClientId, settings.TicketTypeId, settings.DefaultPriorityId);
-        using var response = await SendAsync(HttpMethod.Post, settings, "Tickets", body, cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<CreateTicketResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
-        return payload!.Id.ToString();
+        var ticket = new CreateTicketRequest(title, $"{message}\n\nDomain: {domainName}\nAlert type: {alertType}\nRaised automatically by dotMARC.", haloClientId, settings.TicketTypeId, settings.DefaultPriorityId);
+
+        // Halo's POST endpoints take an array of records, even for a single ticket; a bare object is
+        // refused with "requires a JSON array".
+        using var response = await SendAsync(HttpMethod.Post, settings, "Tickets", new[] { ticket }, cancellationToken).ConfigureAwait(false);
+        var created = await ReadJsonAsync<JsonElement>(response, "Tickets", cancellationToken).ConfigureAwait(false);
+
+        // Halo answers with the created ticket, though some versions wrap it in a one-item array.
+        var createdTicket = created.ValueKind == JsonValueKind.Array && created.GetArrayLength() > 0 ? created[0] : created;
+        if (createdTicket.ValueKind != JsonValueKind.Object || !createdTicket.TryGetProperty("id", out var id) || !TryGetWholeNumber(id, out var ticketId))
+        {
+            throw new InvalidDataException($"HaloPSA created a ticket but its response didn't include the ticket's id. It began: {Truncate(createdTicket.ToString())}");
+        }
+
+        return ticketId.ToString();
     }
 
     public async Task CloseTicketAsync(HaloPsaSettings settings, string ticketId, string note, CancellationToken cancellationToken = default)
     {
-        var body = new CloseTicketRequest(int.Parse(ticketId), settings.ClosedStatusId, note);
-        using var response = await SendAsync(HttpMethod.Post, settings, $"Tickets/{ticketId}", body, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        // Halo updates a ticket by posting the changed fields, with the ticket's id, to Tickets.
+        var update = new CloseTicketRequest(int.Parse(ticketId), settings.ClosedStatusId, note);
+        using var response = await SendAsync(HttpMethod.Post, settings, "Tickets", new[] { update }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, HaloPsaSettings settings, string relativePath, object? body, CancellationToken cancellationToken)
@@ -179,7 +191,7 @@ public sealed class HaloPsaClient : IHaloPsaClient
         var challenge = string.Join(", ", response.Headers.WwwAuthenticate.Select(header => header.ToString()));
         response.Dispose();
 
-        var explanation = string.IsNullOrWhiteSpace(body) ? "" : $" Halo said: {(body.Length <= 300 ? body : body[..300] + "...")}";
+        var explanation = string.IsNullOrWhiteSpace(body) ? "" : $" Halo said: {Truncate(body)}";
         if (!string.IsNullOrWhiteSpace(challenge))
         {
             explanation += $" Halo's challenge: {challenge}.";
@@ -236,7 +248,6 @@ public sealed class HaloPsaClient : IHaloPsaClient
         [property: JsonPropertyName("client_id")] int ClientId,
         [property: JsonPropertyName("tickettype_id")] int? TicketTypeId,
         [property: JsonPropertyName("priority_id")] int? PriorityId);
-    private sealed record CreateTicketResponse([property: JsonPropertyName("id")] int Id);
     private sealed record CloseTicketRequest(
         [property: JsonPropertyName("id")] int Id,
         [property: JsonPropertyName("status_id")] int? StatusId,
