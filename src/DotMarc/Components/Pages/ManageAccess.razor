@@ -23,11 +23,11 @@
     <MudText Typo="Typo.h6" Class="mb-2">Roles</MudText>
     <MudGrid>
         <MudItem xs="9">
-            <MudTextField @bind-Value="_newRoleName" Label="Role name" Placeholder="Domain Manager"
+            <MudTextField @bind-Value="_newRoleName" Label="Role name" Placeholder="Domain Manager" Variant="Variant.Outlined"
                           Error="@(_addRoleError is not null)" ErrorText="@_addRoleError" Immediate="true" />
         </MudItem>
-        <MudItem xs="3" Class="d-flex align-center">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+        <MudItem xs="3" Class="d-flex align-start">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
                        OnClick="AddRoleAsync">Add role</MudButton>
         </MudItem>
     </MudGrid>

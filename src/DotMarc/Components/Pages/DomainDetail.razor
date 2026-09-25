@@ -124,7 +124,7 @@ else
                                     }
                                     else
                                     {
-                                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
                                                    OnClick="PushDmarcRecordAsync">Push via your DNS provider</MudButton>
                                     }
                                 }
@@ -157,7 +157,7 @@ else
                                     }
                                     else
                                     {
-                                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
                                                    OnClick="PushDmarcAuthorizationRecordAsync">Push authorization record via your DNS provider</MudButton>
                                     }
                                 }
@@ -186,7 +186,7 @@ else
                                     }
                                     @if (_domain.TlsrptCheckStatus is TlsrptCheckStatus.MissingOwnRecord or TlsrptCheckStatus.Misconfigured)
                                     {
-                                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
                                                    OnClick="PushTlsrptRecordAsync">Push via your DNS provider</MudButton>
                                     }
                                 </Authorized>
@@ -263,7 +263,7 @@ else
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDkimAsync" title="Recheck now" />
                                 }
-                                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="OpenDkimSelectorsDialogAsync">Configure selectors</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenDkimSelectorsDialogAsync">Configure selectors</MudButton>
                             </Authorized>
                         </AuthorizeView>
                     </ActionContent>

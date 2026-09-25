@@ -29,11 +29,11 @@
     <AuthorizeView Policy="GroupsAdd">
         <MudGrid>
             <MudItem xs="9">
-                <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A"
+                <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A" Variant="Variant.Outlined"
                               Error="@(_addGroupError is not null)" ErrorText="@_addGroupError" Immediate="true" />
             </MudItem>
-            <MudItem xs="3" Class="d-flex align-center">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+            <MudItem xs="3" Class="d-flex align-start">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
                            OnClick="AddGroupAsync">Add group</MudButton>
             </MudItem>
         </MudGrid>
@@ -89,13 +89,15 @@
                     <MudTd>
                         @if (context.HaloClientId.HasValue)
                         {
-                            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenTicketRulesAsync(context))">
-                                Ticket rules
-                            </MudButton>
-                            @if (_ticketRuleOverrideCounts.TryGetValue(context.Id, out var overrideCount))
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@overrideCount @(overrideCount == 1 ? "override" : "overrides")</MudChip>
-                            }
+                            <div class="d-flex align-center" style="gap: 0.5rem;">
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenTicketRulesAsync(context))">
+                                    Ticket rules
+                                </MudButton>
+                                @if (_ticketRuleOverrideCounts.TryGetValue(context.Id, out var overrideCount))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@overrideCount @(overrideCount == 1 ? "override" : "overrides")</MudChip>
+                                }
+                            </div>
                         }
                         else
                         {
@@ -122,19 +124,19 @@
     <AuthorizeView Policy="TagsAdd">
         <MudGrid>
             <MudItem xs="6">
-                <MudTextField @bind-Value="_newTagName" Label="Tag name" Placeholder="primary"
+                <MudTextField @bind-Value="_newTagName" Label="Tag name" Placeholder="primary" Variant="Variant.Outlined"
                               Error="@(_addTagError is not null)" ErrorText="@_addTagError" Immediate="true" />
             </MudItem>
             <MudItem xs="3">
-                <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color">
+                <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color" Variant="Variant.Outlined">
                     @foreach (var color in TagManagementService.AllowedColors)
                     {
                         <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="3" Class="d-flex align-center">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+            <MudItem xs="3" Class="d-flex align-start">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
                            OnClick="AddTagAsync">Add tag</MudButton>
             </MudItem>
         </MudGrid>

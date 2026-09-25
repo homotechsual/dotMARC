@@ -106,7 +106,7 @@
                     </MudSelect>
                     <MudNumericField T="int" @bind-Value="_maxAgeSeconds" Label="Max age (seconds)" Min="0" Class="mt-2" />
                     <MudTextField @bind-Value="_mxHostsText" Label="MX hosts" Lines="3" HelperText="One per line, e.g. mail.example.com" Class="mt-2" />
-                    <MudButton Class="mt-2" OnClick="SaveAdvancedAsync">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2" OnClick="SaveAdvancedAsync">Save</MudButton>
                 </MudExpansionPanel>
             </MudExpansionPanels>
         </div>

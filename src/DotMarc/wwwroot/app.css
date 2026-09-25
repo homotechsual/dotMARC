@@ -39,3 +39,11 @@ html {
     height: 56px;
     margin-top: 8px;
 }
+
+/* Button labels are uppercase, and capital letters sit above the centre of their line box. An icon centred on the
+   line box therefore read about 1px low against the text (measured on every icon button). Nudging it up by a
+   fraction of the font size centres it on the capitals, and scales for small buttons. */
+.mud-button-root .mud-button-icon-start,
+.mud-button-root .mud-button-icon-end {
+    transform: translateY(-0.08em);
+}
