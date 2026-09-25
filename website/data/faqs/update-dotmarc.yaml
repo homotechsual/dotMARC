@@ -1,0 +1,12 @@
+question: How do I update dotMARC to a new release?
+answer: |
+  How you update depends on how you run it, and the page [Update or redeploy dotMARC](/docs/updating) has a
+  table that takes you straight to the right steps for Docker Compose, a plain `docker run`, or Azure Container
+  Apps.
+
+  Two things apply to all of them. Your data is kept, because it lives in PostgreSQL, so never remove the
+  database volume. And database migrations run automatically when the new version starts, so read the
+  **Upgrading** section of each release's notes and take a PostgreSQL backup first if you might need to roll
+  back. Prefer a release tag to `:latest`, which needs an extra step to pick up a new build.
+category: Deploying and updating
+order: 1

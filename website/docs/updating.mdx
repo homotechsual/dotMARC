@@ -1,0 +1,45 @@
+---
+description: How to update dotMARC to a new release on Docker or Azure, check it worked, and roll back.
+---
+
+# Update or redeploy dotMARC
+
+The newest release is <LatestVersion />. See [Releases and Updates](/releases-updates) for what changed in it and
+in earlier versions.
+
+## Before you update
+
+* **Read the release notes** for every version you are skipping. Each one has an **Upgrading** section that
+  says whether anything needs your attention, such as a new permission or setting.
+* **Your data is kept.** Reports, settings and secrets live in PostgreSQL, so an update replaces only the
+  application. Never remove the database volume, and never add `--volumes` to `docker compose down`.
+* **Migrations run by themselves** when the new version starts. An older version isn't always compatible with a
+  newer database, so take a PostgreSQL backup first if you might need to roll back.
+* **Prefer a release tag to `:latest`** in production. A tag such as <code>:<LatestVersion /></code> says exactly what
+  is running and what to go back to. `:latest` moves under you and needs an extra step to pick up a new build.
+
+## Choose how you run dotMARC
+
+| How you run dotMARC | Go to |
+| --- | --- |
+| Docker Compose, using the supplied `docker-compose.yml` files | [Rebuild from the repository](./deploy-with-docker.mdx#supplied-compose-files-rebuild-from-the-repository) |
+| Docker Compose, using your own file with the published image | [Custom Compose file using the published image](./deploy-with-docker.mdx#custom-compose-file-using-the-published-image) |
+| Docker, with the image tagged `:latest` | [If the image is tagged `:latest`](./deploy-with-docker.mdx#if-the-image-is-tagged-latest) |
+| Docker, with a plain `docker run` | [Standalone `docker run`](./deploy-with-docker.mdx#standalone-docker-run) |
+| Azure Container Apps | [Update to a specific release](./deploy-to-azure.mdx#update-to-a-specific-release-recommended) |
+| Azure, with the image tagged `:latest` | [Redeploy when the app is configured with `:latest`](./deploy-to-azure.mdx#redeploy-when-the-app-is-configured-with-latest) |
+| Azure, managed through the Bicep template | [Update through Bicep](./deploy-to-azure.mdx#update-through-bicep) |
+
+## Check it worked
+
+* Open dotMARC and look at the version in the footer. It links to that release's notes.
+* Check **Manage > Server logs** for new warnings or errors. See [Server logs](./server-logs.mdx).
+* On Azure, follow [Verify the update](./deploy-to-azure.mdx#verify-the-update) to confirm the new revision is
+  healthy and taking traffic.
+
+## Roll back
+
+Go back to the previous release tag and recreate the application, the same way you updated. The detailed steps,
+including the database caveat, are in [Docker: Roll back](./deploy-with-docker.mdx#roll-back) and
+[Azure: Roll back](./deploy-to-azure.mdx#roll-back). Don't roll back blindly after a release that applied database
+migrations, because the older version has to work with the schema the newer one left behind.
