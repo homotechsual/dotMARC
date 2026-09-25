@@ -171,6 +171,102 @@ dotMARC's sign-in page with a valid padlock icon and no certificate warning.
 - **Certificate warning/error**: re-check step [2a (DNS isn't pointing at the right IP yet)](#2a-point-your-domain-at-your-server), or give
   Caddy another minute or two to finish requesting the certificate.
 
+## Update or redeploy dotMARC
+
+How to update depends on whether Compose builds dotMARC from this repository (the supplied
+`docker-compose.yml` and `docker-compose.selfhosted.yml`) or your own deployment runs the published
+GHCR image directly. In every case the PostgreSQL data is in a named volume and must be retained.
+Do **not** add `--volumes` to `docker compose down`, and do not delete the Postgres volume during an
+application update.
+
+### Supplied Compose files: rebuild from the repository
+
+The supplied Compose files use `build:`, not `image:`, for the `app` service. Pull the desired
+source revision, rebuild the app image (including an updated .NET base image where available), then
+recreate only the application container. PostgreSQL and Caddy keep running:
+
+```powershell
+# Use docker-compose.yml for the plain stack, or docker-compose.selfhosted.yml for Caddy/HTTPS.
+$COMPOSE_FILE = 'docker-compose.selfhosted.yml'
+
+git pull --ff-only
+docker compose -f $COMPOSE_FILE build --pull app
+docker compose -f $COMPOSE_FILE up -d --no-deps app
+docker compose -f $COMPOSE_FILE ps
+docker compose -f $COMPOSE_FILE logs --tail 100 app
+```
+
+To deploy a particular release instead of the newest `main`, check out its tag before rebuilding:
+
+```powershell
+git fetch --tags
+$VERSION = '<release-version>'
+git checkout "v$VERSION"
+docker compose -f $COMPOSE_FILE build --pull app
+docker compose -f $COMPOSE_FILE up -d --no-deps app
+```
+
+The app applies EF Core migrations during startup. Once the container is healthy, load the
+dashboard and confirm the expected version in its footer.
+
+### Custom Compose file using the published image
+
+If your own Compose file has an `image:` entry such as
+`ghcr.io/homotechsual/dotmarc:<release-version>`, update that value (or the environment variable supplying it),
+then pull and recreate the app service:
+
+```powershell
+$COMPOSE_FILE = 'compose.yml'
+
+docker compose -f $COMPOSE_FILE pull app
+docker compose -f $COMPOSE_FILE up -d --no-deps --force-recreate app
+docker compose -f $COMPOSE_FILE images app
+docker compose -f $COMPOSE_FILE logs --tail 100 app
+```
+
+`docker compose pull` only downloads the image; it does not replace the already-running container.
+The `up --force-recreate` step is what starts a container from the newly pulled image.
+
+### If the image is tagged `:latest`
+
+`docker compose up -d` alone may keep the existing local image and container. Explicitly pull the
+mutable tag, then force-recreate the app service:
+
+```powershell
+docker compose -f $COMPOSE_FILE pull app
+docker compose -f $COMPOSE_FILE up -d --no-deps --force-recreate app
+```
+
+`docker compose images app` shows the local image ID used by the recreated service, but the string
+`:latest` still does not identify a release. Check the version in dotMARC's footer. Prefer an
+immutable release tag in production so it is clear what is running and what to roll back to.
+
+### Standalone `docker run`
+
+Pulling a new image does not alter an existing container. Record the current container's image and
+run options, pull the desired release, then replace the application container using the same
+environment variables, network, ports and restart policy as before:
+
+```powershell
+docker inspect --format '{{.Config.Image}}' dotmarc
+$VERSION = '<release-version>'
+docker pull "ghcr.io/homotechsual/dotmarc:$VERSION"
+docker stop dotmarc
+docker rm dotmarc
+
+# Re-run your original docker run command, changing only the image tag.
+docker run --name dotmarc ... "ghcr.io/homotechsual/dotmarc:$VERSION"
+```
+
+Do not remove the separately managed PostgreSQL container or its volume.
+
+### Roll back
+
+For Compose with a published image, restore the previous release tag, pull it and force-recreate
+the app service. For the supplied build-based Compose files, check out the previous Git release tag
+and rebuild. As with Azure, do not roll back blindly after a release that applied database
+migrations: the older app must remain compatible with the current schema.
+
 ## What's next
 
 Want dotMARC to host MTA-STS policies for your customers' domains? `Caddyfile.selfhosted` (used

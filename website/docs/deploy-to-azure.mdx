@@ -135,7 +135,138 @@ managed identity a narrowly-scoped write role on the vault (see `infra/main.bice
 `Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app
 writes each secret itself the first time you save it from the relevant settings page.
 
-## 5. Re-running the template later (e.g. to turn on MTA-STS hosting)
+## 5. Update or redeploy dotMARC
+
+Container Apps stores the image reference in a **revision**. Check the image configured on the
+currently active app, then list its revision history:
+
+```powershell
+$RG = 'dotmarc-rg'
+$APP = az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppName.value -o tsv
+
+az containerapp show `
+  --resource-group $RG `
+  --name $APP `
+  --query "properties.template.containers[0].image" `
+  --output tsv
+
+az containerapp revision list `
+  --resource-group $RG `
+  --name $APP `
+  --query "[].{Revision:name,Active:properties.active,Created:properties.createdTime,Image:properties.template.containers[0].image}" `
+  --output table
+```
+
+:::note[What version is actually running?]
+
+For an immutable release reference such as <code>ghcr.io/homotechsual/dotmarc:<LatestVersion /></code>, the tag identifies
+the version. If the configured image is `:latest`, Azure only reports `:latest` - that mutable tag
+does not reveal which build was pulled. Check the version shown in dotMARC's footer, or compare the
+deployment time with the image published by the relevant release. Prefer release tags for
+production so the deployed version and rollback target are unambiguous.
+
+:::
+
+### Update to a specific release (recommended)
+
+Use an immutable release tag. `az containerapp update` creates a new revision and, because this
+template uses single-revision mode, moves traffic to it after it becomes ready:
+
+```powershell
+$VERSION = '<release-version>'
+$IMAGE = "ghcr.io/homotechsual/dotmarc:$VERSION"
+$REVISION_SUFFIX = "release-$(Get-Date -Format yyyyMMddHHmmss)"
+
+az containerapp update `
+  --resource-group $RG `
+  --name $APP `
+  --image $IMAGE `
+  --revision-suffix $REVISION_SUFFIX
+```
+
+The app runs EF Core migrations during startup. Do not run a separate migration command; wait for
+the new revision to become ready before considering the update complete.
+
+### Redeploy when the app is configured with `:latest`
+
+Publishing a new image under `:latest` does **not** automatically update a running Container App.
+Running `az containerapp revision restart` only restarts the existing revision; use it for refreshed
+Key Vault references or a stuck replica, not as the image-update mechanism.
+
+If the configured image string remains exactly the same, force a new revision by supplying a unique
+revision suffix:
+
+```powershell
+$IMAGE = 'ghcr.io/homotechsual/dotmarc:latest'
+$REVISION_SUFFIX = "latest-$(Get-Date -Format yyyyMMddHHmmss)"
+
+az containerapp update `
+  --resource-group $RG `
+  --name $APP `
+  --image $IMAGE `
+  --revision-suffix $REVISION_SUFFIX
+```
+
+The unique suffix makes this a new revision even though the image reference is still `:latest`, so
+Container Apps resolves and pulls the tag again. This is inherently less auditable than deploying
+a release tag: the revision records `:latest`, not the release version it represented at that time.
+
+### Update through Bicep
+
+If the deployment is intentionally managed through `infra/main.bicep`, set `containerImage` to the
+new immutable release tag, run the `--what-if` check in the next section, then apply the template.
+A Bicep redeploy with `containerImage` still set to the same `:latest` string may show no template
+change and therefore may not create a new revision. In that case, either change to a release tag or
+use the forced-revision command above.
+
+### Verify the update
+
+```powershell
+$REVISION = az containerapp show `
+  --resource-group $RG `
+  --name $APP `
+  --query properties.latestReadyRevisionName `
+  --output tsv
+
+az containerapp revision show `
+  --resource-group $RG `
+  --name $APP `
+  --revision $REVISION `
+  --query "{Revision:name,Active:properties.active,Image:properties.template.containers[0].image,Replicas:properties.replicas}" `
+  --output table
+
+az containerapp logs show `
+  --resource-group $RG `
+  --name $APP `
+  --revision $REVISION `
+  --tail 100
+```
+
+Then load the dashboard, confirm the expected version in its footer, sign in, and check **Poll
+status** for a successful post-deployment cycle.
+
+### Roll back
+
+Create another revision using the previous immutable release tag:
+
+```powershell
+$PREVIOUS_VERSION = '<previous-release-version>'
+$IMAGE = "ghcr.io/homotechsual/dotmarc:$PREVIOUS_VERSION"
+$REVISION_SUFFIX = "rollback-$(Get-Date -Format yyyyMMddHHmmss)"
+
+az containerapp update `
+  --resource-group $RG `
+  --name $APP `
+  --image $IMAGE `
+  --revision-suffix $REVISION_SUFFIX
+```
+
+Do not roll back blindly after a release that applied database migrations: application rollback is
+only safe when the older release remains compatible with the current schema. A deployment that
+only ever recorded `:latest` also has no reliable historical image target; choose the previous
+release tag explicitly.
+
+## 6. Re-running the template later (e.g. to turn on MTA-STS hosting)
 
 `enableMtaStsHosting` is off by default, so enabling it (or making any other change) usually means
 re-running `az deployment group create` against a resource group that's no longer in exactly the

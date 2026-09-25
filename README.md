@@ -84,6 +84,9 @@ Docker volume (`dotmarc-postgres-data`). Set the seven required environment vari
 setup steps above (or put them in a `.env` file next to `docker-compose.yml` compose reads that
 automatically).
 
+For upgrades, including the important extra pull/recreate step when using a mutable `:latest`
+image, see [Deploy with Docker: Update or redeploy dotMARC](https://dotmarc.app/docs/deploy-with-docker#update-or-redeploy-dotmarc).
+
 ### Cut a release
 
 Release metadata lives in `Directory.Build.props`. Prepare the next version with the release
@@ -127,6 +130,10 @@ reachable except through that trusted front-end, so any upstream proxy is truste
 per-deployment configuration.
 
 ## Deploy to Azure
+
+For an existing deployment, see [Deploy to Azure: Update or redeploy dotMARC](https://dotmarc.app/docs/deploy-to-azure#5-update-or-redeploy-dotmarc)
+for checking the active image, updating immutable release tags, forcing a new revision when using
+`:latest`, verifying readiness, and rolling back.
 
 `infra/main.bicep` provisions everything needed to run dotMARC on Azure:
 
