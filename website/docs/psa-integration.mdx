@@ -16,6 +16,45 @@ In HaloPSA, go to **Configuration → Integrations → HaloPSA API** and create 
 with these scopes: `edit:tickets`, `read:tickets`, `read:customers`. Note its
 account name, auth server URL, resource server URL, client ID, and client secret.
 
+## Permissions for the API agent
+
+The three scopes above are all dotMARC asks for, and Halo has no scopes for agents or teams. What dotMARC
+can actually do is decided by the **agent the API application signs in as** (its "Agent to log in as") and that agent's role. Give it a
+dedicated agent and role, not an administrator.
+
+This configuration is known to work, with the whole lifecycle passing in the
+[integration test](#test-the-whole-integration):
+
+| Halo role setting | Value |
+| --- | --- |
+| Tickets Access Level | Read and Modify |
+| Customers Access Level | Read Only |
+| Users Access Level | Read Only |
+| Can add new Tickets | Yes |
+| Can view Unassigned Tickets | Yes |
+| Can view Tickets that are assigned to other Agents | Yes |
+| Can edit Tickets which are not assigned to them | Yes |
+| Can always update Ticket Statuses and re-assign Tickets outside of actions | Yes |
+| Can edit closed Tickets | Yes |
+| Can change a Ticket's Ticket Type | Yes |
+| Can Re-assign Tickets | Yes |
+| Can assign to Agents in Teams the Agent is not a member of | Yes |
+
+Everything else can stay off, including Can Delete Tickets and Can Edit Advanced Ticket Details.
+
+Not every row is proven to be needed, so trim from here rather than up. When a permission is missing, the
+error names the call that failed:
+
+| What you see | What it usually means |
+| --- | --- |
+| `403 Forbidden` for `GET Client`, and no Halo clients to choose from | The role's **Customers Access Level** is below Read Only. |
+| `401 Unauthorized` or "Record not found" for `GET Tickets/...` or `POST Tickets` after a ticket was created | The agent can create a ticket but can't see it. A ticket dotMARC creates is unassigned unless you choose an agent, so the role needs to view unassigned tickets and tickets assigned to other agents. |
+| "Please assign this Ticket these before closing it" | The ticket has nobody assigned. See [Who tickets are assigned to](#who-tickets-are-assigned-to). |
+| The agent list is empty, or the message says Halo returned no agents | The role can't see agents. The list is optional: leave **Don't assign**, or widen the role. |
+
+Halo may put a role's permissions into the access token it issues, and dotMARC reuses a token for about
+an hour. After changing the role, use **Clear cached Halo sign-in** on Alert settings before testing again.
+
 ## Configure dotMARC
 
 From **Alert settings**, in the **PSA integration (HaloPSA)** section: enable it, fill in the
