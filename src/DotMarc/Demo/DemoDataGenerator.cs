@@ -131,6 +131,11 @@ public static class DemoDataGenerator
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
                 dmarcAuthorizationCheckStatus: DmarcAuthorizationCheckStatus.Missing,
                 dmarcAuthorizationCheckDetail: "No TXT record found at driftwood-media.example._report._dmarc.nova-msp.example",
+                // An "SPF only" failure: a newsletter tool sends as this domain, its SPF check fails, and the
+                // report says nothing at all about DKIM (no signature) - the one shape where a single mechanism
+                // is cleanly to blame, so the breakdown buckets it as SPF alone rather than both.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordAuthDetails: [new(DmarcAuthMechanism.Spf, "mail.bulk-newsletter-tool.example", DmarcMechanismResult.Fail)],
                 dnsProvider: DetectedDnsProvider.Namecheap, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Namecheap]),
             BuildDomain(random, nowUtc, sortOrder: 6, name: "driftwood-events.example", groupName: null,
                 orgs: ["google.com"], passRateForDay: _ => 0.97,
@@ -180,6 +185,9 @@ public static class DemoDataGenerator
             BuildDomain(random, nowUtc, sortOrder: 13, name: "ironclad-parts.example", groupName: "Ironclad Manufacturing",
                 orgs: ["outlook.com"], passRateForDay: _ => 0.93,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                // A second "DKIM only" failure, from a CRM mailer whose signature fails.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordAuthDetails: [new(DmarcAuthMechanism.Dkim, "crm-mailer.example", DmarcMechanismResult.Fail, Selector: "s2")],
                 dnsProvider: DetectedDnsProvider.AmazonRoute53, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.AmazonRoute53]),
             BuildDomain(random, nowUtc, sortOrder: 14, name: "willowmere-retail.example", groupName: "Willowmere Retail",
                 orgs: ["google.com", "yahoo.com"], passRateForDay: _ => 0.98,
@@ -192,6 +200,10 @@ public static class DemoDataGenerator
             BuildDomain(random, nowUtc, sortOrder: 16, name: "cdn.willowmere-retail.example", groupName: "Willowmere Retail",
                 orgs: ["google.com"], passRateForDay: _ => 0.9,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                // A "DKIM only" failure: a billing platform signs its mail but the signature fails (a stale or
+                // rotated key), and the report has no SPF result for it at all.
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordAuthDetails: [new(DmarcAuthMechanism.Dkim, "billing-platform.example", DmarcMechanismResult.Fail, Selector: "k1")],
                 dnsProvider: DetectedDnsProvider.DigitalOcean, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.DigitalOcean]),
             BuildDomain(random, nowUtc, sortOrder: 17, name: "palmwood-logistics.example", groupName: "Palmwood Logistics",
                 orgs: ["google.com", "outlook.com"], passRateForDay: _ => 0.88,
@@ -208,6 +220,9 @@ public static class DemoDataGenerator
             BuildDomain(random, nowUtc, sortOrder: 19, name: "brackenfield-media.example", groupName: "Brackenfield Media",
                 orgs: ["yahoo.com", "protonmail.com"], passRateForDay: _ => 0.91,
                 status: DmarcCheckStatus.Ok, detail: null, daysOfHistory: HistoryDays,
+                // A second "SPF only" failure, from a different kind of sender (an event ticketing platform).
+                forcedFailingDisposition: DispositionResult.Quarantine,
+                failingRecordAuthDetails: [new(DmarcAuthMechanism.Spf, "bounce.event-ticketing.example", DmarcMechanismResult.Fail)],
                 dnsProvider: DetectedDnsProvider.Gandi, dnsNameservers: DnsNameserverSamples[DetectedDnsProvider.Gandi]),
             BuildDomain(random, nowUtc, sortOrder: 20, name: "brackenfield-studio.example", groupName: "Brackenfield Media",
                 orgs: ["google.com"], passRateForDay: _ => 0.97,

@@ -1,0 +1,130 @@
+name: Update Screenshots
+
+# Regenerates the website screenshots (website/static/img/screenshots) from a demo-mode dotMARC and opens a pull
+# request with whichever images changed. Run it from the Actions tab after a UI change or a change to the demo data.
+#
+# One-time setup: Settings > Actions > General > Workflow permissions must allow "Read and write permissions" and
+# "Allow GitHub Actions to create and approve pull requests", or the last step cannot open the pull request.
+#
+# The demo data is seeded from the UTC date, so the numbers in the images change from day to day. That means a run
+# can list every image as changed. Review the pull request before merging, and merge it only when the images
+# show something worth publishing.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  capture:
+    name: Capture screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BRANCH: automation/update-screenshots
+      APP_URL: http://localhost:5195
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: dotmarc
+          POSTGRES_USER: dotmarc
+          POSTGRES_PASSWORD: dotmarc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dotmarc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Remove built-in Yarn
+        run: npm uninstall -g yarn
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: yarn
+          cache-dependency-path: website/yarn.lock
+
+      - name: Install website dependencies
+        working-directory: website
+        run: yarn install --check-cache --inline-builds
+
+      - name: Install Playwright's Chromium
+        working-directory: website
+        run: yarn playwright install --with-deps chromium
+
+      - name: Start dotMARC in demo mode
+        run: |
+          dotnet build src/DotMarc/DotMarc.csproj -c Release
+          # The demo has no sign-in provider of its own to configure: Demo__Enabled swaps in the persona picker at /demo
+          # and seeds the generated dataset before the app starts serving.
+          Demo__Enabled=true \
+          ASPNETCORE_ENVIRONMENT=Development \
+          ASPNETCORE_URLS=${{ env.APP_URL }} \
+          ConnectionStrings__DotMarc="Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc" \
+          nohup dotnet run --project src/DotMarc/DotMarc.csproj -c Release --no-build > app.log 2>&1 &
+
+      - name: Wait for the demo to answer
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail "${APP_URL}/demo" > /dev/null; then
+              echo "Demo is up after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "The demo never came up. Application log:"
+          cat app.log
+          exit 1
+
+      - name: Capture screenshots
+        working-directory: website
+        run: node scripts/capture-screenshots.mjs --base-url "${APP_URL}"
+
+      - name: Show the application log if the capture failed
+        if: failure()
+        run: cat app.log
+
+      - name: Open a pull request with the changed images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain website/static/img/screenshots)" ]; then
+            echo "The screenshots are already up to date. Nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "${BRANCH}"
+          git add website/static/img/screenshots
+          git commit -m "Update website screenshots"
+          git push --force origin "${BRANCH}"
+
+          if gh pr view "${BRANCH}" --json state --jq '.state' 2>/dev/null | grep -q OPEN; then
+            echo "A pull request for ${BRANCH} is already open and now has the new images."
+          else
+            gh pr create \
+              --base "${GITHUB_REF_NAME}" \
+              --head "${BRANCH}" \
+              --title "Update website screenshots" \
+              --body "Regenerated from a demo-mode dotMARC by the Update Screenshots workflow (website/scripts/capture-screenshots.mjs). The demo data is seeded from the UTC date, so review the images before merging."
+          fi

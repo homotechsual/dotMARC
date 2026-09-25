@@ -71,3 +71,44 @@ Started unless you're exposing this to anyone outside your own machine.
 To stop everything: `Ctrl+C` in the terminal it's running in, or `docker compose down` from
 another terminal (add `-v` to also delete the Postgres data volume and start completely fresh next
 time: `docker compose down -v`).
+
+## Refreshing the website screenshots
+
+The images on the website (in `website/static/img/screenshots`, a light and a dark version of each) are
+captured from a demo-mode dotMARC by a script, so they can be refreshed after a UI change or a change to the
+demo data (`src/DotMarc/Demo`) without taking them by hand.
+
+The demo data is seeded from the UTC date, so a given day always produces the same numbers but the numbers
+change from day to day. Expect every image to differ a little on each run, and only commit the ones that show
+something worth publishing.
+
+### In GitHub
+
+Run the **Update Screenshots** workflow from the Actions tab. It starts PostgreSQL and the demo, captures
+every image, and opens a pull request with the result. It needs the repository setting that lets Actions
+create pull requests (Settings, Actions, General).
+
+### On your machine
+
+Start PostgreSQL as in [Local database-first flow](#local-database-first-flow), then run the app in demo
+mode:
+
+```powershell
+$env:Demo__Enabled = 'true'
+$env:ASPNETCORE_URLS = 'http://localhost:5195'
+dotnet run --project src/DotMarc/DotMarc.csproj
+```
+
+In a second terminal:
+
+```powershell
+cd website
+yarn install
+yarn playwright install chromium
+yarn screenshots
+```
+
+If Microsoft Edge is installed you can skip the browser download with `yarn screenshots --channel msedge`.
+`yarn screenshots --only dashboard-admin,sources-tab` captures just those pictures, and the top of
+`website/scripts/capture-screenshots.mjs` lists the other options (the address of the demo, the output folder,
+which domain the domain pages show, and the tallest an image can be).

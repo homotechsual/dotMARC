@@ -406,6 +406,52 @@ public sealed class DemoDataGeneratorTests
         Assert.Equal(0, breakdown.NoReasonGiven);
     }
 
+    [Theory]
+    [InlineData("driftwood-media.example")]
+    [InlineData("brackenfield-media.example")]
+    public void SpfOnlyDomains_QuarantinedVolume_IsBucketedAsInferredSpfFailure(string domainName)
+    {
+        var domain = Generate().Domains.Single(d => d.Name == domainName);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown(ToReports(domain));
+
+        Assert.True(breakdown.Total > 0, "expected some quarantined volume to demonstrate the reason-breakdown panel");
+        Assert.Equal(breakdown.Total, breakdown.InferredSpfFailure);
+        Assert.Equal(0, breakdown.InferredDkimFailure);
+        Assert.Equal(0, breakdown.InferredBothFailure);
+    }
+
+    [Theory]
+    [InlineData("cdn.willowmere-retail.example")]
+    [InlineData("ironclad-parts.example")]
+    public void DkimOnlyDomains_QuarantinedVolume_IsBucketedAsInferredDkimFailure(string domainName)
+    {
+        var domain = Generate().Domains.Single(d => d.Name == domainName);
+
+        var breakdown = DomainStatistics.GetReasonBreakdown(ToReports(domain));
+
+        Assert.True(breakdown.Total > 0, "expected some quarantined volume to demonstrate the reason-breakdown panel");
+        Assert.Equal(breakdown.Total, breakdown.InferredDkimFailure);
+        Assert.Equal(0, breakdown.InferredSpfFailure);
+        Assert.Equal(0, breakdown.InferredBothFailure);
+    }
+
+    [Fact]
+    public void AcrossAllDomains_EveryReasonBucketIsRepresented_SoTheDashboardBreakdownShowsTheFullRange()
+    {
+        var dataset = Generate();
+
+        var breakdowns = dataset.Domains.Select(domain => DomainStatistics.GetReasonBreakdown(ToReports(domain))).ToList();
+
+        Assert.Contains(breakdowns, breakdown => breakdown.BenignOverride > 0);
+        Assert.Contains(breakdowns, breakdown => breakdown.LocalPolicy > 0);
+        Assert.Contains(breakdowns, breakdown => breakdown.Other > 0);
+        Assert.Contains(breakdowns, breakdown => breakdown.InferredSpfFailure > 0);
+        Assert.Contains(breakdowns, breakdown => breakdown.InferredDkimFailure > 0);
+        Assert.Contains(breakdowns, breakdown => breakdown.InferredBothFailure > 0);
+        Assert.Contains(breakdowns, breakdown => breakdown.NoReasonGiven > 0);
+    }
+
     [Fact]
     public void PalmwoodLogistics_QuarantinedVolume_IsBucketedAsNoReasonGiven()
     {
