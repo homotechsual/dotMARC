@@ -260,3 +260,18 @@ jobs:
           VERSION: ${{ needs.publish-images.outputs.version }}
           CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
         run: node website/scripts/publish-canny-changelog.mjs
+
+  # The website says which version is latest (the homepage and any <LatestVersion /> in the docs), worked out at
+  # build time from the newest GitHub release. That release exists now, so rebuild the site on main to pick it up.
+  # A dispatch on main is what publishes to production: a release event would deploy a preview of the tag instead.
+  refresh-website:
+    name: Refresh the website
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Publish the website
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run website-publish.yml --repo "$GITHUB_REPOSITORY" --ref main

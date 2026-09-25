@@ -8,6 +8,7 @@ import type {PluginOptions as FaqsPluginOptions} from '@homotechsual/docusaurus-
 
 const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = require('./lib/ImageRenderers.cjs');
 const ogPlugin = require('@homotechsual/docusaurus-og');
+const {getLatestVersion} = require('./lib/latest-version.cjs');
 
 const siteTitle = 'dotMARC';
 const siteTagline = 'Self-hosted DMARC monitoring for every client domain, from one mailbox.';
@@ -181,4 +182,9 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 };
 
-export default config;
+// Async so the latest released version can be looked up at build time. It reaches the docs (<LatestVersion />) and
+// the homepage through customFields, so neither needs editing at a release. See lib/latest-version.cjs.
+export default async function createConfigAsync(): Promise<Config> {
+  const latestVersion: string | null = await getLatestVersion();
+  return {...config, customFields: {...config.customFields, latestVersion}};
+}

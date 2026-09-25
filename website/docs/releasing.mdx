@@ -123,6 +123,16 @@ entries cannot be listed, or Canny rejects the entry.
    idea and a final `Published entry ... linkedIdeas=N` line. A `Not linking "..."` line means an
    idea was tagged for this version but was not complete at the time.
 
+## The website follows the latest release
+
+The homepage's "Latest release" badge, and anywhere a doc says `<LatestVersion />` (for example an image tag),
+show the newest published GitHub release, worked out when the site is built by `website/lib/latest-version.cjs`.
+If GitHub can't be reached it falls back to the version in `Directory.Build.props`, and if neither is available
+the docs say `latest`. Nothing needs editing at a release: the `refresh-website` job in `release.yml` starts a
+website publish on `main` once the GitHub release exists. Use `<LatestVersion />` in a doc when it should track
+the release, and write a fixed version only where it is an example. The rules are unit tested:
+`node --test website/lib/latest-version.test.cjs`.
+
 ## Backfilling or republishing
 
 The **Canny Changelog Backfill** workflow runs the same script for a list of versions you give it.

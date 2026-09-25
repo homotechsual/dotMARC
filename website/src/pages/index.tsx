@@ -4,6 +4,7 @@ import Layout from '@theme/Layout';
 import Head from '@docusaurus/Head';
 import ThemedImage from '@theme/ThemedImage';
 import useBaseUrl from '@docusaurus/useBaseUrl';
+import {useLatestVersion} from '@site/src/components/LatestVersion';
 
 const heroCopy = {
   eyebrow: 'dotMARC',
@@ -60,14 +61,26 @@ const capabilities = [
 ];
 
 function HomepageHeader() {
+  const latestVersion = useLatestVersion();
+  const releaseNotesPath = latestVersion ? `/releases-updates/v${latestVersion.replaceAll('.', '-')}` : '/releases-updates';
+
   return (
     <header className="relative overflow-hidden pt-12 pb-6 sm:pt-16 lg:pt-24">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[34rem] bg-[radial-gradient(circle_at_top_left,rgba(38,49,65,0.16),transparent_35%),radial-gradient(circle_at_top_right,rgba(227,89,79,0.18),transparent_28%)]" />
       <div className="container relative mx-auto px-4">
         <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(38,49,65,0.14)] bg-white/80 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.22em] text-[#263141] shadow-[0_12px_30px_rgba(38,49,65,0.08)] backdrop-blur dark:border-white/10 dark:bg-[#1e2a3a]/80 dark:text-[#fad0cc]">
-            <span className="h-2 w-2 rounded-full bg-[#e3594f]" />
-            {heroCopy.eyebrow}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(38,49,65,0.14)] bg-white/80 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.22em] text-[#263141] shadow-[0_12px_30px_rgba(38,49,65,0.08)] backdrop-blur dark:border-white/10 dark:bg-[#1e2a3a]/80 dark:text-[#fad0cc]">
+              <span className="h-2 w-2 rounded-full bg-[#e3594f]" />
+              {heroCopy.eyebrow}
+            </div>
+            {latestVersion ? (
+              <Link
+                className="inline-flex items-center gap-2 rounded-full border border-[#263141]/10 px-4 py-2 text-xs font-bold text-[#5b6b7d] transition-colors duration-200 hover:border-[#263141]/20 hover:text-[#e3594f] hover:no-underline dark:border-white/10 dark:text-[#9fb0c2] dark:hover:text-[#ef8b86]"
+                to={releaseNotesPath}>
+                Latest release <span className="text-[#161e29] dark:text-[#fcfcfc]">v{latestVersion}</span>
+              </Link>
+            ) : null}
           </div>
           <h1 className="mt-5 max-w-4xl text-5xl font-black tracking-[-0.06em] text-[#161e29] sm:text-6xl lg:text-7xl dark:text-[#fcfcfc]">
             {heroCopy.title}
