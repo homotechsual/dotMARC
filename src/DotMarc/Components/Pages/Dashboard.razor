@@ -48,40 +48,40 @@ else
 
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Height="100%" Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.h5">@_summary.DomainCount</MudText>
+            <MudPaper Height="100%" Class="pa-4 stat-card" Elevation="1">
+                <MudText Typo="Typo.h5" Class="stat-value">@_summary.DomainCount</MudText>
                 <MudText Typo="Typo.caption">domains monitored</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Height="100%" Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.h5" Color="Color.Success">@_summary.OverallPassRate.ToString("P1")</MudText>
+            <MudPaper Height="100%" Class="pa-4 stat-card" Elevation="1">
+                <MudText Typo="Typo.h5" Class="stat-value" Color="Color.Success">@_summary.OverallPassRate.ToString("P1")</MudText>
                 <MudText Typo="Typo.caption">overall pass rate (30d)</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Height="100%" Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.h5" Color="Color.Warning">@_summary.WarningCount</MudText>
+            <MudPaper Height="100%" Class="pa-4 stat-card" Elevation="1">
+                <MudText Typo="Typo.h5" Class="stat-value" Color="Color.Warning">@_summary.WarningCount</MudText>
                 <MudText Typo="Typo.caption">domains with warnings</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Height="100%" Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.h5" Color="Color.Error">@_summary.MissingCount</MudText>
+            <MudPaper Height="100%" Class="pa-4 stat-card" Elevation="1">
+                <MudText Typo="Typo.h5" Class="stat-value" Color="Color.Error">@_summary.MissingCount</MudText>
                 <MudText Typo="Typo.caption">missing expected report</MudText>
             </MudPaper>
         </MudItem>
         <AuthorizeView Policy="DomainsWrite">
             <MudItem xs="12" sm="6" md="2">
-                <MudPaper Height="100%" Class="pa-4 cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
-                    <MudText Typo="Typo.h5" Color="@(!IsFilterActive && _summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
+                <MudPaper Height="100%" Class="pa-4 stat-card cursor-pointer" Elevation="1" @onclick="@(() => Navigation.NavigateTo("/parse-failures"))">
+                    <MudText Typo="Typo.h5" Class="stat-value" Color="@(!IsFilterActive && _summary.ParseFailureCount > 0 ? Color.Error : Color.Default)">@_summary.ParseFailureCount</MudText>
                     <MudText Typo="Typo.caption">unparseable messages@(IsFilterActive ? " (all domains)" : "")</MudText>
                 </MudPaper>
             </MudItem>
         </AuthorizeView>
         <MudItem xs="12" sm="6" md="2">
-            <MudPaper Height= "100%" Class="pa-4 cursor-pointer" Elevation="1">
-                <MudText Typo="Typo.h5">@_summary.SourceCount</MudText>
+            <MudPaper Height="100%" Class="pa-4 stat-card cursor-pointer" Elevation="1">
+                <MudText Typo="Typo.h5" Class="stat-value">@_summary.SourceCount</MudText>
                 <MudText Typo="Typo.caption">sources provided reports</MudText>
             </MudPaper>
         </MudItem>
@@ -99,19 +99,19 @@ else
                               Width="220px" Height="220px" />
                 </MudItem>
                 <MudItem xs="12" sm="7" Class="d-flex align-center">
-                    <MudText Typo="Typo.body2">
-                        Of @_summary.ReasonBreakdown.Total rejected/quarantined messages: @_summary.ReasonBreakdown.BenignOverride benign
-                        override (forwarders/mailing lists), @_summary.ReasonBreakdown.LocalPolicy local policy,
-                        @_summary.ReasonBreakdown.Other other, @_summary.ReasonBreakdown.InferredSpfFailure with an inferred SPF-only
-                        failure, @_summary.ReasonBreakdown.InferredDkimFailure with an inferred DKIM-only failure,
-                        @_summary.ReasonBreakdown.InferredBothFailure with both inferred failing, @_summary.ReasonBreakdown.NoReasonGiven no reason given.
-                    </MudText>
+                    <ReasonBreakdownList Breakdown="_summary.ReasonBreakdown" />
                 </MudItem>
             </MudGrid>
         </MudPaper>
     }
 
     <MudTable Items="_rows" Hover="true" T="DashboardDomainRow" CustomHeader="true" Filter="RowMatchesFilters">
+        @* The filters apply to every column, so the toggle sits above the table rather than inside one column's heading. *@
+        <ToolBarContent>
+            <MudSpacer />
+            <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                       OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
+        </ToolBarContent>
         <HeaderContent>
             <tr>
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Name)">Domain</MudTableSortLabel></MudTh>
@@ -119,11 +119,7 @@ else
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.PassRate ?? -1)">Pass rate (30d)</MudTableSortLabel></MudTh>
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
-                <MudTh colspan="2" Style="text-align:center; position:relative">
-                    DNS Status
-                    <MudIconButton Icon="@Icons.Material.Filled.FilterList" Size="Size.Small" Color="@(_showFilters ? Color.Primary : Color.Default)"
-                                   OnClick="@(() => _showFilters = !_showFilters)" Style="position:absolute; right:0; top:50%; transform:translateY(-50%);" title="Toggle column filters" />
-                </MudTh>
+                <MudTh colspan="2" Style="text-align:center">DNS Status</MudTh>
             </tr>
             <tr>
                 <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus))">DMARC</MudTableSortLabel></MudTh>

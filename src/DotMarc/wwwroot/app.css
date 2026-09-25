@@ -47,3 +47,27 @@ html {
 .mud-button-root .mud-button-icon-end {
     transform: translateY(-0.08em);
 }
+
+/* The dashboard summary cards: the number is centred above its caption and sized with the viewport (bigger on wide
+   screens, but small enough that six fit across at the medium breakpoint). */
+.stat-card {
+    text-align: center;
+}
+
+.stat-card .stat-value {
+    font-size: clamp(1.75rem, 2.6vw, 2.75rem);
+    line-height: 1.1;
+    margin-bottom: 0.25rem;
+}
+
+/* The reject/quarantine reasons list: compact bullets, with reasons that have no messages dimmed. */
+.reason-list {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.reason-list .reason-none {
+    color: var(--mud-palette-text-secondary);
+}

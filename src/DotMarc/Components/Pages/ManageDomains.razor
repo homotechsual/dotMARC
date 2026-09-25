@@ -41,6 +41,12 @@
 else
 {
     <MudTable Items="_domains" Hover="true" T="DomainRow" CustomHeader="true" Filter="RowMatchesFilters">
+        @* The filters apply to every column, so the toggle sits above the table rather than inside a column heading. *@
+        <ToolBarContent>
+            <MudSpacer />
+            <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                       OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
+        </ToolBarContent>
         <HeaderContent>
             <tr>
                 <MudTh></MudTh>
@@ -54,10 +60,7 @@ else
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.ReportCount)">Reports</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
-                <MudTh>
-                    <MudIconButton Icon="@Icons.Material.Filled.FilterList" Size="Size.Small" Color="@(_showFilters ? Color.Primary : Color.Default)"
-                                   OnClick="@(() => _showFilters = !_showFilters)" title="Toggle column filters" />
-                </MudTh>
+                <MudTh></MudTh>
             </tr>
             @if (_showFilters)
             {

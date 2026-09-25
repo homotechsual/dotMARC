@@ -1,0 +1,30 @@
+@using DotMarc.Reporting
+@* The reject/quarantine reason counts as a bulleted list, in the same order as the donut chart's legend. Reasons
+   with no messages stay in the list (so "none of these" is visible) but are dimmed. Shared by the Dashboard and the
+   domain page so both read the same. *@
+@* One root element, so a flex parent (both pages centre this vertically in a flex row) doesn't lay the heading and the
+   list out side by side. *@
+<div>
+    <MudText Typo="Typo.body2" Class="mb-1">Of @Breakdown.Total rejected/quarantined messages:</MudText>
+    <ul class="reason-list">
+        @foreach (var reason in Reasons)
+        {
+            <li class="@(reason.Count == 0 ? "reason-none" : null)"><strong>@reason.Count</strong> @reason.Description</li>
+        }
+    </ul>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ReasonBreakdown Breakdown { get; set; } = default!;
+
+    private IEnumerable<(int Count, string Description)> Reasons =>
+    [
+        (Breakdown.BenignOverride, "benign override (forwarders and mailing lists)"),
+        (Breakdown.LocalPolicy, "local policy"),
+        (Breakdown.Other, "other"),
+        (Breakdown.InferredSpfFailure, "inferred SPF-only failure"),
+        (Breakdown.InferredDkimFailure, "inferred DKIM-only failure"),
+        (Breakdown.InferredBothFailure, "inferred SPF and DKIM both failing"),
+        (Breakdown.NoReasonGiven, "no reason given"),
+    ];
+}
