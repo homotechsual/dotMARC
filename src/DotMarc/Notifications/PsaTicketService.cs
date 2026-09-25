@@ -35,6 +35,19 @@ public sealed class PsaTicketService : IPsaTicketService
             return;
         }
 
+        // Only this alert type's rules matter, and of the group rules only the deciding group's (the one whose
+        // Halo client the ticket would go to), so read just those plus the global ones.
+        var decidingGroupId = HaloClientResolver.ResolveGroup(domain)?.Id;
+        var rules = await context.AlertTicketRules
+            .AsNoTracking()
+            .Where(rule => rule.AlertType == alert.AlertType && (rule.GroupId == null || rule.GroupId == decidingGroupId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (!AlertTicketPolicy.ShouldCreateTicket(alert.AlertType, domain, rules))
+        {
+            return;
+        }
+
         // AlertingService's cooldown logic (pre-dating this feature) creates a new AlertEvent once
         // the cooldown elapses for a still-unresolved condition, without resolving the earlier one
         // - a domain that stays unhealthy would otherwise accumulate a fresh open Halo ticket every
