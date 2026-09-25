@@ -1,0 +1,113 @@
+---
+slug: v0-7-0
+title: "dotMARC v0.7.0: HaloPSA that works, no more dropped reports, and failure reasons explained"
+description: HaloPSA sign-in and priorities are fixed, with a one-click test of the whole ticket lifecycle and control over which alerts create tickets, per client. DMARC reports with unusual values are now read, failure reasons are inferred when a receiver gives none, and there are server logs in the app and faster pages.
+authors: [mikey]
+tags: [release]
+---
+
+Since [`v0.6.0`](/blog/v0-6-0), this release has mostly been about trust: fixing things that were
+quietly not working, and giving you ways to see for yourself that they do.
+
+{/* truncate */}
+
+## HaloPSA now works, and you can prove it
+
+The HaloPSA integration could not actually sign in: dotMARC asked Halo for a scope that doesn't exist,
+so every attempt was rejected. Once past that, the priority list failed to load too, because Halo
+returns one row per priority per SLA rather than a plain list. Both are fixed, and errors now quote what
+Halo actually answered instead of a vague "couldn't reach".
+
+More usefully, **Alert settings** now has a **Test the integration** button. It creates a clearly marked
+test ticket from your most recent alert's details, closes it using your closed status, then waits for Halo
+to call the webhook back, showing each step as it goes. When something is wrong, the message says what to
+check: a status that doesn't match your closed status, a body dotMARC couldn't read, or a webhook URL with
+the wrong secret. A list of recent webhook calls shows what Halo has really sent, and the webhook URL now
+copies with a click. The webhook reads the ticket and its status from whichever payload Halo is set to
+send, and asks Halo for the status when the payload only names the ticket. When it can't find the ticket
+at all, the list shows the field names Halo sent, never their values. See [PSA integration](/docs/psa-integration#test-the-whole-integration) for the
+walkthrough.
+
+Halo also refuses to close a ticket that nobody is assigned to, so there is a new **Assign new tickets
+to** setting. Pick an agent, or leave it on **Don't assign** if your Halo assigns tickets itself (round
+robin, a rule or the ticket type's default).
+
+What dotMARC can do in Halo is decided by the agent the API application signs in as, and Halo has no
+scopes for that, so the PSA docs now list a tested set of role permissions for it and what each missing
+one looks like. Halo may bake a role's permissions into the sign-in token dotMARC keeps for about an
+hour, so there is a **Clear cached sign-in** button, and saving the PSA settings clears it too. The
+PSA settings are also tidier: grouped into Connection, Ticket defaults and Webhook, and your chosen
+ticket type, priority, closed status and agent now show by name instead of a number.
+
+If you set up Halo on an earlier version, it most likely never worked. After upgrading, load the options
+again, pick your priority, closed status and, if you want one, an agent, save, and run the test.
+
+## Choose which alerts create tickets
+
+Every alert used to open a HaloPSA ticket. Now **Alert settings** has a **Which alerts create tickets**
+panel with a switch for each alert type, and a group can override it for its own client: on **Manage
+groups**, a group with a Halo client has a **Ticket rules** button where each alert type can follow the
+default, always create tickets, or never create them. A group with overrides shows a badge such as
+"2 overrides".
+
+A rule only decides whether a ticket is created. The alert is still recorded, any Teams or webhook
+notification still goes out, and an existing ticket still closes when its alert resolves. If a domain
+belongs to several groups, the rules of the group its ticket goes to apply, and a domain with its own Halo
+client uses the global settings. Nothing changes until you edit a rule: every alert type creates tickets
+by default. See [Choose which alerts create tickets](/docs/psa-integration#choose-which-alerts-create-tickets).
+
+## Reports that were being dropped are now read
+
+Some receivers write values like `Fail` (capitalised) or `no policy` where the DMARC schema expects
+lowercase, and dotMARC's report library rejected those reports outright. They were left unread in the
+mailbox and retried on every poll, which meant missing data and around 158,000 warnings since the first
+release. They are now read, while genuinely unknown values are still rejected.
+
+Expect a backlog of previously stuck reports to appear on the first poll after upgrading, which can move
+your dashboard numbers and resolve missed-report alerts. One known limitation remains: a report that uses
+the `sampled_out` override reason still can't be read, because of a bug in the report library.
+
+## Why was this rejected, when the receiver won't say?
+
+Many receivers send a rejected or quarantined source with no reason at all. dotMARC now works out a
+plain-English explanation from the SPF and DKIM results in the report, such as no DKIM signature, or SPF
+passing for a different domain than the From: address, and marks it **Inferred** so it is never mistaken
+for a reason the receiver reported. The reason-breakdown charts split these into SPF-only, DKIM-only and
+both.
+
+The Sources tab also shows when each source was first seen (with a **New** badge for recent ones) and a
+7-day volume sparkline, names well-known email services such as SendGrid and Mailgun in its
+recommendations, and the suspicious reject activity alert now breaks down which mechanism failed.
+
+## See what the server is doing
+
+Diagnosing a failed integration used to need access to the host's logs. **Manage > Server logs** now shows
+the most recent warnings, errors and dotMARC's own messages, newest first, with level and text filters,
+auto-refresh and a copy button. Secrets in URLs and tokens are redacted, and access is its own
+`LogsView` permission, part of the Admin role. Entries live in memory and reset when the app restarts,
+and nothing is captured on demo instances. See [Server logs](/docs/server-logs).
+
+## Smaller things
+
+* **More DNS providers recognised.** Microsoft 365, Amazon Route 53, GoDaddy, Namecheap, DigitalOcean,
+  OVH, Gandi, NS1, DNS Made Easy and Vercel are detected, and the DNS provider row shows a domain's
+  actual nameservers on hover. One-click DNS push still works for Cloudflare, Azure DNS and Google Cloud
+  DNS.
+* **Faster Dashboard and domain pages.** They no longer load every report's full raw XML, which nothing
+  on those pages uses, and related data is loaded separately instead of being multiplied into one large
+  result. What you see is unchanged.
+
+## Upgrading
+
+Five database migrations run automatically at startup. One adds a nameservers column to domains, one adds
+the Halo agent setting, one saves the names of your chosen Halo ticket type, priority, status and agent
+beside their ids, one adds the table for ticket rules (empty, so every alert type keeps creating
+tickets), and the other changes no schema, so nothing moves and it is safe to roll back. The built-in
+Admin role gains `LogsView` on its own; a custom role needs it granting from **Manage Access**. The new
+settings are **Assign new tickets to**, which defaults to leaving assignment to Halo, and the ticket rules,
+which default to creating tickets for everything.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.7.0) for
+everything that shipped between these two tags, including the usual pile of fixes.
