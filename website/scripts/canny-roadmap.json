@@ -231,5 +231,23 @@
       "Until now the only way to know the HaloPSA integration worked was to wait for a real alert, with no way to see where it went wrong.",
       "Alert settings now has a Test the integration button. It creates a clearly marked test ticket from the most recent alert's details, closes it using your closed status, then waits for Halo to call the webhook back, showing each step as it goes. When something fails, the message says what Halo answered or what to check, such as a wrong webhook secret or a status that does not match your closed status. It uses your saved settings, leaves one closed [dotMARC test] ticket in Halo, and does not touch any real alert. A list of recent calls to the webhook shows what Halo has actually sent."
     ]
+  },
+  {
+    "title": "Choose which alert types create HaloPSA tickets, globally and per client",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "Every alert opened a HaloPSA ticket, with no way to say that one kind of alert is not worth a ticket, or that one client does not want it.",
+      "Alert settings now has a Which alerts create tickets panel with a switch for each alert type. A group (client) can override it from Manage groups: for each alert type it can follow the default, always create tickets, or never create them. A rule only decides whether a ticket is created, so the alert is still recorded and notified, and an existing ticket still closes when its alert resolves. Every alert type creates tickets until someone changes a rule."
+    ]
+  },
+  {
+    "title": "Assign new HaloPSA tickets to an agent, or leave assignment to Halo",
+    "version": "v0.7.0",
+    "status": "complete",
+    "details": [
+      "Halo will not close a ticket that nobody is assigned to, so tickets dotMARC opened could not be closed again when their alert resolved.",
+      "Alert settings now has an Assign new tickets to setting. Pick an agent, or leave it on Do not assign if Halo assigns tickets itself through round robin, a rule or the ticket type default. The PSA docs also list the API agent permissions known to work, and there is a button to clear the cached Halo sign-in after changing them."
+    ]
   }
 ]
