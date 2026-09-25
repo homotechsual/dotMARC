@@ -465,6 +465,85 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         return (bool)(await command.ExecuteScalarAsync())!;
     }
 
+    private async Task SeedMappedMonitoredDomainAsync(string domainName)
+    {
+        await using var context = CreateContext();
+        var haloSettings = await context.HaloPsaSettings.SingleAsync();
+        haloSettings.Enabled = true;
+        haloSettings.AccountName = "contoso";
+        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        context.Groups.Add(group);
+        context.Domains.Add(new Domain
+        {
+            Name = domainName,
+            IsMonitored = true,
+            FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-10),
+            LastReportReceivedUtc = DateTimeOffset.UtcNow.AddDays(-3),
+            Groups = [group]
+        });
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_WithNoTicketRule_OpensATicketForTheAlert()
+    {
+        // The control for the next test: the same setup does open a ticket when nothing has been switched off.
+        await SeedSettingsAsync();
+        await SeedMappedMonitoredDomainAsync("contoso.io");
+        var fakeHalo = new CountingHaloPsaClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), new PsaTicketService(fakeHalo), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync();
+        Assert.Equal(1, fakeHalo.CreateCallCount);
+        Assert.Equal("9000", alert.ExternalTicketId);
+    }
+
+    [Fact]
+    public async Task CheckPinnedDomainsAsync_WhenTheTicketRuleIsOff_RecordsTheAlertAndNotifiesButOpensNoTicket()
+    {
+        await SeedSettingsAsync();
+        await SeedMappedMonitoredDomainAsync("contoso.io");
+        await using (var setup = CreateContext())
+        {
+            await AlertTicketRuleService.SetGlobalAsync(setup, AlertTypes.MissedReport, false);
+        }
+
+        var fakeNotifier = new FakeAlertWebhookClient();
+        var fakeHalo = new CountingHaloPsaClient();
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, new PsaTicketService(fakeHalo), NullLogger<AlertingService>.Instance);
+
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        var alert = await verify.AlertEvents.SingleAsync();
+        Assert.Equal(AlertTypes.MissedReport, alert.AlertType);
+        Assert.Null(alert.ExternalTicketId);
+        Assert.Equal(1, fakeNotifier.CallCount);
+        Assert.Equal(0, fakeHalo.CreateCallCount);
+    }
+
+    private sealed class CountingHaloPsaClient : IHaloPsaClient
+    {
+        public int CreateCallCount { get; private set; }
+
+        public Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloClient>>([]);
+        public Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketType>>([]);
+        public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
+        public Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloPriority>>([]);
+        public Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloAgent>>([]);
+        public Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default) => Task.FromResult(9);
+        public Task CloseTicketAsync(HaloPsaSettings settings, string ticketId, string note, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+        {
+            CreateCallCount++;
+            return Task.FromResult("9000");
+        }
+    }
+
     private sealed class FakeAlertWebhookClient : IAlertWebhookClient
     {
         public int CallCount { get; private set; }

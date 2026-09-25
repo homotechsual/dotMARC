@@ -9,16 +9,8 @@ public static class HaloClientResolver
 {
     public static int? Resolve(Domain domain)
     {
-        if (domain.HaloClientId is { } domainOverride)
-        {
-            return domainOverride;
-        }
-
-        return domain.Groups
-            .Where(g => g.HaloClientId is not null)
-            .OrderBy(g => g.Id)
-            .Select(g => g.HaloClientId)
-            .FirstOrDefault();
+        // Shares ResolveGroup so which client a ticket goes to and whose ticket rules apply can never disagree.
+        return domain.HaloClientId ?? ResolveGroup(domain)?.HaloClientId;
     }
 
     /// <summary>The Group whose Halo client a domain's ticket goes to, which is also the Group whose ticket rules

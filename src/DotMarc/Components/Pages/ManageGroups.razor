@@ -424,9 +424,17 @@
         var dialogRef = await DialogService.ShowAsync<GroupTicketRulesDialog>("Ticket rules", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         await dialogRef.Result;
 
-        // The dialog saves each change itself, so refresh the badge counts when it closes.
-        await using var db = await DbFactory.CreateDbContextAsync();
-        _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
+        // The dialog saves each change itself, so refresh the badge counts when it closes. A failure here must not
+        // escape the handler (that would end the user's session); the badges just stay as they were.
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Couldn't refresh the ticket rule badges. Reload the page to see the latest.", Severity.Warning);
+        }
     }
 
     private sealed record GroupRow(int Id, string Name, int DomainCount, int? HaloClientId);

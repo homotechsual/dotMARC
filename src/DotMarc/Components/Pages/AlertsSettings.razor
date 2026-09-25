@@ -179,7 +179,7 @@ else
         </div>
     </MudPaper>
 
-    @if (_haloSettings.Enabled)
+    @if (_haloSyncSaved)
     {
         <MudPaper Class="pa-4 mt-4">
             <MudText Typo="Typo.h5" Class="mb-1">Which alerts create tickets</MudText>
@@ -287,6 +287,10 @@ else
     private List<HaloAgent> _haloAgents = [];
     private Dictionary<string, bool> _globalTicketRules = [];
 
+    // Whether ticket sync is switched on in the saved settings. The ticket rules panel follows this, not the switch above it,
+    // which can be flipped without saving.
+    private bool _haloSyncSaved;
+
     // MudSwitch keeps its own toggled state. Bumping this after a failed save changes the switch @key, so a fresh
     // instance is created that shows the stored value again instead of the value the user just clicked.
     private int _ticketRuleRenderVersion;
@@ -336,6 +340,7 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await NotificationSettingsService.GetAsync(db);
         _haloSettings = await HaloPsaSettingsService.GetAsync(db);
+        _haloSyncSaved = _haloSettings.Enabled;
         _globalTicketRules = await AlertTicketRuleService.GetGlobalAsync(db);
     }
 
@@ -588,6 +593,7 @@ else
 
             await using var reloadDb = await DbFactory.CreateDbContextAsync();
             _haloSettings = await HaloPsaSettingsService.GetAsync(reloadDb);
+            _haloSyncSaved = _haloSettings.Enabled;
         }
         catch (Exception)
         {

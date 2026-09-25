@@ -217,7 +217,9 @@ public sealed class AlertingService : IAlertingService
     {
         if (AlertTypes.Find(alertType) is null)
         {
-            throw new InvalidOperationException($"Alert type '{alertType}' is not in AlertTypes.All, so it can't be controlled from the ticket rule screens. Add it there.");
+            // A developer slip, not something to stop the cycle over: the alert is still raised (and creates a ticket,
+            // the default), it just isn't listed on the ticket rule screens until it is added to AlertTypes.All.
+            _logger.LogError("Alert type {AlertType} is not in AlertTypes.All, so it can't be controlled from the ticket rule screens. Add it there. The alert is still raised.", alertType);
         }
 
         var activeAlert = await context.AlertEvents
