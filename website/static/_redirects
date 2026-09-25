@@ -1,0 +1,4 @@
+# The blog moved to /releases-updates. Pages are redirected by the client-redirects plugin (see docusaurus.config.ts),
+# but feeds are files rather than pages, so the plugin can't cover them. These keep existing feed subscriptions working.
+/blog/rss.xml   /releases-updates/rss.xml   301
+/blog/atom.xml  /releases-updates/atom.xml  301
