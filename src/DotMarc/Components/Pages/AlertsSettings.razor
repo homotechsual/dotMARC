@@ -105,7 +105,7 @@ else
             </MudItem>
             <MudItem xs="12" md="6" Class="d-flex align-start">
                 <MudTooltip Text="dotMARC keeps Halo's sign-in for about an hour. If you've just changed the API agent's role or permissions in Halo, clear it so the next call signs in again and picks the change up.">
-                    <MudButton Variant="Variant.Text" Class="mt-2" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ClearHaloSignInAsync">Clear cached sign-in</MudButton>
+                    <MudButton Variant="Variant.Text" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ClearHaloSignInAsync">Clear cached sign-in</MudButton>
                 </MudTooltip>
             </MudItem>
         </MudGrid>
@@ -164,7 +164,7 @@ else
                 </div>
             </MudItem>
             <MudItem xs="12" md="3" Class="d-flex align-start">
-                <MudButton Variant="Variant.Outlined" Class="mt-2" StartIcon="@Icons.Material.Filled.VpnKey" OnClick="GenerateWebhookSecretAsync">Generate new secret</MudButton>
+                <MudButton Variant="Variant.Outlined" Class="button-beside-input" StartIcon="@Icons.Material.Filled.VpnKey" OnClick="GenerateWebhookSecretAsync">Generate new secret</MudButton>
             </MudItem>
             @if (_webhookSecretJustGenerated)
             {

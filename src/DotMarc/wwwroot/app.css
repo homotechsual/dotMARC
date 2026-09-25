@@ -30,3 +30,12 @@ html {
     border-top: 1px solid var(--mud-palette-lines-default);
     text-align: center;
 }
+
+/* A button placed beside an outlined input. MudBlazor's outlined inputs are 56px tall and its buttons about 36px,
+   so the row looked lopsided. This makes the button the same height as the input, keeping the row one control.
+   The 8px top margin matches the space MudBlazor leaves above an outlined input for its floating label, so the
+   tops line up as well as the heights. */
+.mud-button-root.button-beside-input {
+    height: 56px;
+    margin-top: 8px;
+}
