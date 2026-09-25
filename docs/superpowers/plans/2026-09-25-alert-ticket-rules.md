@@ -1274,7 +1274,7 @@ order: 6
 - [ ] **Step 3: Build the docs**
 
 Run: `cd website && npm run build`
-Expected: `Generated static files in "build"` with no errors. Also run `grep -c "—" website/docs/psa-integration.mdx website/data/faqs/ticket-rules.yaml`, expected `0` for both.
+Expected: `Generated static files in "build"` with no errors. Also run `grep -c $'\xe2\x80\x94' website/docs/psa-integration.mdx website/data/faqs/ticket-rules.yaml` (that byte sequence is an em dash), expected `0` for both.
 
 - [ ] **Step 4: Run the whole suite**
 
