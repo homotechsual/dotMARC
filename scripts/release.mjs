@@ -76,6 +76,8 @@ function prepare(version) {
     fail(`Multiple blog posts already use slug ${slug}`);
   }
 
+  // The filename carries the day (Docusaurus and the Canny changelog read it) and the post's own `date` carries the
+  // time. Docusaurus sorts posts by date alone, so without a time two releases on the same day list in the wrong order.
   const date = new Date().toISOString().slice(0, 10);
   const blogFile = existingFiles[0] ?? `${date}-${slug}.mdx`;
   const blogPath = join(blogDirectory, blogFile);
@@ -88,7 +90,7 @@ function prepare(version) {
 
   if (!existsSync(blogPath)) {
     mkdirSync(blogDirectory, {recursive: true});
-    writeFileSync(blogPath, `---\nslug: ${slug}\ntitle: "dotMARC ${slug}: release notes"\nauthors: [mikey]\ntags: [release]\n---\n\n<!-- Replace this with the release notes before running the tag phase. -->\n`);
+    writeFileSync(blogPath, `---\nslug: ${slug}\ndate: ${new Date().toISOString()}\ntitle: "dotMARC ${slug}: release notes"\nauthors: [mikey]\ntags: [release]\n---\n\n<!-- Replace this with the release notes before running the tag phase. -->\n`);
     console.log(`[release] Created ${blogPath}`);
   } else {
     console.log(`[release] Blog post already exists: ${blogPath}`);
