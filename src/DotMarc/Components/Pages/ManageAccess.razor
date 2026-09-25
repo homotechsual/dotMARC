@@ -84,11 +84,11 @@
     <MudText Typo="Typo.h6" Class="mb-2">Access grants</MudText>
     <MudGrid>
         <MudItem xs="5">
-            <MudTextField @bind-Value="_newGrantEmail" Label="Email" Placeholder="person@example.com"
+            <MudTextField @bind-Value="_newGrantEmail" Label="Email" Placeholder="person@example.com" Variant="Variant.Outlined"
                           Error="@(_addGrantError is not null)" ErrorText="@_addGrantError" Immediate="true" />
         </MudItem>
         <MudItem xs="3">
-            <MudSelect T="int" @bind-Value="_newGrantRoleId" Label="Role">
+            <MudSelect T="int" @bind-Value="_newGrantRoleId" Label="Role" Variant="Variant.Outlined">
                 @foreach (var role in _roles ?? [])
                 {
                     <MudSelectItem T="int" Value="role.Id">@role.Name</MudSelectItem>
@@ -98,7 +98,7 @@
         @if (SelectedNewGrantRoleIsScopable)
         {
             <MudItem xs="4">
-                <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_newGrantGroupIds" Label="Groups"
+                <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_newGrantGroupIds" Label="Groups" Variant="Variant.Outlined"
                            MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "All (unrestricted)" : $"{selected.Count} group(s)")"
                            RelativeWidth="DropdownWidth.Adaptive">
                     @foreach (var group in _allGroups)

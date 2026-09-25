@@ -196,7 +196,8 @@ else
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@alertType.Description</MudText>
                     </div>
                     <MudSwitch @key="@($"{alertType.Key}-{_ticketRuleRenderVersion}")" T="bool" Value="@TicketRuleValue(alertType)" ValueChanged="@(createTicket => SetTicketRuleAsync(alertType, createTicket))"
-                               Color="Color.Primary" Label="@(TicketRuleValue(alertType) ? "Creates tickets" : "No tickets")" />
+                               Color="Color.Primary" Label="@(TicketRuleValue(alertType) ? "Creates tickets" : "No tickets")"
+                               UserAttributes="@(new Dictionary<string, object> { ["aria-label"] = $"{alertType.DisplayName}: {(TicketRuleValue(alertType) ? "creates tickets" : "no tickets")}" })" />
                 </div>
             }
         </MudPaper>
