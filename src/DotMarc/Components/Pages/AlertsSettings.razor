@@ -179,6 +179,29 @@ else
         </div>
     </MudPaper>
 
+    @if (_haloSettings.Enabled)
+    {
+        <MudPaper Class="pa-4 mt-4">
+            <MudText Typo="Typo.h5" Class="mb-1">Which alerts create tickets</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Turn off an alert type to stop it opening HaloPSA tickets. The alert is still recorded and any Teams or webhook
+                notification still goes out. A group can override this for its own client from Manage groups. A domain that has its own
+                Halo client set on Manage domains uses these settings.
+            </MudText>
+            @foreach (var alertType in AlertTypes.All)
+            {
+                <div class="d-flex align-center justify-space-between py-2" style="gap: 1rem; border-top: 1px solid var(--mud-palette-lines-default);">
+                    <div>
+                        <MudText Typo="Typo.subtitle2">@alertType.DisplayName</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@alertType.Description</MudText>
+                    </div>
+                    <MudSwitch T="bool" Value="@TicketRuleValue(alertType)" ValueChanged="@(createTicket => SetTicketRuleAsync(alertType, createTicket))"
+                               Color="Color.Primary" Label="@(TicketRuleValue(alertType) ? "Creates tickets" : "No tickets")" />
+                </div>
+            }
+        </MudPaper>
+    }
+
     <MudPaper Class="pa-4 mt-4" Elevation="1">
         <MudText Typo="Typo.h6" Class="mb-2">Test the integration</MudText>
         <MudText Typo="Typo.body2" Class="mb-3">
@@ -262,6 +285,26 @@ else
     private List<HaloTicketStatus> _haloStatuses = [];
     private List<HaloPriority> _haloPriorities = [];
     private List<HaloAgent> _haloAgents = [];
+    private Dictionary<string, bool> _globalTicketRules = [];
+
+    private bool TicketRuleValue(AlertTypeInfo alertType) =>
+        _globalTicketRules.TryGetValue(alertType.Key, out var createTicket) ? createTicket : alertType.CreatesTicketByDefault;
+
+    private async Task SetTicketRuleAsync(AlertTypeInfo alertType, bool createTicket)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await AlertTicketRuleService.SetGlobalAsync(db, alertType.Key, createTicket);
+            _globalTicketRules[alertType.Key] = createTicket;
+            Snackbar.Add($"{alertType.DisplayName}: tickets {(createTicket ? "on" : "off")}.", Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Saving the ticket rule for {AlertType} failed", alertType.Key);
+            Snackbar.Add("Couldn't save that ticket rule. Try again.", Severity.Error);
+        }
+    }
 
     // MudSelect can't offer a null item, so "don't assign" is 0 here and null on the saved settings.
     private const int DontAssignAgent = 0;
@@ -288,6 +331,7 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await NotificationSettingsService.GetAsync(db);
         _haloSettings = await HaloPsaSettingsService.GetAsync(db);
+        _globalTicketRules = await AlertTicketRuleService.GetGlobalAsync(db);
     }
 
     private async Task SaveAsync()
