@@ -167,6 +167,46 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheRealHaloTicketStatusChangedPayload_ResolvesTheAlert()
+    {
+        // The structure Halo actually sends for "ticket status changed" (seen on a live tenant, with the
+        // ticket's text and most of its fields left out): the ticket's number at the top level as object_id,
+        // and the whole ticket, including status_id, nested under "ticket". Its own top-level id is a GUID.
+        var response = await PostRawAsync("""
+            {
+              "id": "8e25bc7b-e07e-4102-9398-5d6647e1e79d",
+              "webhook_id": "53232637-7724-4a19-b126-3c7267a292aa",
+              "notification_id": 41,
+              "escmsg_id": "a726ee11-acb8-f111-8260-02725cb0e102",
+              "event": "ticket status changed",
+              "message": "The status has been changed for Ticket ID: 0004242.",
+              "object_id": 4242,
+              "agent_id": 3,
+              "timestamp": "2026-09-25T06:41:08.7895915Z",
+              "ticket": {
+                "id": 4242,
+                "summary": "redacted",
+                "status_id": 9,
+                "tickettype_id": 25,
+                "client_id": 1,
+                "team_id": 5,
+                "agent_id": 3,
+                "customfields": [],
+                "hasbeenclosed": true
+              }
+            }
+            """);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var receipt = LatestReceipt();
+        Assert.Equal(HaloWebhookDelivery.ClosedStatus, receipt.Delivery);
+        Assert.Equal(4242, receipt.TicketId);
+        Assert.Equal(9, receipt.StatusId);
+        Assert.True(receipt.ResolvedAnAlert);
+        Assert.Empty(_statusLookup.Lookups);
+    }
+
+    [Fact]
     public async Task AnEventOnlyPayload_HasItsStatusLookedUpFromHalo()
     {
         // "Event information only": the ticket's id and the event name, but not the status.
