@@ -263,6 +263,8 @@ else
         _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
         _domains = await db.Domains
             .AsNoTracking()
+            // Two collections (Groups and Tags) are projected, so without this EF joins both into one result set.
+            .AsSplitQuery()
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
             .Select(d => new DomainRow(d.Id, d.Name, d.IsMonitored, d.Reports.Count, d.LastReportReceivedUtc,

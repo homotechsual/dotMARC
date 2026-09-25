@@ -11,6 +11,7 @@ using DotMarc.Ingestion;
 using DotMarc.MtaSts;
 using DotMarc.Notifications;
 using MudBlazor.Services;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -57,7 +58,19 @@ var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "
 // throws "Cannot consume scoped service 'DbContextOptions<DotMarcDbContext>' from singleton
 // 'IDbContextFactory<DotMarcDbContext>'". Production skips that validation, which is why this
 // wasn't caught by a Docker smoke test alone.
-builder.Services.AddDbContextFactory<DotMarcDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContextFactory<DotMarcDbContext>(options =>
+{
+    options.UseNpgsql(connectionString);
+
+    // A query that loads two or more collections without .AsSplitQuery() joins them all into one result set, which
+    // multiplies rows and is slow on large data. EF only logs that as a warning, so it slipped through more than
+    // once. In Development (which is also what the integration test host runs as) it throws instead, so a page
+    // that does it fails the first time anyone opens it.
+    if (builder.Environment.IsDevelopment())
+    {
+        options.ConfigureWarnings(warnings => warnings.Throw(RelationalEventId.MultipleCollectionIncludeWarning));
+    }
+});
 
 // Previously unconfigured - Data Protection fell back to its default (non-durable across
 // restarts/redeploys/replicas) key store, which DnsPushStateProtector tolerated only because its
