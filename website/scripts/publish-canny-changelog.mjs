@@ -50,8 +50,11 @@ if (!file) {
 
 // The filename's leading date is the release date - using it as publishedOn means a backfilled
 // entry shows up in Canny dated when the release actually shipped, not the day the backfill ran.
+// Canny refuses to publish an entry immediately for a date in the future, and noon UTC on the release day is
+// still ahead of a release cut that morning, so a date that hasn't been reached yet is left off (publish now).
 const dateMatch = file.match(/^(\d{4}-\d{2}-\d{2})-/);
-const publishedOn = dateMatch ? `${dateMatch[1]}T12:00:00.000Z` : undefined;
+const releaseDay = dateMatch ? `${dateMatch[1]}T12:00:00.000Z` : undefined;
+const publishedOn = releaseDay && new Date(releaseDay) <= new Date() ? releaseDay : undefined;
 
 const notify = (process.env.NOTIFY ?? 'true') !== 'false';
 
