@@ -101,7 +101,9 @@ function tag(version) {
   check(version);
   const slug = slugFor(version);
   const blogFile = blogFilesFor(slug)[0];
-  const status = run('git', ['status', '--short']);
+  // Not run(): that trims the output, which strips the leading space of the first line
+  // (" M Directory.Build.props") and makes the path parsing below drop its first character.
+  const status = execFileSync('git', ['status', '--short'], {cwd: repositoryRoot, encoding: 'utf8'});
   const unexpectedChanges = status
     .split('\n')
     .filter(Boolean)
