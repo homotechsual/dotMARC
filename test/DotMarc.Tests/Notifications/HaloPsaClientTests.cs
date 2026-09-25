@@ -236,6 +236,31 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task GetTicketStatusAsync_ReadsTheStatusOfTheTicket()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242,"status_id":9,"summary":"x"}""");
+
+        var statusId = await client.GetTicketStatusAsync(Settings, 4242);
+
+        Assert.Equal(9, statusId);
+        Assert.Equal("https://contoso.halopsa.com/api/Tickets/4242", handler.Requests[1].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task GetTicketStatusAsync_WhenTheTicketHasNoStatus_SaysWhatHaloSent()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"id":4242}""");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => client.GetTicketStatusAsync(Settings, 4242));
+
+        Assert.Contains("didn't include its status", exception.Message);
+    }
+
+    [Fact]
     public async Task CreateTicketAsync_AssignsTheConfiguredAgent()
     {
         var (client, handler) = CreateClient();
@@ -280,6 +305,30 @@ public sealed class HaloPsaClientTests
 
         Assert.Equal(["Mikey O'Toole", "zara"], agents.Select(agent => agent.Name));
         Assert.Equal("https://contoso.halopsa.com/api/Agent", handler.Requests[1].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task ListAgentsAsync_LogsHowManyAgentsHaloReturnedAndHowManyWereSelectable()
+    {
+        var logger = new CapturingLogger<HaloPsaClient>();
+        var handler = new FakeHttpMessageHandler();
+        var client = new HaloPsaClient(new HttpClient(handler), new FixedSecretStore("the-secret"), new HaloPsaTokenCache(), logger);
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""[{"id":1,"name":"Unassigned"},{"id":3,"name":"Mikey"},{"id":9,"name":"Gone","isdisabled":true}]""");
+
+        await client.ListAgentsAsync(Settings);
+
+        Assert.Contains("returned 3 agents, 1 of them", Assert.Single(logger.Messages));
+    }
+
+    private sealed class CapturingLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
     }
 
     [Fact]

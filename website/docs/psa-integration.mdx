@@ -29,6 +29,20 @@ into HaloPSA's own outbound webhook configuration, triggered on ticket status ch
 the secret only takes effect once it's persisted, so a URL copied before saving 404s until you do.
 This is what lets a ticket closed directly in Halo resolve the dotMARC alert.
 
+### What the webhook needs to send
+
+Halo lets you choose the webhook's payload: a small object, the full object, the event alone, or a
+custom one. dotMARC accepts any of them, as long as the payload identifies the ticket:
+
+* It looks for the ticket's id and status in the usual places: at the top level, or inside an `object`,
+  `ticket` or `data` wrapper, under names such as `ticket_id`, `object_id`, `id` and `status_id`.
+* If the payload names the ticket but not its status (the event alone), dotMARC asks Halo for the
+  ticket's current status. That needs the API agent to be able to read the ticket. If it can't, the call
+  is recorded as "status not in the body and Halo wouldn't say", with Halo's reason.
+* If dotMARC can't find a ticket in the payload at all, the call is recorded under **Recent calls to the
+  webhook** with the names of the fields Halo sent (never their values). Use that to pick a payload that
+  includes the ticket's id, or a custom payload with the ticket's id and status.
+
 Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vault) depends on your
 deployment, see [Deploy to Azure](./deploy-to-azure.mdx#optional-key-vault-backed-secret-storage) if
 you're running on Azure and want it in Key Vault.

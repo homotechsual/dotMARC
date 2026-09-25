@@ -120,6 +120,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
         public Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloPriority>>([]);
         public Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloAgent>>([]);
+        public Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default) => Task.FromResult(9);
 
         public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
         {
@@ -366,7 +367,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(HaloWebhookDelivery.Unreadable, "ticket_id and status_id")]
+    [InlineData(HaloWebhookDelivery.Unreadable, "couldn't find the ticket in the body")]
     [InlineData(HaloWebhookDelivery.WrongSecret, "wrong secret")]
     public async Task Run_FailsAndExplains_WhenTheWebhookCallCouldNotBeUsed(HaloWebhookDelivery delivery, string expectedInDetail)
     {
@@ -380,6 +381,33 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         var step = run.Steps.Last();
         Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
         Assert.Contains(expectedInDetail, step.Detail);
+    }
+
+    [Fact]
+    public async Task Run_ShowsTheFieldNamesHaloSent_WhenTheWebhookBodyHadNoTicket()
+    {
+        await SeedSettingsAsync();
+        await SeedAlertAsync(mappedHaloClientId: 7);
+        _halo.AfterClose = () => _activity.Record(HaloWebhookDelivery.Unreadable, detail: "Halo sent: id, event, webhook_id");
+
+        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+
+        Assert.Contains("Halo sent: id, event, webhook_id", run.Steps.Last().Detail);
+    }
+
+    [Fact]
+    public async Task Run_ExplainsAWebhookThatNamedTheTicketButNotItsStatus()
+    {
+        await SeedSettingsAsync();
+        await SeedAlertAsync(mappedHaloClientId: 7);
+        _halo.AfterClose = () => _activity.Record(HaloWebhookDelivery.StatusUnknown, 4242, detail: "HaloPSA returned 401 Unauthorized for GET Tickets/4242.");
+
+        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+
+        var step = run.Steps.Last();
+        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Contains("without saying its status", step.Detail);
+        Assert.Contains("401 Unauthorized", step.Detail);
     }
 
     [Fact]

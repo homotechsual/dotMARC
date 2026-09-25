@@ -199,7 +199,10 @@ public sealed class HaloIntegrationTestService(
                 Report(WebhookStep, HaloTestOutcome.Failed, $"Halo called the webhook, but reported status {receipt.StatusId} for ticket #{ticketNumber}, and your closed status is {settings.ClosedStatusId}. Real closes wouldn't resolve alerts. Check the Closed status setting matches the status Halo sends.");
                 break;
             case HaloWebhookDelivery.Unreadable:
-                Report(WebhookStep, HaloTestOutcome.Failed, "Halo called the webhook, but the body wasn't something dotMARC could read. It expects JSON containing ticket_id and status_id. Check the payload in Halo's outbound webhook.");
+                Report(WebhookStep, HaloTestOutcome.Failed, $"Halo called the webhook, but dotMARC couldn't find the ticket in the body. {receipt.Detail} Change the webhook's payload in Halo to one that includes the ticket's id and status.");
+                break;
+            case HaloWebhookDelivery.StatusUnknown:
+                Report(WebhookStep, HaloTestOutcome.Failed, $"Halo called the webhook for ticket #{ticketNumber} without saying its status, and asking Halo for the status failed: {receipt.Detail} Either send a payload that includes the status, or let the API agent read tickets.");
                 break;
             case HaloWebhookDelivery.WrongSecret:
                 Report(WebhookStep, HaloTestOutcome.Failed, "A request reached the webhook with the wrong secret. Save PSA settings, then copy the webhook URL into Halo again.");

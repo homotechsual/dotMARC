@@ -322,7 +322,15 @@ else
         try
         {
             _haloAgents = (await HaloPsaClient.ListAgentsAsync(_haloSettings!)).ToList();
-            Snackbar.Add("Loaded ticket types, priorities, statuses and agents from Halo.", Severity.Success);
+            if (_haloAgents.Count == 0)
+            {
+                Snackbar.Add("Loaded ticket types, priorities and statuses from Halo.", Severity.Success);
+                ShowHaloError("Halo returned no agents to choose from, so the agent list is empty. Halo only lists the agents the API agent's role is allowed to see. Leave \"Don't assign\" if Halo assigns tickets itself, or give the API agent's role permission to view agents.");
+            }
+            else
+            {
+                Snackbar.Add("Loaded ticket types, priorities, statuses and agents from Halo.", Severity.Success);
+            }
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
         {
@@ -424,7 +432,8 @@ else
     {
         HaloWebhookDelivery.ClosedStatus => $"ticket #{call.TicketId} closed (status {call.StatusId}){(call.ResolvedAnAlert ? ", resolved an alert" : "")}",
         HaloWebhookDelivery.OtherStatus => $"ticket #{call.TicketId}, status {call.StatusId} (not the closed status, ignored)",
-        HaloWebhookDelivery.Unreadable => "the body wasn't understood",
+        HaloWebhookDelivery.Unreadable => $"the body wasn't understood. {call.Detail}",
+        HaloWebhookDelivery.StatusUnknown => $"ticket #{call.TicketId}, status not in the body and Halo wouldn't say: {call.Detail}",
         HaloWebhookDelivery.WrongSecret => "wrong secret (answered 404)",
         _ => "received"
     };

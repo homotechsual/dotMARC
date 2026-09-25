@@ -10,20 +10,23 @@ public enum HaloWebhookDelivery
     /// <summary>The right secret, but some other status change, which is ignored.</summary>
     OtherStatus,
 
-    /// <summary>The right secret, but a body dotMARC couldn't read (it expects JSON with
-    /// <c>ticket_id</c> and <c>status_id</c>).</summary>
+    /// <summary>The right secret, but a body in which dotMARC couldn't find the ticket. The receipt's
+    /// detail lists the field names Halo sent.</summary>
     Unreadable,
+
+    /// <summary>The ticket was identified, but the body had no status and asking Halo for it failed.</summary>
+    StatusUnknown,
 
     /// <summary>A request reached the webhook path with a secret that doesn't match.</summary>
     WrongSecret
 }
 
-public sealed record HaloWebhookReceipt(DateTimeOffset ReceivedUtc, HaloWebhookDelivery Delivery, int? TicketId, int? StatusId, bool ResolvedAnAlert);
+public sealed record HaloWebhookReceipt(DateTimeOffset ReceivedUtc, HaloWebhookDelivery Delivery, int? TicketId, int? StatusId, bool ResolvedAnAlert, string? Detail = null);
 
 /// <summary>A short, in-memory record of recent calls to the HaloPSA webhook. The endpoint used to
 /// leave no trace, so "did Halo actually call back?" could not be answered from inside the app. It
-/// records only ticket and status numbers, never a secret or a request body, and forgets everything
-/// on restart.</summary>
+/// records ticket and status numbers, and for a body it couldn't read the field names (never the values) it
+/// contained. It never keeps a secret or a request body, and forgets everything on restart.</summary>
 public sealed class HaloWebhookActivity(ILogger<HaloWebhookActivity> logger)
 {
     private const int Capacity = 100;
@@ -32,11 +35,11 @@ public sealed class HaloWebhookActivity(ILogger<HaloWebhookActivity> logger)
     private readonly object _gate = new();
     private readonly Queue<HaloWebhookReceipt> _receipts = new();
 
-    public void Record(HaloWebhookDelivery delivery, int? ticketId = null, int? statusId = null, bool resolvedAnAlert = false)
+    public void Record(HaloWebhookDelivery delivery, int? ticketId = null, int? statusId = null, bool resolvedAnAlert = false, string? detail = null)
     {
         lock (_gate)
         {
-            _receipts.Enqueue(new HaloWebhookReceipt(DateTimeOffset.UtcNow, delivery, ticketId, statusId, resolvedAnAlert));
+            _receipts.Enqueue(new HaloWebhookReceipt(DateTimeOffset.UtcNow, delivery, ticketId, statusId, resolvedAnAlert, detail));
             while (_receipts.Count > Capacity)
             {
                 _receipts.Dequeue();

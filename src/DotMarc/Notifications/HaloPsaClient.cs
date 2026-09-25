@@ -4,6 +4,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DotMarc.Notifications;
 
@@ -12,12 +14,14 @@ public sealed class HaloPsaClient : IHaloPsaClient
     private readonly HttpClient _httpClient;
     private readonly ISecretStore _secretStore;
     private readonly HaloPsaTokenCache _tokenCache;
+    private readonly ILogger<HaloPsaClient> _logger;
 
-    public HaloPsaClient(HttpClient httpClient, ISecretStore secretStore, HaloPsaTokenCache tokenCache)
+    public HaloPsaClient(HttpClient httpClient, ISecretStore secretStore, HaloPsaTokenCache tokenCache, ILogger<HaloPsaClient>? logger = null)
     {
         _httpClient = httpClient;
         _secretStore = secretStore;
         _tokenCache = tokenCache;
+        _logger = logger ?? NullLogger<HaloPsaClient>.Instance;
     }
 
     // Matches what HttpContent.ReadFromJsonAsync used before these reads went through ReadJsonAsync.
@@ -54,11 +58,16 @@ public sealed class HaloPsaClient : IHaloPsaClient
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Agent", null, cancellationToken).ConfigureAwait(false);
         var entries = await ReadJsonAsync<List<AgentEntry>>(response, "Agent", cancellationToken).ConfigureAwait(false) ?? [];
-        return entries
+        var agents = entries
             .Where(entry => entry.Id != UnassignedAgentId && !entry.IsDisabled)
             .Select(entry => new HaloAgent(entry.Id, entry.Name))
             .OrderBy(agent => agent.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // An empty list is ambiguous: Halo may send an API agent only the agents its role can see, or nothing
+        // may be selectable. The counts say which.
+        _logger.LogInformation("HaloPSA returned {ReturnedCount} agents, {SelectableCount} of them enabled and assignable", entries.Count, agents.Count);
+        return agents;
     }
 
     /// <summary>GET /api/Priority doesn't return a plain list of priorities: it returns one row per
@@ -85,7 +94,7 @@ public sealed class HaloPsaClient : IHaloPsaClient
             {
                 entry.ResolvedId = priorityId;
             }
-            else if (TryGetWholeNumber(entry.Id, out var id))
+            else if (HaloJson.TryGetWholeNumber(entry.Id, out var id))
             {
                 // No priorityid: treat a numeric id as the priority's number.
                 entry.ResolvedId = id;
@@ -95,29 +104,6 @@ public sealed class HaloPsaClient : IHaloPsaClient
                 throw new JsonException($"The priority \"{entry.Name}\" has neither a priorityid nor a numeric id.");
             }
         }
-    }
-
-    private static bool TryGetWholeNumber(JsonElement element, out int value)
-    {
-        value = 0;
-        decimal number = 0;
-        const System.Globalization.NumberStyles style = System.Globalization.NumberStyles.AllowLeadingSign | System.Globalization.NumberStyles.AllowDecimalPoint
-            | System.Globalization.NumberStyles.AllowLeadingWhite | System.Globalization.NumberStyles.AllowTrailingWhite;
-
-        var parsed = element.ValueKind switch
-        {
-            JsonValueKind.Number => element.TryGetDecimal(out number),
-            JsonValueKind.String => decimal.TryParse(element.GetString(), style, System.Globalization.CultureInfo.InvariantCulture, out number),
-            _ => false
-        };
-
-        if (!parsed || number != decimal.Truncate(number) || number < int.MinValue || number > int.MaxValue)
-        {
-            return false;
-        }
-
-        value = (int)number;
-        return true;
     }
 
     private static string Truncate(string text) => text.Length <= 300 ? text : text[..300] + "...";
@@ -157,12 +143,25 @@ public sealed class HaloPsaClient : IHaloPsaClient
 
         // Halo answers with the created ticket, though some versions wrap it in a one-item array.
         var createdTicket = created.ValueKind == JsonValueKind.Array && created.GetArrayLength() > 0 ? created[0] : created;
-        if (createdTicket.ValueKind != JsonValueKind.Object || !createdTicket.TryGetProperty("id", out var id) || !TryGetWholeNumber(id, out var ticketId))
+        if (createdTicket.ValueKind != JsonValueKind.Object || !createdTicket.TryGetProperty("id", out var id) || !HaloJson.TryGetWholeNumber(id, out var ticketId))
         {
             throw new InvalidDataException($"HaloPSA created a ticket but its response didn't include the ticket's id. It began: {Truncate(createdTicket.ToString())}");
         }
 
         return ticketId.ToString();
+    }
+
+    /// <summary>The status a ticket is in now, for a webhook that names the ticket but not its status.</summary>
+    public async Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, settings, $"Tickets/{ticketId}", null, cancellationToken).ConfigureAwait(false);
+        var ticket = await ReadJsonAsync<JsonElement>(response, $"Tickets/{ticketId}", cancellationToken).ConfigureAwait(false);
+        if (ticket.ValueKind != JsonValueKind.Object || !ticket.TryGetProperty("status_id", out var statusElement) || !HaloJson.TryGetWholeNumber(statusElement, out var statusId))
+        {
+            throw new InvalidDataException($"HaloPSA's ticket {ticketId} didn't include its status. It began: {Truncate(ticket.ToString())}");
+        }
+
+        return statusId;
     }
 
     public async Task CloseTicketAsync(HaloPsaSettings settings, string ticketId, string note, CancellationToken cancellationToken = default)
@@ -174,8 +173,8 @@ public sealed class HaloPsaClient : IHaloPsaClient
         using var ticketResponse = await SendAsync(HttpMethod.Get, settings, $"Tickets/{ticketId}", null, cancellationToken).ConfigureAwait(false);
         var ticket = await ReadJsonAsync<JsonElement>(ticketResponse, $"Tickets/{ticketId}", cancellationToken).ConfigureAwait(false);
         if (ticket.ValueKind != JsonValueKind.Object
-            || !ticket.TryGetProperty("tickettype_id", out var ticketTypeElement) || !TryGetWholeNumber(ticketTypeElement, out var ticketTypeId)
-            || !ticket.TryGetProperty("client_id", out var clientElement) || !TryGetWholeNumber(clientElement, out var haloClientId))
+            || !ticket.TryGetProperty("tickettype_id", out var ticketTypeElement) || !HaloJson.TryGetWholeNumber(ticketTypeElement, out var ticketTypeId)
+            || !ticket.TryGetProperty("client_id", out var clientElement) || !HaloJson.TryGetWholeNumber(clientElement, out var haloClientId))
         {
             throw new InvalidDataException($"HaloPSA's ticket {ticketId} didn't include its ticket type and client, which closing it needs. It began: {Truncate(ticket.ToString())}");
         }

@@ -756,7 +756,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
 // 400 a malformed body regardless of whether the secret is even right. The secret check has to
 // happen first, and body parsing happens only after it passes, inside the handler.
 app.MapPost("/integrations/halopsa/webhook/{secret}", async (
-    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, ILogger<Program> logger) =>
+    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, IHaloPsaClient haloClient, ILogger<Program> logger) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var settings = await context.HaloPsaSettings.SingleAsync();
@@ -768,26 +768,46 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
         return Results.NotFound();
     }
 
-    HaloWebhookTicketPayload? payload;
+    HaloWebhookReading reading;
     try
     {
-        payload = await JsonSerializer.DeserializeAsync<HaloWebhookTicketPayload>(request.Body, cancellationToken: request.HttpContext.RequestAborted);
+        using var document = await JsonDocument.ParseAsync(request.Body, cancellationToken: request.HttpContext.RequestAborted);
+        reading = HaloWebhookPayloadReader.Read(document.RootElement);
     }
     catch (JsonException ex)
     {
         // Nothing a retry from Halo would fix - log it and 200 rather than surfacing a failure
         // status that could trigger a retry storm.
         logger.LogWarning(ex, "Received an unparseable HaloPSA webhook payload.");
-        webhookActivity.Record(HaloWebhookDelivery.Unreadable);
+        webhookActivity.Record(HaloWebhookDelivery.Unreadable, detail: "The body wasn't JSON.");
         return Results.Ok();
     }
 
-    if (payload is null)
+    if (reading.TicketId is not { } ticketNumber)
     {
-        logger.LogWarning("Received an empty HaloPSA webhook payload.");
-        webhookActivity.Record(HaloWebhookDelivery.Unreadable);
+        // Field names only: the values are ticket content, which doesn't belong in a log.
+        logger.LogWarning("A HaloPSA webhook body had no ticket id dotMARC could find. Halo sent these fields: {Shape}", reading.Shape);
+        webhookActivity.Record(HaloWebhookDelivery.Unreadable, detail: $"Halo sent: {reading.Shape}");
         return Results.Ok();
     }
+
+    var statusId = reading.StatusId;
+    if (statusId is null)
+    {
+        // An "event only" payload names the ticket but not its status, so ask Halo for it.
+        try
+        {
+            statusId = await haloClient.GetTicketStatusAsync(settings, ticketNumber, request.HttpContext.RequestAborted);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "A HaloPSA webhook named ticket {TicketId} but no status, and looking the status up failed.", ticketNumber);
+            webhookActivity.Record(HaloWebhookDelivery.StatusUnknown, ticketNumber, detail: ex.Message);
+            return Results.Ok();
+        }
+    }
+
+    var payload = new HaloWebhookTicketPayload(ticketNumber, statusId.Value);
 
     if (!HaloWebhookStatusMatcher.IsClosedStatus(payload, settings))
     {
