@@ -1,0 +1,93 @@
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject ILogger<GroupTicketRulesDialog> Logger
+
+<MudDialog>
+    <TitleContent>Ticket rules for @GroupName</TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Choose which alerts create HaloPSA tickets for this group's Halo client. <i>Use default</i> follows the setting on Alert settings.
+        </MudText>
+        @if (_loaded)
+        {
+            @foreach (var alertType in AlertTypes.All)
+            {
+                <MudSelect @key="@($"{alertType.Key}-{_renderVersion}")" T="int" Label="@alertType.DisplayName" HelperText="@alertType.Description" Variant="Variant.Outlined" Class="mb-3"
+                           Value="ChoiceFor(alertType)" ValueChanged="@(choice => SetChoiceAsync(alertType, choice))">
+                    <MudSelectItem T="int" Value="Inherit">Use default (currently @(DefaultFor(alertType) ? "Yes" : "No"))</MudSelectItem>
+                    <MudSelectItem T="int" Value="Always">Always create tickets</MudSelectItem>
+                    <MudSelectItem T="int" Value="Never">Never create tickets</MudSelectItem>
+                </MudSelect>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Done">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const int Inherit = 0;
+    private const int Always = 1;
+    private const int Never = 2;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int GroupId { get; set; }
+    [Parameter] public string GroupName { get; set; } = "";
+
+    private Dictionary<string, bool> _globalRules = [];
+    private Dictionary<string, bool> _groupRules = [];
+    private bool _loaded;
+
+    // Bumped after a failed save so the selects are recreated and re-read the stored choice.
+    private int _renderVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _globalRules = await AlertTicketRuleService.GetGlobalAsync(db);
+        _groupRules = await AlertTicketRuleService.GetForGroupAsync(db, GroupId);
+        _loaded = true;
+    }
+
+    private bool DefaultFor(AlertTypeInfo alertType) =>
+        _globalRules.TryGetValue(alertType.Key, out var createTicket) ? createTicket : alertType.CreatesTicketByDefault;
+
+    private int ChoiceFor(AlertTypeInfo alertType) =>
+        _groupRules.TryGetValue(alertType.Key, out var createTicket) ? (createTicket ? Always : Never) : Inherit;
+
+    private async Task SetChoiceAsync(AlertTypeInfo alertType, int choice)
+    {
+        bool? createTicket = choice switch
+        {
+            Always => true,
+            Never => false,
+            _ => null
+        };
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await AlertTicketRuleService.SetForGroupAsync(db, GroupId, alertType.Key, createTicket);
+            if (createTicket is { } value)
+            {
+                _groupRules[alertType.Key] = value;
+            }
+            else
+            {
+                _groupRules.Remove(alertType.Key);
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Saving the ticket rule for group {GroupId}, alert type {AlertType} failed", GroupId, alertType.Key);
+            Snackbar.Add("Couldn't save that ticket rule. Try again.", Severity.Error);
+            _renderVersion++;
+        }
+    }
+
+    private void Done() => MudDialog.Close(DialogResult.Ok(true));
+}

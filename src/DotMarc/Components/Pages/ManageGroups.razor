@@ -48,6 +48,7 @@
                 @if (_haloConfigured)
                 {
                     <MudTh>Halo Client</MudTh>
+                    <MudTh>Ticket rules</MudTh>
                 }
                 <MudTh></MudTh>
             </HeaderContent>
@@ -83,6 +84,22 @@
                                 Suggested match: @suggestion.Name.
                                 <MudLink OnClick="@(() => SetHaloClientIdAsync(context, suggestion.Id))">Use it</MudLink>
                             </MudText>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        @if (context.HaloClientId.HasValue)
+                        {
+                            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenTicketRulesAsync(context))">
+                                Ticket rules
+                            </MudButton>
+                            @if (_ticketRuleOverrideCounts.TryGetValue(context.Id, out var overrideCount))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@overrideCount @(overrideCount == 1 ? "override" : "overrides")</MudChip>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Set a Halo client first</MudText>
                         }
                     </MudTd>
                 }
@@ -179,6 +196,7 @@
     private List<GroupRow>? _groups;
     private List<TagRow>? _tags;
     private List<HaloClient> _haloClients = [];
+    private Dictionary<int, int> _ticketRuleOverrideCounts = [];
     private bool _haloConfigured;
     private string _newGroupName = "";
     private string? _addGroupError;
@@ -196,6 +214,7 @@
             .OrderBy(g => g.Name)
             .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.HaloClientId))
             .ToListAsync();
+        _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
         _tags = await db.Tags
             .AsNoTracking()
             .OrderBy(t => t.Name)
@@ -391,6 +410,21 @@
             Snackbar.Add($"Failed to update {row.Name}'s Halo client. Try again.", Severity.Error);
         }
         await LoadAsync();
+    }
+
+    private async Task OpenTicketRulesAsync(GroupRow row)
+    {
+        var parameters = new DialogParameters<GroupTicketRulesDialog>
+        {
+            { dialog => dialog.GroupId, row.Id },
+            { dialog => dialog.GroupName, row.Name }
+        };
+        var dialogRef = await DialogService.ShowAsync<GroupTicketRulesDialog>("Ticket rules", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        await dialogRef.Result;
+
+        // The dialog saves each change itself, so refresh the badge counts when it closes.
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
     }
 
     private sealed record GroupRow(int Id, string Name, int DomainCount, int? HaloClientId);
