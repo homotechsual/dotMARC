@@ -65,6 +65,26 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_KeepsTheNamesOfTheChosenOptions()
+    {
+        await using var context = CreateContext();
+        await HaloPsaSettingsService.SaveAsync(context, CreateSecretStore(), new HaloPsaSettings
+        {
+            TicketTypeId = 23, TicketTypeName = "RMM Alert",
+            DefaultPriorityId = 4, DefaultPriorityName = "Low",
+            ClosedStatusId = 9, ClosedStatusName = "Closed",
+            AssignedAgentId = 3, AssignedAgentName = "Mikey O'Toole"
+        }, newClientSecret: null);
+
+        await using var verify = CreateContext();
+        var saved = await HaloPsaSettingsService.GetAsync(verify);
+        Assert.Equal("RMM Alert", saved.TicketTypeName);
+        Assert.Equal("Low", saved.DefaultPriorityName);
+        Assert.Equal("Closed", saved.ClosedStatusName);
+        Assert.Equal("Mikey O'Toole", saved.AssignedAgentName);
+    }
+
+    [Fact]
     public async Task SaveAsync_KeepsTheAssignedAgent_AndCanClearItBackToDontAssign()
     {
         await using var context = CreateContext();

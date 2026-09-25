@@ -19,6 +19,14 @@ public sealed class HaloPsaSettings
     public int? DefaultPriorityId { get; set; }
     public int? ClosedStatusId { get; set; }
 
+    // The names of the selections above, saved beside their ids (see HaloOptionNames) so the settings page can
+    // show "RMM Alert" instead of a number before Halo's lists have been loaded. Display only: nothing sent to
+    // Halo uses them.
+    public string? TicketTypeName { get; set; }
+    public string? DefaultPriorityName { get; set; }
+    public string? ClosedStatusName { get; set; }
+    public string? AssignedAgentName { get; set; }
+
     /// <summary>The Halo agent new tickets are assigned to. Null means dotMARC doesn't assign, so Halo's
     /// own routing (round robin, the ticket type's default, a rule) decides. Halo refuses to close a ticket
     /// nobody is assigned to, so an installation that doesn't assign here needs Halo to do it.</summary>

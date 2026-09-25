@@ -80,11 +80,13 @@ else
 @if (_haloSettings is not null)
 {
     <MudPaper Class="pa-4 mt-4">
-        <MudText Typo="Typo.h5" Class="mb-4">PSA integration (HaloPSA)</MudText>
+        <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
+            <MudText Typo="Typo.h5">PSA integration (HaloPSA)</MudText>
+            <MudSwitch @bind-Value="_haloSettings.Enabled" Color="Color.Primary" Label="Enable HaloPSA ticket sync" />
+        </div>
+
+        <MudText Typo="Typo.subtitle1" Class="mt-2 mb-2">Connection</MudText>
         <MudGrid>
-            <MudItem xs="12">
-                <MudSwitch @bind-Value="_haloSettings.Enabled" Color="Color.Primary" Label="Enable HaloPSA ticket sync" />
-            </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField Label="Account name" @bind-Value="_haloSettings.AccountName" Variant="Variant.Outlined" />
             </MudItem>
@@ -101,15 +103,24 @@ else
                 <MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
-            <MudItem xs="12" md="6" Class="d-flex align-center flex-wrap" Style="gap: 0.5rem;">
-                <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses / agents from Halo</MudButton>
+            <MudItem xs="12" md="6" Class="d-flex align-start">
                 <MudTooltip Text="dotMARC keeps Halo's sign-in for about an hour. If you've just changed the API agent's role or permissions in Halo, clear it so the next call signs in again and picks the change up.">
-                    <MudButton Variant="Variant.Text" OnClick="ClearHaloSignInAsync">Clear cached Halo sign-in</MudButton>
+                    <MudButton Variant="Variant.Text" Class="mt-2" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ClearHaloSignInAsync">Clear cached sign-in</MudButton>
                 </MudTooltip>
             </MudItem>
+        </MudGrid>
+
+        <div class="d-flex align-center justify-space-between flex-wrap mt-6 mb-1" style="gap: 0.5rem;">
+            <MudText Typo="Typo.subtitle1">Ticket defaults</MudText>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CloudDownload" OnClick="LoadHaloOptionsAsync">Load options from Halo</MudButton>
+        </div>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+            Loads the ticket types, priorities, statuses and agents to choose from. Save your client secret first.
+        </MudText>
+        <MudGrid>
             <MudItem xs="12" md="4">
                 <MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
-                    @foreach (var ticketType in _haloTicketTypes)
+                    @foreach (var ticketType in HaloOptionNames.WithSaved(_haloTicketTypes.Select(option => (option.Id, option.Name)), _haloSettings.TicketTypeId, _haloSettings.TicketTypeName))
                     {
                         <MudSelectItem T="int?" Value="@((int?)ticketType.Id)">@ticketType.Name</MudSelectItem>
                     }
@@ -117,7 +128,7 @@ else
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudSelect T="int?" Label="Default priority" @bind-Value="_haloSettings.DefaultPriorityId" Variant="Variant.Outlined">
-                    @foreach (var priority in _haloPriorities)
+                    @foreach (var priority in HaloOptionNames.WithSaved(_haloPriorities.Select(option => (option.Id, option.Name)), _haloSettings.DefaultPriorityId, _haloSettings.DefaultPriorityName))
                     {
                         <MudSelectItem T="int?" Value="@((int?)priority.Id)">@priority.Name</MudSelectItem>
                     }
@@ -125,7 +136,7 @@ else
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudSelect T="int?" Label="Closed status" @bind-Value="_haloSettings.ClosedStatusId" Variant="Variant.Outlined">
-                    @foreach (var status in _haloStatuses)
+                    @foreach (var status in HaloOptionNames.WithSaved(_haloStatuses.Select(option => (option.Id, option.Name)), _haloSettings.ClosedStatusId, _haloSettings.ClosedStatusName))
                     {
                         <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
                     }
@@ -135,28 +146,37 @@ else
                 <MudSelect T="int" Label="Assign new tickets to" @bind-Value="AssignedAgentSelection" Variant="Variant.Outlined"
                            HelperText="Halo won't close a ticket nobody is assigned to. Pick an agent, or don't assign if Halo assigns tickets itself (round robin, a rule or the ticket type's default).">
                     <MudSelectItem T="int" Value="@DontAssignAgent">Don't assign (Halo decides)</MudSelectItem>
-                    @foreach (var agent in _haloAgents)
+                    @foreach (var agent in HaloOptionNames.WithSaved(_haloAgents.Select(option => (option.Id, option.Name)), _haloSettings.AssignedAgentId, _haloSettings.AssignedAgentName))
                     {
                         <MudSelectItem T="int" Value="@agent.Id">@agent.Name</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12">
+        </MudGrid>
+
+        <MudText Typo="Typo.subtitle1" Class="mt-6 mb-2">Webhook</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="9">
                 <div @onclick="CopyWebhookUrlAsync" @onkeydown="OnWebhookUrlKeyDown" style="cursor: copy;" title="Click to copy">
                     <MudTextField Label="Webhook URL" ReadOnly="true" Value="@WebhookUrl" Variant="Variant.Outlined"
                                   Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
                                   HelperText="Click to copy. Point HaloPSA's outbound webhook (on ticket status change) at this URL." />
                 </div>
             </MudItem>
-            <MudItem xs="12" Class="d-flex align-center" Style="gap: 0.5rem;">
-                <MudButton Variant="Variant.Outlined" OnClick="GenerateWebhookSecretAsync">Generate new webhook secret</MudButton>
-                @if (_webhookSecretJustGenerated)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Warning">Not saved yet - click Save PSA settings before copying this URL.</MudText>
-                }
+            <MudItem xs="12" md="3" Class="d-flex align-start">
+                <MudButton Variant="Variant.Outlined" Class="mt-2" StartIcon="@Icons.Material.Filled.VpnKey" OnClick="GenerateWebhookSecretAsync">Generate new secret</MudButton>
             </MudItem>
+            @if (_webhookSecretJustGenerated)
+            {
+                <MudItem xs="12" Class="pt-0">
+                    <MudText Typo="Typo.caption" Color="Color.Warning">Not saved yet - click Save PSA settings before copying this URL.</MudText>
+                </MudItem>
+            }
         </MudGrid>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveHaloSettingsAsync">Save PSA settings</MudButton>
+
+        <div class="d-flex justify-end mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveHaloSettingsAsync">Save PSA settings</MudButton>
+        </div>
     </MudPaper>
 
     <MudPaper Class="pa-4 mt-4" Elevation="1">
@@ -504,6 +524,9 @@ else
 
         try
         {
+            // Keep the names of the chosen options beside their ids, so the dropdowns show names before the lists load.
+            HaloOptionNames.Remember(_haloSettings, _haloTicketTypes, _haloPriorities, _haloStatuses, _haloAgents);
+
             await using var db = await DbFactory.CreateDbContextAsync();
             await HaloPsaSettingsService.SaveAsync(db, SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
 
