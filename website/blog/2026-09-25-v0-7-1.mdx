@@ -1,0 +1,64 @@
+---
+slug: v0-7-1
+title: "dotMARC v0.7.1: a tidier interface and a few fixes"
+description: The first patch release. Buttons and icons line up properly, the Dashboard summary is easier to read, the rejected-mail reasons are a list, and a noisy query warning on Manage domains is gone.
+authors: [mikey]
+tags: [release]
+---
+
+A small release after [`v0.7.0`](/releases-updates/v0-7-0), mostly about how things look and one warning that
+shouldn't have been there.
+
+{/* truncate */}
+
+## A tidier interface
+
+* **Buttons beside inputs now match them.** The Clear cached sign-in and Generate new secret buttons, and the
+  Add group, Add tag, Add domain and Add role buttons, are the same height as the field next to them and line
+  up with it. Those Add forms, and the Grant access form, now use the same outlined inputs as the rest of the
+  app.
+* **Icons are centred on their text.** Capital letters sit above the middle of a line, so icons on buttons
+  looked about a pixel low. They are now centred on the lettering.
+* **Real actions look like buttons.** Clear cached sign-in, Ticket rules, the DNS push buttons, Configure
+  selectors and the MTA-STS Save were plain text links. They are outlined buttons now.
+* **Dashboard summary.** The numbers are larger and centred above their captions.
+* **Why rejects and quarantines happened** is a bulleted list, with the count first and reasons that have no
+  messages dimmed, on both the Dashboard and each domain's page.
+* **The filter button applies to the whole table.** It sat inside the DNS Status heading, so it looked like it
+  only filtered that column group. It is now a labelled **Filters** button above the Dashboard and Manage
+  domains tables.
+
+## Fixes
+
+* **Manage domains no longer logs a warning every time it loads.** The page loaded each domain's groups and
+  tags in one large query, which Entity Framework warns about. They are loaded separately now, and the warning
+  under **Manage > Server logs** stops.
+* **Ticket rules are sturdier.** The badge count on Manage groups no longer risks ending your session if the
+  database hiccups as the dialog closes, the **Which alerts create tickets** panel follows the ticket sync
+  setting you have saved rather than the switch you have just flipped, and each switch is announced by screen
+  readers with its alert type.
+* **A missing alert type entry can't stop monitoring.** If a future alert type were added without being listed
+  for ticket rules, it is now logged as an error and the alert is still raised, instead of halting the whole
+  monitor cycle.
+
+## Releases and Updates
+
+The blog is now called **Releases and Updates**, at `/releases-updates`. Every old `/blog` link, including
+the RSS and Atom feeds, redirects to its new address, so existing links and subscriptions keep working.
+
+## Docs and website
+
+* **Update or redeploy dotMARC.** The [Docker](/docs/deploy-with-docker) and [Azure](/docs/deploy-to-azure)
+  guides now cover checking which image is running, updating to a release tag, forcing a new revision when you
+  use `:latest`, checking the app is ready, and rolling back.
+* **The website follows the latest release.** The homepage shows the latest release, and the example image
+  tag in the docs updates itself, so neither needs editing when a release ships.
+
+## Upgrading
+
+There are no database migrations and no new settings. Redeploy and you're done.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.7.1) for everything
+that shipped between these two tags.
