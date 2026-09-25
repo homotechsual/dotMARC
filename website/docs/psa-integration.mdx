@@ -147,6 +147,26 @@ When all five pass, Halo's side of the integration works end to end. A few thing
   last started. A call with the wrong secret is listed as such, which is the usual reason a webhook
   seems to do nothing (see [Server logs](./server-logs.mdx) for the matching log entry).
 
+## Choose which alerts create tickets
+
+By default every alert type opens a ticket. To change that, open **Alert settings**. Once ticket sync is
+enabled, a **Which alerts create tickets** panel lists each alert type with a switch. Turning a type off stops
+it opening tickets. The alert is still recorded, and any Teams or webhook notification still goes out.
+
+A group can override this for its own client. On **Manage groups**, a group that has a Halo client set has a
+**Ticket rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create
+tickets* or *Never create tickets*. A group with overrides shows a badge such as "2 overrides".
+
+Two details worth knowing:
+
+* If a domain belongs to several groups, the rules of the group its ticket goes to apply: the one with the
+  lowest id among the domain's groups that have a Halo client. Other groups' rules are ignored.
+* A domain with its own Halo client set on **Manage domains** isn't covered by a group's rules, so it follows
+  the settings on Alert settings.
+
+Changing a rule affects alerts raised from then on. It doesn't create tickets for alerts that are already open,
+and it doesn't stop an existing ticket from closing when its alert resolves.
+
 ## Route tickets to the right client
 
 Tickets need to land against the right Halo client (company). From **Manage groups**, each Group
@@ -160,7 +180,7 @@ leaving the generic webhook URL blank, it isn't an error.
 
 ## What syncs, and what doesn't
 
-- Alert fires → ticket created, using the alert's title/message as the ticket's summary/details,
+- Alert fires → ticket created (unless its alert type is turned off, see above), using the alert's title/message as the ticket's summary/details,
   filed under the configured ticket type and default priority.
 - Alert resolves in dotMARC (the report comes back, or a later TLSRPT report has no failures) →
   ticket closed in Halo automatically.
