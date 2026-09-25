@@ -21,6 +21,14 @@
 import {readFileSync} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {
+  RELEASE_LINE,
+  TARGET_LINE,
+  correctReleaseLine,
+  releaseLabel,
+  shouldMarkComplete,
+  statusForNewPost,
+} from './canny-release-labels.mjs';
 
 const API_BASE = 'https://canny.io/api/v1';
 const DEFAULT_BOARD_TOKEN = '15f43ba5-535f-4bba-bee3-1776018d433b';
@@ -36,9 +44,14 @@ if (!['none', 'prepend', 'replace'].includes(updateMode)) {
   process.exit(1);
 }
 const notifyVoters = process.env.NOTIFY_VOTERS === 'true';
-const RELEASE_LINE = /^(Target release|Released in):/;
-const TARGET_LINE = /^Target release:[^\n]*/;
 const VERSION_TAG = /^v\d+\.\d+\.\d+$/i;
+
+// "Released in" and a complete status are only claimed once the version has a GitHub release, so an idea
+// that is finished in the code but not yet shipped still reads "Target release". Inside GitHub Actions the
+// repository and token come from the environment; elsewhere it falls back to this repository, unauthenticated.
+const githubRepository = process.env.GITHUB_REPOSITORY ?? 'homotechsual/dotMARC';
+const githubToken = process.env.GITHUB_TOKEN;
+const releasedByVersion = new Map();
 
 function log(message) {
   console.log(`[canny-roadmap] ${message}`);
@@ -51,6 +64,37 @@ function fail(message) {
 
 if (!apiKey) {
   fail('CANNY_API_KEY is not set');
+}
+
+/** True when the version has a GitHub release, false when it definitely doesn't, null when that couldn't be
+ *  established (a network or rate-limit problem), which callers treat as "don't claim it shipped". */
+async function isReleased(version) {
+  const key = version.toLowerCase();
+  if (releasedByVersion.has(key)) {
+    return releasedByVersion.get(key);
+  }
+
+  let released = null;
+  try {
+    const response = await fetch(`https://api.github.com/repos/${githubRepository}/releases/tags/${version}`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        ...(githubToken ? {Authorization: `Bearer ${githubToken}`} : {}),
+      },
+    });
+    if (response.status === 200) {
+      released = true;
+    } else if (response.status === 404) {
+      released = false;
+    } else {
+      log(`Could not tell whether ${version} is released (GitHub answered ${response.status}); treating it as not released`);
+    }
+  } catch (error) {
+    log(`Could not tell whether ${version} is released (${error.message}); treating it as not released`);
+  }
+
+  releasedByVersion.set(key, released);
+  return released;
 }
 
 async function canny(endpoint, body = {}) {
@@ -179,8 +223,9 @@ for (const idea of roadmap) {
   const existing = existingByTitle.get(normalizeTitle(idea.title));
   const versionTagId = idea.version ? tagIdByName.get(idea.version.toLowerCase()) : undefined;
 
-  const releaseLabel = idea.status === 'complete' ? 'Released in' : 'Target release';
-  const fullDetails = idea.version ? `${releaseLabel}: ${idea.version}\n\n${idea.details}` : idea.details;
+  const released = idea.version && idea.status === 'complete' ? await isReleased(idea.version) : undefined;
+  const releaseText = releaseLabel(idea, released);
+  const fullDetails = idea.version ? `${releaseText}: ${idea.version}\n\n${idea.details}` : idea.details;
 
   try {
     if (existing) {
@@ -196,27 +241,31 @@ for (const idea of roadmap) {
           )
         : [];
       // Statuses are otherwise the board owner's to manage; the only move made here is to mark
-      // something complete once the roadmap file says it has shipped.
-      const needsCompletion = idea.status === 'complete' && existing.status !== 'complete';
+      // something complete once the roadmap file says it has shipped and its version has been released.
+      const needsCompletion = shouldMarkComplete(idea, existing.status, released);
 
       const currentDetails = existing.details ?? '';
       let updatedDetails;
+      let correctedDetails;
       let detailsChange = '';
       if (updateMode !== 'none' && idea.version && !RELEASE_LINE.test(currentDetails)) {
         const original = currentDetails.trim();
         // Replacing keeps the original wording underneath, unless it only repeats the title.
         const keepOriginal = original && normalizeTitle(original) !== normalizeTitle(existing.title);
         if (updateMode === 'prepend' && original) {
-          updatedDetails = `${releaseLabel}: ${idea.version}\n\n${currentDetails}`;
+          updatedDetails = `${releaseText}: ${idea.version}\n\n${currentDetails}`;
         } else {
           updatedDetails = keepOriginal ? `${fullDetails}\n\nOriginal request: ${original}` : fullDetails;
         }
         detailsChange = `${updateMode} description`;
-      } else if (idea.status === 'complete' && idea.version && TARGET_LINE.test(currentDetails)) {
-        // Once an idea has shipped its "Target release" line becomes "Released in", whatever the
-        // update mode. Only that first line is touched, and only when it still says "Target release".
-        updatedDetails = currentDetails.replace(TARGET_LINE, `Released in: ${idea.version}`);
-        detailsChange = 'change release line to "Released in"';
+      } else if ((correctedDetails = correctReleaseLine(currentDetails, idea, released)) !== null) {
+        // Once the version is released a complete idea's "Target release" line becomes "Released in", whatever
+        // the update mode; and a "Released in" written before the release goes back to "Target release".
+        // Only the first line is touched.
+        updatedDetails = correctedDetails;
+        detailsChange = released
+          ? 'change release line to "Released in"'
+          : 'change release line back to "Target release" (the version is not released yet)';
       } else if (idea.version && idea.status !== 'complete') {
         // The idea moved to another release, so its public "Target release" line must follow.
         const currentTarget = currentDetails.match(/^Target release:\s*(\S+)/);
@@ -262,7 +311,7 @@ for (const idea of roadmap) {
     }
 
     if (dryRun) {
-      log(`Would create "${idea.title}" (${idea.version ?? 'no version'}, ${idea.status})`);
+      log(`Would create "${idea.title}" (${idea.version ?? 'no version'}, ${statusForNewPost(idea, released)})`);
       continue;
     }
 
@@ -279,9 +328,9 @@ for (const idea of roadmap) {
       changerID: authorId,
       postID: created.id,
       shouldNotifyVoters: false,
-      status: idea.status,
+      status: statusForNewPost(idea, released),
     });
-    log(`CREATED  ${idea.title} (${idea.version ?? 'no version'}, ${idea.status}) -> ${created.id}`);
+    log(`CREATED  ${idea.title} (${idea.version ?? 'no version'}, ${statusForNewPost(idea, released)}) -> ${created.id}`);
   } catch (error) {
     failures++;
     console.error(`[canny-roadmap] FAILED   ${idea.title}: ${error.message}`);

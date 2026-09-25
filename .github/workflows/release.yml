@@ -242,6 +242,19 @@ jobs:
         with:
           node-version: lts/*
 
+      # The GitHub release exists by now, so ideas finished in this version are marked complete on Canny and
+      # their "Target release" line becomes "Released in". It runs before the changelog entry so that entry
+      # links them. A failure here must not stop the changelog entry from being published.
+      - name: Bring the Canny roadmap up to date
+        continue-on-error: true
+        env:
+          CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: "false"
+          UPDATE_MODE: none
+          NOTIFY_VOTERS: "false"
+        run: node website/scripts/sync-canny-roadmap.mjs
+
       - name: Publish changelog entry to Canny
         env:
           VERSION: ${{ needs.publish-images.outputs.version }}

@@ -48,6 +48,8 @@ jobs:
       - name: Sync roadmap ideas to Canny
         env:
           CANNY_API_KEY: ${{ secrets.CANNY_API_KEY }}
+          # Lets the script check whether a version has a GitHub release, which decides "Released in" and complete.
+          GITHUB_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ inputs.dry_run }}
           UPDATE_MODE: ${{ inputs.update_details }}
           NOTIFY_VOTERS: ${{ inputs.notify_voters }}

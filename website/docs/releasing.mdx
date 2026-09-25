@@ -32,7 +32,7 @@ Canny has no release or version field on ideas, so a target release is expressed
 - A **version tag** such as `v0.7.0` on the idea. Tags are only visible to Canny admins, so this is
   for your own filtering and for the changelog linking below.
 - A **"Target release: v0.7.0" line** at the top of the description (or "Released in: v0.6.0" once
-  shipped). This is what a public visitor actually sees.
+  that version has actually been released). This is what a public visitor actually sees.
 - The **status**: `planned`, `in progress`, `complete`, or `under review` for ideas with no version.
 
 No ETAs are set, since they would be public promises. Public roadmap columns follow status and are
@@ -64,23 +64,30 @@ What the sync does, and deliberately does not do:
   duplicated.
 - For an existing idea it only ever brings the version tag in line with the JSON, optionally
   rewrites the description (per `update_details`), and moves the status to **complete** when the
-  JSON says so. It never changes any other status, since statuses are otherwise yours to manage on
-  the board.
+  JSON says so **and the idea's version has been released** (it has a GitHub release). It never
+  changes any other status, since statuses are otherwise yours to manage on the board.
 - **Moving an idea to another release** is a one-line change: edit its `version` in the JSON and run
   the sync. The new version tag is added, any other tag shaped like a version (`v0.7.0`) is removed
   so the idea isn't listed under two releases, and a "Target release: vX" line in its description is
   updated to match. Other tags, such as "In Dev", are never touched.
-- When the JSON says an idea is complete and its description still opens with "Target release:
-  vX", that first line is changed to "Released in: vX" regardless of `update_details`. Only that
-  line is touched; the rest of the description is left as it is.
-- It creates any idea that has no matching post, along with its version tag, and sets its status.
+- **"Released in" is only used once the version is released.** When the JSON says an idea is complete
+  and vX has a GitHub release, a first line of "Target release: vX" is changed to "Released in: vX"
+  regardless of `update_details`. While vX has no release, a complete idea keeps "Target release: vX",
+  and a "Released in: vX" written earlier is put back to "Target release: vX". If GitHub can't be
+  reached the script assumes "not released", and never claims a release it couldn't confirm. Only the
+  first line is touched; the rest of the description is left as it is.
+- It creates any idea that has no matching post, along with its version tag, and sets its status. A
+  complete idea whose version isn't released yet is created as `in progress`, not `complete`.
 - It is safe to re-run: a second run with no JSON changes makes no writes.
 
 ## Changelog publishing and idea linking
 
-The `canny-changelog` job in `release.yml` runs `website/scripts/publish-canny-changelog.mjs` once
-the images and GitHub release have succeeded. It only runs for a real tag push, never for a manual
-re-run of the workflow. For the tagged version it does the following:
+The `canny-changelog` job in `release.yml` runs once the images and GitHub release have succeeded. It
+only runs for a real tag push, never for a manual re-run of the workflow. It first runs the roadmap
+sync (the release now exists, so ideas finished in this version are marked `complete` and their line
+becomes "Released in"), then `website/scripts/publish-canny-changelog.mjs`. A failure in the sync step
+is reported but does not stop the changelog entry. For the tagged version the changelog script does
+the following:
 
 1. **Finds the release post** in `website/blog/` by its `slug` (`v0.7.0` becomes `v0-7-0`), so the
    post must exist at the tagged commit. `release.mjs tag` guarantees that.
@@ -102,9 +109,10 @@ entries cannot be listed, or Canny rejects the entry.
 ## Cutting a release, step by step
 
 1. **Settle the ideas.** For everything shipping in this release, make sure it carries the version
-   tag and is marked complete (see above). Anything that slipped should be moved to a later
-   version (change its `version` in the JSON and run the sync), or it will simply be skipped and
-   logged.
+   tag and is `complete` in `canny-roadmap.json` before you tag. Canny itself stays "Target release"
+   and not complete until the release exists, and the release job then marks them complete and links
+   them. Anything that slipped should be moved to a later version (change its `version` in the JSON
+   and run the sync), or it will simply be skipped and logged.
 2. **Prepare.** `node scripts/release.mjs prepare 0.7.0` bumps `Directory.Build.props` and creates
    the release post.
 3. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with
@@ -127,6 +135,7 @@ complete ideas tagged with that version.
 - Both scripts identify the board by its widget token, which must match `BOARD_TOKEN` in
   `website/src/plugins/featureRequests/FeatureRequestsPage.tsx`.
 - To try the sync locally: `CANNY_API_KEY=... DRY_RUN=true node website/scripts/sync-canny-roadmap.mjs`.
+  The release-line and status rules are unit tested without a Canny key: `node --test website/scripts/canny-release-labels.test.mjs`.
   The changelog script has no dry-run mode and posts for real, so test changes to it against a
   mocked `fetch` rather than the live API.
 
@@ -139,7 +148,10 @@ complete ideas tagged with that version.
   entry that already exists. If you forgot to mark an idea complete before tagging, fix the entry in
   Canny's changelog editor.
 - **Marking an idea complete directly in Canny leaves its release line as "Target release".** The
-  line is only changed to "Released in" by the sync, so set the idea to `complete` in the JSON and
-  run the sync (or edit the line by hand) if you want the public wording to match.
+  line is only changed to "Released in" by the sync, and only once the version has a GitHub release,
+  so set the idea to `complete` in the JSON and let the release job (or a manual sync after the
+  release) do it, or edit the line by hand.
+- **A manual sync before the release won't mark anything complete.** That is deliberate: the sync
+  checks GitHub for the release, so an idea can't read "Released in" or "Complete" ahead of it.
 - **Roadmap columns and public visibility of tags are Canny settings**, not something these scripts
   can change.
