@@ -195,7 +195,7 @@ else
                         <MudText Typo="Typo.subtitle2">@alertType.DisplayName</MudText>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@alertType.Description</MudText>
                     </div>
-                    <MudSwitch T="bool" Value="@TicketRuleValue(alertType)" ValueChanged="@(createTicket => SetTicketRuleAsync(alertType, createTicket))"
+                    <MudSwitch @key="@($"{alertType.Key}-{_ticketRuleRenderVersion}")" T="bool" Value="@TicketRuleValue(alertType)" ValueChanged="@(createTicket => SetTicketRuleAsync(alertType, createTicket))"
                                Color="Color.Primary" Label="@(TicketRuleValue(alertType) ? "Creates tickets" : "No tickets")" />
                 </div>
             }
@@ -287,6 +287,10 @@ else
     private List<HaloAgent> _haloAgents = [];
     private Dictionary<string, bool> _globalTicketRules = [];
 
+    // MudSwitch keeps its own toggled state. Bumping this after a failed save changes the switch @key, so a fresh
+    // instance is created that shows the stored value again instead of the value the user just clicked.
+    private int _ticketRuleRenderVersion;
+
     private bool TicketRuleValue(AlertTypeInfo alertType) =>
         _globalTicketRules.TryGetValue(alertType.Key, out var createTicket) ? createTicket : alertType.CreatesTicketByDefault;
 
@@ -302,6 +306,7 @@ else
         catch (Exception exception)
         {
             Logger.LogWarning(exception, "Saving the ticket rule for {AlertType} failed", alertType.Key);
+            _ticketRuleRenderVersion++;
             Snackbar.Add("Couldn't save that ticket rule. Try again.", Severity.Error);
         }
     }
