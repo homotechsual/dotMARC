@@ -93,7 +93,8 @@ the following:
    post must exist at the tagged commit. `release.mjs tag` guarantees that.
 2. **Converts MDX to Markdown**: drops `import` lines and the `{/* truncate */}` marker, turns
    `<ThemedImage>` into a plain Markdown image (light variant), rewrites relative `/docs/` and
-   `/blog/` links to absolute `https://dotmarc.app/...` links, and tolerates CRLF line endings.
+   `/releases-updates/` links (and the older `/blog/` form) to absolute `https://dotmarc.app/...` links, and
+   tolerates CRLF line endings.
 3. **Skips if it already exists.** Canny's create call has no idempotency key, so the script lists
    existing entries and stops if one has the same title. If it cannot list them, it posts nothing.
 4. **Finds ideas to link**: every idea on the board that is tagged `v0.7.0` **and** has status

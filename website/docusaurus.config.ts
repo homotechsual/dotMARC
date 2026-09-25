@@ -57,7 +57,12 @@ const config: Config = {
           editUrl: 'https://github.com/homotechsual/dotMARC/tree/main/website/',
         },
         blog: {
-          routeBasePath: 'blog',
+          // The content folder is still website/blog; only the public route and titles changed. The old
+          // /blog/* URLs are redirected to /releases-updates/* by the client-redirects plugin below.
+          routeBasePath: 'releases-updates',
+          blogTitle: 'Releases and Updates',
+          blogDescription: 'Release notes and announcements from dotMARC.',
+          blogSidebarTitle: 'Recent releases',
           showReadingTime: true,
           feedOptions: {
             type: ['rss', 'atom'],
@@ -76,6 +81,20 @@ const config: Config = {
   ],
 
   plugins: [
+    [
+      // Keeps every old /blog/* link working (release notes linked from Canny changelog entries, GitHub
+      // releases, the app footer and other sites). It writes a small redirect page for each existing
+      // /releases-updates route at the matching /blog route, and only does so in a production build.
+      '@docusaurus/plugin-client-redirects',
+      {
+        createRedirects(existingPath: string) {
+          if (existingPath === '/releases-updates' || existingPath.startsWith('/releases-updates/')) {
+            return [existingPath.replace('/releases-updates', '/blog')];
+          }
+          return undefined;
+        },
+      },
+    ],
     [
       plausiblePlugin,
       {
@@ -119,7 +138,7 @@ const config: Config = {
       items: [
         {to: '/docs/getting-started', label: 'Docs', position: 'left'},
         {to: '/faqs', label: 'FAQs', position: 'left'},
-        {to: '/blog', label: 'Blog', position: 'left'},
+        {to: '/releases-updates', label: 'Releases and Updates', position: 'left'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
         {to: '/feedback', label: 'Feedback & Feature Requests', position: 'left'},
         {
@@ -145,7 +164,7 @@ const config: Config = {
         {
           title: 'More',
           items: [
-            {label: 'Blog', to: '/blog'},
+            {label: 'Releases and Updates', to: '/releases-updates'},
             {label: 'Demo', to: 'https://demo.dotmarc.app/'},
             {label: 'GitHub', href: 'https://github.com/homotechsual/dotMARC'},
             {label: 'License', to: '/license'},

@@ -86,8 +86,9 @@ const markdown = body
     /<ThemedImage[\s\S]*?alt="([^"]*)"[\s\S]*?light:\s*useBaseUrl\('([^']+)'\)[\s\S]*?\/>/g,
     (_match, alt, src) => `![${alt}](${SITE_URL}${src})`,
   )
-  // Relative doc/blog links only resolve on dotmarc.app, not on Canny's own domain.
-  .replace(/\]\((\/(?:docs|blog)\/[^)]*)\)/g, `](${SITE_URL}$1)`)
+  // Relative doc and release-notes links only resolve on dotmarc.app, not on Canny's own domain. /blog/ is the
+  // old route for /releases-updates/ (still redirected on the site), kept here so older posts convert too.
+  .replace(/\]\((\/(?:docs|releases-updates|blog)\/[^)]*)\)/g, `](${SITE_URL}$1)`)
   .replace(/\n{3,}/g, '\n\n')
   .trim();
 

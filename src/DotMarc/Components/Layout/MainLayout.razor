@@ -146,7 +146,7 @@
     private bool _isDarkMode;
     private readonly int _currentYear = DateTime.UtcNow.Year;
     private static readonly string _version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
-    private static readonly string _releaseNotesUrl = $"https://dotmarc.app/blog/v{_version.Replace('.', '-')}";
+    private static readonly string _releaseNotesUrl = $"https://dotmarc.app/releases-updates/v{_version.Replace('.', '-')}";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

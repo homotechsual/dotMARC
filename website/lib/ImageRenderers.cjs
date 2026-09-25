@@ -200,7 +200,7 @@ const blog = data => {
   const pageData = data?.data || {};
   const metadata = pageData?.metadata || {};
   const isPost = data.pageType === 'post';
-  const title = clampText(isPost ? metadata.title : 'dotMARC Blog', 90);
+  const title = clampText(isPost ? metadata.title : 'dotMARC Releases and Updates', 90);
   const description = clampText(isPost ? metadata.description : 'Release notes and announcements from dotMARC.', 170);
 
   return [
@@ -218,7 +218,7 @@ const blog = data => {
         },
         div(
           {display: 'flex', flexDirection: 'column', gap: 14},
-          badge('Blog', 'rgba(255,255,255,0.16)', '#fcfcfc'),
+          badge('Releases and Updates', 'rgba(255,255,255,0.16)', '#fcfcfc'),
           div({display: 'flex', fontSize: 62, lineHeight: 1.04, fontWeight: 900, letterSpacing: -1.1, color: '#fcfcfc'}, title),
           description
             ? div({display: 'flex', maxWidth: 1000, fontSize: 29, lineHeight: 1.22, color: '#fbe4e2'}, description)
