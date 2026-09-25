@@ -30,6 +30,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
+    public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
     public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
@@ -259,6 +260,24 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<AlertEvent>(entity =>
         {
             entity.HasIndex(e => new { e.DomainName, e.AlertType, e.CreatedUtc });
+        });
+
+        modelBuilder.Entity<AlertTicketRule>(entity =>
+        {
+            entity.Property(rule => rule.AlertType).HasMaxLength(100);
+
+            // Deleting a group deletes its overrides. The global rows have no group and are never touched.
+            entity.HasOne<Group>().WithMany().HasForeignKey(rule => rule.GroupId).OnDelete(DeleteBehavior.Cascade);
+
+            // In PostgreSQL nulls are distinct in a unique index, so "one row per type and group" needs two indexes:
+            // one for the group overrides and one for the global rows.
+            entity.HasIndex(rule => new { rule.AlertType, rule.GroupId })
+                .IsUnique()
+                .HasFilter("\"GroupId\" IS NOT NULL");
+            entity.HasIndex(rule => rule.AlertType)
+                .IsUnique()
+                .HasDatabaseName("IX_AlertTicketRules_AlertType_Global")
+                .HasFilter("\"GroupId\" IS NULL");
         });
 
         modelBuilder.Entity<EncryptedSecret>(entity =>
