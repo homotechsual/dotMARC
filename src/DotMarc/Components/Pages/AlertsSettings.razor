@@ -10,6 +10,7 @@
 @inject IJSRuntime Js
 @inject ILogger<AlertsSettings> Logger
 @inject IHaloPsaClient HaloPsaClient
+@inject HaloPsaTokenCache HaloTokenCache
 @inject HaloIntegrationTestService HaloTester
 @inject HaloWebhookActivity WebhookActivity
 @inject ISecretStore SecretStoreAccessor
@@ -100,8 +101,11 @@ else
                 <MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
             </MudItem>
-            <MudItem xs="12" md="6" Class="d-flex align-center">
+            <MudItem xs="12" md="6" Class="d-flex align-center flex-wrap" Style="gap: 0.5rem;">
                 <MudButton Variant="Variant.Outlined" OnClick="LoadHaloOptionsAsync">Load ticket types / priorities / statuses / agents from Halo</MudButton>
+                <MudTooltip Text="dotMARC keeps Halo's sign-in for about an hour. If you've just changed the API agent's role or permissions in Halo, clear it so the next call signs in again and picks the change up.">
+                    <MudButton Variant="Variant.Text" OnClick="ClearHaloSignInAsync">Clear cached Halo sign-in</MudButton>
+                </MudTooltip>
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
@@ -315,6 +319,14 @@ else
         }
     }
 
+    private async Task ClearHaloSignInAsync()
+    {
+        var dropped = await HaloTokenCache.ClearAsync();
+        Snackbar.Add(dropped == 0
+            ? "There was no cached Halo sign-in. The next call signs in fresh anyway."
+            : "Cleared the cached Halo sign-in. The next call signs in again and picks up any change to the API agent's permissions.", Severity.Success);
+    }
+
     // Halo only lets an API agent whose role can see agents list them. That mustn't undo the lists that
     // did load, so it reports its own problem and leaves "don't assign" and any saved agent in place.
     private async Task LoadHaloAgentsAsync()
@@ -494,6 +506,10 @@ else
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             await HaloPsaSettingsService.SaveAsync(db, SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
+
+            // Saving is when credentials or the API agent's permissions have usually just changed, so don't
+            // keep signing in with a token minted before that.
+            await HaloTokenCache.ClearAsync();
             _newHaloClientSecret = null;
             _webhookSecretJustGenerated = false;
             Snackbar.Add("PSA settings saved.", Severity.Success);

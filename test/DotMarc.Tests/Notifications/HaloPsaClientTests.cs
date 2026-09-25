@@ -236,6 +236,37 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task ClearAsync_ForgetsCachedTokens_SoTheNextCallSignsInAgain()
+    {
+        // Halo can bake the API agent's permissions into a token, so after a role change the old token must go.
+        var handler = new FakeHttpMessageHandler();
+        var cache = new HaloPsaTokenCache();
+        var client = new HaloPsaClient(new HttpClient(handler), new FixedSecretStore("the-secret"), cache);
+        handler.ResponseBodies.Enqueue("""{"access_token":"old-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("[]");
+        handler.ResponseBodies.Enqueue("[]");
+        handler.ResponseBodies.Enqueue("""{"access_token":"new-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("[]");
+
+        await client.ListStatusesAsync(Settings);
+        await client.ListStatusesAsync(Settings);
+        Assert.Equal(1, handler.Requests.Count(request => request.RequestUri!.ToString().EndsWith("/token")));
+
+        var dropped = await cache.ClearAsync();
+        await client.ListStatusesAsync(Settings);
+
+        Assert.Equal(1, dropped);
+        Assert.Equal(2, handler.Requests.Count(request => request.RequestUri!.ToString().EndsWith("/token")));
+        Assert.Equal("Bearer new-token", handler.Requests[^1].Headers.Authorization!.ToString());
+    }
+
+    [Fact]
+    public async Task ClearAsync_WithNothingCached_DropsNothing()
+    {
+        Assert.Equal(0, await new HaloPsaTokenCache().ClearAsync());
+    }
+
+    [Fact]
     public async Task GetTicketStatusAsync_ReadsTheStatusOfTheTicket()
     {
         var (client, handler) = CreateClient();

@@ -47,6 +47,24 @@ public sealed class HaloPsaTokenCache
     public string? GrantedScopeFor(HaloPsaSettings settings) =>
         _tokensByKey.TryGetValue(KeyFor(settings), out var cached) ? cached.GrantedScope : null;
 
+    /// <summary>Forgets every cached token, so the next call signs in to Halo again. Halo may bake an agent's
+    /// permissions into a token when it issues it, so after changing the API agent's role in Halo a token
+    /// minted earlier keeps the old view until it expires (about an hour). Returns how many were dropped.</summary>
+    public async Task<int> ClearAsync(CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var dropped = _tokensByKey.Count;
+            _tokensByKey.Clear();
+            return dropped;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     /// <summary>Drops the cached token for this settings' credentials, e.g. after a 401 - the next
     /// <see cref="GetTokenAsync"/> call for the same key acquires a fresh one instead of reusing a
     /// token Halo has already rejected.</summary>

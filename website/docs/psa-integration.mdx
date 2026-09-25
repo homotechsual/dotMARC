@@ -47,6 +47,11 @@ Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vaul
 deployment, see [Deploy to Azure](./deploy-to-azure.mdx#optional-key-vault-backed-secret-storage) if
 you're running on Azure and want it in Key Vault.
 
+dotMARC keeps Halo's sign-in (an access token) in memory for about an hour. Halo can bake the API agent's
+permissions into that token when it issues it, so after changing the agent's role or permissions in Halo,
+use **Clear cached Halo sign-in** (next to the load button) to make the next call sign in again. Saving the
+PSA settings clears it too, and so does restarting the app.
+
 If loading the options fails, the message shown quotes what HaloPSA answered (an OAuth error such as
 `invalid_scope`, an HTTP status, or the start of a response that wasn't in the expected shape). The
 full detail, including the exception, is under **Manage → Server logs** (see
