@@ -78,7 +78,7 @@ public sealed class AlertingService : IAlertingService
                 // threshold window, auto-resolves once activity stops for the threshold period.
                 if (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < cutoffUtc)
                 {
-                    await ResolveAlertAsync(domain.Name, "UnexpectedActivityOnNullRoutedDomain", cancellationToken).ConfigureAwait(false);
+                    await ResolveAlertAsync(domain.Name, AlertTypes.UnexpectedActivityOnNullRoutedDomain, cancellationToken).ConfigureAwait(false);
                 }
             }
             else if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
@@ -90,7 +90,7 @@ public sealed class AlertingService : IAlertingService
                 var message = domain.LastReportReceivedUtc is { } receivedUtc
                     ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
                     : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
-                await EnsureAlertAsync(db, settings, domain.Name, "MissedReport", "Warning", "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
+                await EnsureAlertAsync(db, settings, domain.Name, AlertTypes.MissedReport, "Warning", "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
             }
 
             // Independent of the report-freshness branch above - a domain can be reporting fine
@@ -109,11 +109,11 @@ public sealed class AlertingService : IAlertingService
         {
             var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding." +
                 BuildInferredBreakdownClause(breakdown);
-            await EnsureAlertAsync(context, settings, domain.Name, "SuspiciousRejectActivity", "Warning", "Reject activity looks like more than benign forwarding", message, cancellationToken).ConfigureAwait(false);
+            await EnsureAlertAsync(context, settings, domain.Name, AlertTypes.SuspiciousRejectActivity, "Warning", "Reject activity looks like more than benign forwarding", message, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await ResolveAlertAsync(domain.Name, "SuspiciousRejectActivity", cancellationToken).ConfigureAwait(false);
+            await ResolveAlertAsync(domain.Name, AlertTypes.SuspiciousRejectActivity, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -140,13 +140,13 @@ public sealed class AlertingService : IAlertingService
     }
 
     public async Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default)
-        => await ResolveAlertAsync(domainName, "MissedReport", cancellationToken).ConfigureAwait(false);
+        => await ResolveAlertAsync(domainName, AlertTypes.MissedReport, cancellationToken).ConfigureAwait(false);
 
     public async Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default)
     {
         if (failedSessionCount == 0)
         {
-            await ResolveAlertAsync(domainName, "TlsrptFailure", cancellationToken).ConfigureAwait(false);
+            await ResolveAlertAsync(domainName, AlertTypes.TlsrptFailure, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -158,7 +158,7 @@ public sealed class AlertingService : IAlertingService
         }
 
         var failureSummary = failureTypes.Count == 0 ? "no failure category supplied" : string.Join(", ", failureTypes.Distinct(StringComparer.OrdinalIgnoreCase));
-        await EnsureAlertAsync(db, settings, domainName, "TlsrptFailure", "Warning", "TLS delivery failures reported", $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.", cancellationToken).ConfigureAwait(false);
+        await EnsureAlertAsync(db, settings, domainName, AlertTypes.TlsrptFailure, "Warning", "TLS delivery failures reported", $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.", cancellationToken).ConfigureAwait(false);
     }
 
     public async Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default)
@@ -180,7 +180,7 @@ public sealed class AlertingService : IAlertingService
                 : " No benign override reason was given - this looks like a genuine spoofing attempt.";
 
         var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.{reasonContext}";
-        await EnsureAlertAsync(db, settings, domainName, "UnexpectedActivityOnNullRoutedDomain", "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
+        await EnsureAlertAsync(db, settings, domainName, AlertTypes.UnexpectedActivityOnNullRoutedDomain, "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ResolveAlertAsync(string domainName, string alertType, CancellationToken cancellationToken)
@@ -215,6 +215,11 @@ public sealed class AlertingService : IAlertingService
 
     private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken)
     {
+        if (AlertTypes.Find(alertType) is null)
+        {
+            throw new InvalidOperationException($"Alert type '{alertType}' is not in AlertTypes.All, so it can't be controlled from the ticket rule screens. Add it there.");
+        }
+
         var activeAlert = await context.AlertEvents
             .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
             .OrderByDescending(e => e.CreatedUtc)
