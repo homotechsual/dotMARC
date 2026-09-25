@@ -11,6 +11,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IHaloPsaClient HaloPsaClient
+@inject ILogger<ManageGroups> Logger
 
 <PageTitle>dotMARC - Manage Groups</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -23,6 +24,45 @@
     for external clients who should only see their own domains. <b>Tags</b> are for your own
     filtering on the dashboard and don't affect who can see what.
 </MudText>
+
+@if (_haloLoadFailed)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        Halo clients couldn't be loaded, so Halo suggestions and the Halo Client picker are unavailable.
+        Check the HaloPSA settings under Alerts, or the server logs, then reload.
+    </MudAlert>
+}
+
+@if (_clientsWithoutGroup.Count > 0)
+{
+    <AuthorizeView Policy="GroupsAdd" Context="addAuthState">
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <div class="d-flex align-center mb-1">
+                <MudText Typo="Typo.h6">Halo clients without a group</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="_creatingFromHalo"
+                           OnClick="CreateAllFromHaloAsync">Create all (@_clientsWithoutGroup.Count)</MudButton>
+            </div>
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
+                These clients exist in Halo but not in dotMARC. Creating a group links it to its Halo client, so
+                tickets for its domains go to that client once you add the domains to it.
+            </MudText>
+            <MudTable Items="_clientsWithoutGroup" T="HaloClient" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Halo client</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd Style="text-align: right;">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="_creatingFromHalo"
+                                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => CreateFromHaloAsync(context))">Create group</MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    </AuthorizeView>
+}
 
 <MudPaper Class="pa-4 mb-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>
@@ -73,17 +113,15 @@
                                 <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
                             }
                         </MudSelect>
-                        @{
-                            var suggestion = !context.HaloClientId.HasValue
-                                ? _haloClients.FirstOrDefault(c => string.Equals(c.Name, context.Name, StringComparison.OrdinalIgnoreCase))
-                                : null;
-                        }
-                        @if (suggestion is not null)
+                        @if (!context.HaloClientId.HasValue)
                         {
-                            <MudText Typo="Typo.caption">
-                                Suggested match: @suggestion.Name.
-                                <MudLink OnClick="@(() => SetHaloClientIdAsync(context, suggestion.Id))">Use it</MudLink>
-                            </MudText>
+                            @foreach (var suggestion in HaloGroupSuggestions.SuggestClientsForGroup(context.Name, _haloClients).Take(3))
+                            {
+                                <MudText Typo="Typo.caption">
+                                    Suggested match: @suggestion.Name.
+                                    <MudLink OnClick="@(() => SetHaloClientIdAsync(context, suggestion.Id))">Use it</MudLink>
+                                </MudText>
+                            }
                         }
                     </MudTd>
                     <MudTd>
@@ -198,6 +236,9 @@
     private List<GroupRow>? _groups;
     private List<TagRow>? _tags;
     private List<HaloClient> _haloClients = [];
+    private List<HaloClient> _clientsWithoutGroup = [];
+    private bool _haloLoadFailed;
+    private bool _creatingFromHalo;
     private Dictionary<int, int> _ticketRuleOverrideCounts = [];
     private bool _haloConfigured;
     private string _newGroupName = "";
@@ -226,17 +267,101 @@
         await using var haloSettingsDb = await DbFactory.CreateDbContextAsync();
         var haloSettings = await HaloPsaSettingsService.GetAsync(haloSettingsDb);
         _haloConfigured = haloSettings.Enabled && haloSettings.ClientSecretConfigured;
+        _haloLoadFailed = false;
+        _haloClients = [];
         if (_haloConfigured)
         {
             try
             {
                 _haloClients = (await HaloPsaClient.ListClientsAsync(haloSettings)).ToList();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                _haloClients = [];
+                _haloLoadFailed = true;
+                Logger.LogWarning(ex, "Manage groups could not load the Halo client list");
             }
         }
+
+        _clientsWithoutGroup = HaloGroupSuggestions
+            .ClientsWithoutGroup(_haloClients, _groups.Select(group => new GroupSummary(group.Name, group.HaloClientId)))
+            .ToList();
+    }
+
+    private async Task CreateFromHaloAsync(HaloClient client)
+    {
+        _creatingFromHalo = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var result = await GroupManagementService.AddGroupAsync(db, client.Name, CancellationToken.None, client.Id);
+            if (result == GroupManagementService.AddGroupResult.Added)
+            {
+                Snackbar.Add($"Created group {client.Name}.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"A group named {client.Name} already exists.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Creating a group from Halo client {ClientName} failed", client.Name);
+            Snackbar.Add($"Failed to create {client.Name}. Try again.", Severity.Error);
+        }
+        finally
+        {
+            _creatingFromHalo = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task CreateAllFromHaloAsync()
+    {
+        var clients = _clientsWithoutGroup.ToList();
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Create groups from Halo",
+            $"Create {clients.Count} group{(clients.Count == 1 ? "" : "s")}, one for each Halo client listed, each linked to its client?",
+            yesText: "Create", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        _creatingFromHalo = true;
+        var created = 0;
+        var skipped = 0;
+        try
+        {
+            foreach (var client in clients)
+            {
+                await using var db = await DbFactory.CreateDbContextAsync();
+                var result = await GroupManagementService.AddGroupAsync(db, client.Name, CancellationToken.None, client.Id);
+                if (result == GroupManagementService.AddGroupResult.Added)
+                {
+                    created++;
+                }
+                else
+                {
+                    skipped++;
+                }
+            }
+
+            Snackbar.Add(skipped == 0
+                ? $"Created {created} group{(created == 1 ? "" : "s")}."
+                : $"Created {created}, skipped {skipped} whose name already exists.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Creating groups from Halo clients failed after {Created} were created", created);
+            Snackbar.Add($"Created {created} before something went wrong. Try again for the rest.", Severity.Error);
+        }
+        finally
+        {
+            _creatingFromHalo = false;
+        }
+
+        await LoadAsync();
     }
 
     private async Task AddGroupAsync()

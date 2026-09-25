@@ -45,6 +45,29 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AddGroupAsync_LinksTheNewGroupToTheGivenHaloClient()
+    {
+        using var context = CreateContext();
+
+        var result = await GroupManagementService.AddGroupAsync(context, "Compute (Bridgend) Limited", CancellationToken.None, haloClientId: 37);
+
+        Assert.Equal(GroupManagementService.AddGroupResult.Added, result);
+        using var verify = CreateContext();
+        Assert.Equal(37, verify.Groups.Single().HaloClientId);
+    }
+
+    [Fact]
+    public async Task AddGroupAsync_LeavesTheHaloClientUnsetByDefault()
+    {
+        using var context = CreateContext();
+
+        await GroupManagementService.AddGroupAsync(context, "Client A", CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Null(verify.Groups.Single().HaloClientId);
+    }
+
+    [Fact]
     public async Task AddGroupAsync_RejectsEmptyName()
     {
         using var context = CreateContext();

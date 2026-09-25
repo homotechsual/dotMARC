@@ -11,7 +11,9 @@ public static class GroupManagementService
 {
     public enum AddGroupResult { Added, InvalidName, AlreadyExists }
 
-    public static async Task<AddGroupResult> AddGroupAsync(DotMarcDbContext context, string rawName, CancellationToken cancellationToken = default)
+    /// <param name="haloClientId">Links the new group to this Halo client straight away, as when a group is created
+    /// from a Halo client on Manage groups.</param>
+    public static async Task<AddGroupResult> AddGroupAsync(DotMarcDbContext context, string rawName, CancellationToken cancellationToken = default, int? haloClientId = null)
     {
         var name = rawName.Trim();
         if (string.IsNullOrEmpty(name))
@@ -25,7 +27,7 @@ public static class GroupManagementService
             return AddGroupResult.AlreadyExists;
         }
 
-        context.Groups.Add(new Group { Name = name });
+        context.Groups.Add(new Group { Name = name, HaloClientId = haloClientId });
 
         try
         {

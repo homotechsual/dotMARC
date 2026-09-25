@@ -172,8 +172,19 @@ and it doesn't stop an existing ticket from closing when its alert resolves.
 Tickets need to land against the right Halo client (company). From **Manage groups**, each Group
 gets a **Halo Client** picker - set once per Group (typically once per MSP client), every domain
 in that Group routes there. If a Group's name matches a Halo client's name, a suggested match
-appears; review and click **Use it** rather than it being applied automatically. A domain that
+appears; review and click **Use it** rather than it being applied automatically. Names are compared
+loosely: case, punctuation and endings such as Limited, Ltd or LLC are ignored, and a Group called
+"McGarvey" is suggested the client "McGarvey Immigration & Asylum Practitioners". A domain that
 needs to route differently than its Group can be overridden individually from **Manage domains**.
+
+### Create Groups from your Halo clients
+
+When Halo is connected, **Manage groups** also lists the **Halo clients without a group**: clients
+that exist in Halo but that no Group is linked to or named after. **Create group** makes a Group
+with that client's name and links it to the client in one step, and **Create all** does the same
+for every client listed, after asking you to confirm. Halo's built-in "Unknown" client is left out.
+Only the Groups are created. Add the domains to them afterwards, from **Manage domains**. If Halo
+can't be reached, Manage groups says so instead of quietly showing no suggestions.
 
 A domain with no mapping (no Group, or a Group with none set) simply doesn't get a ticket, same as
 leaving the generic webhook URL blank, it isn't an error.
