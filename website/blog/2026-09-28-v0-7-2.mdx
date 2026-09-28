@@ -1,0 +1,66 @@
+---
+slug: v0-7-2
+date: 2026-09-28T14:06:07.417Z
+title: "dotMARC v0.7.2: every Halo client, groups from Halo, and filters on every table"
+description: dotMARC now loads every Halo client instead of just the first page, can create a group for each Halo client that doesn't have one, and every table can be filtered and sorted.
+authors: [mikey]
+tags: [release]
+---
+
+A small release after [`v0.7.1`](/releases-updates/v0-7-1), with one fix for anyone with a lot of Halo clients and a
+couple of things that make day-to-day work quicker.
+
+{/* truncate */}
+
+## Every Halo client, not just the first page
+
+dotMARC only ever asked Halo for one page of clients, so if you have more clients than fit on a page, the rest
+were missing from **Manage groups** and the Halo client pickers, with no error to say so. It now asks page by page
+until it has them all. Halo can quietly send fewer clients per page than dotMARC asks for, so dotMARC counts the
+clients it has received against Halo's total rather than trusting the page size.
+
+## Create groups from your Halo clients
+
+When Halo is connected, **Manage groups** now lists the Halo clients that no group is linked to or named after.
+**Create group** makes a group with the client's name and links it to that client in one step, and **Create all**
+does the same for every client listed, after asking you to confirm. Only the groups are created, so add their
+domains from **Manage domains** afterwards.
+
+Suggested matches between a group and a Halo client are also looser: case, punctuation and endings such as
+Limited, Ltd or LLC are ignored, and a group whose name starts a client's name is suggested that client. If Halo
+can't be reached, Manage groups now says so instead of quietly showing no suggestions. See
+[Create Groups from your Halo clients](/docs/psa-integration#create-groups-from-your-halo-clients).
+
+## Filters and sorting on every table
+
+The **Filters** button that the Dashboard and Manage domains tables have is now on every table: a domain's
+Sources, TLS reports and Raw reports tabs, Alerts, Unparseable messages, Roles, Access grants, Groups, Tags and the
+Halo clients without a group. It opens a row of filters under the headings, one per column, and the column
+headings now sort.
+
+The Sources tab is where this helps most. You can narrow it to new sources, a single SPF or DKIM result, a
+disposition or a country, search by IP, reason or owner, or hide sources below a minimum volume.
+
+## Smaller things
+
+* **The demo splits SPF and DKIM failures.** It now includes senders that fail only SPF or only DKIM, so every
+  bucket of the rejected-mail reasons shows something.
+* **The TLS and raw report tables show date ranges the same way**, so a date search works on both.
+
+## Docs and website
+
+* **The docs are organised into categories**, in the order you're likely to need them: get started, deploy,
+  monitor, alerts and integrations, administer, and about the project. There's also a new
+  [Update or redeploy dotMARC](/docs/updating) page. Existing links still work.
+* **Fresh screenshots.** The website's screenshots are now captured automatically from the demo, in both themes,
+  so they show the app as it is.
+
+## Upgrading
+
+There are no database migrations and no new settings. Redeploy and you're done. If you use Halo, open **Manage
+groups** afterwards to see any clients that were missing before.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.7.2) for everything that
+shipped between these two tags.
