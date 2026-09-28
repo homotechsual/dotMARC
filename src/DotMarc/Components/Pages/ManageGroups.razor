@@ -47,10 +47,24 @@
                 These clients exist in Halo but not in dotMARC. Creating a group links it to its Halo client, so
                 tickets for its domains go to that client once you add the domains to it.
             </MudText>
-            <MudTable Items="_clientsWithoutGroup" T="HaloClient" Dense="true" Hover="true">
+            <MudTable Items="_clientsWithoutGroup" T="HaloClient" Dense="true" Hover="true" CustomHeader="true" Filter="ClientWithoutGroupMatchesFilters">
+                <ToolBarContent>
+                    <MudSpacer />
+                    <MudButton Variant="@(_showClientFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                               OnClick="@(() => _showClientFilters = !_showClientFilters)">@(_showClientFilters ? "Hide filters" : "Filters")</MudButton>
+                </ToolBarContent>
                 <HeaderContent>
-                    <MudTh>Halo client</MudTh>
-                    <MudTh></MudTh>
+                    <tr>
+                        <MudTh><MudTableSortLabel SortBy="new Func<HaloClient, object>(c => c.Name)">Halo client</MudTableSortLabel></MudTh>
+                        <MudTh></MudTh>
+                    </tr>
+                    @if (_showClientFilters)
+                    {
+                    <tr>
+                        <MudTh><MudTextField T="string" @bind-Value="_clientNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                        <MudTh></MudTh>
+                    </tr>
+                    }
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.Name</MudTd>
@@ -81,16 +95,46 @@
 
     @if (_groups is { Count: > 0 })
     {
-        <MudTable Items="_groups" Hover="true" T="GroupRow" Class="mt-4">
+        <MudTable Items="_groups" Hover="true" T="GroupRow" Class="mt-4" CustomHeader="true" Filter="GroupMatchesFilters">
+            <ToolBarContent>
+                <MudSpacer />
+                <MudButton Variant="@(_showGroupFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                           OnClick="@(() => _showGroupFilters = !_showGroupFilters)">@(_showGroupFilters ? "Hide filters" : "Filters")</MudButton>
+            </ToolBarContent>
             <HeaderContent>
-                <MudTh>Name</MudTh>
-                <MudTh>Domains</MudTh>
-                @if (_haloConfigured)
+                <tr>
+                    <MudTh><MudTableSortLabel SortBy="new Func<GroupRow, object>(g => g.Name)">Name</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<GroupRow, object>(g => g.DomainCount)">Domains</MudTableSortLabel></MudTh>
+                    @if (_haloConfigured)
+                    {
+                        <MudTh>Halo Client</MudTh>
+                        <MudTh>Ticket rules</MudTh>
+                    }
+                    <MudTh></MudTh>
+                </tr>
+                @if (_showGroupFilters)
                 {
-                    <MudTh>Halo Client</MudTh>
-                    <MudTh>Ticket rules</MudTh>
+                <tr>
+                    <MudTh><MudTextField T="string" @bind-Value="_groupNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                    <MudTh><MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
+                    @if (_haloConfigured)
+                    {
+                        <MudTh>
+                            <MudSelect T="bool?" Value="_groupHasHaloClientFilter" ValueChanged="@(v => _groupHasHaloClientFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                                <MudSelectItem T="bool?" Value="true">Linked</MudSelectItem>
+                                <MudSelectItem T="bool?" Value="false">Not linked</MudSelectItem>
+                            </MudSelect>
+                        </MudTh>
+                        <MudTh>
+                            <MudSelect T="bool?" Value="_groupHasTicketOverridesFilter" ValueChanged="@(v => _groupHasTicketOverridesFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                                <MudSelectItem T="bool?" Value="true">Has overrides</MudSelectItem>
+                                <MudSelectItem T="bool?" Value="false">No overrides</MudSelectItem>
+                            </MudSelect>
+                        </MudTh>
+                    }
+                    <MudTh></MudTh>
+                </tr>
                 }
-                <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>
@@ -182,13 +226,37 @@
 
     @if (_tags is { Count: > 0 })
     {
-        <MudTable Items="_tags" Hover="true" T="TagRow" Class="mt-4">
+        <MudTable Items="_tags" Hover="true" T="TagRow" Class="mt-4" CustomHeader="true" Filter="TagMatchesFilters">
+            <ToolBarContent>
+                <MudSpacer />
+                <MudButton Variant="@(_showTagFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                           OnClick="@(() => _showTagFilters = !_showTagFilters)">@(_showTagFilters ? "Hide filters" : "Filters")</MudButton>
+            </ToolBarContent>
             <HeaderContent>
-                <MudTh>Preview</MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Color</MudTh>
-                <MudTh>Domains</MudTh>
-                <MudTh></MudTh>
+                <tr>
+                    <MudTh>Preview</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(t => t.Name)">Name</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(t => t.Color.ToString())">Color</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(t => t.DomainCount)">Domains</MudTableSortLabel></MudTh>
+                    <MudTh></MudTh>
+                </tr>
+                @if (_showTagFilters)
+                {
+                <tr>
+                    <MudTh></MudTh>
+                    <MudTh><MudTextField T="string" @bind-Value="_tagNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                    <MudTh>
+                        <MudSelect T="Color?" Value="_tagColorFilter" ValueChanged="@(v => _tagColorFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var color in TagManagementService.AllowedColors)
+                            {
+                                <MudSelectItem T="Color?" Value="color">@color</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh><MudNumericField T="int?" @bind-Value="_tagMinDomainsFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
+                    <MudTh></MudTh>
+                </tr>
+                }
             </HeaderContent>
             <RowTemplate>
                 <MudTd><MudChip T="string" Color="context.Color">@context.Name</MudChip></MudTd>
@@ -246,6 +314,61 @@
     private string _newTagName = "";
     private Color _newTagColor = Color.Primary;
     private string? _addTagError;
+
+    private string? _clientNameFilter;
+    private bool _showClientFilters;
+
+    private string? _groupNameFilter;
+    private int? _groupMinDomainsFilter;
+    private bool? _groupHasHaloClientFilter;
+    private bool? _groupHasTicketOverridesFilter;
+    private bool _showGroupFilters;
+
+    private string? _tagNameFilter;
+    private Color? _tagColorFilter;
+    private int? _tagMinDomainsFilter;
+    private bool _showTagFilters;
+
+    private bool ClientWithoutGroupMatchesFilters(HaloClient client) =>
+        string.IsNullOrWhiteSpace(_clientNameFilter) || client.Name.Contains(_clientNameFilter, StringComparison.OrdinalIgnoreCase);
+
+    private bool GroupMatchesFilters(GroupRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(_groupNameFilter) && !row.Name.Contains(_groupNameFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_groupMinDomainsFilter is { } minDomains && row.DomainCount < minDomains)
+        {
+            return false;
+        }
+        if (_groupHasHaloClientFilter is { } hasHaloClient && row.HaloClientId.HasValue != hasHaloClient)
+        {
+            return false;
+        }
+        if (_groupHasTicketOverridesFilter is { } hasOverrides && _ticketRuleOverrideCounts.ContainsKey(row.Id) != hasOverrides)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private bool TagMatchesFilters(TagRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(_tagNameFilter) && !row.Name.Contains(_tagNameFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_tagColorFilter is { } color && row.Color != color)
+        {
+            return false;
+        }
+        if (_tagMinDomainsFilter is { } minDomains && row.DomainCount < minDomains)
+        {
+            return false;
+        }
+        return true;
+    }
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 

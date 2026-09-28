@@ -19,12 +19,28 @@ else if (_failures.Count == 0)
 }
 else
 {
-    <MudTable Items="_failures" Hover="true" T="ParseFailure">
+    <MudTable Items="_failures" Hover="true" T="ParseFailure" CustomHeader="true" Filter="FailureMatchesFilters">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                       OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
+        </ToolBarContent>
         <HeaderContent>
-            <MudTh>Message ID</MudTh>
-            <MudTh>Reason</MudTh>
-            <MudTh>Attempts</MudTh>
-            <MudTh>Last attempted</MudTh>
+            <tr>
+                <MudTh><MudTableSortLabel SortBy="new Func<ParseFailure, object>(f => f.GraphMessageId)">Message ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ParseFailure, object>(f => f.Reason)">Reason</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ParseFailure, object>(f => f.AttemptCount)">Attempts</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ParseFailure, object>(f => f.LastAttemptedUtc)">Last attempted</MudTableSortLabel></MudTh>
+            </tr>
+            @if (_showFilters)
+            {
+            <tr>
+                <MudTh><MudTextField T="string" @bind-Value="_messageIdFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_reasonFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                <MudTh><MudNumericField T="int?" @bind-Value="_minAttemptsFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_lastAttemptedFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+            </tr>
+            }
         </HeaderContent>
         <RowTemplate>
             <MudTd Style="overflow-wrap:anywhere">@context.GraphMessageId</MudTd>
@@ -37,6 +53,33 @@ else
 
 @code {
     private List<ParseFailure>? _failures;
+
+    private string? _messageIdFilter;
+    private string? _reasonFilter;
+    private int? _minAttemptsFilter;
+    private string? _lastAttemptedFilter;
+    private bool _showFilters;
+
+    private bool FailureMatchesFilters(ParseFailure failure)
+    {
+        if (!string.IsNullOrWhiteSpace(_messageIdFilter) && !failure.GraphMessageId.Contains(_messageIdFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_reasonFilter) && !(failure.Reason ?? "").Contains(_reasonFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_minAttemptsFilter is { } minAttempts && failure.AttemptCount < minAttempts)
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_lastAttemptedFilter) && !failure.LastAttemptedUtc.ToString("g").Contains(_lastAttemptedFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        return true;
+    }
 
     protected override async Task OnInitializedAsync()
     {

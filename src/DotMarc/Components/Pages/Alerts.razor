@@ -23,20 +23,57 @@ else if (_alerts.Count == 0)
 }
 else
 {
-    <MudTable Items="_alerts" Hover="true" T="AlertEvent">
+    <MudTable Items="_alerts" Hover="true" T="AlertEvent" CustomHeader="true" Filter="AlertMatchesFilters">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                       OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
+        </ToolBarContent>
         <HeaderContent>
-            <MudTh>Domain</MudTh>
-            <MudTh>Type</MudTh>
-            <MudTh>Severity</MudTh>
-            <MudTh>Created</MudTh>
-            <MudTh>Resolved</MudTh>
-            <MudTh>Message</MudTh>
+            <tr>
+                <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.DomainName)">Domain</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.AlertType)">Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.Severity)">Severity</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
+                <MudTh>Message</MudTh>
+            </tr>
+            @if (_showFilters)
+            {
+            <tr>
+                <MudTh><MudTextField T="string" @bind-Value="_domainFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                <MudTh>
+                    <MudSelect T="string" Value="_typeFilter" ValueChanged="@(v => _typeFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var alertType in _alerts.Select(e => e.AlertType).Distinct().OrderBy(t => t))
+                        {
+                            <MudSelectItem T="string" Value="alertType">@alertType</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+                <MudTh>
+                    <MudSelect T="string" Value="_severityFilter" ValueChanged="@(v => _severityFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var severity in _alerts.Select(e => e.Severity).Distinct().OrderBy(s => s))
+                        {
+                            <MudSelectItem T="string" Value="severity">@severity</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_createdFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                <MudTh>
+                    <MudSelect T="bool?" Value="_resolvedFilter" ValueChanged="@(v => _resolvedFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        <MudSelectItem T="bool?" Value="false">Open</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="true">Resolved</MudSelectItem>
+                    </MudSelect>
+                </MudTh>
+                <MudTh><MudTextField T="string" @bind-Value="_messageFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+            </tr>
+            }
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.DomainName</MudTd>
             <MudTd>@context.AlertType</MudTd>
             <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
-            <MudTd>@context.CreatedUtc.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>@FormatCreated(context)</MudTd>
             <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
             <MudTd>@context.Message</MudTd>
         </RowTemplate>
@@ -45,6 +82,45 @@ else
 
 @code {
     private List<AlertEvent>? _alerts;
+
+    private string? _domainFilter;
+    private string? _typeFilter;
+    private string? _severityFilter;
+    private string? _createdFilter;
+    private bool? _resolvedFilter;
+    private string? _messageFilter;
+    private bool _showFilters;
+
+    private static string FormatCreated(AlertEvent alert) => alert.CreatedUtc.ToLocalTime().ToString("g");
+
+    private bool AlertMatchesFilters(AlertEvent alert)
+    {
+        if (!string.IsNullOrWhiteSpace(_domainFilter) && !alert.DomainName.Contains(_domainFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_typeFilter is not null && alert.AlertType != _typeFilter)
+        {
+            return false;
+        }
+        if (_severityFilter is not null && alert.Severity != _severityFilter)
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_createdFilter) && !FormatCreated(alert).Contains(_createdFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_resolvedFilter is { } resolved && alert.IsResolved != resolved)
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_messageFilter) && !alert.Message.Contains(_messageFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        return true;
+    }
 
     protected override async Task OnInitializedAsync()
     {

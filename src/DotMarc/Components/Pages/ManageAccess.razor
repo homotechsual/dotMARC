@@ -34,11 +34,33 @@
 
     @if (_roles is { Count: > 0 })
     {
-        <MudTable Items="_roles" Hover="true" T="RoleRow" Class="mt-4">
+        <MudTable Items="_roles" Hover="true" T="RoleRow" Class="mt-4" CustomHeader="true" Filter="RoleMatchesFilters">
+            <ToolBarContent>
+                <MudSpacer />
+                <MudButton Variant="@(_showRoleFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                           OnClick="@(() => _showRoleFilters = !_showRoleFilters)">@(_showRoleFilters ? "Hide filters" : "Filters")</MudButton>
+            </ToolBarContent>
             <HeaderContent>
-                <MudTh>Name</MudTh>
-                <MudTh>Permissions</MudTh>
-                <MudTh></MudTh>
+                <tr>
+                    <MudTh><MudTableSortLabel SortBy="new Func<RoleRow, object>(r => r.Name)">Name</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<RoleRow, object>(r => r.IsLocked ? int.MaxValue : r.Permissions.Count)">Permissions</MudTableSortLabel></MudTh>
+                    <MudTh></MudTh>
+                </tr>
+                @if (_showRoleFilters)
+                {
+                <tr>
+                    <MudTh><MudTextField T="string" @bind-Value="_roleNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                    <MudTh>
+                        <MudSelect T="Permission?" Value="_rolePermissionFilter" ValueChanged="@(v => _rolePermissionFilter = v)" Clearable="true" Placeholder="Has permission" Margin="Margin.Dense">
+                            @foreach (var permission in Enum.GetValues<Permission>())
+                            {
+                                <MudSelectItem T="Permission?" Value="permission">@permission</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh></MudTh>
+                </tr>
+                }
             </HeaderContent>
             <RowTemplate>
                 <MudTd>
@@ -116,13 +138,42 @@
 
     @if (_grants is { Count: > 0 })
     {
-        <MudTable Items="_grants" Hover="true" T="GrantRow" Class="mt-4">
+        <MudTable Items="_grants" Hover="true" T="GrantRow" Class="mt-4" CustomHeader="true" Filter="GrantMatchesFilters">
+            <ToolBarContent>
+                <MudSpacer />
+                <MudButton Variant="@(_showGrantFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                           OnClick="@(() => _showGrantFilters = !_showGrantFilters)">@(_showGrantFilters ? "Hide filters" : "Filters")</MudButton>
+            </ToolBarContent>
             <HeaderContent>
-                <MudTh>Email</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Role</MudTh>
-                <MudTh>Groups</MudTh>
-                <MudTh></MudTh>
+                <tr>
+                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.Email)">Email</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.IsBound)">Status</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.RoleName)">Role</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.ScopedGroupsDisplay)">Groups</MudTableSortLabel></MudTh>
+                    <MudTh></MudTh>
+                </tr>
+                @if (_showGrantFilters)
+                {
+                <tr>
+                    <MudTh><MudTextField T="string" @bind-Value="_grantEmailFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                    <MudTh>
+                        <MudSelect T="bool?" Value="_grantIsBoundFilter" ValueChanged="@(v => _grantIsBoundFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            <MudSelectItem T="bool?" Value="true">Active</MudSelectItem>
+                            <MudSelectItem T="bool?" Value="false">Pending first sign-in</MudSelectItem>
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh>
+                        <MudSelect T="string" Value="_grantRoleFilter" ValueChanged="@(v => _grantRoleFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var roleName in _grants.Select(g => g.RoleName).Distinct().OrderBy(n => n))
+                            {
+                                <MudSelectItem T="string" Value="roleName">@roleName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh><MudTextField T="string" @bind-Value="_grantGroupsFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                    <MudTh></MudTh>
+                </tr>
+                }
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.Email</MudTd>
@@ -151,6 +202,51 @@
     private int _newGrantRoleId;
     private IReadOnlyCollection<int> _newGrantGroupIds = [];
     private string? _addGrantError;
+
+    private string? _roleNameFilter;
+    private Permission? _rolePermissionFilter;
+    private bool _showRoleFilters;
+
+    private string? _grantEmailFilter;
+    private bool? _grantIsBoundFilter;
+    private string? _grantRoleFilter;
+    private string? _grantGroupsFilter;
+    private bool _showGrantFilters;
+
+    private bool RoleMatchesFilters(RoleRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(_roleNameFilter) && !row.Name.Contains(_roleNameFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        // Locked roles show "All permissions", so they match whichever permission is picked.
+        if (_rolePermissionFilter is { } permission && !row.IsLocked && !row.Permissions.Contains(permission))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private bool GrantMatchesFilters(GrantRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(_grantEmailFilter) && !row.Email.Contains(_grantEmailFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (_grantIsBoundFilter is { } isBound && row.IsBound != isBound)
+        {
+            return false;
+        }
+        if (_grantRoleFilter is not null && row.RoleName != _grantRoleFilter)
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_grantGroupsFilter) && !row.ScopedGroupsDisplay.Contains(_grantGroupsFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        return true;
+    }
 
     private bool SelectedNewGrantRoleIsScopable => _roles?.SingleOrDefault(r => r.Id == _newGrantRoleId)?.IsScopable ?? false;
 
