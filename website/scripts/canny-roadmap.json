@@ -8,6 +8,14 @@
     ]
   },
   {
+    "title": "Searchable Halo Client list",
+    "version": "v0.7.3",
+    "status": "complete",
+    "details": [
+      "Every Halo client picker can now be searched by typing part of a client's name, and Halo clients are listed alphabetically. The same search is on the other dropdowns that grow with your data, such as the group and tag pickers."
+    ]
+  },
+  {
     "title": "Widen alerting beyond MissedReport / TLSRPTFailure",
     "version": "v0.8.0",
     "status": "planned",
