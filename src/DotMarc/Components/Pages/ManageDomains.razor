@@ -68,30 +68,15 @@ else
                 <MudTh></MudTh>
                 <MudTh><MudTextField T="string" @bind-Value="_domainFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
                 <MudTh>
-                    <MudSelect T="int?" Value="_groupFilter" ValueChanged="@(v => _groupFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        @foreach (var group in _allGroups)
-                        {
-                            <MudSelectItem T="int?" Value="group.Id">@group.Name</MudSelectItem>
-                        }
-                    </MudSelect>
+                    <SearchableSelect TValue="int?" Options="_groupFilterOptions" Value="_groupFilter" ValueChanged="@(v => _groupFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
                 </MudTh>
                 <MudTh>
-                    <MudSelect T="int?" Value="_tagFilter" ValueChanged="@(v => _tagFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        @foreach (var tag in _allTags)
-                        {
-                            <MudSelectItem T="int?" Value="tag.Id">@tag.Name</MudSelectItem>
-                        }
-                    </MudSelect>
+                    <SearchableSelect TValue="int?" Options="_tagFilterOptions" Value="_tagFilter" ValueChanged="@(v => _tagFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
                 </MudTh>
                 @if (_haloConfigured)
                 {
                     <MudTh>
-                        <MudSelect T="int?" Value="_haloClientFilter" ValueChanged="@(v => _haloClientFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                            @foreach (var haloClient in _haloClients)
-                            {
-                                <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="_haloClientFilter" ValueChanged="@(v => _haloClientFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
                     </MudTh>
                 }
                 <MudTh>
@@ -130,15 +115,9 @@ else
             <MudTd>
                 <AuthorizeView Policy="DomainsEdit" Context="authState">
                     <Authorized>
-                        <MudSelect T="int" MultiSelection="true" SelectedValues="context.GroupIds"
-                                   SelectedValuesChanged="@(ids => SetDomainGroupsAsync(context, ids))"
-                                   MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} group(s)")"
-                                   RelativeWidth="DropdownWidth.Adaptive">
-                            @foreach (var group in _allGroups)
-                            {
-                                <MudSelectItem T="int" Value="group.Id">@group.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <SearchableMultiSelect TValue="int" Options="_groupOptions" SelectedValues="context.GroupIds"
+                                               SelectedValuesChanged="@(ids => SetDomainGroupsAsync(context, ids))"
+                                               MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} group(s)")" />
                     </Authorized>
                     <NotAuthorized>
                         @(_allGroups.Where(g => context.GroupIds.Contains(g.Id)).Select(g => g.Name).Any()
@@ -150,15 +129,9 @@ else
             <MudTd>
                 <AuthorizeView Policy="DomainsEdit" Context="authState">
                     <Authorized>
-                        <MudSelect T="int" MultiSelection="true" SelectedValues="context.TagIds"
-                                   SelectedValuesChanged="@(ids => SetDomainTagsAsync(context, ids))"
-                                   MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} tag(s)")"
-                                   RelativeWidth="DropdownWidth.Adaptive">
-                            @foreach (var tag in _allTags)
-                            {
-                                <MudSelectItem T="int" Value="tag.Id">@tag.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <SearchableMultiSelect TValue="int" Options="_tagOptions" SelectedValues="context.TagIds"
+                                               SelectedValuesChanged="@(ids => SetDomainTagsAsync(context, ids))"
+                                               MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} tag(s)")" />
                     </Authorized>
                     <NotAuthorized>
                         @(_allTags.Where(t => context.TagIds.Contains(t.Id)).Select(t => t.Name).Any()
@@ -170,12 +143,7 @@ else
             @if (_haloConfigured)
             {
                 <MudTd>
-                    <MudSelect T="int?" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true">
-                        @foreach (var haloClient in _haloClients)
-                        {
-                            <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
-                        }
-                    </MudSelect>
+                    <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true" />
                 </MudTd>
             }
             <MudTd>
@@ -205,6 +173,13 @@ else
     private List<Tag> _allTags = [];
     private List<HaloClient> _haloClients = [];
     private bool _haloConfigured;
+
+    // Built once per load rather than per row, since every row's pickers share them.
+    private List<SelectOption<int>> _groupOptions = [];
+    private List<SelectOption<int>> _tagOptions = [];
+    private List<SelectOption<int?>> _groupFilterOptions = [];
+    private List<SelectOption<int?>> _tagFilterOptions = [];
+    private List<SelectOption<int?>> _haloClientOptions = [];
     private string _newDomainName = "";
     private string? _addError;
 
@@ -285,6 +260,12 @@ else
                 _haloClients = [];
             }
         }
+
+        _groupOptions = _allGroups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList();
+        _tagOptions = _allTags.Select(tag => new SelectOption<int>(tag.Id, tag.Name)).ToList();
+        _groupFilterOptions = _allGroups.Select(group => new SelectOption<int?>(group.Id, group.Name)).ToList();
+        _tagFilterOptions = _allTags.Select(tag => new SelectOption<int?>(tag.Id, tag.Name)).ToList();
+        _haloClientOptions = _haloClients.Select(haloClient => new SelectOption<int?>(haloClient.Id, haloClient.Name)).ToList();
     }
 
     private async Task AddDomainAsync()

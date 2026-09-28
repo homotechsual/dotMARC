@@ -477,6 +477,44 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task ListClientsAsync_ReturnsClientsInAlphabeticalOrder_IgnoringCase()
+    {
+        // Halo returns clients in id order across pages, which reads as random in a picker.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":3,"clients":[{"id":1,"name":"zeta Ltd"},{"id":2,"name":"Alpha"}]}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":3,"clients":[{"id":3,"name":"beta"}]}""");
+
+        var clients = await client.ListClientsAsync(Settings);
+
+        Assert.Equal(["Alpha", "beta", "zeta Ltd"], clients.Select(c => c.Name));
+    }
+
+    [Fact]
+    public async Task ListTicketTypesAsync_ReturnsTicketTypesInAlphabeticalOrder()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = """[{"id":1,"name":"Incident"},{"id":2,"name":"alert"},{"id":3,"name":"Change"}]""";
+
+        var ticketTypes = await client.ListTicketTypesAsync(Settings);
+
+        Assert.Equal(["alert", "Change", "Incident"], ticketTypes.Select(t => t.Name));
+    }
+
+    [Fact]
+    public async Task ListStatusesAsync_ReturnsStatusesInAlphabeticalOrder()
+    {
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBody = """[{"id":1,"name":"New"},{"id":9,"name":"Closed"},{"id":2,"name":"In Progress"}]""";
+
+        var statuses = await client.ListStatusesAsync(Settings);
+
+        Assert.Equal(["Closed", "In Progress", "New"], statuses.Select(s => s.Name));
+    }
+
+    [Fact]
     public async Task ListClientsAsync_StopsAtAnEmptyPage_EvenIfRecordCountSaysThereAreMore()
     {
         // A record_count that overstates the total must not keep dotMARC requesting empty pages.

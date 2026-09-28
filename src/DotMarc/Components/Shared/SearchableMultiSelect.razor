@@ -1,0 +1,104 @@
+@typeparam TValue
+
+@* A multiple-choice dropdown with a search box above its checklist. This isn't a MudSelect: MudSelect keeps focus
+   on its own input while it's open, so a search box inside its list never receives the key presses. Ticks are held
+   here while it's open and reported once when it closes: pages such as Manage domains save and reload on every
+   change, which would otherwise rebuild this component, and close it, after each tick. Options the search hides
+   stay selected. *@
+<div style="position: relative;" @onkeydown="OnKeyDown">
+    <MudTextField T="string" Value="@DisplayText" ReadOnly="true" Label="@Label" Variant="Variant" Class="cursor-pointer"
+                  Adornment="Adornment.End" AdornmentIcon="@(_open ? Icons.Material.Filled.ArrowDropUp : Icons.Material.Filled.ArrowDropDown)"
+                  @onclick="Toggle" />
+    <MudPopover Open="_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" RelativeWidth="DropdownWidth.Adaptive"
+                Paper="true" Elevation="8" MaxHeight="360">
+        @* The popover renders outside the wrapper above, so Escape in the search box needs its own handler. *@
+        <div class="px-4 pt-2 pb-1" @onkeydown="OnKeyDown">
+            <MudTextField T="string" @bind-Value="_search" Placeholder="Search" Immediate="true" Margin="Margin.Dense" AutoFocus="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" autocomplete="off" />
+        </div>
+        @{ var matchingOptions = SelectSearch.Filter(Options, _search).ToList(); }
+        @if (matchingOptions.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="px-4 py-2 mud-text-secondary">No matches</MudText>
+        }
+        @foreach (var option in matchingOptions)
+        {
+            <div class="px-2">
+                <MudCheckBox T="bool" Value="@IsSelected(option.Value)" ValueChanged="@(isChecked => SetSelected(option.Value, isChecked))"
+                             Label="@option.Text" Dense="true" Color="Color.Primary" />
+            </div>
+        }
+    </MudPopover>
+    <MudOverlay Visible="_open" OnClick="CloseAsync" LockScroll="false" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<SelectOption<TValue>> Options { get; set; } = [];
+    [Parameter] public IReadOnlyCollection<TValue>? SelectedValues { get; set; }
+    [Parameter] public EventCallback<IReadOnlyCollection<TValue>> SelectedValuesChanged { get; set; }
+    [Parameter] public Func<IReadOnlyList<string>, string>? MultiSelectionTextFunc { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public Variant Variant { get; set; } = Variant.Text;
+
+    private bool _open;
+    private string? _search;
+
+    // The selection being edited while the dropdown is open; null while it's closed.
+    private List<TValue>? _pending;
+
+    private IEnumerable<TValue> CurrentSelection => _pending ?? SelectedValues ?? (IEnumerable<TValue>)[];
+
+    private string DisplayText
+    {
+        get
+        {
+            var selectedTexts = Options.Where(option => IsSelected(option.Value)).Select(option => option.Text).ToList();
+            return MultiSelectionTextFunc?.Invoke(selectedTexts) ?? string.Join(", ", selectedTexts);
+        }
+    }
+
+    private bool IsSelected(TValue value) => CurrentSelection.Contains(value);
+
+    private void SetSelected(TValue value, bool isChecked)
+    {
+        _pending ??= (SelectedValues ?? []).ToList();
+        _pending.RemoveAll(existing => EqualityComparer<TValue>.Default.Equals(existing, value));
+        if (isChecked)
+        {
+            _pending.Add(value);
+        }
+    }
+
+    private async Task Toggle()
+    {
+        if (_open)
+        {
+            await CloseAsync();
+        }
+        else
+        {
+            _open = true;
+        }
+    }
+
+    // Reports the selection only if it actually changed, and starts with the whole list again next time.
+    private async Task CloseAsync()
+    {
+        _open = false;
+        _search = null;
+        var edited = _pending;
+        _pending = null;
+        if (edited is not null && !edited.ToHashSet().SetEquals(SelectedValues ?? []))
+        {
+            await SelectedValuesChanged.InvokeAsync(edited);
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            await CloseAsync();
+        }
+    }
+}

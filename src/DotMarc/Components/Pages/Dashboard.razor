@@ -29,20 +29,13 @@ else
 {
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6">
-            <MudSelect T="int?" Label="Group" Value="_selectedGroupId" ValueChanged="@(v => OnGroupFilterChangedAsync(v))" Clearable="@(_scopedGroupIds is null)" Disabled="@(_scopedGroupIds is not null && _scopedGroupIds.Count == 1)">
-                @foreach (var group in _allGroups)
-                {
-                    <MudSelectItem T="int?" Value="group.Id">@group.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <SearchableSelect TValue="int?" Label="Group" Options="@(_allGroups.Select(group => new SelectOption<int?>(group.Id, group.Name)).ToList())"
+                              Value="_selectedGroupId" ValueChanged="@(v => OnGroupFilterChangedAsync(v))"
+                              Clearable="@(_scopedGroupIds is null)" Disabled="@(_scopedGroupIds is not null && _scopedGroupIds.Count == 1)" />
         </MudItem>
         <MudItem xs="12" sm="6">
-            <MudSelect T="int?" Label="Tag" Value="_selectedTagId" ValueChanged="@(v => OnTagFilterChangedAsync(v))" Clearable="true">
-                @foreach (var tag in _allTags)
-                {
-                    <MudSelectItem T="int?" Value="tag.Id">@tag.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <SearchableSelect TValue="int?" Label="Tag" Options="@(_allTags.Select(tag => new SelectOption<int?>(tag.Id, tag.Name)).ToList())"
+                              Value="_selectedTagId" ValueChanged="@(v => OnTagFilterChangedAsync(v))" Clearable="true" />
         </MudItem>
     </MudGrid>
 

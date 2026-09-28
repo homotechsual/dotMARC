@@ -60,21 +60,22 @@ public sealed class HaloPsaClient : IHaloPsaClient
             }
         }
 
-        return clients;
+        // Halo sends clients in id order, which reads as random in a picker.
+        return clients.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public async Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "TicketType", null, cancellationToken).ConfigureAwait(false);
         var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "TicketType", cancellationToken).ConfigureAwait(false);
-        return payload?.Select(e => new HaloTicketType(e.Id, e.Name)).ToList() ?? [];
+        return payload?.Select(e => new HaloTicketType(e.Id, e.Name)).OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList() ?? [];
     }
 
     public async Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, settings, "Status", null, cancellationToken).ConfigureAwait(false);
         var payload = await ReadJsonAsync<List<IdNameEntry>>(response, "Status", cancellationToken).ConfigureAwait(false);
-        return payload?.Select(e => new HaloTicketStatus(e.Id, e.Name)).ToList() ?? [];
+        return payload?.Select(e => new HaloTicketStatus(e.Id, e.Name)).OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList() ?? [];
     }
 
     /// <summary>Enabled agents a ticket can be assigned to. Halo's built-in "Unassigned" agent (id 1) is left

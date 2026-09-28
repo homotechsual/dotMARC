@@ -412,12 +412,8 @@ else
                         <MudTh><MudTextField T="string" @bind-Value="_sourceReasonFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
                         <MudTh><MudTextField T="string" @bind-Value="_sourceOwnerFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
                         <MudTh>
-                            <MudSelect T="string" Value="_sourceCountryFilter" ValueChanged="@(v => _sourceCountryFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var country in _sources.Where(s => s.Country is not null).Select(s => s.Country!).Distinct().OrderBy(c => c))
-                                {
-                                    <MudSelectItem T="string" Value="country">@country</MudSelectItem>
-                                }
-                            </MudSelect>
+                            <SearchableSelect TValue="string" Options="@(_sources.Where(s => s.Country is not null).Select(s => s.Country!).Distinct().OrderBy(c => c).Select(country => new SelectOption<string>(country, country)).ToList())"
+                                              Value="_sourceCountryFilter" ValueChanged="@(v => _sourceCountryFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
                         </MudTh>
                     </tr>
                     }

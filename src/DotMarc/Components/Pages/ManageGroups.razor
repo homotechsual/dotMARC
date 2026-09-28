@@ -151,12 +151,7 @@
                 @if (_haloConfigured)
                 {
                     <MudTd>
-                        <MudSelect T="int?" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true">
-                            @foreach (var haloClient in _haloClients)
-                            {
-                                <MudSelectItem T="int?" Value="@((int?)haloClient.Id)">@haloClient.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true" />
                         @if (!context.HaloClientId.HasValue)
                         {
                             @foreach (var suggestion in HaloGroupSuggestions.SuggestClientsForGroup(context.Name, _haloClients).Take(3))
@@ -304,6 +299,7 @@
     private List<GroupRow>? _groups;
     private List<TagRow>? _tags;
     private List<HaloClient> _haloClients = [];
+    private List<SelectOption<int?>> _haloClientOptions = [];
     private List<HaloClient> _clientsWithoutGroup = [];
     private bool _haloLoadFailed;
     private bool _creatingFromHalo;
@@ -405,6 +401,7 @@
             }
         }
 
+        _haloClientOptions = _haloClients.Select(haloClient => new SelectOption<int?>(haloClient.Id, haloClient.Name)).ToList();
         _clientsWithoutGroup = HaloGroupSuggestions
             .ClientsWithoutGroup(_haloClients, _groups.Select(group => new GroupSummary(group.Name, group.HaloClientId)))
             .ToList();
