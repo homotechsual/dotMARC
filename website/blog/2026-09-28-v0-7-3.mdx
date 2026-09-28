@@ -1,0 +1,44 @@
+---
+slug: v0-7-3
+date: 2026-09-28T18:25:33.104Z
+title: "dotMARC v0.7.3: search the dropdowns that grow"
+description: Halo client pickers, and the other dropdowns that grow with your data, can now be searched by typing, and Halo lists are alphabetical.
+authors: [mikey]
+tags: [release]
+---
+
+A small release after [`v0.7.2`](/releases-updates/v0-7-2). Now that dotMARC loads every Halo client, the list
+is long enough that scrolling through it gets old, so the dropdowns that grow with your data can now be searched.
+
+{/* truncate */}
+
+## Search the Halo client list
+
+Every Halo client picker can now be searched: type part of a client's name and the list narrows as you go. That
+covers the Halo Client picker on each group and each domain, the Halo client filter on **Manage domains**, and the
+client you run the Halo integration test with. The agent picker under **Assign new tickets to** can be searched the
+same way, with **Don't assign** kept at the top.
+
+Halo clients, ticket types and statuses are now listed alphabetically too, instead of in whatever order Halo sent
+them. Priorities keep Halo's order, since that runs from lowest to highest.
+
+## Search groups and tags too
+
+The same search is on the other dropdowns that grow with your data:
+
+* **Choosing a domain's groups and tags** on Manage domains, and **a person's groups** when granting access. These
+  now open a search box above a checklist. Tick as many as you like, then click away or press Escape to save them
+  all at once. Groups the search is hiding stay ticked.
+* **The Group and Tag filters** on the Dashboard and Manage domains, and **the Country filter** on a domain's
+  Sources tab.
+
+Short, fixed lists, such as Yes or No, severities and delivery modes, stay as plain dropdowns.
+
+## Upgrading
+
+There are no database migrations and no new settings. Redeploy and you're done.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.7.3) for everything that
+shipped between these two tags.
