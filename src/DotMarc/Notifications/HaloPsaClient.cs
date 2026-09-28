@@ -30,11 +30,37 @@ public sealed class HaloPsaClient : IHaloPsaClient
     /// <summary>Halo's built-in "Unassigned" agent, which every ticket without an assignee carries.</summary>
     private const int UnassignedAgentId = 1;
 
+    /// <summary>The page size dotMARC asks Halo for. Halo can silently return fewer a page than this (100 is
+    /// common), so nothing below relies on getting it.</summary>
+    private const int ClientPageSize = 1000;
+
+    /// <summary>Without <c>pageinate=true</c>, GET /Client returns only Halo's first page, so a tenant with more
+    /// clients than that silently lost the rest. This asks page by page until it has <c>record_count</c> clients
+    /// (the total across every page). The page count isn't worked out from the page size, because Halo may cap
+    /// a page below the size asked for, which would stop after the first few pages. An empty page also stops it,
+    /// so an overstated count can't keep it requesting, and a response with no <c>record_count</c> is taken as
+    /// the whole list.</summary>
     public async Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Get, settings, "Client", null, cancellationToken).ConfigureAwait(false);
-        var payload = await ReadJsonAsync<ClientListResponse>(response, "Client", cancellationToken).ConfigureAwait(false);
-        return payload?.Clients.Select(c => new HaloClient(c.Id, c.Name)).ToList() ?? [];
+        var clients = new List<HaloClient>();
+        for (var pageNumber = 1; ; pageNumber++)
+        {
+            var path = $"Client?pageinate=true&page_size={ClientPageSize}&page_no={pageNumber}";
+            using var response = await SendAsync(HttpMethod.Get, settings, path, null, cancellationToken).ConfigureAwait(false);
+            var page = await ReadJsonAsync<ClientListResponse>(response, "Client", cancellationToken).ConfigureAwait(false);
+            if (page is null || page.Clients.Count == 0)
+            {
+                break;
+            }
+
+            clients.AddRange(page.Clients.Select(c => new HaloClient(c.Id, c.Name)));
+            if (page.RecordCount is not { } recordCount || clients.Count >= recordCount)
+            {
+                break;
+            }
+        }
+
+        return clients;
     }
 
     public async Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default)
@@ -271,7 +297,9 @@ public sealed class HaloPsaClient : IHaloPsaClient
     private sealed record IdNameEntry(
         [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleInt32Converter))] int Id,
         [property: JsonPropertyName("name")] string Name);
-    private sealed record ClientListResponse([property: JsonPropertyName("clients")] List<IdNameEntry> Clients);
+    private sealed record ClientListResponse(
+        [property: JsonPropertyName("clients")] List<IdNameEntry> Clients,
+        [property: JsonPropertyName("record_count"), JsonConverter(typeof(FlexibleInt32Converter))] int? RecordCount);
     private sealed record CreateTicketRequest(
         [property: JsonPropertyName("summary")] string Summary,
         [property: JsonPropertyName("details")] string Details,

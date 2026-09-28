@@ -454,6 +454,44 @@ public sealed class HaloPsaClientTests
     }
 
     [Fact]
+    public async Task ListClientsAsync_RequestsPagesUntilItHasRecordCountClients_EvenWhenHaloCapsThePageSize()
+    {
+        // Halo only returns one page of clients unless asked to paginate, and it can silently cap a page below
+        // the page_size asked for (100 when 1000 was requested). So the page count can't be worked out from the
+        // requested size: here Halo sends two clients a page, and all five must still arrive.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":5,"clients":[{"id":1,"name":"Client A"},{"id":2,"name":"Client B"}]}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":5,"clients":[{"id":3,"name":"Client C"},{"id":4,"name":"Client D"}]}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":5,"clients":[{"id":5,"name":"Client E"}]}""");
+
+        var clients = await client.ListClientsAsync(Settings);
+
+        Assert.Equal([1, 2, 3, 4, 5], clients.Select(c => c.Id));
+        var pageRequests = handler.Requests.Skip(1).Select(request => request.RequestUri!.Query).ToList();
+        Assert.Equal(3, pageRequests.Count);
+        Assert.All(pageRequests, query => Assert.Contains("pageinate=true", query));
+        Assert.Contains("page_no=1", pageRequests[0]);
+        Assert.Contains("page_no=2", pageRequests[1]);
+        Assert.Contains("page_no=3", pageRequests[2]);
+    }
+
+    [Fact]
+    public async Task ListClientsAsync_StopsAtAnEmptyPage_EvenIfRecordCountSaysThereAreMore()
+    {
+        // A record_count that overstates the total must not keep dotMARC requesting empty pages.
+        var (client, handler) = CreateClient();
+        handler.ResponseBodies.Enqueue("""{"access_token":"the-token","expires_in":3600}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":5000,"clients":[{"id":1,"name":"Client A"}]}""");
+        handler.ResponseBodies.Enqueue("""{"record_count":5000,"clients":[]}""");
+
+        var clients = await client.ListClientsAsync(Settings);
+
+        Assert.Single(clients);
+        Assert.Equal(3, handler.Requests.Count);
+    }
+
+    [Fact]
     public async Task ListPrioritiesAsync_ReturnsTheParsedPriorityList()
     {
         var (client, handler) = CreateClient();
