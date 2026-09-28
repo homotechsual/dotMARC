@@ -10,4 +10,7 @@
   border-radius: 0px;
   background: var(--site-color-feedback-background);
   min-height: 500px;
+  iframe {
+    padding-top: var(--ifm-spacing-vertical);
+  }
 }
