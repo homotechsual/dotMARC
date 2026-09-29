@@ -109,8 +109,11 @@ the context, and records one entry:
 Outside the services:
 
 * **DNS pushes**, in the push callback endpoint: `dns.pushed`, one entry per push with each record's name,
-  type, old value and new value. A push that doesn't succeed records nothing, matching decision 5; it is
-  already logged as a warning.
+  type, old value and new value. A push that fails can still have changed the live zone (a replace deletes the old
+  record first, and providers stop at the first failing record with earlier ones already live), so
+  `ReplaceFailedAfterDelete` and `ProviderError` record `dns.push_failed` with the attempted changes. Only
+  `ZoneNotFound`, which never reaches the zone, records nothing. (Added after the final review: decision 5 assumed a
+  failed push changed nothing, which isn't true here.)
 * **Halo actions** on Alert settings: `halo.integration_tested` and `halo.sign_in_cleared`.
 * **Export**: `audit.exported`, with the filters used.
 

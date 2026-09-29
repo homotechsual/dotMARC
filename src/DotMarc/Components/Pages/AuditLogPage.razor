@@ -37,8 +37,11 @@
           OnRowClick="@((TableRowClickEventArgs<AuditEntry> args) => ToggleExpanded(args.Item))">
     <ToolBarContent>
         <MudSpacer />
+        @* The download attribute keeps Blazor's router from handling this link. Without it, clicking Export navigated
+           the page to the export URL: it recorded a page view of /audit/export and left the address bar there, so
+           pressing F5 downloaded (and recorded) the export again. *@
         <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" Class="mr-2"
-                   Href="@($"/audit/export?{_filter.ToQueryString()}")">Export CSV</MudButton>
+                   Href="@($"/audit/export?{_filter.ToQueryString()}")" UserAttributes="@(new Dictionary<string, object?> { ["download"] = "" })">Export CSV</MudButton>
         <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
                    OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
     </ToolBarContent>

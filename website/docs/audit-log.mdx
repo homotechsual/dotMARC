@@ -10,9 +10,9 @@ The audit log answers "who changed this?", "who has been signing in?" and "who l
 ## What it records
 
 * **Changes.** Domains, groups and tags added, changed or removed; roles and access grants; alert, HaloPSA and DNS
-  provider settings; ticket rules; DNS records pushed to your provider; running the HaloPSA integration test; and
-  exporting the log itself. Each entry says who did it, when, what it was about, and the old and new value of
-  every field that changed.
+  provider settings; ticket rules; DNS records pushed to your provider, including a push that failed partway and
+  may have left the zone partly changed; running the HaloPSA integration test; and exporting the log itself. Each
+  entry says who did it, when, what it was about, and the old and new value of every field that changed.
 * **Sign-ins.** Every successful sign-in, and every sign-in refused because the person has no access grant, with
   the email they tried.
 * **Page views.** Which pages each person opened, such as a domain's Sources tab. These are hidden unless you

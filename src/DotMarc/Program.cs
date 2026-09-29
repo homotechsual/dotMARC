@@ -783,11 +783,11 @@ app.MapGet("/dns-push/{provider}/callback", async (
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
     var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, changes, CancellationToken.None);
 
-    // Recorded only when the push went through. A push that failed changed nothing, and is already logged below.
+    // A failed push can still have changed the zone (see DnsPushAudit), so every outcome that reached it is recorded.
     // The records are live in DNS by now, so this can't share a transaction with the change; it's best-effort.
-    if (result.Outcome == DnsPushOutcome.Pushed)
+    if (DotMarc.Audit.DnsPushAudit.CreateEntry(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), domain, provider, changes, result.Outcome) is { } pushEntry)
     {
-        await auditRecorder.RecordAsync(DotMarc.Audit.DnsPushAudit.CreateEntry(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), domain, provider, changes));
+        await auditRecorder.RecordAsync(pushEntry);
     }
 
     var resultFlag = result.Outcome switch

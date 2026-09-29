@@ -34,6 +34,7 @@ public static class AuditActions
     public const string GoogleCloudDnsSettingsSaved = "settings.google_cloud_dns.saved";
     public const string AuditSettingsSaved = "settings.audit.saved";
     public const string DnsPushed = "dns.pushed";
+    public const string DnsPushFailed = "dns.push_failed";
     public const string HaloIntegrationTested = "halo.integration_tested";
     public const string HaloSignInCleared = "halo.sign_in_cleared";
     public const string AuditExported = "audit.exported";
@@ -75,6 +76,7 @@ public static class AuditActions
         (GoogleCloudDnsSettingsSaved, "Google Cloud DNS settings saved"),
         (AuditSettingsSaved, "Audit retention changed"),
         (DnsPushed, "DNS records pushed"),
+        (DnsPushFailed, "DNS push failed partway"),
         (HaloIntegrationTested, "HaloPSA integration tested"),
         (HaloSignInCleared, "HaloPSA sign-in cleared"),
         (AuditExported, "Audit log exported"),
