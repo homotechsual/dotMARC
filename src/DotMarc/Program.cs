@@ -310,6 +310,7 @@ else
 }
 
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
+builder.Services.AddScoped<DotMarc.Audit.AuditActorAccessor>();
 
 builder.Services.AddAuthorization(options =>
 {

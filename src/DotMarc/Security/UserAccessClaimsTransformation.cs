@@ -52,7 +52,7 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
         // configuration: try preferred_username first, then the UPN and Email claim types
         // (populated by Microsoft.Identity.Web's default claim mapping for some configurations),
         // then a literal "email" claim type some tenants emit instead.
-        var email = FirstNonEmptyClaim(principal, "preferred_username", ClaimTypes.Upn, ClaimTypes.Email, "email");
+        var email = UserClaims.GetEmail(principal);
         if (string.IsNullOrEmpty(objectId) && string.IsNullOrEmpty(email))
         {
             return principal;
@@ -77,23 +77,5 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
         }
 
         return principal;
-    }
-
-    /// <summary>Returns the value of the first of the given claim types that's present with a
-    /// non-empty value, or null if none are. Distinct from FindFirst(...)?.Value on a single
-    /// claim type: a claim present but empty-valued should still fall through to the next
-    /// candidate rather than short-circuiting the chain with an unusable value.</summary>
-    private static string? FirstNonEmptyClaim(ClaimsPrincipal principal, params string[] claimTypes)
-    {
-        foreach (var claimType in claimTypes)
-        {
-            var value = principal.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrEmpty(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
     }
 }
