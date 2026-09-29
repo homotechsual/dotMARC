@@ -51,6 +51,9 @@
             <AuthorizeView Policy="LogsView">
                 <MudMenuItem Href="/logs" Icon="@Icons.Material.Filled.Article">Server logs</MudMenuItem>
             </AuthorizeView>
+            <AuthorizeView Policy="AuditView">
+                <MudMenuItem Href="/audit" Icon="@Icons.Material.Filled.History">Audit log</MudMenuItem>
+            </AuthorizeView>
         </MudMenu>
         @if (DemoOptions.Value.Enabled)
         {

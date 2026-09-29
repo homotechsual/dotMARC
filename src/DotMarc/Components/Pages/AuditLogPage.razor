@@ -1,0 +1,171 @@
+@page "/audit"
+@attribute [Authorize(Policy = "AuditView")]
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+
+<PageTitle>dotMARC - Audit log</PageTitle>
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">Audit log</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/audit-log" Text="What the audit log records" Class="ml-2" />
+</div>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+    Who changed what, who signed in, and which pages they opened. Entries can't be edited or deleted. They leave
+    only once they pass the retention period.
+</MudText>
+
+<MudGrid Class="mb-2">
+    <MudItem xs="12" sm="4">
+        <MudDatePicker Label="From (UTC)" Date="@ToDateTime(_filter.From)" DateChanged="@(date => UpdateFilterAsync(_filter with { From = ToDateOnly(date) }))" Clearable="true" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudDatePicker Label="To (UTC)" Date="@ToDateTime(_filter.To)" DateChanged="@(date => UpdateFilterAsync(_filter with { To = ToDateOnly(date) }))" Clearable="true" />
+    </MudItem>
+    <MudItem xs="12" sm="4" Class="d-flex align-center">
+        <MudSwitch T="bool" Value="_filter.IncludePageViews" ValueChanged="@(include => UpdateFilterAsync(_filter with { IncludePageViews = include }))"
+                   Label="Show page views" Color="Color.Primary" />
+    </MudItem>
+</MudGrid>
+
+<MudTable @ref="_table" T="AuditEntry" ServerData="LoadPageAsync" Hover="true" Dense="true" CustomHeader="true" RowsPerPage="50"
+          OnRowClick="@((TableRowClickEventArgs<AuditEntry> args) => ToggleExpanded(args.Item))">
+    <ToolBarContent>
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" Class="mr-2"
+                   Href="@($"/audit/export?{_filter.ToQueryString()}")">Export CSV</MudButton>
+        <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                   OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
+    </ToolBarContent>
+    <HeaderContent>
+        <tr>
+            <MudTh>Time (UTC)</MudTh>
+            <MudTh>Kind</MudTh>
+            <MudTh>Who</MudTh>
+            <MudTh>Action</MudTh>
+            <MudTh>Target</MudTh>
+            <MudTh>Summary</MudTh>
+        </tr>
+        @if (_showFilters)
+        {
+        <tr>
+            <MudTh></MudTh>
+            <MudTh>
+                <MudSelect T="AuditEntryKind?" Value="_filter.Kind" ValueChanged="@(kind => UpdateFilterAsync(_filter with { Kind = kind }))" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                    <MudSelectItem T="AuditEntryKind?" Value="AuditEntryKind.Change">Changes</MudSelectItem>
+                    <MudSelectItem T="AuditEntryKind?" Value="AuditEntryKind.SignIn">Sign-ins</MudSelectItem>
+                    <MudSelectItem T="AuditEntryKind?" Value="AuditEntryKind.PageView">Page views</MudSelectItem>
+                </MudSelect>
+            </MudTh>
+            <MudTh><MudTextField T="string" Value="_filter.Who" ValueChanged="@(text => UpdateFilterAsync(_filter with { Who = text }))" Placeholder="Search" DebounceInterval="400" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+            <MudTh><SearchableSelect TValue="string" Options="ActionOptions" Value="_filter.Action" ValueChanged="@(action => UpdateFilterAsync(_filter with { Action = action }))" Clearable="true" Placeholder="Any" Margin="Margin.Dense" /></MudTh>
+            <MudTh><MudTextField T="string" Value="_filter.Target" ValueChanged="@(text => UpdateFilterAsync(_filter with { Target = text }))" Placeholder="Search" DebounceInterval="400" Margin="Margin.Dense" /></MudTh>
+            <MudTh><MudTextField T="string" Value="_filter.Summary" ValueChanged="@(text => UpdateFilterAsync(_filter with { Summary = text }))" Placeholder="Search" DebounceInterval="400" Margin="Margin.Dense" /></MudTh>
+        </tr>
+        }
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd Style="white-space:nowrap">@context.OccurredUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small" Color="@KindColor(context.Kind)">@KindLabel(context.Kind)</MudChip></MudTd>
+        <MudTd>@context.ActorName</MudTd>
+        <MudTd><MudText Typo="Typo.caption">@context.Action</MudText></MudTd>
+        <MudTd>@context.TargetName</MudTd>
+        <MudTd Style="@($"cursor:{(context.Changes.Count > 0 ? "pointer" : "default")}")">
+            @context.Summary
+            @if (context.Changes.Count > 0)
+            {
+                <MudIcon Icon="@(_expandedEntryId == context.Id ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" Class="ml-1" Style="vertical-align:middle" />
+            }
+        </MudTd>
+    </RowTemplate>
+    <ChildRowContent>
+        @if (_expandedEntryId == context.Id && context.Changes.Count > 0)
+        {
+            <MudTr>
+                <td colspan="6" class="px-6 pb-4">
+                    <MudSimpleTable Dense="true" Elevation="0">
+                        <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+                        <tbody>
+                            @foreach (var change in context.Changes)
+                            {
+                                <tr>
+                                    <td>@change.Field</td>
+                                    @if (change.Secret)
+                                    {
+                                        <td colspan="2" class="mud-text-secondary">Changed (the value isn't recorded)</td>
+                                    }
+                                    else
+                                    {
+                                        <td>@(change.Old ?? "(none)")</td>
+                                        <td>@(change.New ?? "(none)")</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </td>
+            </MudTr>
+        }
+    </ChildRowContent>
+    <NoRecordsContent>
+        <MudText>No entries match these filters.</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="@(new[] { 25, 50, 100 })" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private static readonly IReadOnlyList<SelectOption<string>> ActionOptions =
+        AuditActions.All.Select(action => new SelectOption<string>(action.Action, action.Label)).ToList();
+
+    private MudTable<AuditEntry>? _table;
+    private AuditFilter _filter = new() { From = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)) };
+    private bool _showFilters;
+    private long? _expandedEntryId;
+
+    private async Task<TableData<AuditEntry>> LoadPageAsync(TableState state, CancellationToken cancellationToken)
+    {
+        await using var context = await DbFactory.CreateDbContextAsync(cancellationToken);
+        var query = AuditQuery.Apply(context.AuditEntries.AsNoTracking(), _filter);
+        var total = await query.CountAsync(cancellationToken);
+        var entries = await query
+            .OrderByDescending(entry => entry.OccurredUtc)
+            .ThenByDescending(entry => entry.Id)
+            .Skip(state.Page * state.PageSize)
+            .Take(state.PageSize)
+            .ToListAsync(cancellationToken);
+        return new TableData<AuditEntry> { TotalItems = total, Items = entries };
+    }
+
+    private async Task UpdateFilterAsync(AuditFilter filter)
+    {
+        _filter = filter;
+        _expandedEntryId = null;
+        if (_table is not null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private void ToggleExpanded(AuditEntry entry) => _expandedEntryId = _expandedEntryId == entry.Id ? null : entry.Id;
+
+    private static DateTime? ToDateTime(DateOnly? date) => date?.ToDateTime(TimeOnly.MinValue);
+
+    private static DateOnly? ToDateOnly(DateTime? date) => date is { } value ? DateOnly.FromDateTime(value) : null;
+
+    private static string KindLabel(AuditEntryKind kind) => kind switch
+    {
+        AuditEntryKind.Change => "Change",
+        AuditEntryKind.SignIn => "Sign-in",
+        _ => "Page view"
+    };
+
+    private static Color KindColor(AuditEntryKind kind) => kind switch
+    {
+        AuditEntryKind.Change => Color.Primary,
+        AuditEntryKind.SignIn => Color.Info,
+        _ => Color.Default
+    };
+}

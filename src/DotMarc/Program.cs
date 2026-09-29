@@ -518,6 +518,28 @@ app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContex
 // permission its target already needs (MtaStsManage for the CNAME, DomainsEdit for the DMARC TXT
 // record), checked explicitly below since /start doesn't yet know which target it's for from route
 // data alone.
+// Streams the rows the Audit log page's filters match. The filter travels in the query string, and the export is
+// itself recorded, so who took a copy of the log is part of the log.
+app.MapGet("/audit/export", async (HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory, DotMarc.Audit.AuditRecorder auditRecorder) =>
+{
+    var filter = DotMarc.Audit.AuditFilter.FromQuery(httpContext.Request.Query);
+    await auditRecorder.RecordAsync(DotMarc.Audit.AuditLog.Create(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User),
+        DotMarc.Audit.AuditEntryKind.Change, DotMarc.Audit.AuditActions.AuditExported, null, $"Exported the audit log ({filter.Describe()})"));
+
+    httpContext.Response.ContentType = "text/csv; charset=utf-8";
+    httpContext.Response.Headers.ContentDisposition = $"attachment; filename=\"dotmarc-audit-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.csv\"";
+
+    await using var context = await dbContextFactory.CreateDbContextAsync(httpContext.RequestAborted);
+    var entries = DotMarc.Audit.AuditQuery.Apply(context.AuditEntries.AsNoTracking(), filter)
+        .OrderByDescending(entry => entry.OccurredUtc)
+        .ThenByDescending(entry => entry.Id)
+        .AsAsyncEnumerable();
+
+    // A byte order mark so Excel reads the UTF-8 correctly.
+    await using var writer = new StreamWriter(httpContext.Response.Body, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    await DotMarc.Audit.AuditCsv.WriteAsync(writer, entries, httpContext.RequestAborted);
+}).RequireAuthorization(nameof(Permission.AuditView));
+
 app.MapGet("/dns-push/{provider}/start", async (
     string provider, int domainId, string target, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
