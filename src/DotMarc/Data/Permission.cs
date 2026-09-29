@@ -24,5 +24,7 @@ public enum Permission
     AlertsView,
     AlertsManage,
     DnsPushManage,
-    LogsView
+    LogsView,
+    AuditView,
+    AuditManage
 }
