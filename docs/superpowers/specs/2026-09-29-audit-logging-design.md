@@ -74,7 +74,7 @@ A record carrying `Kind`, `ObjectId`, `Email` and `Name`, with two constructors:
 
 * `AuditActor.FromPrincipal(ClaimsPrincipal)` for a signed-in person, reading the object id and email with the
   same claim fallbacks as `UserAccessClaimsTransformation`.
-* `AuditActor.System(string name)` for work nobody clicked, for example "Startup" for seeding the initial
+* `AuditActor.ForSystem(string name)` for work nobody clicked, for example "Startup" for seeding the initial
   admins, or "HaloPSA webhook".
 
 Pages get the current actor from a small scoped service, `AuditActorAccessor`, that reads the
@@ -89,8 +89,8 @@ for a secret that changed.
 
 ### What is recorded
 
-Every mutating public method on these services takes an `AuditActor` (before its `CancellationToken`) and
-records one entry:
+Every mutating public method on these services takes an `AuditActor` as its second parameter, straight after
+the context, and records one entry:
 
 * `DomainManagementService`: `domain.added`, `domain.removed`, `domain.monitoring_changed`,
   `domain.halo_client_changed`, `domain.mta_sts_changed`, `domain.dkim_selectors_changed`, `domains.reordered`
