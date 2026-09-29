@@ -49,7 +49,7 @@ public static class DemoDataSeeder
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
                 "UserAccessScopedGroups", "DomainGroup", "DomainTag", "AlertEvents",
-                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails"
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);

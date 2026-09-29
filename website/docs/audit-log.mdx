@@ -1,0 +1,47 @@
+---
+description: What dotMARC's audit log records, who can see it, how to filter and export it, and how long entries are kept.
+---
+
+# Audit log
+
+The audit log answers "who changed this?", "who has been signing in?" and "who looked at what?". Open it from
+**Manage > Audit log**.
+
+## What it records
+
+* **Changes.** Domains, groups and tags added, changed or removed; roles and access grants; alert, HaloPSA and DNS
+  provider settings; ticket rules; DNS records pushed to your provider; running the HaloPSA integration test; and
+  exporting the log itself. Each entry says who did it, when, what it was about, and the old and new value of
+  every field that changed.
+* **Sign-ins.** Every successful sign-in, and every sign-in refused because the person has no access grant, with
+  the email they tried.
+* **Page views.** Which pages each person opened, such as a domain's Sources tab. These are hidden unless you
+  switch on **Show page views**.
+
+Secrets are never recorded. When a client secret, webhook secret or webhook URL changes, the entry says it changed,
+without the value.
+
+Attempts that dotMARC refused, such as adding a domain that already exists, aren't recorded. Reports arriving and
+alerts being raised aren't recorded either: they're the data dotMARC monitors, and have their own pages.
+
+The log starts when you upgrade to the version that added it. Nothing from before then can be reconstructed.
+
+## Who can see it
+
+Reading and exporting the log needs the `AuditView` permission. Changing how long entries are kept needs
+`AuditManage`, so someone can review the log without being able to shorten it. Both are part of the built-in Admin
+role, and can be added to a custom role from **Manage access**. See [Permissions and access](./permissions-and-access.mdx).
+
+Nothing in dotMARC edits or deletes an entry. Entries leave only when they pass their retention period.
+
+## Filter and export
+
+The date pickers choose the range, in UTC, and default to the last 30 days. **Filters** opens a row for kind, who
+(name or email), action, target and summary. Click an entry to see each field it changed.
+
+**Export CSV** downloads exactly what the filters match. The export is itself recorded.
+
+## Retention
+
+Changes and sign-ins are kept for a year, and page views for 90 days, by default. Change these on the Audit log
+page: each is between 1 and 3,650 days, or empty to keep forever. Expired entries are deleted once a day.

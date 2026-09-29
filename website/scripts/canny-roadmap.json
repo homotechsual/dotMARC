@@ -58,7 +58,7 @@
   {
     "title": "Audit logging for all changes / configuration alterations and access.",
     "version": "v0.8.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
       "dotMARC lets you grant other people (including client contacts) access, change alert and PSA settings, configure DNS provider credentials and push DNS records. There is currently no record of who did what.",
       "Proposal: an audit log that records administrative actions with who, what and when, for example access granted or revoked, role changes, settings changes, domains added or removed, and DNS records pushed. Viewable and filterable behind its own permission, with export.",
