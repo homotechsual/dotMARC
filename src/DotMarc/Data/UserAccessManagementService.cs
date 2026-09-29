@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -13,7 +14,7 @@ public static class UserAccessManagementService
     public enum UpdateAccessResult { Updated, RoleNotFound }
     public enum RevokeAccessResult { Revoked, LastAdminGuard }
 
-    public static async Task<GrantAccessResult> GrantAccessAsync(DotMarcDbContext context, string rawEmail, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
+    public static async Task<GrantAccessResult> GrantAccessAsync(DotMarcDbContext context, AuditActor actor, string rawEmail, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
     {
         var email = rawEmail.Trim();
         if (string.IsNullOrEmpty(email))
@@ -37,11 +38,17 @@ public static class UserAccessManagementService
             ? await context.Groups.Where(g => groupIds.Contains(g.Id)).ToListAsync(cancellationToken).ConfigureAwait(false)
             : [];
 
-        context.UserAccesses.Add(new UserAccess { Email = email, RoleId = roleId, ScopedGroups = groups });
+        var access = new UserAccess { Email = email, RoleId = roleId, ScopedGroups = groups };
+        context.UserAccesses.Add(access);
 
         try
         {
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await AuditLog.SaveAndRecordAsync(context,
+                () => AuditLog.Record(context, actor, AuditActions.AccessGranted, AuditTarget.For(access), $"Granted {email} the {role.Name} role",
+                    new AuditChanges()
+                        .Field("Role", (string?)null, role.Name)
+                        .Set("Groups", [], groups.Select(group => group.Name))),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
@@ -55,7 +62,7 @@ public static class UserAccessManagementService
     /// covers Grant + Revoke, not editing an existing grant's role/scope. Reserved here for a
     /// future edit-grant feature; kept rather than removed so that feature doesn't have to
     /// re-derive this logic.</summary>
-    public static async Task<UpdateAccessResult> UpdateAccessAsync(DotMarcDbContext context, int userAccessId, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
+    public static async Task<UpdateAccessResult> UpdateAccessAsync(DotMarcDbContext context, AuditActor actor, int userAccessId, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
     {
         var role = await context.Roles.SingleOrDefaultAsync(r => r.Id == roleId, cancellationToken).ConfigureAwait(false);
         if (role is null)
@@ -63,11 +70,21 @@ public static class UserAccessManagementService
             return UpdateAccessResult.RoleNotFound;
         }
 
-        var access = await context.UserAccesses.Include(u => u.ScopedGroups).SingleAsync(u => u.Id == userAccessId, cancellationToken).ConfigureAwait(false);
-        access.RoleId = roleId;
-        access.ScopedGroups = role.IsScopable
+        var access = await context.UserAccesses.Include(u => u.Role).Include(u => u.ScopedGroups).AsSplitQuery()
+            .SingleAsync(u => u.Id == userAccessId, cancellationToken).ConfigureAwait(false);
+        var groups = role.IsScopable
             ? await context.Groups.Where(g => groupIds.Contains(g.Id)).ToListAsync(cancellationToken).ConfigureAwait(false)
             : [];
+        var changes = new AuditChanges()
+            .Field("Role", access.Role.Name, role.Name)
+            .Set("Groups", access.ScopedGroups.Select(group => group.Name), groups.Select(group => group.Name));
+
+        access.RoleId = roleId;
+        access.ScopedGroups = groups;
+        if (changes.Any)
+        {
+            AuditLog.Record(context, actor, AuditActions.AccessUpdated, AuditTarget.For(access), $"Changed access for {access.Email}", changes);
+        }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return UpdateAccessResult.Updated;
@@ -77,7 +94,7 @@ public static class UserAccessManagementService
     /// would permanently lock the app out of its own Manage Access page, recoverable only via
     /// direct SQL. Checked by role/permission content, not by the built-in Admin role's identity,
     /// since a custom role could also carry AccessManage.</summary>
-    public static async Task<RevokeAccessResult> RevokeAccessAsync(DotMarcDbContext context, int userAccessId, CancellationToken cancellationToken = default)
+    public static async Task<RevokeAccessResult> RevokeAccessAsync(DotMarcDbContext context, AuditActor actor, int userAccessId, CancellationToken cancellationToken = default)
     {
         var access = await context.UserAccesses.Include(u => u.Role).SingleAsync(u => u.Id == userAccessId, cancellationToken).ConfigureAwait(false);
 
@@ -103,6 +120,7 @@ public static class UserAccessManagementService
             }
         }
 
+        AuditLog.Record(context, actor, AuditActions.AccessRevoked, AuditTarget.For(access), $"Revoked access for {access.Email}");
         context.UserAccesses.Remove(access);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return RevokeAccessResult.Revoked;

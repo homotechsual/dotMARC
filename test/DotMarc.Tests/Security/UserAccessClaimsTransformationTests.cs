@@ -65,7 +65,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
             var role = new Role { Name = "Domain Manager", IsLocked = false, IsScopable = false, Permissions = [Permission.DomainsView, Permission.DomainsAdd] };
             context.Roles.Add(role);
             context.SaveChanges();
-            await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", role.Id, [], CancellationToken.None);
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", role.Id, [], CancellationToken.None);
         }
 
         var transformation = new UserAccessClaimsTransformation(CreateFactory());
@@ -87,7 +87,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
             context.Roles.Add(role);
             context.Groups.Add(group);
             context.SaveChanges();
-            await UserAccessManagementService.GrantAccessAsync(context, "client@example.com", role.Id, [group.Id], CancellationToken.None);
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "client@example.com", role.Id, [group.Id], CancellationToken.None);
         }
 
         var transformation = new UserAccessClaimsTransformation(CreateFactory());
@@ -105,7 +105,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
             var role = new Role { Name = "Domain Manager", IsLocked = false, IsScopable = false, Permissions = [Permission.DomainsView] };
             context.Roles.Add(role);
             context.SaveChanges();
-            await UserAccessManagementService.GrantAccessAsync(context, "fallback@example.com", role.Id, [], CancellationToken.None);
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "fallback@example.com", role.Id, [], CancellationToken.None);
         }
 
         var transformation = new UserAccessClaimsTransformation(CreateFactory());
@@ -133,7 +133,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
             var role = new Role { Name = "Domain Manager", IsLocked = false, IsScopable = false, Permissions = [Permission.DomainsView] };
             context.Roles.Add(role);
             context.SaveChanges();
-            await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", role.Id, [], CancellationToken.None);
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", role.Id, [], CancellationToken.None);
         }
 
         var transformation = new UserAccessClaimsTransformation(CreateFactory());
@@ -158,7 +158,7 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
             context.Roles.Add(role);
             context.Groups.Add(group);
             context.SaveChanges();
-            await UserAccessManagementService.GrantAccessAsync(context, "scoped-empty@example.com", role.Id, [group.Id], CancellationToken.None);
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "scoped-empty@example.com", role.Id, [group.Id], CancellationToken.None);
         }
 
         var transformation = new UserAccessClaimsTransformation(CreateFactory());

@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         using var context = CreateContext();
         var roleId = SeedRole(context, "Domain Manager", isScopable: false, Permission.DomainsView);
 
-        var result = await UserAccessManagementService.GrantAccessAsync(context, "  person@example.com  ", roleId, [999], CancellationToken.None);
+        var result = await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "  person@example.com  ", roleId, [999], CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.GrantAccessResult.Granted, result);
         using var verify = CreateContext();
@@ -64,7 +65,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         context.SaveChanges();
         var groupId = context.Groups.Single().Id;
 
-        var result = await UserAccessManagementService.GrantAccessAsync(context, "client@example.com", roleId, [groupId], CancellationToken.None);
+        var result = await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "client@example.com", roleId, [groupId], CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.GrantAccessResult.Granted, result);
         using var verify = CreateContext();
@@ -77,9 +78,9 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var roleId = SeedRole(context, "Viewer", isScopable: true, Permission.DomainsView);
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
 
-        var result = await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        var result = await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.GrantAccessResult.AlreadyExists, result);
     }
@@ -89,7 +90,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", 999, [], CancellationToken.None);
+        var result = await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", 999, [], CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.GrantAccessResult.RoleNotFound, result);
     }
@@ -103,10 +104,10 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         context.Groups.Add(new Group { Name = "Client A" });
         context.SaveChanges();
         var groupId = context.Groups.Single().Id;
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", viewerRoleId, [groupId], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", viewerRoleId, [groupId], CancellationToken.None);
         var accessId = context.UserAccesses.Single().Id;
 
-        await UserAccessManagementService.UpdateAccessAsync(context, accessId, managerRoleId, [groupId], CancellationToken.None);
+        await UserAccessManagementService.UpdateAccessAsync(context, TestActors.Admin, accessId, managerRoleId, [groupId], CancellationToken.None);
 
         using var verify = CreateContext();
         var access = verify.UserAccesses.Include(u => u.ScopedGroups).Single();
@@ -119,10 +120,10 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var roleId = SeedRole(context, "Viewer", isScopable: true, Permission.DomainsView);
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
         var accessId = context.UserAccesses.Single().Id;
 
-        var result = await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, TestActors.Admin, accessId, CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.RevokeAccessResult.Revoked, result);
         using var verify = CreateContext();
@@ -134,10 +135,10 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var adminRoleId = SeedRole(context, "Admin", isScopable: false, Permission.AccessManage);
-        await UserAccessManagementService.GrantAccessAsync(context, "admin@example.com", adminRoleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "admin@example.com", adminRoleId, [], CancellationToken.None);
         var accessId = context.UserAccesses.Single().Id;
 
-        var result = await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, TestActors.Admin, accessId, CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.RevokeAccessResult.LastAdminGuard, result);
         using var verify = CreateContext();
@@ -149,11 +150,11 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var adminRoleId = SeedRole(context, "Admin", isScopable: false, Permission.AccessManage);
-        await UserAccessManagementService.GrantAccessAsync(context, "admin1@example.com", adminRoleId, [], CancellationToken.None);
-        await UserAccessManagementService.GrantAccessAsync(context, "admin2@example.com", adminRoleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "admin1@example.com", adminRoleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "admin2@example.com", adminRoleId, [], CancellationToken.None);
         var firstAccessId = context.UserAccesses.Single(u => u.Email == "admin1@example.com").Id;
 
-        var result = await UserAccessManagementService.RevokeAccessAsync(context, firstAccessId, CancellationToken.None);
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, TestActors.Admin, firstAccessId, CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.RevokeAccessResult.Revoked, result);
         using var verify = CreateContext();
@@ -166,10 +167,10 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var roleId = SeedRole(context, "Viewer", isScopable: true, Permission.DomainsView);
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
         var accessId = context.UserAccesses.Single().Id;
 
-        var result = await UserAccessManagementService.RevokeAccessAsync(context, accessId, CancellationToken.None);
+        var result = await UserAccessManagementService.RevokeAccessAsync(context, TestActors.Admin, accessId, CancellationToken.None);
 
         Assert.Equal(UserAccessManagementService.RevokeAccessResult.Revoked, result);
         using var verify = CreateContext();
@@ -181,7 +182,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var roleId = SeedRole(context, "Viewer", isScopable: true, Permission.DomainsView);
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
 
         var resolved = await UserAccessManagementService.ResolveAsync(context, "oid-123", "person@example.com", CancellationToken.None);
 
@@ -196,7 +197,7 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
         var roleId = SeedRole(context, "Viewer", isScopable: true, Permission.DomainsView);
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
         await UserAccessManagementService.ResolveAsync(context, "oid-123", "person@example.com", CancellationToken.None);
 
         var resolved = await UserAccessManagementService.ResolveAsync(context, "oid-123", "person-renamed@example.com", CancellationToken.None);
@@ -213,5 +214,45 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         var resolved = await UserAccessManagementService.ResolveAsync(context, "oid-999", "nobody@example.com", CancellationToken.None);
 
         Assert.Null(resolved);
+    }
+
+    [Fact]
+    public async Task GrantAccessAsync_RecordsTheRoleAndGroups()
+    {
+        await using (var context = CreateContext())
+        {
+            context.Roles.Add(new Role { Name = "Client viewer", IsScopable = true, Permissions = [Permission.DomainsView] });
+            context.Groups.Add(new Group { Name = "Client A" });
+            await context.SaveChangesAsync();
+            var roleId = (await context.Roles.SingleAsync(role => role.Name == "Client viewer")).Id;
+            var groupId = (await context.Groups.SingleAsync()).Id;
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "sam@contoso.com", roleId, [groupId]);
+        }
+
+        await using var verify = CreateContext();
+        var access = await verify.UserAccesses.SingleAsync(userAccess => userAccess.Email == "sam@contoso.com");
+        var entry = await verify.AuditEntries.SingleAsync(auditEntry => auditEntry.Action == AuditActions.AccessGranted);
+        Assert.Equal((access.Id.ToString(), "sam@contoso.com", "Granted sam@contoso.com the Client viewer role"), (entry.TargetId, entry.TargetName, entry.Summary));
+        Assert.Equal([new AuditFieldChange("Role", null, "Client viewer"), new AuditFieldChange("Groups", "None", "Client A")], entry.Changes);
+    }
+
+    [Fact]
+    public async Task RevokeAccessAsync_RecordsNothing_WhenItWouldRemoveTheLastAdmin()
+    {
+        await using (var context = CreateContext())
+        {
+            context.Roles.Add(new Role { Name = "Admin", IsLocked = true, Permissions = [Permission.AccessManage] });
+            await context.SaveChangesAsync();
+            var roleId = (await context.Roles.SingleAsync()).Id;
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "only-admin@contoso.com", roleId, []);
+            var accessId = (await context.UserAccesses.SingleAsync()).Id;
+
+            var result = await UserAccessManagementService.RevokeAccessAsync(context, TestActors.Admin, accessId);
+
+            Assert.Equal(UserAccessManagementService.RevokeAccessResult.LastAdminGuard, result);
+        }
+
+        await using var verify = CreateContext();
+        Assert.DoesNotContain(verify.AuditEntries, entry => entry.Action == AuditActions.AccessRevoked);
     }
 }

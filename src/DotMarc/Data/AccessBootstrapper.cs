@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -59,14 +60,21 @@ public static class AccessBootstrapper
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                foreach (var email in emails)
+                var seededGrants = emails.Select(email => new UserAccess { Email = email, RoleId = adminRoleId }).ToList();
+                context.UserAccesses.AddRange(seededGrants);
+                if (seededGrants.Count > 0)
                 {
-                    context.UserAccesses.Add(new UserAccess { Email = email, RoleId = adminRoleId });
-                }
-                if (emails.Length > 0)
-                {
-                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                    logger.LogInformation("Seeded {Count} initial admin grant(s) from InitialAdmins:Emails.", emails.Length);
+                    var startup = AuditActor.ForSystem("Startup");
+                    await AuditLog.SaveAndRecordAsync(context, () =>
+                    {
+                        foreach (var grant in seededGrants)
+                        {
+                            AuditLog.Record(context, startup, AuditActions.AccessGranted, AuditTarget.For(grant),
+                                $"Granted {grant.Email} the Admin role from InitialAdmins:Emails",
+                                new AuditChanges().Field("Role", (string?)null, "Admin"));
+                        }
+                    }, cancellationToken).ConfigureAwait(false);
+                    logger.LogInformation("Seeded {Count} initial admin grant(s) from InitialAdmins:Emails.", seededGrants.Count);
                 }
                 else
                 {

@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using System.Data.Common;
 using DotMarc.Data;
 using DotMarc.Tests.Internal;
@@ -39,7 +40,7 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await RoleManagementService.AddRoleAsync(context, "Domain Manager", [Permission.DomainsView, Permission.DomainsAdd], CancellationToken.None);
+        var result = await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Domain Manager", [Permission.DomainsView, Permission.DomainsAdd], CancellationToken.None);
 
         Assert.Equal(RoleManagementService.AddRoleResult.Added, result);
         using var verify = CreateContext();
@@ -55,7 +56,7 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await RoleManagementService.AddRoleAsync(context, "   ", [Permission.DomainsView], CancellationToken.None);
+        var result = await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "   ", [Permission.DomainsView], CancellationToken.None);
 
         Assert.Equal(RoleManagementService.AddRoleResult.InvalidName, result);
         Assert.Empty(context.Roles);
@@ -65,9 +66,9 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     public async Task AddRoleAsync_RejectsCaseInsensitiveDuplicate()
     {
         using var context = CreateContext();
-        await RoleManagementService.AddRoleAsync(context, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
+        await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
 
-        var result = await RoleManagementService.AddRoleAsync(context, "domain manager", [Permission.DomainsView], CancellationToken.None);
+        var result = await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "domain manager", [Permission.DomainsView], CancellationToken.None);
 
         Assert.Equal(RoleManagementService.AddRoleResult.AlreadyExists, result);
     }
@@ -76,10 +77,10 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     public async Task UpdateRoleAsync_UpdatesNameAndPermissions()
     {
         using var context = CreateContext();
-        await RoleManagementService.AddRoleAsync(context, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
+        await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
         var roleId = context.Roles.Single().Id;
 
-        var result = await RoleManagementService.UpdateRoleAsync(context, roleId, "Renamed", [Permission.DomainsView, Permission.DomainsDelete], CancellationToken.None);
+        var result = await RoleManagementService.UpdateRoleAsync(context, TestActors.Admin, roleId, "Renamed", [Permission.DomainsView, Permission.DomainsDelete], CancellationToken.None);
 
         Assert.Equal(RoleManagementService.UpdateRoleResult.Updated, result);
         using var verify = CreateContext();
@@ -96,7 +97,7 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
         context.SaveChanges();
         var adminId = context.Roles.Single().Id;
 
-        var result = await RoleManagementService.UpdateRoleAsync(context, adminId, "Not Admin", [Permission.DomainsView], CancellationToken.None);
+        var result = await RoleManagementService.UpdateRoleAsync(context, TestActors.Admin, adminId, "Not Admin", [Permission.DomainsView], CancellationToken.None);
 
         Assert.Equal(RoleManagementService.UpdateRoleResult.Locked, result);
         using var verify = CreateContext();
@@ -111,7 +112,7 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
         context.SaveChanges();
         var adminId = context.Roles.Single().Id;
 
-        var result = await RoleManagementService.RemoveRoleAsync(context, adminId, CancellationToken.None);
+        var result = await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, adminId, CancellationToken.None);
 
         Assert.Equal(RoleManagementService.RemoveRoleResult.Locked, result);
     }
@@ -120,11 +121,11 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     public async Task RemoveRoleAsync_RejectsRemovingARoleStillGrantedToSomeone()
     {
         using var context = CreateContext();
-        await RoleManagementService.AddRoleAsync(context, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
+        await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
         var roleId = context.Roles.Single().Id;
-        await UserAccessManagementService.GrantAccessAsync(context, "person@example.com", roleId, [], CancellationToken.None);
+        await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
 
-        var result = await RoleManagementService.RemoveRoleAsync(context, roleId, CancellationToken.None);
+        var result = await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, roleId, CancellationToken.None);
 
         Assert.Equal(RoleManagementService.RemoveRoleResult.InUse, result);
         using var verify = CreateContext();
@@ -135,10 +136,10 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     public async Task RemoveRoleAsync_RemovesAnUnusedUnlockedRole()
     {
         using var context = CreateContext();
-        await RoleManagementService.AddRoleAsync(context, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
+        await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
         var roleId = context.Roles.Single().Id;
 
-        var result = await RoleManagementService.RemoveRoleAsync(context, roleId, CancellationToken.None);
+        var result = await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, roleId, CancellationToken.None);
 
         Assert.Equal(RoleManagementService.RemoveRoleResult.Removed, result);
         using var verify = CreateContext();
@@ -149,7 +150,7 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
     public async Task RemoveRoleAsync_ReturnsInUse_WhenAGrantIsInsertedBetweenTheCheckAndTheDelete()
     {
         using var seedContext = CreateContext();
-        await RoleManagementService.AddRoleAsync(seedContext, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
+        await RoleManagementService.AddRoleAsync(seedContext, TestActors.Admin, "Domain Manager", [Permission.DomainsView], CancellationToken.None);
         var roleId = seedContext.Roles.Single().Id;
 
         // Reproduces the check-then-act race the FK-violation catch in RemoveRoleAsync guards
@@ -161,12 +162,12 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
         var interceptor = new DeleteRaceInterceptor(async () =>
         {
             using var racingContext = CreateContext();
-            await UserAccessManagementService.GrantAccessAsync(racingContext, "person@example.com", roleId, [], CancellationToken.None);
+            await UserAccessManagementService.GrantAccessAsync(racingContext, TestActors.Admin, "person@example.com", roleId, [], CancellationToken.None);
         });
         var options = new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).AddInterceptors(interceptor).Options;
         using var context = new DotMarcDbContext(options);
 
-        var result = await RoleManagementService.RemoveRoleAsync(context, roleId, CancellationToken.None);
+        var result = await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, roleId, CancellationToken.None);
 
         Assert.Equal(RoleManagementService.RemoveRoleResult.InUse, result);
         Assert.True(interceptor.Triggered, "the race interceptor never fired -- this test did not actually exercise the DELETE statement.");
@@ -208,5 +209,35 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
                 await onDelete().ConfigureAwait(false);
             }
         }
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_RecordsThePermissionsBeforeAndAfter()
+    {
+        await using (var context = CreateContext())
+        {
+            await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Ops", [Permission.DomainsView]);
+            var roleId = (await context.Roles.SingleAsync(role => role.Name == "Ops")).Id;
+            await RoleManagementService.UpdateRoleAsync(context, TestActors.Admin, roleId, "Ops", [Permission.DomainsView, Permission.AlertsView]);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync(auditEntry => auditEntry.Action == AuditActions.RoleUpdated);
+        Assert.Equal([new AuditFieldChange("Permissions", "DomainsView", "AlertsView, DomainsView")], entry.Changes);
+    }
+
+    [Fact]
+    public async Task RemoveRoleAsync_RecordsNothing_WhenTheRoleIsStillGranted()
+    {
+        await using (var context = CreateContext())
+        {
+            await RoleManagementService.AddRoleAsync(context, TestActors.Admin, "Ops", [Permission.DomainsView]);
+            var roleId = (await context.Roles.SingleAsync(role => role.Name == "Ops")).Id;
+            await UserAccessManagementService.GrantAccessAsync(context, TestActors.Admin, "sam@contoso.com", roleId, []);
+            await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, roleId);
+        }
+
+        await using var verify = CreateContext();
+        Assert.DoesNotContain(verify.AuditEntries, entry => entry.Action == AuditActions.RoleRemoved);
     }
 }

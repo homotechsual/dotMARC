@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
@@ -182,5 +183,20 @@ public sealed class AccessBootstrapperTests : IAsyncLifetime
         var grants = verify.UserAccesses.ToList();
         Assert.Single(grants); // deduplicated case-insensitively rather than throwing on the unique index.
         Assert.Equal("dup@example.com", grants[0].Email); // first occurrence's casing wins.
+    }
+
+    [Fact]
+    public async Task SeedingInitialAdmins_RecordsEachGrantAsStartup()
+    {
+        await using (var context = CreateContext())
+        {
+            await AccessBootstrapper.BootstrapWithLeaderLockAsync(context, Options("first@contoso.com,second@contoso.com"), NullLogger.Instance, CancellationToken.None);
+        }
+
+        await using var verify = CreateContext();
+        var entries = await verify.AuditEntries.Where(entry => entry.Action == AuditActions.AccessGranted).ToListAsync();
+        Assert.Equal(2, entries.Count);
+        Assert.All(entries, entry => Assert.Equal((AuditActorKind.System, "Startup"), (entry.ActorKind, entry.ActorName)));
+        Assert.Equal(["first@contoso.com", "second@contoso.com"], entries.Select(entry => entry.TargetName).Order());
     }
 }

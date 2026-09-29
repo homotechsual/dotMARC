@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -12,7 +13,7 @@ public static class RoleManagementService
     public enum UpdateRoleResult { Updated, InvalidName, AlreadyExists, Locked }
     public enum RemoveRoleResult { Removed, Locked, InUse }
 
-    public static async Task<AddRoleResult> AddRoleAsync(DotMarcDbContext context, string rawName, List<Permission> permissions, CancellationToken cancellationToken = default)
+    public static async Task<AddRoleResult> AddRoleAsync(DotMarcDbContext context, AuditActor actor, string rawName, List<Permission> permissions, CancellationToken cancellationToken = default)
     {
         var name = rawName.Trim();
         if (string.IsNullOrEmpty(name))
@@ -26,11 +27,15 @@ public static class RoleManagementService
             return AddRoleResult.AlreadyExists;
         }
 
-        context.Roles.Add(new Role { Name = name, IsLocked = false, IsScopable = false, Permissions = permissions });
+        var role = new Role { Name = name, IsLocked = false, IsScopable = false, Permissions = permissions };
+        context.Roles.Add(role);
 
         try
         {
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await AuditLog.SaveAndRecordAsync(context,
+                () => AuditLog.Record(context, actor, AuditActions.RoleAdded, AuditTarget.For(role), $"Added role {role.Name}",
+                    new AuditChanges().Set("Permissions", [], PermissionNames(permissions))),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
@@ -40,7 +45,7 @@ public static class RoleManagementService
         return AddRoleResult.Added;
     }
 
-    public static async Task<UpdateRoleResult> UpdateRoleAsync(DotMarcDbContext context, int roleId, string rawName, List<Permission> permissions, CancellationToken cancellationToken = default)
+    public static async Task<UpdateRoleResult> UpdateRoleAsync(DotMarcDbContext context, AuditActor actor, int roleId, string rawName, List<Permission> permissions, CancellationToken cancellationToken = default)
     {
         var role = await context.Roles.SingleAsync(r => r.Id == roleId, cancellationToken).ConfigureAwait(false);
         if (role.IsLocked)
@@ -60,6 +65,15 @@ public static class RoleManagementService
             return UpdateRoleResult.AlreadyExists;
         }
 
+        var changes = new AuditChanges()
+            .Field("Name", role.Name, name)
+            .Set("Permissions", PermissionNames(role.Permissions), PermissionNames(permissions));
+        if (!changes.Any)
+        {
+            return UpdateRoleResult.Updated;
+        }
+
+        AuditLog.Record(context, actor, AuditActions.RoleUpdated, AuditTarget.For(role), $"Updated role {name}", changes);
         role.Name = name;
         role.Permissions = permissions;
 
@@ -80,7 +94,7 @@ public static class RoleManagementService
     /// pointing at nothing - an undefined-permissions state. This checks first and refuses rather
     /// than letting that happen; the database's own DeleteBehavior.Restrict foreign key is a
     /// backstop behind this check, not the primary guard.</summary>
-    public static async Task<RemoveRoleResult> RemoveRoleAsync(DotMarcDbContext context, int roleId, CancellationToken cancellationToken = default)
+    public static async Task<RemoveRoleResult> RemoveRoleAsync(DotMarcDbContext context, AuditActor actor, int roleId, CancellationToken cancellationToken = default)
     {
         var role = await context.Roles.SingleAsync(r => r.Id == roleId, cancellationToken).ConfigureAwait(false);
         if (role.IsLocked)
@@ -94,6 +108,8 @@ public static class RoleManagementService
             return RemoveRoleResult.InUse;
         }
 
+        // Saved with the delete, so a delete the database refuses below leaves no entry behind either.
+        AuditLog.Record(context, actor, AuditActions.RoleRemoved, AuditTarget.For(role), $"Removed role {role.Name}");
         context.Roles.Remove(role);
 
         try
@@ -121,4 +137,7 @@ public static class RoleManagementService
 
         return RemoveRoleResult.Removed;
     }
+
+    private static IEnumerable<string> PermissionNames(IEnumerable<Permission> permissions) =>
+        permissions.Select(permission => permission.ToString());
 }
