@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,50 +34,76 @@ public static class AlertTicketRuleService
             .ToDictionaryAsync(overrides => overrides.GroupId, overrides => overrides.Count, cancellationToken)
             .ConfigureAwait(false);
 
-    public static Task SetGlobalAsync(DotMarcDbContext context, string alertType, bool createTicket, CancellationToken cancellationToken = default) =>
-        UpsertAsync(context, alertType, groupId: null, createTicket, cancellationToken);
-
-    /// <summary>Sets a group's override, or removes it with <c>null</c> so the group inherits again. Removing
-    /// the row, not storing "inherit", means overrides never pile up as no-ops.</summary>
-    public static async Task SetForGroupAsync(DotMarcDbContext context, int groupId, string alertType, bool? createTicket, CancellationToken cancellationToken = default)
+    public static async Task SetGlobalAsync(DotMarcDbContext context, AuditActor actor, string alertType, bool createTicket, CancellationToken cancellationToken = default)
     {
-        if (createTicket is null)
-        {
-            RequireKnownAlertType(alertType);
-            await context.AlertTicketRules
-                .Where(rule => rule.GroupId == groupId && rule.AlertType == alertType)
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        await UpsertAsync(context, alertType, groupId, createTicket.Value, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task UpsertAsync(DotMarcDbContext context, string alertType, int? groupId, bool createTicket, CancellationToken cancellationToken)
-    {
-        RequireKnownAlertType(alertType);
-
+        var alert = RequireKnownAlertType(alertType);
         var existing = await context.AlertTicketRules
-            .SingleOrDefaultAsync(rule => rule.AlertType == alertType && rule.GroupId == groupId, cancellationToken)
+            .SingleOrDefaultAsync(rule => rule.AlertType == alertType && rule.GroupId == null, cancellationToken)
             .ConfigureAwait(false);
+
+        // Compared by effect: a missing rule means the alert type's default.
+        var changes = new AuditChanges().Field("Creates tickets", existing?.CreateTicket ?? alert.CreatesTicketByDefault, createTicket);
+
         if (existing is null)
         {
-            context.AlertTicketRules.Add(new AlertTicketRule { AlertType = alertType, GroupId = groupId, CreateTicket = createTicket });
+            context.AlertTicketRules.Add(new AlertTicketRule { AlertType = alertType, GroupId = null, CreateTicket = createTicket });
         }
         else
         {
             existing.CreateTicket = createTicket;
         }
 
+        if (changes.Any)
+        {
+            AuditLog.Record(context, actor, AuditActions.TicketRuleGlobalChanged, new AuditTarget("AlertType", alertType, alert.DisplayName),
+                $"{alert.DisplayName} alerts {(createTicket ? "now create" : "no longer create")} tickets", changes);
+        }
+
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static void RequireKnownAlertType(string alertType)
+    /// <summary>Sets a group's override, or removes it with <c>null</c> so the group inherits again. Removing
+    /// the row, not storing "inherit", means overrides never pile up as no-ops.</summary>
+    public static async Task SetForGroupAsync(DotMarcDbContext context, AuditActor actor, int groupId, string alertType, bool? createTicket, CancellationToken cancellationToken = default)
     {
-        if (AlertTypes.Find(alertType) is null)
+        var alert = RequireKnownAlertType(alertType);
+        var existing = await context.AlertTicketRules
+            .SingleOrDefaultAsync(rule => rule.GroupId == groupId && rule.AlertType == alertType, cancellationToken)
+            .ConfigureAwait(false);
+        var changes = new AuditChanges().Field(alert.DisplayName, OverrideText(existing?.CreateTicket), OverrideText(createTicket));
+        if (!changes.Any)
         {
-            throw new ArgumentException($"'{alertType}' is not a known alert type.", nameof(alertType));
+            return;
         }
+
+        if (createTicket is null)
+        {
+            // Safe: with no existing rule, both sides are "Use default" and the method has already returned.
+            context.AlertTicketRules.Remove(existing!);
+        }
+        else if (existing is null)
+        {
+            context.AlertTicketRules.Add(new AlertTicketRule { AlertType = alertType, GroupId = groupId, CreateTicket = createTicket.Value });
+        }
+        else
+        {
+            existing.CreateTicket = createTicket.Value;
+        }
+
+        var group = await context.Groups.AsNoTracking().SingleOrDefaultAsync(g => g.Id == groupId, cancellationToken).ConfigureAwait(false);
+        var target = group is null ? new AuditTarget("Group", groupId.ToString(System.Globalization.CultureInfo.InvariantCulture), null) : AuditTarget.For(group);
+        AuditLog.Record(context, actor, AuditActions.TicketRuleGroupChanged, target,
+            $"Set {alert.DisplayName} tickets for {group?.Name ?? $"group {groupId}"} to {OverrideText(createTicket).ToLowerInvariant()}", changes);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static string OverrideText(bool? createTicket) => createTicket switch
+    {
+        null => "Use default",
+        true => "Always create tickets",
+        false => "Never create tickets"
+    };
+
+    private static AlertTypeInfo RequireKnownAlertType(string alertType) =>
+        AlertTypes.Find(alertType) ?? throw new ArgumentException($"'{alertType}' is not a known alert type.", nameof(alertType));
 }

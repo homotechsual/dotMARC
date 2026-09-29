@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,10 +14,28 @@ public static class NotificationSettingsService
     public static Task<NotificationSettings> GetAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) =>
         context.NotificationSettings.SingleAsync(cancellationToken);
 
-    public static async Task SaveAsync(DotMarcDbContext context, NotificationSettings updated, CancellationToken cancellationToken = default)
+    public static async Task SaveAsync(DotMarcDbContext context, AuditActor actor, NotificationSettings updated, CancellationToken cancellationToken = default)
     {
         ValidateWebhookUrl(updated.TeamsWebhookUrl, "Teams webhook URL");
         ValidateWebhookUrl(updated.GenericWebhookUrl, "Generic webhook URL");
+
+        // A no-tracking snapshot, because the caller may pass the very instance this context is tracking.
+        var saved = await context.NotificationSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
+        var changes = new AuditChanges()
+            .Field("Enabled", saved.Enabled, updated.Enabled)
+            .Field("Delivery mode", saved.DeliveryMode, updated.DeliveryMode)
+            // Webhook URLs carry the token that lets anyone post to the channel, so they're recorded like secrets.
+            .Secret("Teams webhook URL", saved.TeamsWebhookUrl != updated.TeamsWebhookUrl)
+            .Secret("Generic webhook URL", saved.GenericWebhookUrl != updated.GenericWebhookUrl)
+            .Field("Missing report threshold (days)", saved.MissingReportThresholdDays, updated.MissingReportThresholdDays)
+            .Field("Cooldown (minutes)", saved.CooldownMinutes, updated.CooldownMinutes)
+            .Field("Monitor interval (seconds)", saved.MonitorIntervalSeconds, updated.MonitorIntervalSeconds)
+            .Field("Suspicious reject minimum volume", saved.SuspiciousRejectMinVolume, updated.SuspiciousRejectMinVolume)
+            .Field("Suspicious reject non-benign %", saved.SuspiciousRejectNonBenignPercent, updated.SuspiciousRejectNonBenignPercent);
+        if (!changes.Any)
+        {
+            return;
+        }
 
         var existing = await context.NotificationSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
 
@@ -30,6 +49,7 @@ public static class NotificationSettingsService
         existing.SuspiciousRejectMinVolume = updated.SuspiciousRejectMinVolume;
         existing.SuspiciousRejectNonBenignPercent = updated.SuspiciousRejectNonBenignPercent;
 
+        AuditLog.Record(context, actor, AuditActions.NotificationSettingsSaved, AuditTarget.Settings("Notifications"), "Saved notification settings", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

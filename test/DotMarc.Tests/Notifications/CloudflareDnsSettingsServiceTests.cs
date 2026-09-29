@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
@@ -43,7 +44,7 @@ public sealed class CloudflareDnsSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await CloudflareDnsSettingsService.SaveAsync(context, secretStore, new CloudflareDnsSettings { ClientId = "client-id" }, newClientSecret: null);
+        await CloudflareDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new CloudflareDnsSettings { ClientId = "client-id" }, newClientSecret: null);
 
         await using var verify = CreateContext();
         var saved = await CloudflareDnsSettingsService.GetAsync(verify);
@@ -58,7 +59,7 @@ public sealed class CloudflareDnsSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await CloudflareDnsSettingsService.SaveAsync(context, secretStore, new CloudflareDnsSettings { ClientId = "client-id" }, newClientSecret: "the-real-secret");
+        await CloudflareDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new CloudflareDnsSettings { ClientId = "client-id" }, newClientSecret: "the-real-secret");
 
         await using var verify = CreateContext();
         var saved = await CloudflareDnsSettingsService.GetAsync(verify);
@@ -71,10 +72,10 @@ public sealed class CloudflareDnsSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
-        await CloudflareDnsSettingsService.SaveAsync(context, secretStore, new CloudflareDnsSettings { ClientId = "client-id" }, newClientSecret: "first-secret");
+        await CloudflareDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new CloudflareDnsSettings { ClientId = "client-id" }, newClientSecret: "first-secret");
 
         await using var secondContext = CreateContext();
-        await CloudflareDnsSettingsService.SaveAsync(secondContext, secretStore, new CloudflareDnsSettings { ClientId = "changed" }, newClientSecret: null);
+        await CloudflareDnsSettingsService.SaveAsync(secondContext, TestActors.Admin, secretStore, new CloudflareDnsSettings { ClientId = "changed" }, newClientSecret: null);
 
         Assert.Equal("first-secret", await secretStore.GetSecretAsync(CloudflareDnsSettings.SecretStoreKey));
 
@@ -82,5 +83,25 @@ public sealed class CloudflareDnsSettingsServiceTests : IAsyncLifetime
         var verified = await CloudflareDnsSettingsService.GetAsync(verify);
         Assert.True(verified.ClientSecretConfigured);
         Assert.Equal("changed", verified.ClientId);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RecordsANewClientSecret_WithoutItsValue()
+    {
+        CloudflareDnsSettings updated;
+        await using (var loadContext = CreateContext())
+        {
+            updated = await loadContext.CloudflareDnsSettings.AsNoTracking().SingleAsync();
+        }
+
+        await using (var context = CreateContext())
+        {
+            await CloudflareDnsSettingsService.SaveAsync(context, TestActors.Admin, CreateSecretStore(), updated, "cloudflare-secret-value");
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Equal(AuditActions.CloudflareDnsSettingsSaved, entry.Action);
+        Assert.Equal([new AuditFieldChange("Client secret", null, null, Secret: true)], entry.Changes);
     }
 }

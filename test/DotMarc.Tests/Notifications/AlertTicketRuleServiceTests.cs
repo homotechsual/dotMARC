@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 // test/DotMarc.Tests/Notifications/AlertTicketRuleServiceTests.cs
 using DotMarc.Data;
 using DotMarc.Notifications;
@@ -57,12 +58,12 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
     {
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
+            await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
         }
 
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, true);
+            await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
         }
 
         await using var verify = CreateContext();
@@ -78,7 +79,7 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
         var groupB = await AddGroupAsync("Client B");
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetForGroupAsync(context, groupA, AlertTypes.TlsrptFailure, false);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupA, AlertTypes.TlsrptFailure, false);
         }
 
         await using var verify = CreateContext();
@@ -93,12 +94,12 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
         var groupId = await AddGroupAsync("Client A");
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetForGroupAsync(context, groupId, AlertTypes.MissedReport, true);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, AlertTypes.MissedReport, true);
         }
 
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetForGroupAsync(context, groupId, AlertTypes.MissedReport, null);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, AlertTypes.MissedReport, null);
         }
 
         await using var verify = CreateContext();
@@ -112,10 +113,10 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
         var groupB = await AddGroupAsync("Client B");
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
-            await AlertTicketRuleService.SetForGroupAsync(context, groupA, AlertTypes.MissedReport, true);
-            await AlertTicketRuleService.SetForGroupAsync(context, groupA, AlertTypes.TlsrptFailure, false);
-            await AlertTicketRuleService.SetForGroupAsync(context, groupB, AlertTypes.MissedReport, false);
+            await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupA, AlertTypes.MissedReport, true);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupA, AlertTypes.TlsrptFailure, false);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupB, AlertTypes.MissedReport, false);
         }
 
         await using var verify = CreateContext();
@@ -129,8 +130,8 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
         var groupId = await AddGroupAsync("Client A");
         await using (var context = CreateContext())
         {
-            await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
-            await AlertTicketRuleService.SetForGroupAsync(context, groupId, AlertTypes.MissedReport, true);
+            await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, AlertTypes.MissedReport, true);
         }
 
         await using (var context = CreateContext())
@@ -153,8 +154,8 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
         await using var context = CreateContext();
 
         var attempt = forGroup
-            ? AlertTicketRuleService.SetForGroupAsync(context, groupId, "NotARealAlertType", true)
-            : AlertTicketRuleService.SetGlobalAsync(context, "NotARealAlertType", true);
+            ? AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, "NotARealAlertType", true)
+            : AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, "NotARealAlertType", true);
 
         await Assert.ThrowsAsync<ArgumentException>(() => attempt);
     }
@@ -172,5 +173,54 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
         second.AlertTicketRules.Add(new AlertTicketRule { AlertType = AlertTypes.MissedReport, GroupId = groupId, CreateTicket = true });
         second.AlertTicketRules.Add(new AlertTicketRule { AlertType = AlertTypes.MissedReport, GroupId = groupId, CreateTicket = false });
         await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task SetForGroupAsync_RecordsTheGroupsOverride()
+    {
+        await using (var context = CreateContext())
+        {
+            context.Groups.Add(new Group { Name = "Client A" });
+            await context.SaveChangesAsync();
+            var groupId = (await context.Groups.SingleAsync()).Id;
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, AlertTypes.MissedReport, false);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Equal((AuditActions.TicketRuleGroupChanged, "Client A"), (entry.Action, entry.TargetName));
+        Assert.Equal([new AuditFieldChange("Missing DMARC report", "Use default", "Never create tickets")], entry.Changes);
+    }
+
+    [Fact]
+    public async Task SetForGroupAsync_RemovingAnOverride_RecordsItAsUseDefault()
+    {
+        await using (var context = CreateContext())
+        {
+            context.Groups.Add(new Group { Name = "Client A" });
+            await context.SaveChangesAsync();
+            var groupId = (await context.Groups.SingleAsync()).Id;
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, AlertTypes.MissedReport, true);
+            await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, groupId, AlertTypes.MissedReport, null);
+        }
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.AlertTicketRules);
+        var entry = await verify.AuditEntries.OrderByDescending(auditEntry => auditEntry.Id).FirstAsync();
+        Assert.Equal([new AuditFieldChange("Missing DMARC report", "Always create tickets", "Use default")], entry.Changes);
+    }
+
+    [Fact]
+    public async Task SetGlobalAsync_RecordsNothing_WhenTheEffectiveSettingIsUnchanged()
+    {
+        await using (var context = CreateContext())
+        {
+            // Every alert type creates tickets by default, so turning one "on" changes nothing.
+            await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
+        }
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.AuditEntries);
+        Assert.Single(verify.AlertTicketRules);
     }
 }

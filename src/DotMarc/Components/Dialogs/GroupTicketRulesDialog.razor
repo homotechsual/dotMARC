@@ -1,6 +1,7 @@
 @using DotMarc.Data
 @using DotMarc.Notifications
 @using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject ILogger<GroupTicketRulesDialog> Logger
@@ -71,7 +72,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await AlertTicketRuleService.SetForGroupAsync(db, GroupId, alertType.Key, createTicket);
+            await AlertTicketRuleService.SetForGroupAsync(db, await AuditActorAccessor.GetAsync(), GroupId, alertType.Key, createTicket);
             if (createTicket is { } value)
             {
                 _groupRules[alertType.Key] = value;

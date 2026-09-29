@@ -38,7 +38,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     private async Task SeedSettingsAsync(bool enabled = true, int missingReportThresholdDays = 2, int cooldownMinutes = 180, int suspiciousRejectMinVolume = 10, int suspiciousRejectNonBenignPercent = 50)
     {
         await using var context = CreateContext();
-        await NotificationSettingsService.SaveAsync(context, new NotificationSettings
+        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
         {
             Enabled = enabled,
             DeliveryMode = "Teams",
@@ -508,7 +508,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await SeedMappedMonitoredDomainAsync("contoso.io");
         await using (var setup = CreateContext())
         {
-            await AlertTicketRuleService.SetGlobalAsync(setup, AlertTypes.MissedReport, false);
+            await AlertTicketRuleService.SetGlobalAsync(setup, TestActors.Admin, AlertTypes.MissedReport, false);
         }
 
         var fakeNotifier = new FakeAlertWebhookClient();

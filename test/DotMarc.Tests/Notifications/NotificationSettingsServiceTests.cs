@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
@@ -52,7 +53,7 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
 
-        await NotificationSettingsService.SaveAsync(context, new NotificationSettings
+        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
         {
             Enabled = false,
             DeliveryMode = "Generic",
@@ -80,8 +81,8 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
 
-        await NotificationSettingsService.SaveAsync(context, new NotificationSettings { Enabled = false, DeliveryMode = "Teams" }, CancellationToken.None);
-        await NotificationSettingsService.SaveAsync(context, new NotificationSettings { Enabled = true, DeliveryMode = "Both" }, CancellationToken.None);
+        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { Enabled = false, DeliveryMode = "Teams" }, CancellationToken.None);
+        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { Enabled = true, DeliveryMode = "Both" }, CancellationToken.None);
 
         await using var verify = CreateContext();
         Assert.Single(verify.NotificationSettings);
@@ -99,12 +100,50 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
-            NotificationSettingsService.SaveAsync(context, new NotificationSettings
+            NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
             {
                 DeliveryMode = "Generic",
                 GenericWebhookUrl = webhookUrl
             }, CancellationToken.None));
 
         Assert.Contains("Generic webhook URL", exception.Message);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RecordsChangedSettings_AndNeverAWebhookUrl()
+    {
+        NotificationSettings updated;
+        await using (var loadContext = CreateContext())
+        {
+            updated = await loadContext.NotificationSettings.AsNoTracking().SingleAsync();
+        }
+        var originalCooldown = updated.CooldownMinutes;
+        updated.CooldownMinutes = originalCooldown + 30;
+        updated.TeamsWebhookUrl = "https://contoso.webhook.office.com/webhookb2/secret-token";
+
+        await using (var context = CreateContext())
+        {
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, updated);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Equal(AuditActions.NotificationSettingsSaved, entry.Action);
+        Assert.Contains(new AuditFieldChange("Cooldown (minutes)", originalCooldown.ToString(), (originalCooldown + 30).ToString()), entry.Changes);
+        Assert.Contains(new AuditFieldChange("Teams webhook URL", null, null, Secret: true), entry.Changes);
+        Assert.DoesNotContain(entry.Changes, change => (change.Old ?? "").Contains("secret-token") || (change.New ?? "").Contains("secret-token"));
+    }
+
+    [Fact]
+    public async Task SaveAsync_RecordsNothing_WhenNothingChanged()
+    {
+        await using (var context = CreateContext())
+        {
+            var unchanged = await context.NotificationSettings.SingleAsync();
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, unchanged);
+        }
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.AuditEntries);
     }
 }

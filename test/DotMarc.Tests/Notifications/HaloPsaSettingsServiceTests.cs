@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
@@ -43,7 +44,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await HaloPsaSettingsService.SaveAsync(context, secretStore, new HaloPsaSettings
+        await HaloPsaSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new HaloPsaSettings
         {
             Enabled = true,
             AccountName = "contoso",
@@ -68,7 +69,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
     public async Task SaveAsync_KeepsTheNamesOfTheChosenOptions()
     {
         await using var context = CreateContext();
-        await HaloPsaSettingsService.SaveAsync(context, CreateSecretStore(), new HaloPsaSettings
+        await HaloPsaSettingsService.SaveAsync(context, TestActors.Admin, CreateSecretStore(), new HaloPsaSettings
         {
             TicketTypeId = 23, TicketTypeName = "RMM Alert",
             DefaultPriorityId = 4, DefaultPriorityName = "Low",
@@ -89,13 +90,13 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
-        await HaloPsaSettingsService.SaveAsync(context, secretStore, new HaloPsaSettings { AssignedAgentId = 3 }, newClientSecret: null);
+        await HaloPsaSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new HaloPsaSettings { AssignedAgentId = 3 }, newClientSecret: null);
 
         await using var afterAssign = CreateContext();
         Assert.Equal(3, (await HaloPsaSettingsService.GetAsync(afterAssign)).AssignedAgentId);
 
         await using var clearContext = CreateContext();
-        await HaloPsaSettingsService.SaveAsync(clearContext, secretStore, new HaloPsaSettings { AssignedAgentId = null }, newClientSecret: null);
+        await HaloPsaSettingsService.SaveAsync(clearContext, TestActors.Admin, secretStore, new HaloPsaSettings { AssignedAgentId = null }, newClientSecret: null);
 
         await using var afterClear = CreateContext();
         Assert.Null((await HaloPsaSettingsService.GetAsync(afterClear)).AssignedAgentId);
@@ -107,7 +108,7 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await HaloPsaSettingsService.SaveAsync(context, secretStore, new HaloPsaSettings { Enabled = true }, newClientSecret: "the-real-secret");
+        await HaloPsaSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new HaloPsaSettings { Enabled = true }, newClientSecret: "the-real-secret");
 
         await using var verify = CreateContext();
         var saved = await HaloPsaSettingsService.GetAsync(verify);
@@ -120,15 +121,41 @@ public sealed class HaloPsaSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
-        await HaloPsaSettingsService.SaveAsync(context, secretStore, new HaloPsaSettings { Enabled = true }, newClientSecret: "first-secret");
+        await HaloPsaSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new HaloPsaSettings { Enabled = true }, newClientSecret: "first-secret");
 
         await using var secondContext = CreateContext();
-        await HaloPsaSettingsService.SaveAsync(secondContext, secretStore, new HaloPsaSettings { Enabled = false, AccountName = "changed" }, newClientSecret: null);
+        await HaloPsaSettingsService.SaveAsync(secondContext, TestActors.Admin, secretStore, new HaloPsaSettings { Enabled = false, AccountName = "changed" }, newClientSecret: null);
 
         Assert.Equal("first-secret", await secretStore.GetSecretAsync(HaloPsaSettings.SecretStoreKey));
 
         await using var verify = CreateContext();
         var verified = await HaloPsaSettingsService.GetAsync(verify);
         Assert.True(verified.ClientSecretConfigured);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RecordsSecretsAsChanged_WithoutTheirValues()
+    {
+        HaloPsaSettings updated;
+        await using (var loadContext = CreateContext())
+        {
+            updated = await loadContext.HaloPsaSettings.AsNoTracking().SingleAsync();
+        }
+        updated.WebhookSecret = "webhook-secret-value";
+        updated.AccountName = "contoso";
+
+        await using (var context = CreateContext())
+        {
+            await HaloPsaSettingsService.SaveAsync(context, TestActors.Admin, CreateSecretStore(), updated, "client-secret-value");
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync();
+        var storedChanges = System.Text.Json.JsonSerializer.Serialize(entry.Changes);
+        Assert.DoesNotContain("client-secret-value", storedChanges);
+        Assert.DoesNotContain("webhook-secret-value", storedChanges);
+        Assert.Contains(new AuditFieldChange("Client secret", null, null, Secret: true), entry.Changes);
+        Assert.Contains(new AuditFieldChange("Webhook secret", null, null, Secret: true), entry.Changes);
+        Assert.Contains(entry.Changes, change => change.Field == "Account name" && change.New == "contoso");
     }
 }

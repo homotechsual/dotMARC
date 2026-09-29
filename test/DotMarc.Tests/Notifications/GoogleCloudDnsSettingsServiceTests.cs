@@ -43,7 +43,7 @@ public sealed class GoogleCloudDnsSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await GoogleCloudDnsSettingsService.SaveAsync(context, secretStore, new GoogleCloudDnsSettings { ClientId = "client-id" }, newClientSecret: null);
+        await GoogleCloudDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new GoogleCloudDnsSettings { ClientId = "client-id" }, newClientSecret: null);
 
         await using var verify = CreateContext();
         var saved = await GoogleCloudDnsSettingsService.GetAsync(verify);
@@ -58,7 +58,7 @@ public sealed class GoogleCloudDnsSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await GoogleCloudDnsSettingsService.SaveAsync(context, secretStore, new GoogleCloudDnsSettings { ClientId = "client-id" }, newClientSecret: "the-real-secret");
+        await GoogleCloudDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new GoogleCloudDnsSettings { ClientId = "client-id" }, newClientSecret: "the-real-secret");
 
         await using var verify = CreateContext();
         var saved = await GoogleCloudDnsSettingsService.GetAsync(verify);
@@ -71,10 +71,10 @@ public sealed class GoogleCloudDnsSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
-        await GoogleCloudDnsSettingsService.SaveAsync(context, secretStore, new GoogleCloudDnsSettings { ClientId = "client-id" }, newClientSecret: "first-secret");
+        await GoogleCloudDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new GoogleCloudDnsSettings { ClientId = "client-id" }, newClientSecret: "first-secret");
 
         await using var secondContext = CreateContext();
-        await GoogleCloudDnsSettingsService.SaveAsync(secondContext, secretStore, new GoogleCloudDnsSettings { ClientId = "changed" }, newClientSecret: null);
+        await GoogleCloudDnsSettingsService.SaveAsync(secondContext, TestActors.Admin, secretStore, new GoogleCloudDnsSettings { ClientId = "changed" }, newClientSecret: null);
 
         Assert.Equal("first-secret", await secretStore.GetSecretAsync(GoogleCloudDnsSettings.SecretStoreKey));
 

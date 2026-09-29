@@ -232,7 +232,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         await EnableHaloAsync();
         await using var context = CreateContext();
         var (_, _, alert) = await SeedMappedDomainAsync(context);
-        await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
 
         var fakeClient = new FakeHaloPsaClient();
         await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
@@ -249,7 +249,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         await EnableHaloAsync();
         await using var context = CreateContext();
         var (_, _, alert) = await SeedMappedDomainAsync(context, AlertTypes.TlsrptFailure);
-        await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
 
         var fakeClient = new FakeHaloPsaClient();
         await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
@@ -263,8 +263,8 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         await EnableHaloAsync();
         await using var context = CreateContext();
         var (group, _, alert) = await SeedMappedDomainAsync(context);
-        await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, true);
-        await AlertTicketRuleService.SetForGroupAsync(context, group.Id, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
+        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);
 
         var fakeClient = new FakeHaloPsaClient();
         await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
@@ -278,8 +278,8 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         await EnableHaloAsync();
         await using var context = CreateContext();
         var (group, _, alert) = await SeedMappedDomainAsync(context);
-        await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
-        await AlertTicketRuleService.SetForGroupAsync(context, group.Id, AlertTypes.MissedReport, true);
+        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, true);
 
         var fakeClient = new FakeHaloPsaClient();
         await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
@@ -295,8 +295,8 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         var (group, domain, alert) = await SeedMappedDomainAsync(context);
         domain.HaloClientId = 99;
         await context.SaveChangesAsync();
-        await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, true);
-        await AlertTicketRuleService.SetForGroupAsync(context, group.Id, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
+        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);
 
         var fakeClient = new FakeHaloPsaClient();
         await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
@@ -314,8 +314,8 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         alert.ExternalTicketProvider = "HaloPSA";
         alert.ExternalTicketId = "1000";
         await context.SaveChangesAsync();
-        await AlertTicketRuleService.SetGlobalAsync(context, AlertTypes.MissedReport, false);
-        await AlertTicketRuleService.SetForGroupAsync(context, group.Id, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
+        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);
 
         var fakeClient = new FakeHaloPsaClient();
         await new PsaTicketService(fakeClient).CloseTicketAsync(context, alert);

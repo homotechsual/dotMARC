@@ -5,6 +5,7 @@
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject IJSRuntime Js
@@ -295,7 +296,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await AlertTicketRuleService.SetGlobalAsync(db, alertType.Key, createTicket);
+            await AlertTicketRuleService.SetGlobalAsync(db, await AuditActorAccessor.GetAsync(), alertType.Key, createTicket);
             _globalTicketRules[alertType.Key] = createTicket;
             Snackbar.Add($"{alertType.DisplayName}: tickets {(createTicket ? "on" : "off")}.", Severity.Success);
         }
@@ -351,7 +352,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await NotificationSettingsService.SaveAsync(db, _settings!);
+            await NotificationSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), _settings!);
             Snackbar.Add("Alert settings saved.", Severity.Success);
         }
         catch (ArgumentException exception)
@@ -584,7 +585,7 @@ else
             HaloOptionNames.Remember(_haloSettings, _haloTicketTypes, _haloPriorities, _haloStatuses, _haloAgents);
 
             await using var db = await DbFactory.CreateDbContextAsync();
-            await HaloPsaSettingsService.SaveAsync(db, SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
+            await HaloPsaSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
 
             // Saving is when credentials or the API agent's permissions have usually just changed, so don't
             // keep signing in with a token minted before that.

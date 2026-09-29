@@ -43,7 +43,7 @@ public sealed class AzureDnsSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await AzureDnsSettingsService.SaveAsync(context, secretStore, new AzureDnsSettings { ClientId = "client-id" }, newClientSecret: null);
+        await AzureDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new AzureDnsSettings { ClientId = "client-id" }, newClientSecret: null);
 
         await using var verify = CreateContext();
         var saved = await AzureDnsSettingsService.GetAsync(verify);
@@ -58,7 +58,7 @@ public sealed class AzureDnsSettingsServiceTests : IAsyncLifetime
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
 
-        await AzureDnsSettingsService.SaveAsync(context, secretStore, new AzureDnsSettings { ClientId = "client-id" }, newClientSecret: "the-real-secret");
+        await AzureDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new AzureDnsSettings { ClientId = "client-id" }, newClientSecret: "the-real-secret");
 
         await using var verify = CreateContext();
         var saved = await AzureDnsSettingsService.GetAsync(verify);
@@ -71,10 +71,10 @@ public sealed class AzureDnsSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         var secretStore = CreateSecretStore();
-        await AzureDnsSettingsService.SaveAsync(context, secretStore, new AzureDnsSettings { ClientId = "client-id" }, newClientSecret: "first-secret");
+        await AzureDnsSettingsService.SaveAsync(context, TestActors.Admin, secretStore, new AzureDnsSettings { ClientId = "client-id" }, newClientSecret: "first-secret");
 
         await using var secondContext = CreateContext();
-        await AzureDnsSettingsService.SaveAsync(secondContext, secretStore, new AzureDnsSettings { ClientId = "changed" }, newClientSecret: null);
+        await AzureDnsSettingsService.SaveAsync(secondContext, TestActors.Admin, secretStore, new AzureDnsSettings { ClientId = "changed" }, newClientSecret: null);
 
         Assert.Equal("first-secret", await secretStore.GetSecretAsync(AzureDnsSettings.SecretStoreKey));
 

@@ -6,6 +6,7 @@
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISecretStore SecretStoreAccessor
 @inject ISnackbar Snackbar
@@ -93,7 +94,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await CloudflareDnsSettingsService.SaveAsync(db, SecretStoreAccessor, _cloudflareSettings, string.IsNullOrWhiteSpace(_newCloudflareClientSecret) ? null : _newCloudflareClientSecret);
+            await CloudflareDnsSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _cloudflareSettings, string.IsNullOrWhiteSpace(_newCloudflareClientSecret) ? null : _newCloudflareClientSecret);
             _newCloudflareClientSecret = null;
             Snackbar.Add("Cloudflare settings saved.", Severity.Success);
 
@@ -116,7 +117,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await AzureDnsSettingsService.SaveAsync(db, SecretStoreAccessor, _azureDnsSettings, string.IsNullOrWhiteSpace(_newAzureDnsClientSecret) ? null : _newAzureDnsClientSecret);
+            await AzureDnsSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _azureDnsSettings, string.IsNullOrWhiteSpace(_newAzureDnsClientSecret) ? null : _newAzureDnsClientSecret);
             _newAzureDnsClientSecret = null;
             Snackbar.Add("Azure DNS settings saved.", Severity.Success);
 
@@ -139,7 +140,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await GoogleCloudDnsSettingsService.SaveAsync(db, SecretStoreAccessor, _googleCloudDnsSettings, string.IsNullOrWhiteSpace(_newGoogleCloudDnsClientSecret) ? null : _newGoogleCloudDnsClientSecret);
+            await GoogleCloudDnsSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _googleCloudDnsSettings, string.IsNullOrWhiteSpace(_newGoogleCloudDnsClientSecret) ? null : _newGoogleCloudDnsClientSecret);
             _newGoogleCloudDnsClientSecret = null;
             Snackbar.Add("Google Cloud DNS settings saved.", Severity.Success);
 
