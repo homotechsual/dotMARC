@@ -5,8 +5,12 @@
 @using DotMarc.Demo
 @using Microsoft.Extensions.Options
 @using System.Reflection
+@implements IDisposable
 @inject IJSRuntime Js
 @inject IOptions<DemoOptions> DemoOptions
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuditRecorder AuditRecorder
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -157,8 +161,49 @@
             var stored = await Js.InvokeAsync<string?>("localStorage.getItem", "dotmarc-dark-mode");
             _isDarkMode = stored == "true";
             StateHasChanged();
+
+            // The first page of the circuit. Recorded here, not in OnInitialized, because this only runs once the
+            // circuit is interactive, so a prerender doesn't count the same view twice.
+            await RecordPageViewAsync(Navigation.Uri);
         }
     }
+
+    private string? _lastRecordedPath;
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs args) => await RecordPageViewAsync(args.Location);
+
+    /// <summary>Best-effort, like every page view: AuditRecorder never throws, and anything else here is caught,
+    /// because this runs from an async void event handler where an exception would end the circuit.</summary>
+    private async Task RecordPageViewAsync(string uri)
+    {
+        try
+        {
+            var path = PageViewPaths.PathOf(uri);
+            if (path == _lastRecordedPath)
+            {
+                return;
+            }
+
+            _lastRecordedPath = path;
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                return;
+            }
+
+            var domainName = PageViewPaths.DomainOf(path);
+            await AuditRecorder.RecordAsync(AuditLog.Create(AuditActor.FromPrincipal(user), AuditEntryKind.PageView, AuditActions.PageViewed,
+                domainName is null ? null : AuditTarget.DomainNamed(domainName), $"Opened {path}"));
+        }
+        catch (Exception)
+        {
+            // Nothing to do: a missed page view must not break the page.
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 
     private async Task ToggleDarkModeAsync()
     {

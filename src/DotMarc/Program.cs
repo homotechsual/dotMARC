@@ -307,11 +307,30 @@ else
     builder.Services.Configure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
         Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
         options => options.AccessDeniedPath = "/AccessDenied");
+
+    // Records each Entra sign-in once, as it completes, rather than in the claims transformation, which runs on
+    // every request. Chains onto whatever handler Microsoft.Identity.Web has already set.
+    builder.Services.Configure<Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectOptions>(
+        Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme,
+        options =>
+        {
+            var previousOnTokenValidated = options.Events.OnTokenValidated;
+            options.Events.OnTokenValidated = async tokenValidatedContext =>
+            {
+                await previousOnTokenValidated(tokenValidatedContext);
+                if (tokenValidatedContext.Principal is { } principal)
+                {
+                    var signInAuditor = tokenValidatedContext.HttpContext.RequestServices.GetRequiredService<DotMarc.Audit.SignInAuditor>();
+                    await signInAuditor.RecordAsync(principal, tokenValidatedContext.HttpContext.RequestAborted);
+                }
+            };
+        });
 }
 
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
 builder.Services.AddScoped<DotMarc.Audit.AuditActorAccessor>();
 builder.Services.AddSingleton<DotMarc.Audit.AuditRecorder>();
+builder.Services.AddSingleton<DotMarc.Audit.SignInAuditor>();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -405,7 +424,7 @@ app.MapPost("/signout", async (HttpContext httpContext) =>
 
 if (demoOptions.Enabled)
 {
-    app.MapPost("/demo/sign-in/{persona}", async (string persona, HttpContext httpContext) =>
+    app.MapPost("/demo/sign-in/{persona}", async (string persona, HttpContext httpContext, DotMarc.Audit.SignInAuditor signInAuditor) =>
     {
         string email;
         string displayName;
@@ -437,9 +456,9 @@ if (demoOptions.Enabled)
             nameType: System.Security.Claims.ClaimTypes.Name,
             roleType: System.Security.Claims.ClaimTypes.Role);
 
-        await httpContext.SignInAsync(
-            Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
-            new System.Security.Claims.ClaimsPrincipal(identity));
+        var principal = new System.Security.Claims.ClaimsPrincipal(identity);
+        await httpContext.SignInAsync(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme, principal);
+        await signInAuditor.RecordAsync(principal, httpContext.RequestAborted);
 
         return Results.Redirect("/");
     }).AllowAnonymous();
