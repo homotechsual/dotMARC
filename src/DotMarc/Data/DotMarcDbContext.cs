@@ -1,3 +1,5 @@
+using System.Text.Json;
+using DotMarc.Audit;
 using DotMarc.Notifications;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +39,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<CloudflareDnsSettings> CloudflareDnsSettings => Set<CloudflareDnsSettings>();
     public DbSet<AzureDnsSettings> AzureDnsSettings => Set<AzureDnsSettings>();
     public DbSet<GoogleCloudDnsSettings> GoogleCloudDnsSettings => Set<GoogleCloudDnsSettings>();
+    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<AuditSettings> AuditSettings => Set<AuditSettings>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -290,6 +294,32 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         // there's no leader-election concern here: it's static seed data applied once by the
         // migration itself, not something computed per-deployment at startup.
         modelBuilder.Entity<NotificationSettings>().HasData(new NotificationSettings { Id = 1 });
+        modelBuilder.Entity<AuditSettings>().HasData(new AuditSettings { Id = 1 });
+
+        modelBuilder.Entity<AuditEntry>(entity =>
+        {
+            entity.Property(auditEntry => auditEntry.Kind).HasConversion<string>().HasMaxLength(16);
+            entity.Property(auditEntry => auditEntry.ActorKind).HasConversion<string>().HasMaxLength(16);
+            entity.Property(auditEntry => auditEntry.Action).HasMaxLength(64);
+            entity.Property(auditEntry => auditEntry.TargetType).HasMaxLength(32);
+
+            // Stored as jsonb through a converter, like Role.Permissions uses one for its list, so the column can be
+            // queried in SQL later without a separate changes table.
+            entity.Property(auditEntry => auditEntry.Changes)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    changes => JsonSerializer.Serialize(changes, AuditJson.Options),
+                    stored => JsonSerializer.Deserialize<List<AuditFieldChange>>(stored, AuditJson.Options) ?? new List<AuditFieldChange>())
+                .Metadata.SetValueComparer(new ValueComparer<List<AuditFieldChange>>(
+                    (left, right) => left!.SequenceEqual(right!),
+                    changes => changes.Aggregate(0, (hash, change) => HashCode.Combine(hash, change.GetHashCode())),
+                    changes => changes.ToList()));
+
+            entity.HasIndex(auditEntry => auditEntry.OccurredUtc).IsDescending();
+            entity.HasIndex(auditEntry => new { auditEntry.Kind, auditEntry.OccurredUtc });
+            entity.HasIndex(auditEntry => auditEntry.ActorEmail);
+            entity.HasIndex(auditEntry => new { auditEntry.TargetType, auditEntry.TargetId });
+        });
         modelBuilder.Entity<HaloPsaSettings>().HasData(new HaloPsaSettings { Id = 1 });
         modelBuilder.Entity<CloudflareDnsSettings>().HasData(new CloudflareDnsSettings { Id = 1 });
         modelBuilder.Entity<AzureDnsSettings>().HasData(new AzureDnsSettings { Id = 1 });
