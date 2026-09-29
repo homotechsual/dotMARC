@@ -15,7 +15,7 @@ public sealed class AuditCoverageTests
         typeof(DomainManagementService), typeof(GroupManagementService), typeof(TagManagementService),
         typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(AlertTicketRuleService),
         typeof(NotificationSettingsService), typeof(HaloPsaSettingsService), typeof(CloudflareDnsSettingsService),
-        typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService),
+        typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService), typeof(AuditSettingsService),
     ];
 
     private static readonly string[] ReadMethodPrefixes = ["Get", "List", "Count", "Resolve"];
@@ -29,7 +29,7 @@ public sealed class AuditCoverageTests
             .ToList();
 
         // Guards against the list above silently matching nothing.
-        Assert.True(mutatingMethods.Count >= 29, $"Expected at least 29 mutating methods, found {mutatingMethods.Count}.");
+        Assert.True(mutatingMethods.Count >= 30, $"Expected at least 30 mutating methods, found {mutatingMethods.Count}.");
 
         var missingActor = mutatingMethods
             .Where(method =>

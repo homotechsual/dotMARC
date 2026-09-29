@@ -1,0 +1,65 @@
+@using DotMarc.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuditActorAccessor AuditActorAccessor
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudText Typo="Typo.h6">Retention</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+        How long each kind of entry is kept, in days. Leave a box empty to keep that kind forever. Entries older than
+        this are deleted once a day.
+    </MudText>
+    @if (_settings is null)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int?" @bind-Value="_settings.ChangeRetentionDays" Label="Changes" Placeholder="Keep forever" Variant="Variant.Outlined"
+                                 Min="AuditSettings.MinimumRetentionDays" Max="AuditSettings.MaximumRetentionDays" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int?" @bind-Value="_settings.SignInRetentionDays" Label="Sign-ins" Placeholder="Keep forever" Variant="Variant.Outlined"
+                                 Min="AuditSettings.MinimumRetentionDays" Max="AuditSettings.MaximumRetentionDays" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int?" @bind-Value="_settings.PageViewRetentionDays" Label="Page views" Placeholder="Keep forever" Variant="Variant.Outlined"
+                                 Min="AuditSettings.MinimumRetentionDays" Max="AuditSettings.MaximumRetentionDays" />
+            </MudItem>
+        </MudGrid>
+        <div class="d-flex justify-end mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save retention</MudButton>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    private AuditSettings? _settings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var context = await DbFactory.CreateDbContextAsync();
+        _settings = await context.AuditSettings.AsNoTracking().SingleAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            await AuditSettingsService.SaveAsync(context, await AuditActorAccessor.GetAsync(), _settings!);
+            Snackbar.Add("Retention saved.", Severity.Success);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            Snackbar.Add(exception.Message.Split(" (Parameter")[0], Severity.Error);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Couldn't save retention. Try again.", Severity.Error);
+        }
+    }
+}

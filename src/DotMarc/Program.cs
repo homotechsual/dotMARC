@@ -169,6 +169,7 @@ builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
 // mailbox dependency), so it's just as meaningful against seeded demo data as against real
 // polled reports.
 builder.Services.AddHostedService<PinnedDomainHealthMonitor>();
+builder.Services.AddHostedService<DotMarc.Audit.AuditRetentionService>();
 
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts.MtaStsDnsVerifier>(client =>
 {

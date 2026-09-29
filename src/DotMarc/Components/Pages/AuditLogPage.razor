@@ -16,6 +16,10 @@
     only once they pass the retention period.
 </MudText>
 
+<AuthorizeView Policy="AuditManage">
+    <AuditRetentionPanel />
+</AuthorizeView>
+
 <MudGrid Class="mb-2">
     <MudItem xs="12" sm="4">
         <MudDatePicker Label="From (UTC)" Date="@ToDateTime(_filter.From)" DateChanged="@(date => UpdateFilterAsync(_filter with { From = ToDateOnly(date) }))" Clearable="true" />
