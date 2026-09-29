@@ -311,6 +311,7 @@ else
 
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
 builder.Services.AddScoped<DotMarc.Audit.AuditActorAccessor>();
+builder.Services.AddSingleton<DotMarc.Audit.AuditRecorder>();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -535,7 +536,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     IDmarcAuthorizationTxtLookup dmarcAuthorizationTxtLookup, IDnsProviderDetector dnsProviderDetector,
     IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
     DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner, DotMarc.MtaSts.IMtaStsCnameLookup mtaStsCnameLookup,
-    IAuthorizationService authorizationService, ILogger<Program> logger) =>
+    IAuthorizationService authorizationService, DotMarc.Audit.AuditRecorder auditRecorder, ILogger<Program> logger) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
@@ -739,6 +740,13 @@ app.MapGet("/dns-push/{provider}/callback", async (
 
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
     var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, changes, CancellationToken.None);
+
+    // Recorded only when the push went through. A push that failed changed nothing, and is already logged below.
+    // The records are live in DNS by now, so this can't share a transaction with the change; it's best-effort.
+    if (result.Outcome == DnsPushOutcome.Pushed)
+    {
+        await auditRecorder.RecordAsync(DotMarc.Audit.DnsPushAudit.CreateEntry(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), domain, provider, changes));
+    }
 
     var resultFlag = result.Outcome switch
     {

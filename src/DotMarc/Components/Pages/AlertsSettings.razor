@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject AuditActorAccessor AuditActorAccessor
+@inject AuditRecorder AuditRecorder
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject IJSRuntime Js
@@ -399,6 +400,8 @@ else
     private async Task ClearHaloSignInAsync()
     {
         var dropped = await HaloTokenCache.ClearAsync();
+        await AuditRecorder.RecordAsync(AuditLog.Create(await AuditActorAccessor.GetAsync(), AuditEntryKind.Change,
+            AuditActions.HaloSignInCleared, AuditTarget.Settings("HaloPSA"), "Cleared the cached HaloPSA sign-in"));
         Snackbar.Add(dropped == 0
             ? "There was no cached Halo sign-in. The next call signs in fresh anyway."
             : "Cleared the cached Halo sign-in. The next call signs in again and picks up any change to the API agent's permissions.", Severity.Success);
@@ -464,6 +467,8 @@ else
             });
 
             _testRun = await HaloTester.RunAsync(_testHaloClientId, progress, null, CancellationToken.None);
+            await AuditRecorder.RecordAsync(AuditLog.Create(await AuditActorAccessor.GetAsync(), AuditEntryKind.Change,
+                AuditActions.HaloIntegrationTested, AuditTarget.Settings("HaloPSA"), "Ran the HaloPSA integration test"));
 
             // The progress callbacks are posted asynchronously, so take the final list from the
             // run itself rather than trusting they have all landed.
