@@ -135,7 +135,7 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
 
         await using (var context = CreateContext())
         {
-            await GroupManagementService.RemoveGroupAsync(context, groupId);
+            await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, groupId);
         }
 
         await using var verify = CreateContext();

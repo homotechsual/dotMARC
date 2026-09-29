@@ -317,7 +317,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await GroupManagementService.SetDomainGroupsAsync(db, row.Id, groupIds.ToList(), CancellationToken.None);
+            await GroupManagementService.SetDomainGroupsAsync(db, await AuditActorAccessor.GetAsync(), row.Id, groupIds.ToList(), CancellationToken.None);
         }
         catch (Exception)
         {
@@ -331,7 +331,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await TagManagementService.SetDomainTagsAsync(db, row.Id, tagIds.ToList(), CancellationToken.None);
+            await TagManagementService.SetDomainTagsAsync(db, await AuditActorAccessor.GetAsync(), row.Id, tagIds.ToList(), CancellationToken.None);
         }
         catch (Exception)
         {

@@ -7,6 +7,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -413,7 +414,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var result = await GroupManagementService.AddGroupAsync(db, client.Name, CancellationToken.None, client.Id);
+            var result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), client.Name, CancellationToken.None, client.Id);
             if (result == GroupManagementService.AddGroupResult.Added)
             {
                 Snackbar.Add($"Created group {client.Name}.", Severity.Success);
@@ -456,7 +457,7 @@
             foreach (var client in clients)
             {
                 await using var db = await DbFactory.CreateDbContextAsync();
-                var result = await GroupManagementService.AddGroupAsync(db, client.Name, CancellationToken.None, client.Id);
+                var result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), client.Name, CancellationToken.None, client.Id);
                 if (result == GroupManagementService.AddGroupResult.Added)
                 {
                     created++;
@@ -491,7 +492,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            result = await GroupManagementService.AddGroupAsync(db, _newGroupName, CancellationToken.None);
+            result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), _newGroupName, CancellationToken.None);
         }
         catch (Exception)
         {
@@ -518,7 +519,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var result = await GroupManagementService.RenameGroupAsync(db, row.Id, newName, CancellationToken.None);
+            var result = await GroupManagementService.RenameGroupAsync(db, await AuditActorAccessor.GetAsync(), row.Id, newName, CancellationToken.None);
             var error = result switch
             {
                 GroupManagementService.AddGroupResult.InvalidName => "Group name can't be empty.",
@@ -553,7 +554,7 @@
             try
             {
                 await using var db = await DbFactory.CreateDbContextAsync();
-                await GroupManagementService.RemoveGroupAsync(db, row.Id, CancellationToken.None);
+                await GroupManagementService.RemoveGroupAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
                 await LoadAsync();
             }
             catch (Exception)
@@ -570,7 +571,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            result = await TagManagementService.AddTagAsync(db, _newTagName, _newTagColor, CancellationToken.None);
+            result = await TagManagementService.AddTagAsync(db, await AuditActorAccessor.GetAsync(), _newTagName, _newTagColor, CancellationToken.None);
         }
         catch (Exception)
         {
@@ -599,7 +600,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var result = await TagManagementService.UpdateTagAsync(db, row.Id, newName, newColor, CancellationToken.None);
+            var result = await TagManagementService.UpdateTagAsync(db, await AuditActorAccessor.GetAsync(), row.Id, newName, newColor, CancellationToken.None);
             var error = result switch
             {
                 TagManagementService.AddTagResult.InvalidName => "Tag name can't be empty.",
@@ -635,7 +636,7 @@
             try
             {
                 await using var db = await DbFactory.CreateDbContextAsync();
-                await TagManagementService.RemoveTagAsync(db, row.Id, CancellationToken.None);
+                await TagManagementService.RemoveTagAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
                 await LoadAsync();
             }
             catch (Exception)
@@ -650,7 +651,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await GroupManagementService.SetHaloClientIdAsync(db, row.Id, haloClientId, CancellationToken.None);
+            await GroupManagementService.SetHaloClientIdAsync(db, await AuditActorAccessor.GetAsync(), row.Id, haloClientId, CancellationToken.None);
         }
         catch (Exception)
         {
