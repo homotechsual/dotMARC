@@ -14,6 +14,7 @@
 @using DotMarc.Ingestion
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IIpInfoLookup IpLookup
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -1289,7 +1290,7 @@ else
 
         var selectors = (List<string>)result.Data!;
         await using var db = await DbFactory.CreateDbContextAsync();
-        await DomainManagementService.SetDkimSelectorsAsync(db, _domain!.Id, selectors, CancellationToken.None);
+        await DomainManagementService.SetDkimSelectorsAsync(db, await AuditActorAccessor.GetAsync(), _domain!.Id, selectors, CancellationToken.None);
         _domain.DkimSelectors = selectors;
 
         await RecheckDkimAsync();

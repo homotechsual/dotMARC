@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -370,7 +371,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetMonitoredAsync(db, row.Id, isMonitored, CancellationToken.None);
+            await DomainManagementService.SetMonitoredAsync(db, await AuditActorAccessor.GetAsync(), row.Id, isMonitored, CancellationToken.None);
         }
         catch (Exception)
         {

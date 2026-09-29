@@ -120,7 +120,7 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     public async Task RemoveGroupAsync_RemovesTheGroup_ButNotItsMemberDomain()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.io", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.io", CancellationToken.None);
         await GroupManagementService.AddGroupAsync(context, "Client A", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
         var groupId = context.Groups.Single().Id;
@@ -137,7 +137,7 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     public async Task SetDomainGroupsAsync_ReplacesTheFullMembershipSet()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.io", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.io", CancellationToken.None);
         await GroupManagementService.AddGroupAsync(context, "Client A", CancellationToken.None);
         await GroupManagementService.AddGroupAsync(context, "Client B", CancellationToken.None);
         var domainId = context.Domains.Single().Id;

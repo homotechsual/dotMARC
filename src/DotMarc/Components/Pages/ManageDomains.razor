@@ -7,6 +7,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -275,7 +276,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            result = await DomainManagementService.AddDomainAsync(db, _newDomainName, CancellationToken.None);
+            result = await DomainManagementService.AddDomainAsync(db, await AuditActorAccessor.GetAsync(), _newDomainName, CancellationToken.None);
         }
         catch (Exception)
         {
@@ -302,7 +303,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetMonitoredAsync(db, row.Id, isMonitored, CancellationToken.None);
+            await DomainManagementService.SetMonitoredAsync(db, await AuditActorAccessor.GetAsync(), row.Id, isMonitored, CancellationToken.None);
         }
         catch (Exception)
         {
@@ -354,7 +355,7 @@ else
             try
             {
                 await using var db = await DbFactory.CreateDbContextAsync();
-                await DomainManagementService.RemoveDomainAsync(db, row.Id, CancellationToken.None);
+                await DomainManagementService.RemoveDomainAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
                 await LoadAsync();
             }
             catch (Exception)
@@ -394,7 +395,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.ReorderAsync(db, _domains.Select(d => d.Id).ToList(), CancellationToken.None);
+            await DomainManagementService.ReorderAsync(db, await AuditActorAccessor.GetAsync(), _domains.Select(d => d.Id).ToList(), CancellationToken.None);
         }
         catch (Exception)
         {
@@ -409,7 +410,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetHaloClientIdAsync(db, row.Id, haloClientId, CancellationToken.None);
+            await DomainManagementService.SetHaloClientIdAsync(db, await AuditActorAccessor.GetAsync(), row.Id, haloClientId, CancellationToken.None);
         }
         catch (Exception)
         {

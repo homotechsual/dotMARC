@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +43,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await DomainManagementService.AddDomainAsync(context, "Contoso.COM", CancellationToken.None);
+        var result = await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "Contoso.COM", CancellationToken.None);
 
         Assert.Equal(DomainManagementService.AddDomainResult.Added, result);
         var domain = context.Domains.Single();
@@ -56,7 +57,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await DomainManagementService.AddDomainAsync(context, "not-a-domain", CancellationToken.None);
+        var result = await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "not-a-domain", CancellationToken.None);
 
         Assert.Equal(DomainManagementService.AddDomainResult.InvalidName, result);
         Assert.Empty(context.Domains);
@@ -66,9 +67,9 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task AddDomainAsync_RejectsDuplicate_RegardlessOfCasing()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
 
-        var result = await DomainManagementService.AddDomainAsync(context, "CONTOSO.com", CancellationToken.None);
+        var result = await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "CONTOSO.com", CancellationToken.None);
 
         Assert.Equal(DomainManagementService.AddDomainResult.AlreadyMonitored, result);
         Assert.Single(context.Domains);
@@ -78,10 +79,10 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task RemoveDomainAsync_DeletesDomainWithNoReports()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
 
-        await DomainManagementService.RemoveDomainAsync(context, domainId, CancellationToken.None);
+        await DomainManagementService.RemoveDomainAsync(context, TestActors.Admin, domainId, CancellationToken.None);
 
         Assert.Empty(context.Domains);
     }
@@ -114,7 +115,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         context.Reports.Add(report);
         await context.SaveChangesAsync();
 
-        await DomainManagementService.RemoveDomainAsync(context, domain.Id, CancellationToken.None);
+        await DomainManagementService.RemoveDomainAsync(context, TestActors.Admin, domain.Id, CancellationToken.None);
 
         using var verify = CreateContext();
         Assert.Empty(verify.Domains);
@@ -126,10 +127,10 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task SetMonitoredAsync_TogglesIsMonitored()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
 
-        await DomainManagementService.SetMonitoredAsync(context, domainId, false, CancellationToken.None);
+        await DomainManagementService.SetMonitoredAsync(context, TestActors.Admin, domainId, false, CancellationToken.None);
 
         using var verify = CreateContext();
         Assert.False(verify.Domains.Single().IsMonitored);
@@ -139,11 +140,11 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task SetMtaStsConfigAsync_SavesConfig_AndResetsStatusToPendingDns_WhenEnablingForTheFirstTime()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
 
         await DomainManagementService.SetMtaStsConfigAsync(
-            context, domainId, enabled: true, MtaStsMode.Enforce, ["mail.contoso.com"], 86_400, CancellationToken.None);
+            context, TestActors.Admin, domainId, enabled: true, MtaStsMode.Enforce, ["mail.contoso.com"], 86_400, CancellationToken.None);
 
         using var verify = CreateContext();
         var domain = verify.Domains.Single();
@@ -158,17 +159,17 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task SetMtaStsConfigAsync_LeavesStatusAlone_WhenAlreadyEnabled()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
         await DomainManagementService.SetMtaStsConfigAsync(
-            context, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com"], 604_800, CancellationToken.None);
+            context, TestActors.Admin, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com"], 604_800, CancellationToken.None);
         context.Domains.Single().MtaStsStatus = MtaStsStatus.Active;
         await context.SaveChangesAsync();
 
         // Editing the MX list on an already-enabled, already-Active domain shouldn't reset it back
         // to PendingDns - only the false-to-true enable transition does that.
         await DomainManagementService.SetMtaStsConfigAsync(
-            context, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com", "backup.contoso.com"], 604_800, CancellationToken.None);
+            context, TestActors.Admin, domainId, enabled: true, MtaStsMode.Testing, ["mail.contoso.com", "backup.contoso.com"], 604_800, CancellationToken.None);
 
         using var verify = CreateContext();
         var domain = verify.Domains.Single();
@@ -194,16 +195,16 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task ReorderAsync_SetsSortOrderToMatchTheGivenSequence()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "a.com", CancellationToken.None);
-        await DomainManagementService.AddDomainAsync(context, "b.com", CancellationToken.None);
-        await DomainManagementService.AddDomainAsync(context, "c.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "a.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "b.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "c.com", CancellationToken.None);
 
         var domains = context.Domains.OrderBy(d => d.Name).ToList();
         var a = domains.Single(d => d.Name == "a.com");
         var b = domains.Single(d => d.Name == "b.com");
         var c = domains.Single(d => d.Name == "c.com");
 
-        await DomainManagementService.ReorderAsync(context, [c.Id, a.Id, b.Id], CancellationToken.None);
+        await DomainManagementService.ReorderAsync(context, TestActors.Admin, [c.Id, a.Id, b.Id], CancellationToken.None);
 
         using var verify = CreateContext();
         Assert.Equal(0, verify.Domains.Single(d => d.Name == "c.com").SortOrder);
@@ -215,12 +216,12 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task AddDomainAsync_AppendsToTheEnd_WhenOtherDomainsAlreadyHaveDistinctSortOrder()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "a.com", CancellationToken.None);
-        await DomainManagementService.AddDomainAsync(context, "b.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "a.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "b.com", CancellationToken.None);
         var existing = context.Domains.OrderBy(d => d.Name).ToList();
-        await DomainManagementService.ReorderAsync(context, [existing[1].Id, existing[0].Id], CancellationToken.None);
+        await DomainManagementService.ReorderAsync(context, TestActors.Admin, [existing[1].Id, existing[0].Id], CancellationToken.None);
 
-        await DomainManagementService.AddDomainAsync(context, "c.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "c.com", CancellationToken.None);
 
         using var verify = CreateContext();
         Assert.Equal(2, verify.Domains.Single(d => d.Name == "c.com").SortOrder);
@@ -252,7 +253,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         context.Domains.Add(domain);
         await context.SaveChangesAsync();
 
-        await DomainManagementService.SetHaloClientIdAsync(context, domain.Id, 7);
+        await DomainManagementService.SetHaloClientIdAsync(context, TestActors.Admin, domain.Id, 7);
 
         await using var verify = CreateContext();
         Assert.Equal(7, (await verify.Domains.SingleAsync(d => d.Id == domain.Id)).HaloClientId);
@@ -262,13 +263,127 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     public async Task SetDkimSelectorsAsync_SavesTheSelectorList()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.com", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
         var domainId = context.Domains.Single().Id;
 
-        await DomainManagementService.SetDkimSelectorsAsync(context, domainId, ["selector1", "selector2"], CancellationToken.None);
+        await DomainManagementService.SetDkimSelectorsAsync(context, TestActors.Admin, domainId, ["selector1", "selector2"], CancellationToken.None);
 
         using var verify = CreateContext();
         var domain = verify.Domains.Single();
         Assert.Equal(["selector1", "selector2"], domain.DkimSelectors);
+    }
+
+    private static async Task<AuditEntry> LatestEntryAsync(DotMarcDbContext context) =>
+        await context.AuditEntries.OrderByDescending(entry => entry.Id).FirstAsync();
+
+    [Fact]
+    public async Task AddDomainAsync_RecordsWhoAddedTheDomain()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "Contoso.com");
+        }
+
+        await using var verify = CreateContext();
+        var domain = await verify.Domains.SingleAsync();
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Equal(AuditActions.DomainAdded, entry.Action);
+        Assert.Equal(AuditEntryKind.Change, entry.Kind);
+        Assert.Equal("admin@example.com", entry.ActorEmail);
+        Assert.Equal(("Domain", domain.Id.ToString(), "contoso.com"), (entry.TargetType, entry.TargetId, entry.TargetName));
+        Assert.Equal("Added domain contoso.com", entry.Summary);
+    }
+
+    [Fact]
+    public async Task AddDomainAsync_RecordsNothing_WhenItRefusesTheDomain()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com");
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com");
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "not a domain");
+        }
+
+        await using var verify = CreateContext();
+        Assert.Single(verify.AuditEntries);
+    }
+
+    [Fact]
+    public async Task SetMonitoredAsync_RecordsTheOldAndNewValue()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com");
+            var domainId = (await context.Domains.SingleAsync()).Id;
+            await DomainManagementService.SetMonitoredAsync(context, TestActors.Admin, domainId, isMonitored: false);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await LatestEntryAsync(verify);
+        Assert.Equal(AuditActions.DomainMonitoringChanged, entry.Action);
+        Assert.Equal("Stopped monitoring contoso.com", entry.Summary);
+        Assert.Equal([new AuditFieldChange("Monitored", "Yes", "No")], entry.Changes);
+    }
+
+    [Fact]
+    public async Task SetMonitoredAsync_RecordsNothing_WhenTheValueIsUnchanged()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com");
+            var domainId = (await context.Domains.SingleAsync()).Id;
+            await DomainManagementService.SetMonitoredAsync(context, TestActors.Admin, domainId, isMonitored: true);
+        }
+
+        await using var verify = CreateContext();
+        Assert.Single(verify.AuditEntries);
+    }
+
+    [Fact]
+    public async Task SetMtaStsConfigAsync_RecordsOnlyTheFieldsThatChanged()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com");
+            var domainId = (await context.Domains.SingleAsync()).Id;
+            await DomainManagementService.SetMtaStsConfigAsync(context, TestActors.Admin, domainId, enabled: true, MtaStsMode.Testing, ["mx1.contoso.com"], 86400);
+            await DomainManagementService.SetMtaStsConfigAsync(context, TestActors.Admin, domainId, enabled: true, MtaStsMode.Enforce, ["mx1.contoso.com"], 86400);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await LatestEntryAsync(verify);
+        Assert.Equal(AuditActions.DomainMtaStsChanged, entry.Action);
+        Assert.Equal([new AuditFieldChange("Mode", "Testing", "Enforce")], entry.Changes);
+    }
+
+    [Fact]
+    public async Task ReorderAsync_RecordsOneEntryWithTheOldAndNewOrder()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "alpha.com");
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "beta.com");
+            var domainIdsByName = await context.Domains.ToDictionaryAsync(domain => domain.Name, domain => domain.Id);
+            await DomainManagementService.ReorderAsync(context, TestActors.Admin, [domainIdsByName["beta.com"], domainIdsByName["alpha.com"]]);
+        }
+
+        await using var verify = CreateContext();
+        var reorderEntry = await verify.AuditEntries.SingleAsync(entry => entry.Action == AuditActions.DomainsReordered);
+        Assert.Equal([new AuditFieldChange("Order", "alpha.com, beta.com", "beta.com, alpha.com")], reorderEntry.Changes);
+    }
+
+    [Fact]
+    public async Task RemoveDomainAsync_RecordsTheRemovedDomainsName()
+    {
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com");
+            var domainId = (await context.Domains.SingleAsync()).Id;
+            await DomainManagementService.RemoveDomainAsync(context, TestActors.Admin, domainId);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await LatestEntryAsync(verify);
+        Assert.Equal((AuditActions.DomainRemoved, "contoso.com", "Removed domain contoso.com"), (entry.Action, entry.TargetName, entry.Summary));
     }
 }

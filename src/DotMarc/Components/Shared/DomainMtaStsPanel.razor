@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.Options
+@inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IOptions<MtaStsOptions> MtaStsOptions
 @inject IMxHostsLookup MxHostsLookup
@@ -162,7 +163,7 @@
             }
 
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetMtaStsConfigAsync(db, Domain.Id, enabled: true, MtaStsMode.Testing, mxHosts, 604_800, CancellationToken.None);
+            await DomainManagementService.SetMtaStsConfigAsync(db, await AuditActorAccessor.GetAsync(), Domain.Id, enabled: true, MtaStsMode.Testing, mxHosts, 604_800, CancellationToken.None);
 
             _enabled = true;
             _mode = MtaStsMode.Testing;
@@ -201,7 +202,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetMtaStsConfigAsync(db, Domain.Id, _enabled, _mode, mxHosts, _maxAgeSeconds, CancellationToken.None);
+            await DomainManagementService.SetMtaStsConfigAsync(db, await AuditActorAccessor.GetAsync(), Domain.Id, _enabled, _mode, mxHosts, _maxAgeSeconds, CancellationToken.None);
             Domain.MtaStsEnabled = _enabled;
             Domain.MtaStsMode = _mode;
             Domain.MtaStsMaxAgeSeconds = _maxAgeSeconds;

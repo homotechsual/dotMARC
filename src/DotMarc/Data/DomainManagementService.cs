@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -14,7 +15,7 @@ public static class DomainManagementService
     /// <summary>Creates a monitored Domain row with no reports yet, so it immediately shows as
     /// "Missing" on the Dashboard (Dashboard.razor's existing IsMonitored &amp;&amp;
     /// LastReportReceivedUtc-is-null check) until its first real report arrives.</summary>
-    public static async Task<AddDomainResult> AddDomainAsync(DotMarcDbContext context, string rawName, CancellationToken cancellationToken = default)
+    public static async Task<AddDomainResult> AddDomainAsync(DotMarcDbContext context, AuditActor actor, string rawName, CancellationToken cancellationToken = default)
     {
         if (!DomainNameValidator.TryNormalize(rawName, out var normalized))
         {
@@ -28,11 +29,14 @@ public static class DomainManagementService
         }
 
         var nextSortOrder = (await context.Domains.MaxAsync(d => (int?)d.SortOrder, cancellationToken).ConfigureAwait(false) ?? -1) + 1;
-        context.Domains.Add(new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = true, SortOrder = nextSortOrder });
+        var domain = new Domain { Name = normalized, FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = true, SortOrder = nextSortOrder };
+        context.Domains.Add(domain);
 
         try
         {
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await AuditLog.SaveAndRecordAsync(context,
+                () => AuditLog.Record(context, actor, AuditActions.DomainAdded, AuditTarget.For(domain), $"Added domain {domain.Name}"),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
@@ -52,25 +56,41 @@ public static class DomainManagementService
     /// from Domain to Report and Report to ReportRecord, so this also removes all report history
     /// for the domain - callers (ManageDomains.razor) confirm that with the user first when the
     /// domain has any reports.</summary>
-    public static async Task RemoveDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default)
+    public static async Task RemoveDomainAsync(DotMarcDbContext context, AuditActor actor, int domainId, CancellationToken cancellationToken = default)
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        AuditLog.Record(context, actor, AuditActions.DomainRemoved, AuditTarget.For(domain), $"Removed domain {domain.Name}");
         context.Domains.Remove(domain);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public static async Task SetMonitoredAsync(DotMarcDbContext context, int domainId, bool isMonitored, CancellationToken cancellationToken = default)
+    public static async Task SetMonitoredAsync(DotMarcDbContext context, AuditActor actor, int domainId, bool isMonitored, CancellationToken cancellationToken = default)
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var changes = new AuditChanges().Field("Monitored", domain.IsMonitored, isMonitored);
+        if (!changes.Any)
+        {
+            return;
+        }
+
         domain.IsMonitored = isMonitored;
+        AuditLog.Record(context, actor, AuditActions.DomainMonitoringChanged, AuditTarget.For(domain),
+            $"{(isMonitored ? "Started" : "Stopped")} monitoring {domain.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Sets (or clears, with null) a domain's Halo client override, from Manage Domains.</summary>
-    public static async Task SetHaloClientIdAsync(DotMarcDbContext context, int domainId, int? haloClientId, CancellationToken cancellationToken = default)
+    public static async Task SetHaloClientIdAsync(DotMarcDbContext context, AuditActor actor, int domainId, int? haloClientId, CancellationToken cancellationToken = default)
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var changes = new AuditChanges().Field("Halo client", domain.HaloClientId, haloClientId);
+        if (!changes.Any)
+        {
+            return;
+        }
+
         domain.HaloClientId = haloClientId;
+        AuditLog.Record(context, actor, AuditActions.DomainHaloClientChanged, AuditTarget.For(domain), $"Changed the Halo client for {domain.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -82,6 +102,7 @@ public static class DomainManagementService
     /// is a network call this pure-DB service does not make.</summary>
     public static async Task SetMtaStsConfigAsync(
         DotMarcDbContext context,
+        AuditActor actor,
         int domainId,
         bool enabled,
         MtaStsMode mode,
@@ -90,6 +111,15 @@ public static class DomainManagementService
         CancellationToken cancellationToken = default)
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var changes = new AuditChanges()
+            .Field("Hosting enabled", domain.MtaStsEnabled, enabled)
+            .Field("Mode", domain.MtaStsMode, mode)
+            .Set("MX hosts", domain.MtaStsMxHosts, mxHosts)
+            .Field("Max age (seconds)", domain.MtaStsMaxAgeSeconds, maxAgeSeconds);
+        if (!changes.Any)
+        {
+            return;
+        }
 
         if (enabled && !domain.MtaStsEnabled)
         {
@@ -103,6 +133,7 @@ public static class DomainManagementService
         domain.MtaStsMxHosts = mxHosts;
         domain.MtaStsMaxAgeSeconds = maxAgeSeconds;
 
+        AuditLog.Record(context, actor, AuditActions.DomainMtaStsChanged, AuditTarget.For(domain), $"Changed MTA-STS for {domain.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -110,10 +141,17 @@ public static class DomainManagementService
     /// selectors" dialog. Does not itself trigger a recheck - the dialog's own save handler does
     /// that immediately afterward via PollingService.RunSingleDkimCheckAsync, matching the "enable
     /// MTA-STS" flow's immediate-check-after-save pattern.</summary>
-    public static async Task SetDkimSelectorsAsync(DotMarcDbContext context, int domainId, List<string> selectors, CancellationToken cancellationToken = default)
+    public static async Task SetDkimSelectorsAsync(DotMarcDbContext context, AuditActor actor, int domainId, List<string> selectors, CancellationToken cancellationToken = default)
     {
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var changes = new AuditChanges().Set("DKIM selectors", domain.DkimSelectors, selectors);
+        if (!changes.Any)
+        {
+            return;
+        }
+
         domain.DkimSelectors = selectors;
+        AuditLog.Record(context, actor, AuditActions.DomainDkimSelectorsChanged, AuditTarget.For(domain), $"Changed the DKIM selectors for {domain.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -124,12 +162,14 @@ public static class DomainManagementService
     /// report-driven one (PollingService.StoreReportAsync) - there's no uniqueness constraint on
     /// the column, and every ordering query breaks such ties with .ThenBy(d => d.Name), so this is
     /// tolerated by design rather than guarded against.</summary>
-    public static async Task ReorderAsync(DotMarcDbContext context, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default)
+    public static async Task ReorderAsync(DotMarcDbContext context, AuditActor actor, IReadOnlyList<int> orderedDomainIds, CancellationToken cancellationToken = default)
     {
         var domains = await context.Domains
             .Where(d => orderedDomainIds.Contains(d.Id))
             .ToDictionaryAsync(d => d.Id, cancellationToken)
             .ConfigureAwait(false);
+
+        var orderBefore = domains.Values.OrderBy(domain => domain.SortOrder).ThenBy(domain => domain.Name).Select(domain => domain.Name).ToList();
 
         for (var index = 0; index < orderedDomainIds.Count; index++)
         {
@@ -140,6 +180,13 @@ public static class DomainManagementService
             {
                 domain.SortOrder = index;
             }
+        }
+
+        var orderAfter = orderedDomainIds.Where(domains.ContainsKey).Select(domainId => domains[domainId].Name).ToList();
+        var changes = new AuditChanges().Field("Order", string.Join(", ", orderBefore), string.Join(", ", orderAfter));
+        if (changes.Any)
+        {
+            AuditLog.Record(context, actor, AuditActions.DomainsReordered, null, "Reordered domains", changes);
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

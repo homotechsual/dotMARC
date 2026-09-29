@@ -145,7 +145,7 @@ public sealed class TagManagementServiceTests : IAsyncLifetime
     public async Task RemoveTagAsync_RemovesTheTag_ButNotItsMemberDomain()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.io", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.io", CancellationToken.None);
         await TagManagementService.AddTagAsync(context, "primary", Color.Primary, CancellationToken.None);
         var domainId = context.Domains.Single().Id;
         var tagId = context.Tags.Single().Id;
@@ -162,7 +162,7 @@ public sealed class TagManagementServiceTests : IAsyncLifetime
     public async Task SetDomainTagsAsync_ReplacesTheFullMembershipSet()
     {
         using var context = CreateContext();
-        await DomainManagementService.AddDomainAsync(context, "contoso.io", CancellationToken.None);
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.io", CancellationToken.None);
         await TagManagementService.AddTagAsync(context, "primary", Color.Primary, CancellationToken.None);
         await TagManagementService.AddTagAsync(context, "secondary", Color.Secondary, CancellationToken.None);
         var domainId = context.Domains.Single().Id;

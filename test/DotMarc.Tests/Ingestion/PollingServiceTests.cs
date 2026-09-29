@@ -380,7 +380,7 @@ public class PollingServiceTests : IAsyncLifetime
         // lands, not treated as unseen and duplicated.
         using (var context = CreateContext())
         {
-            await DomainManagementService.AddDomainAsync(context, "contoso.io", CancellationToken.None);
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.io", CancellationToken.None);
         }
 
         var graphClient = new FakeGraphMailboxClient();
@@ -405,10 +405,10 @@ public class PollingServiceTests : IAsyncLifetime
     {
         using (var context = CreateContext())
         {
-            await DomainManagementService.AddDomainAsync(context, "existing-a.com", CancellationToken.None);
-            await DomainManagementService.AddDomainAsync(context, "existing-b.com", CancellationToken.None);
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "existing-a.com", CancellationToken.None);
+            await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "existing-b.com", CancellationToken.None);
             var existing = context.Domains.OrderBy(d => d.Name).ToList();
-            await DomainManagementService.ReorderAsync(context, [existing[1].Id, existing[0].Id], CancellationToken.None);
+            await DomainManagementService.ReorderAsync(context, TestActors.Admin, [existing[1].Id, existing[0].Id], CancellationToken.None);
         }
 
         var graphClient = new FakeGraphMailboxClient();
