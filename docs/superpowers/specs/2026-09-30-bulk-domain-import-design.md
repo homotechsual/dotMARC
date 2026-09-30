@@ -65,7 +65,8 @@ After that, all three are the same list of rows of cells.
 
 * **Without a header row**, cells are read in the order above, and later columns can be left off. So a list of domains,
   one per line, is valid input.
-* **A header row** is recognised when the first cell of the first data row is `domain`. Header names are compared
+* **A header row** is recognised when one of the first row's cells is `domain`. A data row never holds that, since a
+  domain has a dot. Header names are compared
   ignoring case, spaces, hyphens and underscores. With a header, columns can be in any order and any can be missing.
   An unrecognised header is shown as a warning and its column ignored.
 * In `;` lists each entry is trimmed, and empty entries are ignored.
@@ -137,10 +138,11 @@ For each, the person picks:
 * **Map to** an existing group, tag or Halo client, from a searchable list.
 * **Leave it out.** The name is dropped from every row that uses it.
 
-The default is **Map to** the best match when one is close enough, otherwise **Create it** when possible, otherwise
-**Leave it out**. A match is close enough when the names are equal after ignoring case, punctuation and spacing, and
-endings such as Limited, Ltd, LLC and Inc (the same loose comparison `HaloGroupSuggestions` uses), or when they are
-within two single-character edits of each other. Up to three suggestions are shown, best first.
+The default is **Map to** an existing name that is the same name written differently: equal after ignoring case,
+punctuation and spacing, and endings such as Limited, Ltd, LLC and Inc (the same loose comparison `HaloGroupSuggestions`
+uses). Otherwise it is **Create it** when possible, otherwise **Leave it out**. Names within two single-character edits
+are suggested (up to three, best first) but never chosen by default, because a near miss can be a genuinely different
+name, such as "Client C" and "Client A". (Changed while planning: the first version also defaulted to typo matches.)
 
 `-Name` removal entries naming something that doesn't exist are ignored with a note, since there's nothing to remove.
 
