@@ -10,6 +10,7 @@ public static class AuditActions
     public const string DomainMtaStsChanged = "domain.mta_sts_changed";
     public const string DomainDkimSelectorsChanged = "domain.dkim_selectors_changed";
     public const string DomainsReordered = "domains.reordered";
+    public const string DomainsImported = "domains.imported";
     public const string DomainGroupsChanged = "domain.groups_changed";
     public const string DomainTagsChanged = "domain.tags_changed";
     public const string GroupAdded = "group.added";
@@ -52,6 +53,7 @@ public static class AuditActions
         (DomainMtaStsChanged, "Domain MTA-STS changed"),
         (DomainDkimSelectorsChanged, "Domain DKIM selectors changed"),
         (DomainsReordered, "Domains reordered"),
+        (DomainsImported, "Domains imported"),
         (DomainGroupsChanged, "Domain groups changed"),
         (DomainTagsChanged, "Domain tags changed"),
         (GroupAdded, "Group added"),

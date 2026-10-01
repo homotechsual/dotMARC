@@ -29,9 +29,19 @@ public static class AuditLog
     /// <summary>For a change whose entry needs an id the database assigns, such as a newly added domain: saves the
     /// change, lets <paramref name="recordEntries"/> call <see cref="Record"/> now the id is known, and saves again,
     /// all in one transaction so neither is kept without the other. An exception from the first save (such as a
-    /// unique-name race) propagates to the caller unchanged.</summary>
+    /// unique-name race) propagates to the caller unchanged. Inside a transaction the caller already opened, it joins
+    /// that one instead.</summary>
     public static async Task SaveAndRecordAsync(DotMarcDbContext context, Action recordEntries, CancellationToken cancellationToken)
     {
+        // Inside a caller's transaction (a bulk import), join it: the caller commits or rolls back everything.
+        if (context.Database.CurrentTransaction is not null)
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            recordEntries();
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         recordEntries();

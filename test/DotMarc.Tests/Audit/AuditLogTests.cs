@@ -64,6 +64,23 @@ public sealed class AuditLogTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAndRecordAsync_JoinsTheCallersTransaction()
+    {
+        await using (var context = CreateContext())
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var group = new Group { Name = "Client A" };
+            context.Groups.Add(group);
+            await AuditLog.SaveAndRecordAsync(context, () => AuditLog.Record(context, TestActors.Admin, AuditActions.GroupAdded, AuditTarget.For(group), "Added group Client A"), CancellationToken.None);
+            await transaction.RollbackAsync();
+        }
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.Groups);
+        Assert.Empty(verify.AuditEntries);
+    }
+
+    [Fact]
     public async Task SaveAndRecordAsync_KeepsNeither_WhenTheEntryCannotBeSaved()
     {
         await using (var context = CreateContext())
