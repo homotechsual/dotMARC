@@ -67,6 +67,10 @@ public static class HaloGroupSuggestions
         return IsTokenPrefix(groupTokens, clientTokens) || IsTokenPrefix(clientTokens, groupTokens);
     }
 
+    /// <summary>A name reduced for loose comparison: lower-cased words, punctuation dropped, trailing company suffixes
+    /// such as "Limited" removed. Two names with the same key are the same name written differently.</summary>
+    public static string LooseKey(string name) => string.Join(' ', Tokenise(name));
+
     /// <summary>True when <paramref name="shorter"/> is the start of <paramref name="longer"/> (or the same), word for word.</summary>
     private static bool IsTokenPrefix(IReadOnlyList<string> shorter, IReadOnlyList<string> longer)
     {

@@ -115,4 +115,11 @@ public sealed class HaloGroupSuggestionsTests
     {
         Assert.Empty(HaloGroupSuggestions.SuggestClientsForGroup("Unknown", AllClients));
     }
+
+    [Fact]
+    public void LooseKey_IgnoresCasePunctuationAndCompanySuffixes()
+    {
+        Assert.Equal("compute bridgend", HaloGroupSuggestions.LooseKey("Compute (Bridgend) Limited"));
+        Assert.Equal(HaloGroupSuggestions.LooseKey("Contoso Ltd."), HaloGroupSuggestions.LooseKey("contoso"));
+    }
 }
