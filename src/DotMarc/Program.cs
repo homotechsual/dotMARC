@@ -40,8 +40,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
+// SignalR's 32 KB default closed the connection when a domain import was pasted: the text box sends its whole value in
+// one message. The import allows 1 MB of pasted text, which JSON escaping can roughly double.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options => options.MaximumReceiveMessageSize = 2 * DotMarc.DomainImport.CsvImportReader.MaximumBytes + 64 * 1024);
 builder.Services.AddMudServices();
 
 var connectionString = builder.Configuration.GetConnectionString("DotMarc") ?? "Host=localhost;Database=dotmarc;Username=dotmarc;Password=dotmarc";

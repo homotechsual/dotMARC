@@ -39,7 +39,8 @@ public static class DomainImportPlanner
         }
 
         var names = new NameResolver(snapshot, permissions, resolutions ?? new Dictionary<NameKey, NameResolution>());
-        foreach (var primary in primaries.Values)
+        // Rows that Skip mode leaves alone don't use their names, so those aren't listed or created.
+        foreach (var primary in primaries.Values.Where(primary => mode != ExistingDomainMode.Skip || !snapshot.DomainsByName.ContainsKey(primary.Domain)))
         {
             if (usable.Groups)
             {

@@ -95,13 +95,19 @@ public sealed record ImportTable(IReadOnlySet<ImportColumn> Columns, IReadOnlyLi
         }
         else
         {
+            // A column counts only if some row has a value in it. A trailing comma, or a spreadsheet whose used range is
+            // wider than its data, would otherwise make Match mode read Groups and Tags as present and blank, and clear them.
+            bool HasValue(int index) => dataRows.Any(row => index < row.Cells.Count && row.Cells[index].Length > 0);
             var widest = dataRows.Max(row => row.Cells.Count);
             for (var index = 0; index < Math.Min(widest, PositionalOrder.Length); index++)
             {
-                columnIndexes[PositionalOrder[index]] = index;
+                if (index == 0 || HasValue(index))
+                {
+                    columnIndexes[PositionalOrder[index]] = index;
+                }
             }
 
-            if (widest > PositionalOrder.Length)
+            if (Enumerable.Range(PositionalOrder.Length, Math.Max(0, widest - PositionalOrder.Length)).Any(HasValue))
             {
                 warnings.Add($"Without a header row only the first {PositionalOrder.Length} columns are read, so the rest were ignored.");
             }

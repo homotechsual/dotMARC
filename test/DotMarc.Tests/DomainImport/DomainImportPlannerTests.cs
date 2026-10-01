@@ -61,6 +61,16 @@ public sealed class DomainImportPlannerTests
     }
 
     [Fact]
+    public void SkipMode_DoesntListOrCreateNamesOnlySkippedRowsUse()
+    {
+        var plan = Plan("domain,groups,tags\nnew.com,,\nold.com,Client Z,brand-new-tag", Snapshot([Existing("old.com")]), ExistingDomainMode.Skip);
+
+        Assert.Empty(plan.UnknownNames);
+        Assert.Empty(plan.GroupsToCreate);
+        Assert.Empty(plan.TagsToCreate);
+    }
+
+    [Fact]
     public void AddMode_AddsGroups_AndRemovesDashEntries_ShowingTheRemoval()
     {
         var plan = Plan("domain,groups\nold.com,Client B;-Client A", Snapshot([Existing("old.com", groups: ["Client A"])]), ExistingDomainMode.Add);

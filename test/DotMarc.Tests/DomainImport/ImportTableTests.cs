@@ -29,6 +29,16 @@ public sealed class ImportTableTests
     }
 
     [Fact]
+    public void WithoutAHeader_AColumnThatIsBlankOnEveryRow_IsNotPresent()
+    {
+        // A trailing comma, or a spreadsheet whose used range is wider than its data, must not make Match mode read the
+        // Groups and Tags columns as "present and blank" and clear them.
+        var table = Table("contoso.com,,\nfabrikam.com,Client A,");
+
+        Assert.Equal(new HashSet<ImportColumn> { ImportColumn.Domain, ImportColumn.Groups }, table.Columns);
+    }
+
+    [Fact]
     public void AHeader_MapsColumnsByNameInAnyOrder_AndWarnsAboutUnknownOnes()
     {
         var table = Table("Monitored,Colour,Domain,MTA_STS Max-Age\nyes,red,contoso.com,86400");
