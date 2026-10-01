@@ -1,0 +1,347 @@
+@page "/domains/import"
+@attribute [Authorize(Policy = "DomainsAdd")]
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.DomainImport
+@using DotMarc.MtaSts
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IHaloPsaClient HaloPsaClient
+@inject IMxHostsLookup MxHostsLookup
+@inject ISnackbar Snackbar
+@inject ILogger<ImportDomains> Logger
+
+<PageTitle>dotMARC - Import domains</PageTitle>
+<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">Import domains</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/import-domains" Text="Columns, modes and examples" Class="ml-2" />
+</div>
+
+@if (_result is not null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-3">
+        Added @_result.Added, updated @_result.Updated, @_result.Unchanged unchanged, skipped @_result.SkippedExisting already monitored
+        and @_result.Invalid invalid. Health checks run for the new domains within the next polling cycle.
+    </MudAlert>
+    <MudTable Items="_result.Rows" Dense="true" Hover="true" RowsPerPage="50">
+        <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>What happened</MudTh></HeaderContent>
+        <RowTemplate><MudTd>@context.LineNumber</MudTd><MudTd>@context.Domain</MudTd><MudTd>@context.Outcome</MudTd></RowTemplate>
+        <PagerContent><MudTablePager /></PagerContent>
+    </MudTable>
+    <div class="d-flex mt-3" style="gap:0.5rem">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/domains">Go to Manage domains</MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="StartOver">Import more</MudButton>
+    </div>
+}
+else if (_plan is null)
+{
+    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+        Paste domains, one per line, or choose a CSV or Excel file. Optional columns set each domain's groups, tags, Halo
+        client, monitoring, DKIM selectors and MTA-STS. Nothing is saved until you check the preview and confirm.
+        Download a sample: <MudLink Href="/domains/import/sample.csv" UserAttributes="@DownloadAttribute">CSV</MudLink> or
+        <MudLink Href="/domains/import/sample.xlsx" UserAttributes="@DownloadAttribute">Excel</MudLink>.
+    </MudText>
+    <MudPaper Class="pa-4" Elevation="1">
+        @if (_uploadedFileName is null)
+        {
+            <MudTextField T="string" @bind-Value="_pasteText" Label="Domains" Lines="10" Variant="Variant.Outlined"
+                          Placeholder="contoso.com&#10;fabrikam.com,Client A,primary" />
+        }
+        else
+        {
+            <MudChip T="string" Color="Color.Primary" OnClose="@(() => { _uploadedFileName = null; _uploadedRows = null; })">@_uploadedFileName</MudChip>
+        }
+        <div class="d-flex align-center mt-3" style="gap:0.5rem">
+            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChosenAsync" Accept=".csv,.txt,.xlsx,.xls">
+                <CustomContent>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile" OnClick="@context.OpenFilePickerAsync">Choose a CSV or Excel file</MudButton>
+                </CustomContent>
+            </MudFileUpload>
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="PreviewAsync">@(_busy ? "Reading..." : "Preview")</MudButton>
+        </div>
+        @if (_inputError is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_inputError</MudAlert>
+        }
+    </MudPaper>
+}
+else
+{
+    @foreach (var warning in _table!.Warnings)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@warning</MudAlert>
+    }
+    @foreach (var notice in _plan.Notices)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">@notice</MudAlert>
+    }
+
+    <div class="d-flex flex-wrap mb-3" style="gap:0.5rem">
+        <MudChip T="string" Color="Color.Success">@_plan.NewCount new</MudChip>
+        <MudChip T="string" Color="Color.Info">@(_plan.UpdateCount + _plan.UnchangedCount + _plan.SkippedExistingCount) already monitored</MudChip>
+        <MudChip T="string">@_plan.DuplicateCount duplicate</MudChip>
+        <MudChip T="string" Color="Color.Error">@_plan.InvalidCount invalid</MudChip>
+    </div>
+
+    @if (_plan.Rows.Any(row => row.Status == ImportRowStatus.AlreadyMonitored))
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="1">
+            <MudText Typo="Typo.subtitle1">Domains that are already monitored</MudText>
+            <MudRadioGroup T="ExistingDomainMode" Value="_mode" ValueChanged="@(mode => { _mode = mode; Replan(); })">
+                <MudRadio T="ExistingDomainMode" Value="ExistingDomainMode.Skip">Skip them</MudRadio>
+                <MudRadio T="ExistingDomainMode" Value="ExistingDomainMode.Add">Add groups and tags (-Name removes one), and apply settings</MudRadio>
+                <MudRadio T="ExistingDomainMode" Value="ExistingDomainMode.Match">Make groups and tags match the file, and apply settings</MudRadio>
+            </MudRadioGroup>
+        </MudPaper>
+    }
+
+    @if (_plan.UnknownNames.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="1">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Names that don't exist yet</MudText>
+            <MudSimpleTable Dense="true" Elevation="0">
+                <thead><tr><th>Name</th><th>Used on lines</th><th>What to do</th></tr></thead>
+                <tbody>
+                    @foreach (var unknown in _plan.UnknownNames)
+                    {
+                        <tr>
+                            <td><MudChip T="string" Size="Size.Small">@KindLabel(unknown.Kind)</MudChip> @unknown.Name</td>
+                            <td>@string.Join(", ", unknown.LineNumbers)</td>
+                            <td>
+                                <div class="d-flex align-center" style="gap:0.5rem">
+                                    <MudSelect T="NameChoice" Value="unknown.Resolution.Choice" Margin="Margin.Dense" Style="min-width:160px"
+                                               ValueChanged="@(choice => Resolve(unknown, choice, choice == NameChoice.MapTo ? unknown.Suggestions.FirstOrDefault() ?? ExistingNames(unknown.Kind).FirstOrDefault() : null))">
+                                        @if (unknown.CanCreate)
+                                        {
+                                            <MudSelectItem T="NameChoice" Value="NameChoice.Create">Create it</MudSelectItem>
+                                        }
+                                        <MudSelectItem T="NameChoice" Value="NameChoice.MapTo">Map to</MudSelectItem>
+                                        <MudSelectItem T="NameChoice" Value="NameChoice.LeaveOut">Leave it out</MudSelectItem>
+                                    </MudSelect>
+                                    @if (unknown.Resolution.Choice == NameChoice.MapTo)
+                                    {
+                                        <SearchableSelect TValue="string" Options="@(ExistingNames(unknown.Kind).Select(name => new SelectOption<string>(name, name)).ToList())"
+                                                          Value="unknown.Resolution.MapTo" ValueChanged="@(name => Resolve(unknown, NameChoice.MapTo, name))" Margin="Margin.Dense" />
+                                    }
+                                </div>
+                                @if (unknown.Suggestions.Count > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Closest: @string.Join(", ", unknown.Suggestions)</MudText>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+
+    <MudTable Items="_plan.Rows" Dense="true" Hover="true" RowsPerPage="50">
+        <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>Status</MudTh><MudTh>What will happen</MudTh></HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.LineNumber</MudTd>
+            <MudTd>@(context.Domain ?? context.RawDomain)</MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@StatusLabel(context.Status)</MudChip></MudTd>
+            <MudTd>
+                @if (context.InvalidReason is not null)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error">@context.InvalidReason</MudText>
+                }
+                @foreach (var change in context.Changes)
+                {
+                    <MudText Typo="Typo.body2">@change.Field: @(change.Old ?? "(none)") → @(change.New ?? "(none)")</MudText>
+                }
+                @foreach (var removal in context.Removals)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error">@removal</MudText>
+                }
+                @foreach (var note in context.Notes)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@note</MudText>
+                }
+            </MudTd>
+        </RowTemplate>
+        <PagerContent><MudTablePager /></PagerContent>
+    </MudTable>
+
+    <div class="d-flex mt-3" style="gap:0.5rem">
+        <MudButton Variant="Variant.Outlined" OnClick="@(() => { _plan = null; _table = null; })">Back</MudButton>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || (_plan.NewCount + _plan.UpdateCount) == 0)" OnClick="ImportAsync">
+            @(_busy ? "Importing..." : $"Import: add {_plan.NewCount}, update {_plan.UpdateCount}")
+        </MudButton>
+    </div>
+}
+
+@code {
+    private static readonly Dictionary<string, object?> DownloadAttribute = new() { ["download"] = "" };
+
+    private string _pasteText = "";
+    private string? _uploadedFileName;
+    private IReadOnlyList<ImportRow>? _uploadedRows;
+    private string? _inputError;
+    private bool _busy;
+
+    private ImportTable? _table;
+    private ImportSnapshot? _snapshot;
+    private ImportPermissions _permissions = ImportPermissions.All;
+    private ExistingDomainMode _mode = ExistingDomainMode.Skip;
+    private readonly Dictionary<NameKey, NameResolution> _resolutions = [];
+    private ImportPlan? _plan;
+    private ImportResult? _result;
+
+    private async Task OnFileChosenAsync(IBrowserFile file)
+    {
+        _inputError = null;
+        try
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: XlsxImportReader.MaximumBytes + 1);
+            _uploadedRows = file.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) || file.Name.EndsWith(".xls", StringComparison.OrdinalIgnoreCase)
+                ? await XlsxImportReader.ReadAsync(stream, file.Name, CancellationToken.None)
+                : await CsvImportReader.ReadAsync(stream, CancellationToken.None);
+            _uploadedFileName = file.Name;
+            _pasteText = "";
+        }
+        catch (ImportInputException refusal)
+        {
+            _inputError = refusal.Message;
+        }
+        catch (IOException)
+        {
+            _inputError = "The file is too large. CSV files can be up to 1 MB and Excel files up to 5 MB.";
+        }
+    }
+
+    private async Task PreviewAsync()
+    {
+        _inputError = null;
+        _busy = true;
+        try
+        {
+            if (_uploadedRows is null && System.Text.Encoding.UTF8.GetByteCount(_pasteText) > CsvImportReader.MaximumBytes)
+            {
+                throw new ImportInputException("The pasted text is larger than 1 MB. Split it into smaller imports.");
+            }
+
+            _table = ImportTable.FromRows(_uploadedRows ?? CsvImportReader.Read(_pasteText));
+            _permissions = await LoadPermissionsAsync();
+            var (haloClients, haloUnavailableReason) = await LoadHaloClientsAsync();
+            await using var context = await DbFactory.CreateDbContextAsync();
+            _snapshot = await ImportSnapshotLoader.LoadAsync(context, _table, haloClients, haloUnavailableReason, MxHostsLookup, CancellationToken.None);
+            _resolutions.Clear();
+            Replan();
+        }
+        catch (ImportInputException refusal)
+        {
+            _inputError = refusal.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task<ImportPermissions> LoadPermissionsAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        async Task<bool> CanAsync(string policy) => (await AuthorizationService.AuthorizeAsync(user, policy)).Succeeded;
+        return new ImportPermissions(await CanAsync("DomainsEdit"), await CanAsync("MtaStsManage"), await CanAsync("GroupsAdd"), await CanAsync("TagsAdd"));
+    }
+
+    private async Task<(IReadOnlyList<HaloClient>? Clients, string? UnavailableReason)> LoadHaloClientsAsync()
+    {
+        if (!_table!.Columns.Contains(ImportColumn.HaloClient))
+        {
+            return (null, null);
+        }
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var settings = await HaloPsaSettingsService.GetAsync(context);
+        if (!settings.Enabled || !settings.ClientSecretConfigured)
+        {
+            return (null, "HaloPSA isn't connected, so the Halo client column was ignored.");
+        }
+
+        try
+        {
+            return ((await HaloPsaClient.ListClientsAsync(settings)).ToList(), null);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Loading Halo clients for a domain import failed");
+            return (null, "The Halo client list couldn't be loaded, so the Halo client column was ignored.");
+        }
+    }
+
+    private void Replan() => _plan = DomainImportPlanner.Plan(_table!, _snapshot!, _mode, _permissions, _resolutions);
+
+    private void Resolve(UnknownName unknown, NameChoice choice, string? mapTo)
+    {
+        _resolutions[unknown.Key] = new NameResolution(choice, mapTo);
+        Replan();
+    }
+
+    private IReadOnlyList<string> ExistingNames(ImportNameKind kind) => kind switch
+    {
+        ImportNameKind.Group => _snapshot!.GroupNames,
+        ImportNameKind.Tag => _snapshot!.TagNames,
+        _ => _snapshot!.HaloClients?.Select(client => client.Name).ToList() ?? []
+    };
+
+    private async Task ImportAsync()
+    {
+        _busy = true;
+        try
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            _result = await DomainImportService.ApplyAsync(context, await AuditActorAccessor.GetAsync(), _plan!);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A domain import failed and was rolled back");
+            Snackbar.Add("The import failed, and nothing was saved. Check the preview and try again.", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartOver()
+    {
+        (_result, _plan, _table, _snapshot, _uploadedRows, _uploadedFileName, _pasteText) = (null, null, null, null, null, null, "");
+        _resolutions.Clear();
+    }
+
+    private static string KindLabel(ImportNameKind kind) => kind switch
+    {
+        ImportNameKind.Group => "Group",
+        ImportNameKind.Tag => "Tag",
+        _ => "Halo client"
+    };
+
+    private static string StatusLabel(ImportRowStatus status) => status switch
+    {
+        ImportRowStatus.New => "New",
+        ImportRowStatus.AlreadyMonitored => "Already monitored",
+        ImportRowStatus.Duplicate => "Duplicate",
+        _ => "Invalid"
+    };
+
+    private static Color StatusColor(ImportRowStatus status) => status switch
+    {
+        ImportRowStatus.New => Color.Success,
+        ImportRowStatus.AlreadyMonitored => Color.Info,
+        ImportRowStatus.Duplicate => Color.Default,
+        _ => Color.Error
+    };
+}

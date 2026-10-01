@@ -27,9 +27,11 @@
                 <MudTextField @bind-Value="_newDomainName" Label="Domain name" Placeholder="contoso.com" Variant="Variant.Outlined"
                               Error="@(_addError is not null)" ErrorText="@_addError" Immediate="true" />
             </MudItem>
-            <MudItem xs="3" Class="d-flex align-start">
+            <MudItem xs="3" Class="d-flex align-start" Style="gap:0.5rem">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
                            OnClick="AddDomainAsync">Add domain</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.UploadFile"
+                           Href="/domains/import">Import domains</MudButton>
             </MudItem>
         </MudGrid>
     </MudPaper>
