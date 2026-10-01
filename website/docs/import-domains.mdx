@@ -1,0 +1,71 @@
+---
+description: Add and update many domains at once from a pasted list, a CSV file or an Excel file, with a preview before anything is saved.
+---
+
+# Import domains
+
+**Manage domains > Import domains** adds many domains at once, and can update the groups, tags and settings of domains
+you already monitor. Paste a list, or choose a CSV or Excel (`.xlsx`) file. Nothing is saved until you check the
+preview and confirm, and the whole import is saved at once or not at all.
+
+The page has a sample CSV and a sample Excel file to start from.
+
+## Columns
+
+Only the domain is required, so a list of domains, one per line, is a complete import.
+
+| Column | What it holds |
+| --- | --- |
+| domain | The domain, for example `contoso.com`. |
+| groups | Groups, separated by `;`. |
+| tags | Tags, separated by `;`. |
+| halo client | The HaloPSA client's name. Used only when HaloPSA is connected. |
+| monitored | `yes` or `no`. |
+| dkim selectors | DKIM selectors, separated by `;`. They replace the domain's list. |
+| mta-sts mode | `off`, `none`, `testing` or `enforce`. |
+| mta-sts mx hosts | MX hosts, separated by `;`. |
+| mta-sts max age | Seconds, from 1 to 31,557,600. |
+
+Without a header row, columns are read in that order. With a header row (one of its cells is `domain`), columns can be
+in any order and any can be left out.
+
+A blank cell leaves that value as it is. A value that doesn't make sense, such as `monitored` set to `maybe`, is left
+out and the preview says why; the rest of the row still imports.
+
+Turning MTA-STS on needs MX hosts. If a row doesn't give them and the domain has none saved, dotMARC looks them up in
+DNS, as the Enable button on a domain's page does.
+
+## Domains you already monitor
+
+Choose what happens to them on the preview:
+
+* **Skip them** (the default) leaves them untouched.
+* **Add** adds the listed groups and tags, and applies any settings given. Write `-Name` to remove a group or tag, for
+  example `Client A;-Old Client`.
+* **Match the file** makes each domain's groups and tags exactly what its row lists, and applies any settings given. A
+  blank groups or tags cell removes them all. A column that isn't in the file is left alone.
+
+Everything that will be removed is shown in red on the preview.
+
+## Names that don't exist yet
+
+If a group, tag or Halo client in the import doesn't exist, the preview lists it. For each one, choose to create it,
+map it to an existing one, or leave it out. A name that's the same as an existing one apart from punctuation or an
+ending like "Ltd" is mapped to it for you; close spellings are suggested, to catch typos, but you choose them. Halo clients can't be
+created from dotMARC. A name that only differs in capital letters is treated as the existing one.
+
+## Permissions
+
+Importing needs the `DomainsAdd` permission. Groups, tags, Halo client, monitoring and DKIM selectors also need
+`DomainsEdit`, and the MTA-STS columns need `MtaStsManage`. Creating groups or tags needs `GroupsAdd` or `TagsAdd`.
+Without a permission, that column is ignored and the preview says so. See [Permissions and access](./permissions-and-access.mdx).
+
+## Limits
+
+An import can have up to 1,000 rows. CSV files and pasted text can be up to 1 MB, and Excel files up to 5 MB. Old
+`.xls` files can't be read: save them as `.xlsx` or CSV.
+
+## After importing
+
+Every change is recorded in the [audit log](./audit-log.mdx), as if you'd made it by hand, with one extra entry
+summarising the import. New domains get their DNS health checks within the next polling cycle.

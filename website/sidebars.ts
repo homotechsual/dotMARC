@@ -26,7 +26,7 @@ const sidebars: SidebarsConfig = {
         title: 'Monitor your domains',
         description: 'What needs to be in place in DNS, and how dotMARC can set it up for you.',
       },
-      items: ['dmarc-and-mta-sts', 'dns-provider-push', 'mta-sts'],
+      items: ['import-domains', 'dmarc-and-mta-sts', 'dns-provider-push', 'mta-sts'],
     },
     {
       type: 'category',

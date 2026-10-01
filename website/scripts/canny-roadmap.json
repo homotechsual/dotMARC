@@ -28,7 +28,7 @@
   {
     "title": "Allow bulk domain onboarding with CSV or paste-a-list imports",
     "version": "v0.8.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
       "Domains are currently added one at a time from Manage domains, which is slow when onboarding a client with dozens of domains or an MSP's whole customer base.",
       "Proposal: import many domains at once from a CSV file or a pasted list (one per line), with optional columns for Group and Tags. Show a preview before committing that flags invalid names and duplicates, then create the domains and start their DNS health checks straight away.",
