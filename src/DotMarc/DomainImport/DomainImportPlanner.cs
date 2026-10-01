@@ -223,7 +223,7 @@ public static class DomainImportPlanner
             return resolution.Choice switch
             {
                 NameChoice.Create => name.Trim(),
-                NameChoice.MapTo => NameMatcher.FindExisting(resolution.MapTo!, existing),
+                NameChoice.MapTo when resolution.MapTo is { } mapTo => NameMatcher.FindExisting(mapTo, existing),
                 _ => null
             };
         }
@@ -234,7 +234,9 @@ public static class DomainImportPlanner
             if (chosen.TryGetValue(key, out var choice)
                 && (choice.Choice == NameChoice.LeaveOut
                     || (choice.Choice == NameChoice.Create && CanCreate(key.Kind))
-                    || (choice.Choice == NameChoice.MapTo && choice.MapTo is not null && NameMatcher.FindExisting(choice.MapTo, existing) is not null)))
+                    // Map to with nothing picked yet stays as it is: the name is left out and the import waits
+                    // (ImportPlan.HasUnfinishedChoices) until a name is picked.
+                    || (choice.Choice == NameChoice.MapTo && (choice.MapTo is null || NameMatcher.FindExisting(choice.MapTo, existing) is not null))))
             {
                 return choice;
             }

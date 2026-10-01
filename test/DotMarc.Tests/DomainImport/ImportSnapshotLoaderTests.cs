@@ -63,6 +63,21 @@ public sealed class ImportSnapshotLoaderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ADomainStoredInUnicodeBeforeNamesWereNormalised_MatchesItsXnForm()
+    {
+        await using (var context = CreateContext())
+        {
+            context.Domains.Add(new Domain { Name = "bücher.example", FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = true });
+            await context.SaveChangesAsync();
+        }
+
+        await using var loadContext = CreateContext();
+        var snapshot = await ImportSnapshotLoader.LoadAsync(loadContext, Table("xn--bcher-kva.example"), null, null, new FakeMxHostsLookup(), CancellationToken.None);
+
+        Assert.Equal("bücher.example", Assert.Single(snapshot.DomainsByName, pair => pair.Key == "xn--bcher-kva.example").Value.Name);
+    }
+
+    [Fact]
     public async Task LooksUpMxHosts_OnlyForDomainsTurningMtaStsOnWithoutAny()
     {
         var lookup = new FakeMxHostsLookup();

@@ -33,6 +33,7 @@ public static class CsvImportReader
             text = text[1..];
         }
 
+        var separator = Separator(text);
         var rows = new List<ImportRow>();
         var cells = new List<string>();
         var cell = new StringBuilder();
@@ -77,7 +78,7 @@ public static class CsvImportReader
                     cell.Clear();
                     inQuotes = true;
                     break;
-                case ',':
+                case var _ when character == separator:
                     cells.Add(cell.ToString());
                     cell.Clear();
                     break;
@@ -105,5 +106,13 @@ public static class CsvImportReader
             ImportRows.AddIfData(rows, rowStartLine, cells);
             cells.Clear();
         }
+    }
+
+    /// <summary>Cells copied from a spreadsheet and pasted arrive separated by tabs. The first line with data decides:
+    /// tabs and no commas means tab-separated, anything else is CSV.</summary>
+    private static char Separator(string text)
+    {
+        var firstLine = text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0 && !line.StartsWith('#')) ?? "";
+        return firstLine.Contains('\t') && !firstLine.Contains(',') ? '\t' : ',';
     }
 }

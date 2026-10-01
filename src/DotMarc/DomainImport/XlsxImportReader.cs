@@ -38,6 +38,13 @@ public static class XlsxImportReader
                 }
 
                 ImportRows.AddIfData(rows, rowNumber, cells);
+
+                // A small, highly compressed file can hold millions of rows, so stop once it's past what an import
+                // allows (a header row and the most data rows) rather than reading it all.
+                if (rows.Count > ImportTable.MaximumDataRows + 1)
+                {
+                    throw new ImportInputException($"The spreadsheet has more than {ImportTable.MaximumDataRows:N0} rows, the most an import can have. Split it into smaller imports.");
+                }
             }
 
             return rows;

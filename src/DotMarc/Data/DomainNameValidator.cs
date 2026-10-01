@@ -27,7 +27,7 @@ public static class DomainNameValidator
         reason = candidate switch
         {
             "" => "The domain is empty.",
-            _ when candidate.Contains("://", StringComparison.Ordinal) => "That's a web address. Use just the domain, for example contoso.com.",
+            _ when candidate.Contains("://", StringComparison.Ordinal) || candidate.Contains('/') => "That's a web address. Use just the domain, for example contoso.com.",
             _ when candidate.Contains('@') => "That's an email address. Use just the domain, for example contoso.com.",
             _ when candidate.Any(char.IsWhiteSpace) => "A domain can't contain spaces.",
             _ => null

@@ -522,14 +522,15 @@ app.MapGet("/.well-known/mta-sts.txt", async (HttpContext httpContext, IDbContex
 // permission its target already needs (MtaStsManage for the CNAME, DomainsEdit for the DMARC TXT
 // record), checked explicitly below since /start doesn't yet know which target it's for from route
 // data alone.
-// Streams the rows the Audit log page's filters match. The filter travels in the query string, and the export is
-// itself recorded, so who took a copy of the log is part of the log.
+// The Import domains page's sample files, built from the same rows so the CSV and Excel versions always match.
 app.MapGet("/domains/import/sample.csv", () =>
         Results.File(System.Text.Encoding.UTF8.GetBytes(DotMarc.DomainImport.DomainImportSamples.Csv), "text/csv", "dotmarc-domain-import-sample.csv"))
     .RequireAuthorization(nameof(Permission.DomainsAdd));
 app.MapGet("/domains/import/sample.xlsx", () =>
         Results.File(DotMarc.DomainImport.DomainImportSamples.Xlsx(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "dotmarc-domain-import-sample.xlsx"))
     .RequireAuthorization(nameof(Permission.DomainsAdd));
+// Streams the rows the Audit log page's filters match. The filter travels in the query string, and the export is
+// itself recorded, so who took a copy of the log is part of the log.
 app.MapGet("/audit/export", async (HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory, DotMarc.Audit.AuditRecorder auditRecorder) =>
 {
     var filter = DotMarc.Audit.AuditFilter.FromQuery(httpContext.Request.Query);

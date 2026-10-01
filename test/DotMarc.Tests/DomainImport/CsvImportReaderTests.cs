@@ -60,6 +60,25 @@ public sealed class CsvImportReaderTests
     }
 
     [Fact]
+    public void CellsCopiedFromASpreadsheet_AreSplitOnTabs()
+    {
+        // Copying cells from Excel and pasting them gives tab-separated lines.
+        var rows = CsvImportReader.Read("domain\tgroups\ncontoso.com\tClient A; Client B\nfabrikam.com");
+
+        Assert.Equal(["domain", "groups"], rows[0].Cells);
+        Assert.Equal(["contoso.com", "Client A; Client B"], rows[1].Cells);
+        Assert.Equal(["fabrikam.com"], rows[2].Cells);
+    }
+
+    [Fact]
+    public void TabsInsideACommaSeparatedFile_StayInTheCell()
+    {
+        var rows = CsvImportReader.Read("domain,groups\ncontoso.com,Client\tA");
+
+        Assert.Equal(["contoso.com", "Client\tA"], rows[1].Cells);
+    }
+
+    [Fact]
     public async Task ReadAsync_RefusesTextThatIsntUtf8()
     {
         var utf16 = new MemoryStream(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("contoso.com")).ToArray());

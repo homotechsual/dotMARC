@@ -54,6 +54,8 @@ public sealed class DomainNameValidatorTests
     [Theory]
     [InlineData("https://contoso.com/", "web address")]
     [InlineData("http://contoso.com", "web address")]
+    [InlineData("contoso.com/", "web address")]
+    [InlineData("www.contoso.com/about", "web address")]
     [InlineData("sam@contoso.com", "email address")]
     public void TryNormalize_ExplainsWhyUrlsAndEmailAddressesAreRefused(string input, string reasonMentions)
     {

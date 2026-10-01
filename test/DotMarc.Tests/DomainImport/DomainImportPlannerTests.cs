@@ -146,6 +146,20 @@ public sealed class DomainImportPlannerTests
     }
 
     [Fact]
+    public void MapToWithNothingPickedYet_StaysMapTo_LeavesTheNameOut_AndHoldsTheImport()
+    {
+        var resolutions = new Dictionary<NameKey, NameResolution> { [new NameKey(ImportNameKind.Group, "brand new")] = new(NameChoice.MapTo) };
+
+        var plan = Plan("domain,groups\na.com,Brand New", resolutions: resolutions);
+
+        Assert.Equal(new NameResolution(NameChoice.MapTo), plan.UnknownNames.Single().Resolution);
+        Assert.Null(plan.Rows.Single().Target!.Groups!.Add.SingleOrDefault());
+        Assert.Empty(plan.GroupsToCreate);
+        Assert.True(plan.HasUnfinishedChoices);
+        Assert.False(Plan("domain,groups\na.com,Brand New").HasUnfinishedChoices);
+    }
+
+    [Fact]
     public void HaloClients_CantBeCreated_AndTheColumnIsIgnoredWithoutHalo()
     {
         var clients = new[] { new HaloClient(7, "Contoso Limited"), new HaloClient(8, "Fabrikam") };

@@ -81,6 +81,31 @@ public sealed class AuditLogTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAndRecordAsync_InTheCallersTransaction_LeavesItUsableAfterAUniqueNameRace()
+    {
+        await using (var seed = CreateContext())
+        {
+            seed.Groups.Add(new Group { Name = "Client A" });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext())
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            // As if another session added "Client A" after this one checked for it: the save hits the unique index.
+            context.Groups.Add(new Group { Name = "Client A" });
+            await Assert.ThrowsAsync<DbUpdateException>(() =>
+                AuditLog.SaveAndRecordAsync(context, () => { }, CancellationToken.None));
+
+            await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client B", CancellationToken.None);
+            await transaction.CommitAsync();
+        }
+
+        await using var verify = CreateContext();
+        Assert.Equal(["Client A", "Client B"], await verify.Groups.OrderBy(group => group.Name).Select(group => group.Name).ToListAsync());
+    }
+
+    [Fact]
     public async Task SaveAndRecordAsync_KeepsNeither_WhenTheEntryCannotBeSaved()
     {
         await using (var context = CreateContext())

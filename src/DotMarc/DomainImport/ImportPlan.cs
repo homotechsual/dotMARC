@@ -80,4 +80,8 @@ public sealed record ImportPlan(
     public int SkippedExistingCount => Rows.Count(row => row.Status == ImportRowStatus.AlreadyMonitored && Mode == ExistingDomainMode.Skip);
     public int DuplicateCount => Rows.Count(row => row.Status == ImportRowStatus.Duplicate);
     public int InvalidCount => Rows.Count(row => row.Status == ImportRowStatus.Invalid);
+
+    /// <summary>True while a name is set to "Map to" with nothing picked yet. The import waits for a choice rather than
+    /// quietly leaving the name out.</summary>
+    public bool HasUnfinishedChoices => UnknownNames.Any(name => name.Resolution is { Choice: NameChoice.MapTo, MapTo: null });
 }

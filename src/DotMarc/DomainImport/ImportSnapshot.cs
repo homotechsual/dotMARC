@@ -42,28 +42,54 @@ public static class ImportSnapshotLoader
             .Distinct()
             .ToList();
 
+        // Domains added before names were normalised may be stored in Unicode ("bücher.example") rather than the xn--
+        // form the import uses, so look for both.
+        var storedForms = validNames.Concat(validNames.Select(UnicodeForm).OfType<string>()).Distinct().ToList();
+
         var domains = await context.Domains
             .AsNoTracking()
-            .Where(domain => validNames.Contains(domain.Name))
+            .Where(domain => storedForms.Contains(domain.Name))
             .Include(domain => domain.Groups)
             .Include(domain => domain.Tags)
             .AsSplitQuery()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var domainsByName = domains.ToDictionary(
-            domain => domain.Name,
-            domain => new ExistingDomain(domain.Id, domain.Name,
-                domain.Groups.Select(group => group.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
-                domain.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
-                domain.HaloClientId, domain.IsMonitored, domain.DkimSelectors, domain.MtaStsEnabled, domain.MtaStsMode,
-                domain.MtaStsMxHosts, domain.MtaStsMaxAgeSeconds));
+        // Keyed by the normalised name. If both forms are stored, the xn-- one (an exact match) wins.
+        var domainsByName = domains
+            .GroupBy(domain => DomainNameValidator.TryNormalize(domain.Name, out var normalized) ? normalized : domain.Name)
+            .ToDictionary(
+                sameDomain => sameDomain.Key,
+                sameDomain => ToExisting(sameDomain.FirstOrDefault(domain => domain.Name == sameDomain.Key) ?? sameDomain.First()));
 
         var groupNames = await context.Groups.AsNoTracking().OrderBy(group => group.Name).Select(group => group.Name).ToListAsync(cancellationToken).ConfigureAwait(false);
         var tagNames = await context.Tags.AsNoTracking().OrderBy(tag => tag.Name).Select(tag => tag.Name).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var lookedUp = await LookUpMxHostsAsync(table, domainsByName, mxHostsLookup, cancellationToken).ConfigureAwait(false);
         return new ImportSnapshot(domainsByName, groupNames, tagNames, haloClients, haloUnavailableReason, lookedUp);
+    }
+
+    private static readonly System.Globalization.IdnMapping Idn = new();
+
+    private static ExistingDomain ToExisting(Domain domain) =>
+        new(domain.Id, domain.Name,
+            domain.Groups.Select(group => group.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
+            domain.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
+            domain.HaloClientId, domain.IsMonitored, domain.DkimSelectors, domain.MtaStsEnabled, domain.MtaStsMode,
+            domain.MtaStsMxHosts, domain.MtaStsMaxAgeSeconds);
+
+    /// <summary>The Unicode form of an xn-- name, or null if it has none.</summary>
+    private static string? UnicodeForm(string asciiName)
+    {
+        try
+        {
+            var unicode = Idn.GetUnicode(asciiName);
+            return unicode == asciiName ? null : unicode;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>MX hosts from DNS for the domains that turn MTA-STS on without any, as the domain page's Enable button

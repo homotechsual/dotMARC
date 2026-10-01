@@ -119,7 +119,7 @@ else
                             <td>
                                 <div class="d-flex align-center" style="gap:0.5rem">
                                     <MudSelect T="NameChoice" Value="unknown.Resolution.Choice" Margin="Margin.Dense" Style="min-width:160px"
-                                               ValueChanged="@(choice => Resolve(unknown, choice, choice == NameChoice.MapTo ? unknown.Suggestions.FirstOrDefault() ?? ExistingNames(unknown.Kind).FirstOrDefault() : null))">
+                                               ValueChanged="@(choice => Resolve(unknown, choice, choice == NameChoice.MapTo ? unknown.Suggestions.FirstOrDefault() : null))">
                                         @if (unknown.CanCreate)
                                         {
                                             <MudSelectItem T="NameChoice" Value="NameChoice.Create">Create it</MudSelectItem>
@@ -133,6 +133,10 @@ else
                                                           Value="unknown.Resolution.MapTo" ValueChanged="@(name => Resolve(unknown, NameChoice.MapTo, name))" Margin="Margin.Dense" />
                                     }
                                 </div>
+                                @if (unknown.Resolution is { Choice: NameChoice.MapTo, MapTo: null })
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block">Pick a name to map it to.</MudText>
+                                }
                                 @if (unknown.Suggestions.Count > 0)
                                 {
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Closest: @string.Join(", ", unknown.Suggestions)</MudText>
@@ -176,7 +180,7 @@ else
     <div class="d-flex mt-3" style="gap:0.5rem">
         <MudButton Variant="Variant.Outlined" OnClick="@(() => { _plan = null; _table = null; })">Back</MudButton>
         <MudSpacer />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || (_plan.NewCount + _plan.UpdateCount) == 0)" OnClick="ImportAsync">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || _plan.HasUnfinishedChoices || (_plan.NewCount + _plan.UpdateCount) == 0)" OnClick="ImportAsync">
             @(_busy ? "Importing..." : $"Import: add {_plan.NewCount}, update {_plan.UpdateCount}")
         </MudButton>
     </div>
@@ -193,7 +197,7 @@ else
 
     private ImportTable? _table;
     private ImportSnapshot? _snapshot;
-    private ImportPermissions _permissions = ImportPermissions.All;
+    private ImportPermissions _permissions = new(false, false, false, false);
     private ExistingDomainMode _mode = ExistingDomainMode.Skip;
     private readonly Dictionary<NameKey, NameResolution> _resolutions = [];
     private ImportPlan? _plan;
@@ -202,10 +206,20 @@ else
     private async Task OnFileChosenAsync(IBrowserFile file)
     {
         _inputError = null;
+        var isSpreadsheet = file.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) || file.Name.EndsWith(".xls", StringComparison.OrdinalIgnoreCase);
+        var maximumBytes = isSpreadsheet ? XlsxImportReader.MaximumBytes : CsvImportReader.MaximumBytes;
+        if (file.Size > maximumBytes)
+        {
+            _inputError = isSpreadsheet
+                ? "The file is larger than 5 MB. Split it into smaller files."
+                : "The file is larger than 1 MB. Split it into smaller files.";
+            return;
+        }
+
         try
         {
-            await using var stream = file.OpenReadStream(maxAllowedSize: XlsxImportReader.MaximumBytes + 1);
-            _uploadedRows = file.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) || file.Name.EndsWith(".xls", StringComparison.OrdinalIgnoreCase)
+            await using var stream = file.OpenReadStream(maxAllowedSize: maximumBytes + 1);
+            _uploadedRows = isSpreadsheet
                 ? await XlsxImportReader.ReadAsync(stream, file.Name, CancellationToken.None)
                 : await CsvImportReader.ReadAsync(stream, CancellationToken.None);
             _uploadedFileName = file.Name;
@@ -215,14 +229,21 @@ else
         {
             _inputError = refusal.Message;
         }
-        catch (IOException)
+        catch (Exception exception)
         {
-            _inputError = "The file is too large. CSV files can be up to 1 MB and Excel files up to 5 MB.";
+            // Such as the browser dropping the upload part way. The page carries on; the person can choose it again.
+            Logger.LogWarning(exception, "Reading an uploaded domain import file failed");
+            _inputError = "The file couldn't be read. Choose it again, or paste the domains instead.";
         }
     }
 
     private async Task PreviewAsync()
     {
+        if (_busy)
+        {
+            return;
+        }
+
         _inputError = null;
         _busy = true;
         try
@@ -233,21 +254,34 @@ else
             }
 
             _table = ImportTable.FromRows(_uploadedRows ?? CsvImportReader.Read(_pasteText));
-            _permissions = await LoadPermissionsAsync();
-            var (haloClients, haloUnavailableReason) = await LoadHaloClientsAsync();
-            await using var context = await DbFactory.CreateDbContextAsync();
-            _snapshot = await ImportSnapshotLoader.LoadAsync(context, _table, haloClients, haloUnavailableReason, MxHostsLookup, CancellationToken.None);
             _resolutions.Clear();
-            Replan();
+            await LoadSnapshotAndReplanAsync();
         }
         catch (ImportInputException refusal)
         {
             _inputError = refusal.Message;
         }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Building a domain import preview failed");
+            (_table, _plan) = (null, null);
+            _inputError = "The preview couldn't be built. Try again in a moment.";
+        }
         finally
         {
             _busy = false;
         }
+    }
+
+    /// <summary>Loads what the plan needs (permissions, Halo clients and the database snapshot) and plans again, keeping
+    /// the person's choices.</summary>
+    private async Task LoadSnapshotAndReplanAsync()
+    {
+        _permissions = await LoadPermissionsAsync();
+        var (haloClients, haloUnavailableReason) = await LoadHaloClientsAsync();
+        await using var context = await DbFactory.CreateDbContextAsync();
+        _snapshot = await ImportSnapshotLoader.LoadAsync(context, _table!, haloClients, haloUnavailableReason, MxHostsLookup, CancellationToken.None);
+        Replan();
     }
 
     private async Task<ImportPermissions> LoadPermissionsAsync()
@@ -299,6 +333,12 @@ else
 
     private async Task ImportAsync()
     {
+        // A double-click can arrive before the disabled button renders.
+        if (_busy)
+        {
+            return;
+        }
+
         _busy = true;
         try
         {
@@ -308,7 +348,17 @@ else
         catch (Exception exception)
         {
             Logger.LogError(exception, "A domain import failed and was rolled back");
-            Snackbar.Add("The import failed, and nothing was saved. Check the preview and try again.", Severity.Error);
+            // Something changed since the preview, such as a group being deleted, so refresh it before a retry.
+            try
+            {
+                await LoadSnapshotAndReplanAsync();
+                Snackbar.Add("The import failed, and nothing was saved. The preview now shows the latest data: check it and try again.", Severity.Error);
+            }
+            catch (Exception refreshException)
+            {
+                Logger.LogError(refreshException, "Refreshing the domain import preview failed");
+                Snackbar.Add("The import failed, and nothing was saved. Go back and preview again before retrying.", Severity.Error);
+            }
         }
         finally
         {
@@ -319,6 +369,7 @@ else
     private void StartOver()
     {
         (_result, _plan, _table, _snapshot, _uploadedRows, _uploadedFileName, _pasteText) = (null, null, null, null, null, null, "");
+        _mode = ExistingDomainMode.Skip;
         _resolutions.Clear();
     }
 

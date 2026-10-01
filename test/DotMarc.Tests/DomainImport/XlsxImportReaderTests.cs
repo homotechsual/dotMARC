@@ -45,6 +45,27 @@ public sealed class XlsxImportReaderTests
     }
 
     [Fact]
+    public async Task ASheetWithMoreRowsThanAnImportAllows_IsRefusedWithoutReadingItAll()
+    {
+        var rows = Enumerable.Range(1, ImportTable.MaximumDataRows + 2)
+            .Select(number => (IReadOnlyList<object?>)[$"d{number}.com"])
+            .ToList();
+
+        var refusal = await Assert.ThrowsAsync<ImportInputException>(() => ReadAsync(SimpleXlsxWriter.Build(rows)));
+
+        Assert.Contains("more than 1,000 rows", refusal.Message);
+    }
+
+    [Fact]
+    public async Task AHeaderAndAThousandRows_AreRead()
+    {
+        var rows = new List<IReadOnlyList<object?>> { new object?[] { "domain" } };
+        rows.AddRange(Enumerable.Range(1, ImportTable.MaximumDataRows).Select(number => (IReadOnlyList<object?>)[$"d{number}.com"]));
+
+        Assert.Equal(ImportTable.MaximumDataRows + 1, (await ReadAsync(SimpleXlsxWriter.Build(rows))).Count);
+    }
+
+    [Fact]
     public async Task AFileThatIsntASpreadsheet_IsRefused()
     {
         var refusal = await Assert.ThrowsAsync<ImportInputException>(() => ReadAsync(Encoding.UTF8.GetBytes("not a spreadsheet")));
