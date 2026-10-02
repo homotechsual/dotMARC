@@ -76,8 +76,10 @@ public static class DnsHealthAlertEvaluator
 
         if (mode == DnsHealthAlertMode.WhenItBreaks && !state.HasPassed)
         {
-            // Never passed, so it hasn't broken: a domain that was never set up stays quiet.
+            // Never passed, so it hasn't broken: a domain that was never set up stays quiet. Resolving closes any
+            // alerts left from when the check was set to Whenever it fails.
             ClearPending(state);
+            actions.Add(DnsHealthAlertAction.Resolve(check.AlertType));
             return;
         }
 

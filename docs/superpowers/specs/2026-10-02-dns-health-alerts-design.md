@@ -90,7 +90,7 @@ There's a unique index on (`DomainId`, `Item`). Rows are created by the evaluato
 
 The DMARC check already fetches the record. It also parses three tags into new domain fields:
 
-- `DmarcPolicy`: `p`, as `None`, `Quarantine` or `Reject`. Null if there's no record or `p` is missing or invalid.
+- `DmarcPolicy`: `p`, as `None`, `Quarantine` or `Reject`. Null if there's no record. A missing or invalid `p` counts as `None`, as receivers treat it (RFC 7489 6.6.3), so a typo that drops a reject policy is caught.
 - `DmarcSubdomainPolicy`: `sp`. If missing, it is the same as `p`.
 - `DmarcPercent`: `pct`, from 0 to 100. If missing or invalid, it is 100.
 
@@ -114,7 +114,7 @@ by default), saves the state, and carries out the actions with the existing `Ens
 
 - **Passing:** set `HasPassed`, clear the pending failure, and resolve the check's alert.
 - **Ignored, or the check's mode is Off:** clear the pending failure and resolve the check's alert.
-- **Failing in *When it breaks* mode, never passed:** clear any pending failure and do nothing else.
+- **Failing in *When it breaks* mode, never passed:** clear any pending failure and resolve the check's alert (one may be left from when the check was set to *Whenever it fails*).
 - **Failing, nothing pending:** set `PendingSinceUtc` to now and `RecheckDueUtc` to now + 15 minutes. Don't alert.
 - **Failing, pending, and the check ran again at or after `RecheckDueUtc`** (its `...CheckedUtc` is at or after it):
   raise the alert. The pending failure is left in place until the check passes, is ignored or is turned off, so the

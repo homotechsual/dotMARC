@@ -21,13 +21,21 @@ public sealed class DmarcPolicyTagsTests
     }
 
     [Theory]
-    [InlineData("v=DMARC1; rua=mailto:rua@example.com")]
-    [InlineData("v=DMARC1; p=bogus")]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData(null)]
-    public void Parse_IsNull_WithoutAValidP(string? record)
+    public void Parse_IsNull_WithoutARecord(string? record)
     {
         Assert.Null(DmarcPolicyTags.Parse(record));
+    }
+
+    [Theory]
+    [InlineData("v=DMARC1; rua=mailto:rua@example.com")]
+    [InlineData("v=DMARC1; p=rejct; rua=mailto:rua@example.com")]
+    public void AMissingOrInvalidP_ReadsAsNone_AsReceiversTreatIt(string record)
+    {
+        // RFC 7489 6.6.3: with a valid rua, receivers apply p=none, so a typo in p is a real downgrade to alert on.
+        Assert.Equal(new DmarcPolicyTags(DmarcPolicyLevel.None, DmarcPolicyLevel.None, 100), DmarcPolicyTags.Parse(record));
     }
 
     [Theory]

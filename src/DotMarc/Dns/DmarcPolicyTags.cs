@@ -7,8 +7,8 @@ namespace DotMarc.Dns;
 /// the format the DMARC policy weakened alert stores its accepted policy in.</summary>
 public sealed record DmarcPolicyTags(DmarcPolicyLevel Policy, DmarcPolicyLevel SubdomainPolicy, int Percent)
 {
-    /// <summary>Reads p, sp and pct from a DMARC record, or from a baseline written by <see cref="Format"/>. Null if
-    /// p is missing or isn't none, quarantine or reject. Tag names and values ignore case and spaces, and the first
+    /// <summary>Reads p, sp and pct from a DMARC record, or from a baseline written by <see cref="Format"/>. Null only
+    /// when there's no text; a missing or invalid p reads as none. Tag names and values ignore case and spaces, and the first
     /// of a repeated tag wins.</summary>
     public static DmarcPolicyTags? Parse(string? record)
     {
@@ -27,10 +27,9 @@ public sealed record DmarcPolicyTags(DmarcPolicyLevel Policy, DmarcPolicyLevel S
             }
         }
 
-        if (!tags.TryGetValue("p", out var policyText) || ParseLevel(policyText) is not { } policy)
-        {
-            return null;
-        }
+        // A missing or invalid p is read as none, as receivers treat it (RFC 7489 6.6.3), so a typo that turns a
+        // reject policy into nothing is caught as a weakened policy rather than skipped.
+        var policy = tags.TryGetValue("p", out var policyText) ? ParseLevel(policyText) ?? DmarcPolicyLevel.None : DmarcPolicyLevel.None;
 
         var subdomainPolicy = tags.TryGetValue("sp", out var subdomainText) ? ParseLevel(subdomainText) ?? policy : policy;
         var percent = tags.TryGetValue("pct", out var percentText)

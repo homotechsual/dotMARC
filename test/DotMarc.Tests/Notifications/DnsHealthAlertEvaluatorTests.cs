@@ -216,6 +216,21 @@ public sealed class DnsHealthAlertEvaluatorTests
     }
 
     [Fact]
+    public void SwitchingBackToWhenItBreaks_ResolvesTheAlertsOfChecksThatNeverPassed()
+    {
+        // Whenever it fails raised alerts for a domain that was never set up; switching back must quiet them.
+        var states = new List<DomainAlertState>();
+        var domain = WithStatus(DnsHealthItems.Spf, "MissingRecord");
+        Run(domain, states, new NotificationSettings { SpfAlertMode = DnsHealthAlertMode.WheneverItFails });
+
+        var actions = Run(domain, states, now: Now.AddMinutes(20));
+
+        Assert.Empty(Raised(actions));
+        Assert.True(Resolves(actions, AlertTypes.SpfRecordBroken));
+        Assert.Null(State(states, DnsHealthItems.Spf).PendingSinceUtc);
+    }
+
+    [Fact]
     public void Off_ResolvesTheAlertAndClearsThePendingFailure()
     {
         var states = StatesAfterAHealthyCycle();
