@@ -452,6 +452,9 @@ public sealed class PollingService : BackgroundService
         domain.DmarcCheckStatus = result.Status;
         domain.DmarcCheckedUtc = DateTimeOffset.UtcNow;
         domain.DmarcCheckDetail = result.Detail;
+        domain.DmarcPolicy = result.Policy?.Policy;
+        domain.DmarcSubdomainPolicy = result.Policy?.SubdomainPolicy;
+        domain.DmarcPercent = result.Policy?.Percent;
     }
 
     /// <summary>TLSRPT counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>

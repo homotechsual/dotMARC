@@ -165,4 +165,28 @@ public sealed class DmarcCheckCycleTests : IAsyncLifetime
         Assert.Equal(TlsrptCheckStatus.MissingOwnRecord, domain.TlsrptCheckStatus);
         Assert.NotNull(domain.TlsrptCheckedUtc);
     }
+
+    [Fact]
+    public async Task RunDmarcCheckCycleAsync_StoresThePolicy_AndClearsItWhenTheRecordGoes()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow });
+        await context.SaveChangesAsync();
+        var checker = new FakeDmarcDnsChecker { Result = new(DmarcCheckStatus.Ok, null, new DmarcPolicyTags(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine, 50)) };
+        var service = CreateService(context);
+
+        await service.RunDmarcCheckCycleAsync(context, checker, "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        var domain = context.Domains.Single();
+        Assert.Equal((DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine, 50), (domain.DmarcPolicy!.Value, domain.DmarcSubdomainPolicy!.Value, domain.DmarcPercent!.Value));
+
+        domain.DmarcCheckedUtc = DateTimeOffset.UtcNow.AddDays(-2);
+        await context.SaveChangesAsync();
+        checker.Result = new(DmarcCheckStatus.MissingOwnRecord, "No TXT record found at _dmarc.contoso.io");
+        await service.RunDmarcCheckCycleAsync(context, checker, "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Null(domain.DmarcPolicy);
+        Assert.Null(domain.DmarcSubdomainPolicy);
+        Assert.Null(domain.DmarcPercent);
+    }
 }

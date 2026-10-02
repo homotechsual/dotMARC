@@ -30,16 +30,18 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
             return new DmarcCheckResult(DmarcCheckStatus.Misconfigured, $"_dmarc.{domainName} does not start with v=DMARC1: {ownRecord}");
         }
 
+        var policy = DmarcPolicyTags.Parse(ownRecord);
         var ruaAddresses = ParseRuaAddresses(ownRecord);
         if (!ruaAddresses.Any(a => string.Equals(a, mailboxAddress, StringComparison.OrdinalIgnoreCase)))
         {
             return new DmarcCheckResult(DmarcCheckStatus.Misconfigured,
                 ruaAddresses.Count == 0
                     ? $"_dmarc.{domainName} has no rua= tag"
-                    : $"_dmarc.{domainName}'s rua= points to {string.Join(", ", ruaAddresses)}, not {mailboxAddress}");
+                    : $"_dmarc.{domainName}'s rua= points to {string.Join(", ", ruaAddresses)}, not {mailboxAddress}",
+                policy);
         }
 
-        return new DmarcCheckResult(DmarcCheckStatus.Ok, null);
+        return new DmarcCheckResult(DmarcCheckStatus.Ok, null, policy);
     }
 
     /// <summary>RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being

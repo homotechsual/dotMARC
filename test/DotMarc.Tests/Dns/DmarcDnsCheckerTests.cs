@@ -202,4 +202,43 @@ public class DmarcDnsCheckerTests
         Assert.Equal(DmarcAuthorizationCheckStatus.Ok, result.Status);
         Assert.Null(result.Detail);
     }
+
+    [Fact]
+    public async Task CheckAsync_ReadsThePolicy_WhenTheRecordIsOk()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; pct=50; rua=mailto:rua.dmarc@mjco.uk\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+        Assert.Equal(new DmarcPolicyTags(DmarcPolicyLevel.Quarantine, DmarcPolicyLevel.Quarantine, 50), result.Policy);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReadsThePolicy_EvenWhenRuaIsWrong()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=reject; rua=mailto:other@example.com\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Misconfigured, result.Status);
+        Assert.Equal(DmarcPolicyLevel.Reject, result.Policy!.Policy);
+    }
+
+    [Fact]
+    public async Task CheckAsync_HasNoPolicy_WithoutARecord()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = NxDomainResponse;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Null(result.Policy);
+    }
 }
