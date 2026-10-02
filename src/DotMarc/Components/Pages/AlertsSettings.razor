@@ -73,6 +73,37 @@ else
                 <MudNumericField Label="Suspicious reject non-benign %" @bind-Value="_settings.SuspiciousRejectNonBenignPercent" Min="1" Max="100" Variant="Variant.Outlined"
                                   HelperText="Alert when at least this % of rejects/quarantines have no benign override reason (forwarder/mailing list/sampling)." />
             </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mt-2">DNS health alerts</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    Alert when a domain's DNS health check fails. "When it breaks" alerts only once the check has passed at least
+                    once, so domains that were never set up stay quiet. A failure is rechecked about 15 minutes later before it alerts.
+                </MudText>
+            </MudItem>
+
+            @foreach (var modeSetting in DnsHealthModeSettings)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudSelect T="DnsHealthAlertMode" Label="@modeSetting.Label" Variant="Variant.Outlined"
+                               Value="modeSetting.Get(_settings)" ValueChanged="@(mode => modeSetting.Set(_settings!, mode))">
+                        <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.WhenItBreaks">When it breaks</MudSelectItem>
+                        <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.WheneverItFails">Whenever it fails</MudSelectItem>
+                        <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.Off">Off</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            }
+
+            <MudItem xs="12" md="4">
+                <MudSwitch @bind-Value="_settings.DmarcPolicyWeakenedEnabled" Color="Color.Primary" Label="Alert when a DMARC policy weakens" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSwitch @bind-Value="_settings.NameserversChangedEnabled" Color="Color.Primary" Label="Alert when nameservers change" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField Label="Close policy and nameserver alerts after (days)" @bind-Value="_settings.AcknowledgeableAutoCloseDays" Min="0" Max="365" Variant="Variant.Outlined"
+                                 HelperText="0 keeps them open until someone acknowledges them or closes their ticket." />
+            </MudItem>
         </MudGrid>
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAsync">Save settings</MudButton>
@@ -272,6 +303,19 @@ else
 }
 
 @code {
+    private sealed record DnsHealthModeSetting(string Label, Func<NotificationSettings, DnsHealthAlertMode> Get, Action<NotificationSettings, DnsHealthAlertMode> Set);
+
+    private static readonly DnsHealthModeSetting[] DnsHealthModeSettings =
+    [
+        new("DMARC record", settings => settings.DmarcAlertMode, (settings, mode) => settings.DmarcAlertMode = mode),
+        new("DMARC authorization record", settings => settings.DmarcAuthorizationAlertMode, (settings, mode) => settings.DmarcAuthorizationAlertMode = mode),
+        new("TLS-RPT record", settings => settings.TlsrptAlertMode, (settings, mode) => settings.TlsrptAlertMode = mode),
+        new("SPF record", settings => settings.SpfAlertMode, (settings, mode) => settings.SpfAlertMode = mode),
+        new("MX", settings => settings.MxAlertMode, (settings, mode) => settings.MxAlertMode = mode),
+        new("DKIM", settings => settings.DkimAlertMode, (settings, mode) => settings.DkimAlertMode = mode),
+        new("MTA-STS", settings => settings.MtaStsAlertMode, (settings, mode) => settings.MtaStsAlertMode = mode),
+    ];
+
     private NotificationSettings? _settings;
     private HaloPsaSettings? _haloSettings;
     private string? _newHaloClientSecret;

@@ -4,8 +4,13 @@
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuditActorAccessor AuditActorAccessor
+@inject IPsaTicketService PsaTicketService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>dotMARC - Alerts</PageTitle>
 <div class="d-flex align-center mb-4">
@@ -37,6 +42,7 @@ else
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
                 <MudTh>Message</MudTh>
+                <MudTh></MudTh>
             </tr>
             @if (_showFilters)
             {
@@ -66,6 +72,7 @@ else
                     </MudSelect>
                 </MudTh>
                 <MudTh><MudTextField T="string" @bind-Value="_messageFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                <MudTh></MudTh>
             </tr>
             }
         </HeaderContent>
@@ -76,6 +83,14 @@ else
             <MudTd>@FormatCreated(context)</MudTd>
             <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
             <MudTd>@context.Message</MudTd>
+            <MudTd>
+                @if (!context.IsResolved && AlertAcknowledgement.IsAcknowledgeable(context.AlertType))
+                {
+                    <AuthorizeView Policy="AlertsManage" Context="authorization">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(() => AcknowledgeAsync(context))">Acknowledge</MudButton>
+                    </AuthorizeView>
+                }
+            </MudTd>
         </RowTemplate>
     </MudTable>
 }
@@ -122,7 +137,9 @@ else
         return true;
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _alerts = await db.AlertEvents
@@ -130,6 +147,37 @@ else
             .OrderByDescending(e => e.CreatedUtc)
             .Take(100)
             .ToListAsync();
+    }
+
+    private async Task AcknowledgeAsync(AlertEvent alert)
+    {
+        var accepted = alert.AlertType == AlertTypes.DmarcPolicyWeakened ? "its current DMARC policy" : "its current nameservers";
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Acknowledge alert",
+            $"Close this alert for {alert.DomainName} and accept {accepted} as the new normal? Its Halo ticket is closed too, if it has one.",
+            yesText: "Acknowledge", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        // The button only renders with AlertsManage, and Blazor only runs handlers for rendered elements.
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var outcome = await AlertAcknowledgement.AcknowledgeAsync(db, await AuditActorAccessor.GetAsync(), alert.Id, PsaTicketService);
+        switch (outcome)
+        {
+            case AcknowledgeOutcome.Acknowledged:
+                Snackbar.Add("Alert acknowledged.", Severity.Success);
+                break;
+            case AcknowledgeOutcome.AcknowledgedButTicketNotClosed:
+                Snackbar.Add("Alert acknowledged, but its Halo ticket couldn't be closed. Close it in Halo.", Severity.Warning);
+                break;
+            default:
+                Snackbar.Add("That alert is already closed.", Severity.Info);
+                break;
+        }
+
+        await LoadAsync();
     }
 
     private static Color GetSeverityColor(string severity) => severity switch
