@@ -97,6 +97,60 @@ public sealed class AlertingService : IAlertingService
             // AND have a reject mix worth flagging, so this always runs.
             await CheckSuspiciousRejectActivityAsync(db, settings, domain, cancellationToken).ConfigureAwait(false);
         }
+
+        await CheckDnsHealthAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs DnsHealthAlertEvaluator for every monitored domain, saves what it remembers, then raises and
+    /// resolves alerts. Resolves are only sent for alerts that are open, so a quiet cycle costs one query, not one per
+    /// domain per check.</summary>
+    private async Task CheckDnsHealthAsync(DotMarcDbContext db, NotificationSettings settings, List<Domain> domains, CancellationToken cancellationToken)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        var domainIds = domains.Select(domain => domain.Id).ToList();
+        var states = await db.DomainAlertStates
+            .Where(state => domainIds.Contains(state.DomainId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var openAlerts = (await db.AlertEvents
+                .Where(alert => !alert.IsResolved && AlertTypes.DnsHealth.Contains(alert.AlertType))
+                .Select(alert => new { alert.DomainName, alert.AlertType })
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Select(alert => (alert.DomainName, alert.AlertType))
+            .ToHashSet();
+
+        var actionsByDomain = new List<(Domain Domain, IReadOnlyList<DnsHealthAlertAction> Actions)>();
+        foreach (var domain in domains)
+        {
+            var domainStates = states.Where(state => state.DomainId == domain.Id).ToList();
+            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, settings, nowUtc)));
+            db.DomainAlertStates.AddRange(domainStates.Where(state => state.Id == 0));
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var (domain, actions) in actionsByDomain)
+        {
+            foreach (var action in actions)
+            {
+                if (action.Kind == DnsHealthActionKind.Raise)
+                {
+                    await EnsureAlertAsync(db, settings, domain.Name, action.AlertType, action.Severity, action.Title, action.Message, cancellationToken).ConfigureAwait(false);
+                }
+                else if (openAlerts.Contains((domain.Name, action.AlertType)))
+                {
+                    await ResolveAlertAsync(domain.Name, action.AlertType, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        // A domain that stops being monitored isn't evaluated any more, so close what it left open.
+        var monitoredNames = domains.Select(domain => domain.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var (domainName, alertType) in openAlerts.Where(alert => !monitoredNames.Contains(alert.DomainName)))
+        {
+            await ResolveAlertAsync(domainName, alertType, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task CheckSuspiciousRejectActivityAsync(DotMarcDbContext context, NotificationSettings settings, Domain domain, CancellationToken cancellationToken)
