@@ -33,7 +33,7 @@ Keys are stored on alerts and ticket rules, so they must never change once shipp
 `AlertTypes.All`.
 
 | Key | Display name | Severity | Ticket by default |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `DmarcRecordBroken` | DMARC record broken | Warning | Yes |
 | `DmarcAuthorizationBroken` | DMARC authorization record broken | Warning | Yes |
 | `TlsrptRecordBroken` | TLS-RPT record broken | Warning | Yes |
@@ -47,7 +47,7 @@ Keys are stored on alerts and ticket rules, so they must never change once shipp
 ### What counts as passing, failing or ignored
 
 | Check | Passing | Failing | Ignored |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | DMARC | `Ok` | `MissingOwnRecord`, `Misconfigured`, `MissingAuthorizationRecord` | `NotChecked` |
 | DMARC authorization | `Ok` | `Missing` | `NotChecked`, `NotApplicable` |
 | TLS-RPT | `Ok` | `MissingOwnRecord`, `Misconfigured` | `NotChecked` |
@@ -76,7 +76,7 @@ The global **Alerts enabled** switch still turns all of this off.
 A new table, `DomainAlertStates`, with one row per domain per watched item:
 
 | Column | Meaning |
-|---|---|
+| --- | --- |
 | `DomainId` | The domain. Cascade-deleted with it. |
 | `Item` | `Dmarc`, `DmarcAuthorization`, `Tlsrpt`, `Spf`, `Mx`, `Dkim`, `MtaSts`, `DmarcPolicy` or `Nameservers` (string). |
 | `HasPassed` | The check has passed at least once since dotMARC started watching it. |
