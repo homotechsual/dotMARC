@@ -19,14 +19,18 @@ public sealed class AlertTicketPolicyTests
         new() { AlertType = alertType, GroupId = groupId, CreateTicket = createTicket };
 
     [Fact]
-    public void WithNoRules_EveryAlertTypeCreatesATicket()
+    public void WithNoRules_EachAlertTypeFollowsItsTicketDefault()
     {
         var domain = DomainIn(null, MakeGroup(1, 7));
 
         foreach (var alertType in AlertTypes.All)
         {
-            Assert.True(AlertTicketPolicy.ShouldCreateTicket(alertType.Key, domain, []));
+            Assert.Equal(alertType.CreatesTicketByDefault, AlertTicketPolicy.ShouldCreateTicket(alertType.Key, domain, []));
         }
+
+        // Only nameserver changes, a heads-up rather than a fault, default to no ticket.
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.NameserversChanged, domain, []));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.SpfRecordBroken, domain, []));
     }
 
     [Theory]

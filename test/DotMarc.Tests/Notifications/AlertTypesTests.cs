@@ -8,14 +8,6 @@ namespace DotMarc.Tests.Notifications;
 public sealed class AlertTypesTests
 {
     [Fact]
-    public void All_ListsTheFourAlertTypesDotMarcRaises()
-    {
-        Assert.Equal(
-            ["MissedReport", "SuspiciousRejectActivity", "TlsrptFailure", "UnexpectedActivityOnNullRoutedDomain"],
-            AlertTypes.All.Select(alertType => alertType.Key));
-    }
-
-    [Fact]
     public void EveryKeyConstant_IsInTheRegistry_SoANewAlertTypeCannotBeMissingFromTheUi()
     {
         var constantValues = typeof(AlertTypes)
@@ -29,20 +21,37 @@ public sealed class AlertTypesTests
     }
 
     [Fact]
-    public void EveryAlertType_HasANameADescriptionAndCreatesTicketsByDefault()
+    public void Find_ReturnsTheAlertType_OrNullForAnUnknownKey()
+    {
+        Assert.Equal("TlsrptFailure", AlertTypes.Find("TlsrptFailure")!.Key);
+        Assert.Null(AlertTypes.Find("NotARealAlertType"));
+    }
+
+    [Fact]
+    public void All_ListsTheAlertTypesDotMarcRaises()
+    {
+        Assert.Equal(
+            ["MissedReport", "SuspiciousRejectActivity", "TlsrptFailure", "UnexpectedActivityOnNullRoutedDomain",
+             "DmarcRecordBroken", "DmarcAuthorizationBroken", "TlsrptRecordBroken", "SpfRecordBroken", "MxRecordBroken",
+             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "NameserversChanged"],
+            AlertTypes.All.Select(alertType => alertType.Key));
+    }
+
+    [Fact]
+    public void EveryAlertType_HasANameAndADescription_AndAllButNameserverChangesCreateTickets()
     {
         foreach (var alertType in AlertTypes.All)
         {
             Assert.False(string.IsNullOrWhiteSpace(alertType.DisplayName));
             Assert.False(string.IsNullOrWhiteSpace(alertType.Description));
-            Assert.True(alertType.CreatesTicketByDefault);
+            Assert.Equal(alertType.Key != AlertTypes.NameserversChanged, alertType.CreatesTicketByDefault);
         }
     }
 
     [Fact]
-    public void Find_ReturnsTheAlertType_OrNullForAnUnknownKey()
+    public void DnsHealth_ListsTheNineDnsHealthAlertTypes()
     {
-        Assert.Equal("TlsrptFailure", AlertTypes.Find("TlsrptFailure")!.Key);
-        Assert.Null(AlertTypes.Find("NotARealAlertType"));
+        Assert.Equal(9, AlertTypes.DnsHealth.Count);
+        Assert.All(AlertTypes.DnsHealth, key => Assert.NotNull(AlertTypes.Find(key)));
     }
 }
