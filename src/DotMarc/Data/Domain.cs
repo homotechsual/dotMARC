@@ -15,6 +15,11 @@ public sealed class Domain
     public DmarcCheckStatus DmarcCheckStatus { get; set; }
     public DateTimeOffset? DmarcCheckedUtc { get; set; }
     public string? DmarcCheckDetail { get; set; }
+    // Read from the DMARC record by the DMARC check, with sp and pct filled in from their defaults; all null when
+    // there's no DMARC record. The DMARC policy weakened alert compares these with the accepted policy.
+    public DmarcPolicyLevel? DmarcPolicy { get; set; }
+    public DmarcPolicyLevel? DmarcSubdomainPolicy { get; set; }
+    public int? DmarcPercent { get; set; }
     public TlsrptCheckStatus TlsrptCheckStatus { get; set; }
     public DateTimeOffset? TlsrptCheckedUtc { get; set; }
     public string? TlsrptCheckDetail { get; set; }
@@ -54,4 +59,5 @@ public sealed class Domain
     public List<TlsrptReport> TlsrptReports { get; set; } = [];
     public List<Group> Groups { get; set; } = [];
     public List<Tag> Tags { get; set; } = [];
+    public List<DomainAlertState> AlertStates { get; set; } = [];
 }

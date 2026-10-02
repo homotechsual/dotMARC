@@ -146,4 +146,61 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.Empty(verify.AuditEntries);
     }
+
+    [Fact]
+    public async Task AFreshDatabase_HasTheDnsHealthAlertDefaults()
+    {
+        await using var context = CreateContext();
+
+        var settings = await NotificationSettingsService.GetAsync(context);
+
+        Assert.All(
+            [settings.DmarcAlertMode, settings.DmarcAuthorizationAlertMode, settings.TlsrptAlertMode, settings.SpfAlertMode,
+             settings.MxAlertMode, settings.DkimAlertMode, settings.MtaStsAlertMode],
+            mode => Assert.Equal(DnsHealthAlertMode.WhenItBreaks, mode));
+        Assert.True(settings.DmarcPolicyWeakenedEnabled);
+        Assert.True(settings.NameserversChangedEnabled);
+        Assert.Equal(0, settings.AcknowledgeableAutoCloseDays);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SavesAndAuditsTheDnsHealthAlertSettings()
+    {
+        NotificationSettings updated;
+        await using (var loadContext = CreateContext())
+        {
+            updated = await loadContext.NotificationSettings.AsNoTracking().SingleAsync();
+        }
+        updated.SpfAlertMode = DnsHealthAlertMode.WheneverItFails;
+        updated.DkimAlertMode = DnsHealthAlertMode.Off;
+        updated.NameserversChangedEnabled = false;
+        updated.AcknowledgeableAutoCloseDays = 7;
+
+        await using (var context = CreateContext())
+        {
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, updated);
+        }
+
+        await using var verify = CreateContext();
+        var saved = await NotificationSettingsService.GetAsync(verify);
+        Assert.Equal(DnsHealthAlertMode.WheneverItFails, saved.SpfAlertMode);
+        Assert.Equal(DnsHealthAlertMode.Off, saved.DkimAlertMode);
+        Assert.False(saved.NameserversChangedEnabled);
+        Assert.Equal(7, saved.AcknowledgeableAutoCloseDays);
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Contains(new AuditFieldChange("SPF alerts", "WhenItBreaks", "WheneverItFails"), entry.Changes);
+        Assert.Contains(new AuditFieldChange("Close policy and nameserver alerts after (days)", "0", "7"), entry.Changes);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(366)]
+    public async Task SaveAsync_RefusesAnAutoCloseOutsideZeroTo365Days(int days)
+    {
+        await using var context = CreateContext();
+        var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
+        settings.AcknowledgeableAutoCloseDays = days;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings));
+    }
 }

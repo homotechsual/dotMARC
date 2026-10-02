@@ -18,6 +18,10 @@ public static class NotificationSettingsService
     {
         ValidateWebhookUrl(updated.TeamsWebhookUrl, "Teams webhook URL");
         ValidateWebhookUrl(updated.GenericWebhookUrl, "Generic webhook URL");
+        if (updated.AcknowledgeableAutoCloseDays is < 0 or > 365)
+        {
+            throw new ArgumentException("Close policy and nameserver alerts after (days) must be from 0 to 365.", nameof(updated));
+        }
 
         // A no-tracking snapshot, because the caller may pass the very instance this context is tracking.
         var saved = await context.NotificationSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
@@ -31,7 +35,17 @@ public static class NotificationSettingsService
             .Field("Cooldown (minutes)", saved.CooldownMinutes, updated.CooldownMinutes)
             .Field("Monitor interval (seconds)", saved.MonitorIntervalSeconds, updated.MonitorIntervalSeconds)
             .Field("Suspicious reject minimum volume", saved.SuspiciousRejectMinVolume, updated.SuspiciousRejectMinVolume)
-            .Field("Suspicious reject non-benign %", saved.SuspiciousRejectNonBenignPercent, updated.SuspiciousRejectNonBenignPercent);
+            .Field("Suspicious reject non-benign %", saved.SuspiciousRejectNonBenignPercent, updated.SuspiciousRejectNonBenignPercent)
+            .Field("DMARC record alerts", saved.DmarcAlertMode, updated.DmarcAlertMode)
+            .Field("DMARC authorization record alerts", saved.DmarcAuthorizationAlertMode, updated.DmarcAuthorizationAlertMode)
+            .Field("TLS-RPT record alerts", saved.TlsrptAlertMode, updated.TlsrptAlertMode)
+            .Field("SPF alerts", saved.SpfAlertMode, updated.SpfAlertMode)
+            .Field("MX alerts", saved.MxAlertMode, updated.MxAlertMode)
+            .Field("DKIM alerts", saved.DkimAlertMode, updated.DkimAlertMode)
+            .Field("MTA-STS alerts", saved.MtaStsAlertMode, updated.MtaStsAlertMode)
+            .Field("DMARC policy weakened alerts", saved.DmarcPolicyWeakenedEnabled, updated.DmarcPolicyWeakenedEnabled)
+            .Field("Nameservers changed alerts", saved.NameserversChangedEnabled, updated.NameserversChangedEnabled)
+            .Field("Close policy and nameserver alerts after (days)", saved.AcknowledgeableAutoCloseDays, updated.AcknowledgeableAutoCloseDays);
         if (!changes.Any)
         {
             return;
@@ -48,6 +62,16 @@ public static class NotificationSettingsService
         existing.MonitorIntervalSeconds = updated.MonitorIntervalSeconds;
         existing.SuspiciousRejectMinVolume = updated.SuspiciousRejectMinVolume;
         existing.SuspiciousRejectNonBenignPercent = updated.SuspiciousRejectNonBenignPercent;
+        existing.DmarcAlertMode = updated.DmarcAlertMode;
+        existing.DmarcAuthorizationAlertMode = updated.DmarcAuthorizationAlertMode;
+        existing.TlsrptAlertMode = updated.TlsrptAlertMode;
+        existing.SpfAlertMode = updated.SpfAlertMode;
+        existing.MxAlertMode = updated.MxAlertMode;
+        existing.DkimAlertMode = updated.DkimAlertMode;
+        existing.MtaStsAlertMode = updated.MtaStsAlertMode;
+        existing.DmarcPolicyWeakenedEnabled = updated.DmarcPolicyWeakenedEnabled;
+        existing.NameserversChangedEnabled = updated.NameserversChangedEnabled;
+        existing.AcknowledgeableAutoCloseDays = updated.AcknowledgeableAutoCloseDays;
 
         AuditLog.Record(context, actor, AuditActions.NotificationSettingsSaved, AuditTarget.Settings("Notifications"), "Saved notification settings", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

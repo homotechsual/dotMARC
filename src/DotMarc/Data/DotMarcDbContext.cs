@@ -33,6 +33,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
+    public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
     public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
@@ -57,6 +58,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.MxCheckStatus).HasConversion<string>();
             entity.Property(d => d.DkimCheckStatus).HasConversion<string>();
             entity.Property(d => d.DnsProvider).HasConversion<string>();
+            entity.Property(d => d.DmarcPolicy).HasConversion<string>();
+            entity.Property(d => d.DmarcSubdomainPolicy).HasConversion<string>();
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<string> behind a value converter throws at runtime ("cannot be used as a
@@ -282,6 +285,25 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("IX_AlertTicketRules_AlertType_Global")
                 .HasFilter("\"GroupId\" IS NULL");
+        });
+
+        modelBuilder.Entity<DomainAlertState>(entity =>
+        {
+            entity.Property(state => state.Item).HasMaxLength(40);
+            entity.Property(state => state.Baseline).HasMaxLength(2000);
+            entity.HasIndex(state => new { state.DomainId, state.Item }).IsUnique();
+            entity.HasOne<Domain>().WithMany(domain => domain.AlertStates).HasForeignKey(state => state.DomainId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationSettings>(entity =>
+        {
+            entity.Property(settings => settings.DmarcAlertMode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(settings => settings.DmarcAuthorizationAlertMode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(settings => settings.TlsrptAlertMode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(settings => settings.SpfAlertMode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(settings => settings.MxAlertMode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(settings => settings.DkimAlertMode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(settings => settings.MtaStsAlertMode).HasConversion<string>().HasMaxLength(20);
         });
 
         modelBuilder.Entity<EncryptedSecret>(entity =>
