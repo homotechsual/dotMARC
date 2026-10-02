@@ -1,3 +1,4 @@
+using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Reporting;
 using Microsoft.EntityFrameworkCore;
@@ -106,6 +107,8 @@ public sealed class AlertingService : IAlertingService
     /// domain per check.</summary>
     private async Task CheckDnsHealthAsync(DotMarcDbContext db, NotificationSettings settings, List<Domain> domains, CancellationToken cancellationToken)
     {
+        await AutoCloseAcknowledgeableAlertsAsync(settings, cancellationToken).ConfigureAwait(false);
+
         var nowUtc = DateTimeOffset.UtcNow;
         var domainIds = domains.Select(domain => domain.Id).ToList();
         var states = await db.DomainAlertStates
@@ -321,6 +324,37 @@ public sealed class AlertingService : IAlertingService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to create PSA ticket for {DomainName} alert {AlertType}.", domainName, alertType);
+        }
+    }
+
+    private static readonly AuditActor AutoCloseActor = AuditActor.ForSystem("Alert auto-close");
+
+    /// <summary>With AcknowledgeableAutoCloseDays above 0, closes policy and nameserver alerts left open that long, as
+    /// if acknowledged.</summary>
+    private async Task AutoCloseAcknowledgeableAlertsAsync(NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        if (settings.AcknowledgeableAutoCloseDays <= 0)
+        {
+            return;
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.AcknowledgeableAutoCloseDays);
+        var staleAlertIds = await db.AlertEvents
+            .Where(alert => !alert.IsResolved && alert.CreatedUtc < cutoffUtc
+                && (alert.AlertType == AlertTypes.DmarcPolicyWeakened || alert.AlertType == AlertTypes.NameserversChanged))
+            .Select(alert => alert.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var alertId in staleAlertIds)
+        {
+            await using var alertContext = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+            var outcome = await AlertAcknowledgement.AcknowledgeAsync(alertContext, AutoCloseActor, alertId, _psaTicketService, cancellationToken).ConfigureAwait(false);
+            if (outcome == AcknowledgeOutcome.AcknowledgedButTicketNotClosed)
+            {
+                _logger.LogWarning("Closed alert {AlertId} automatically, but couldn't close its PSA ticket.", alertId);
+            }
         }
     }
 }

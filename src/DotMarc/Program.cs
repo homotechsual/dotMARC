@@ -897,6 +897,8 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
     {
         alert.IsResolved = true;
         alert.ResolvedUtc = DateTimeOffset.UtcNow;
+        // Closing a policy or nameserver alert's ticket accepts the change, the same as Acknowledge.
+        await DnsHealthBaselines.AcceptCurrentAsync(context, alert, request.HttpContext.RequestAborted);
         await context.SaveChangesAsync();
     }
 

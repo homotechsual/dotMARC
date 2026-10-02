@@ -89,6 +89,35 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         Assert.True(alert.IsResolved);
     }
 
+    [Fact]
+    public async Task ClosingAPolicyAlertsTicket_AcceptsTheCurrentPolicy()
+    {
+        await using (var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options))
+        {
+            var domain = new Domain
+            {
+                Name = "policy.example", IsMonitored = true, FirstSeenUtc = DateTimeOffset.UtcNow,
+                DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100,
+            };
+            domain.AlertStates.Add(new DomainAlertState { Item = DnsHealthItems.DmarcPolicy, Baseline = "p=reject; sp=reject; pct=100" });
+            context.Domains.Add(domain);
+            context.AlertEvents.Add(new AlertEvent
+            {
+                DomainName = "policy.example", AlertType = AlertTypes.DmarcPolicyWeakened, Severity = "Warning", Title = "t", Message = "m",
+                ExternalTicketProvider = "HaloPSA", ExternalTicketId = "5151"
+            });
+            await context.SaveChangesAsync();
+        }
+
+        using var client = _factory!.CreateClient();
+        await client.PostAsJsonAsync("/integrations/halopsa/webhook/the-webhook-secret", new { ticket_id = 5151, status_id = 9 });
+
+        await using var verify = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
+        Assert.True((await verify.AlertEvents.SingleAsync(alert => alert.ExternalTicketId == "5151")).IsResolved);
+        var domainId = (await verify.Domains.SingleAsync(candidate => candidate.Name == "policy.example")).Id;
+        Assert.Equal("p=none; sp=none; pct=100", (await verify.DomainAlertStates.SingleAsync(state => state.DomainId == domainId)).Baseline);
+    }
+
     private HaloWebhookReceipt LatestReceipt() =>
         _factory!.Services.GetRequiredService<HaloWebhookActivity>().Recent(1).Single();
 

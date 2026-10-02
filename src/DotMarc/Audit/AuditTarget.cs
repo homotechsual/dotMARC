@@ -1,5 +1,6 @@
 using System.Globalization;
 using DotMarc.Data;
+using DotMarc.Notifications;
 
 namespace DotMarc.Audit;
 
@@ -11,6 +12,7 @@ public sealed record AuditTarget(string Type, string? Id, string? Name)
     public static AuditTarget For(Tag tag) => new("Tag", IdText(tag.Id), tag.Name);
     public static AuditTarget For(Role role) => new("Role", IdText(role.Id), role.Name);
     public static AuditTarget For(UserAccess access) => new("UserAccess", IdText(access.Id), access.Email);
+    public static AuditTarget For(AlertEvent alert) => new("Alert", IdText(alert.Id), alert.DomainName);
 
     /// <summary>A settings screen, such as "HaloPSA" or "Notifications". There is only one of each, so no id.</summary>
     public static AuditTarget Settings(string name) => new("Settings", null, name);
