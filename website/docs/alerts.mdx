@@ -16,7 +16,7 @@ resolves itself automatically once the underlying condition clears, no manual di
 | `MissedReport` | A monitored domain hasn't received a DMARC report within the configured threshold. | A DMARC report is received for that domain. |
 | `TlsrptFailure` | A TLSRPT report for the domain contains one or more failed TLS delivery sessions. See [MTA-STS: TLS reporting](./mta-sts.mdx#tls-reporting). | A later TLSRPT report for the same domain has zero failed sessions. |
 
-Both alert types are currently raised at `Warning` severity.
+These alert types are raised at `Warning` severity. The DNS health alerts below have their own severities.
 
 ## Cooldown and re-firing
 
@@ -29,6 +29,9 @@ elapses since the open alert was created, so a genuinely down domain doesn't pag
 **Alerts** (`/alerts`) is the event feed, every alert ever raised, most recent first, with its
 domain, type, severity, created/resolved timestamps, and message. It requires the `AlertsView`
 permission, which is part of the built-in Viewer role by default.
+
+Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge** button for anyone with the
+`AlertsManage` permission. See [Closing policy and nameserver alerts](#closing-policy-and-nameserver-alerts).
 
 ## Alert settings
 
@@ -44,9 +47,61 @@ permission, granted separately from `AlertsView`.
 | Missing report threshold (days) | How many days without a report before `MissedReport` fires. Default `2`. |
 | Cooldown (minutes) | Minimum time between repeat firings of the same open alert. Default `180`. |
 | Monitor interval (seconds) | How often the background check for missed reports runs. Default `300`. |
+| DNS health alerts | For each of the seven checks: **When it breaks** (default), **Whenever it fails** or **Off**. See [DNS health alerts](#dns-health-alerts). |
+| Alert when a DMARC policy weakens | On by default. |
+| Alert when nameservers change | On by default. |
+| Close policy and nameserver alerts after (days) | `0` (default) keeps them open until acknowledged or their ticket is closed. |
 
 Both webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
 `https://user:pass@host/...`); anything else is rejected on save.
+
+## DNS health alerts
+
+dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM and MTA-STS records about once a
+day. It raises an alert when one of those checks fails, when a domain's DMARC policy gets weaker, or when its
+nameservers change.
+
+| Type | Raised when | Resolves when | Severity |
+| --- | --- | --- | --- |
+| `DmarcRecordBroken` | The DMARC record is missing or broken. | The check passes again. | Warning |
+| `DmarcAuthorizationBroken` | The record that lets reports go to dotMARC's mailbox is missing. | The check passes again. | Warning |
+| `TlsrptRecordBroken` | The TLS-RPT record is missing or broken. | The check passes again. | Warning |
+| `SpfRecordBroken` | The SPF record is missing, duplicated or broken. A `-all`-only record counts as passing. | The check passes again. | Warning |
+| `MxRecordBroken` | There's no MX record, or the mail server's name doesn't resolve. A null MX counts as passing. | The check passes again. | Warning |
+| `DkimRecordBroken` | A DKIM selector set for the domain is missing or broken. | The check passes again, or the selectors are removed. | Warning |
+| `MtaStsFailing` | dotMARC stopped being able to serve the domain's MTA-STS policy. | MTA-STS is active again, or turned off. | Warning |
+| `DmarcPolicyWeakened` | `p`, `sp` or `pct` went down, for example from `p=reject` to `p=quarantine`. | The policy goes back up, or the alert is closed (see below). | Warning |
+| `NameserversChanged` | The domain's nameservers changed, often the start of a DNS migration. | They change back, or the alert is closed (see below). | Info |
+
+A check that hasn't run yet, or doesn't apply (no DKIM selectors, MTA-STS turned off or still being set up), never
+alerts.
+
+### When a check alerts
+
+Each check has a setting:
+
+* **When it breaks** (the default): alerts only once the check has passed at least once. A domain that was never
+  set up, for example one with no TLS-RPT record, stays quiet.
+* **Whenever it fails**: alerts whenever the check fails.
+* **Off**: never alerts, and closes any open alert.
+
+When a check first fails, nothing is sent. dotMARC checks it again about 15 minutes later and only alerts if it's
+still failing, so a brief DNS hiccup doesn't page anyone. The same applies to policy and nameserver changes.
+
+Upgrading to a version with DNS health alerts doesn't raise a flood of alerts: on its first run dotMARC notes which
+checks pass and the current policy and nameservers, and only alerts on changes from there.
+
+Nameservers changed alerts don't open a HaloPSA ticket by default. Change that with the ticket rules, like any other
+alert type.
+
+### Closing policy and nameserver alerts
+
+A weaker DMARC policy or new nameservers may be deliberate, so these alerts compare against an accepted value. Any of
+these closes the alert and accepts the current policy or nameservers as the new normal:
+
+* **Acknowledge** on the Alerts page (needs `AlertsManage`). It's recorded in the [audit log](./audit-log.mdx).
+* **Closing its HaloPSA ticket.**
+* **Closing automatically** after the number of days in **Close policy and nameserver alerts after (days)**, if set.
 
 ## Delivery channels
 

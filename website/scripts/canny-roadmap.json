@@ -18,7 +18,7 @@
   {
     "title": "Widen alerting beyond MissedReport / TLSRPTFailure",
     "version": "v0.8.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
       "Today dotMARC raises alerts for missed DMARC reports and TLS reporting failures. The domain health checklist already checks the DMARC record, DMARC authorization record, TLS reporting record, MTA-STS, SPF, MX and DKIM, but a check going from OK to broken only shows up if someone happens to open that domain.",
       "Proposal: raise an alert when a health check that was previously OK becomes missing or misconfigured, for example an SPF record deleted during a DNS migration or the DMARC authorization record removed. The alert would resolve automatically once the check passes again, respect the existing cooldown, and be delivered through the same channels as other alerts (Teams, generic webhook and HaloPSA tickets).",
