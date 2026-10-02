@@ -143,7 +143,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
 
         using var verify = CreateContext();
-        Assert.Equal(3, await verify.AlertEvents.CountAsync());
+        Assert.Equal(6, await verify.AlertEvents.CountAsync());
 
         var missedReport = await verify.AlertEvents.SingleAsync(a => a.DomainName == "fleet.cobalt-freight.example");
         Assert.Equal("MissedReport", missedReport.AlertType);
@@ -209,5 +209,19 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         using var verify = CreateContext();
         Assert.Equal(25, await verify.Domains.CountAsync());
         Assert.Equal(2, await verify.UserAccesses.CountAsync());
+    }
+
+    [Fact]
+    public async Task ResetAsync_WritesTheAlertStatesAndDmarcPolicies()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Equal(3, await verify.DomainAlertStates.CountAsync());
+        var aurora = await verify.Domains.SingleAsync(domain => domain.Name == "aurora-retail.example");
+        Assert.Equal(DmarcPolicyLevel.Quarantine, aurora.DmarcPolicy);
+        Assert.Single(await verify.DomainAlertStates.Where(state => state.DomainId == aurora.Id).ToListAsync());
     }
 }

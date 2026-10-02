@@ -48,7 +48,7 @@ public static class DemoDataSeeder
             TRUNCATE TABLE
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
-                "UserAccessScopedGroups", "DomainGroup", "DomainTag", "AlertEvents",
+                "UserAccessScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates",
                 "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries"
             RESTART IDENTITY CASCADE
             """,
@@ -101,7 +101,10 @@ public static class DemoDataSeeder
                 DnsProvider = domainSeed.DnsProvider,
                 DnsProviderCheckedUtc = domainSeed.DnsProvider == DetectedDnsProvider.NotChecked ? null : domainSeed.FirstSeenUtc,
                 DnsZone = domainSeed.DnsZone,
-                DnsNameservers = domainSeed.DnsNameservers ?? []
+                DnsNameservers = domainSeed.DnsNameservers ?? [],
+                DmarcPolicy = domainSeed.DmarcPolicy,
+                DmarcSubdomainPolicy = domainSeed.DmarcSubdomainPolicy,
+                DmarcPercent = domainSeed.DmarcPercent
             };
 
             if (domainSeed.GroupName is not null)
@@ -211,6 +214,12 @@ public static class DemoDataSeeder
             }
 
             context.Domains.Add(domain);
+        }
+
+        foreach (var stateSeed in dataset.AlertStates)
+        {
+            var domain = context.Domains.Local.Single(candidate => candidate.Name == stateSeed.DomainName);
+            domain.AlertStates.Add(new DomainAlertState { Item = stateSeed.Item, HasPassed = stateSeed.HasPassed, Baseline = stateSeed.Baseline });
         }
 
         foreach (var alertSeed in dataset.AlertEvents)

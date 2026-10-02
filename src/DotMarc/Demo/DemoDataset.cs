@@ -10,7 +10,8 @@ public sealed record DemoDataset(
     List<DemoPollCycleSeed> PollCycles,
     List<DemoPollCycleDailySummarySeed> PollCycleDailySummaries,
     List<DemoParseFailureSeed> ParseFailures,
-    List<DemoAlertEventSeed> AlertEvents);
+    List<DemoAlertEventSeed> AlertEvents,
+    List<DemoAlertStateSeed> AlertStates);
 
 public sealed record DemoGroupSeed(string Name);
 
@@ -45,7 +46,10 @@ public sealed record DemoDomainSeed(
     string? DkimCheckDetail = null,
     DetectedDnsProvider DnsProvider = DetectedDnsProvider.NotChecked,
     string? DnsZone = null,
-    List<string>? DnsNameservers = null);
+    List<string>? DnsNameservers = null,
+    DmarcPolicyLevel? DmarcPolicy = null,
+    DmarcPolicyLevel? DmarcSubdomainPolicy = null,
+    int? DmarcPercent = null);
 
 public sealed record DemoTlsrptReportSeed(
     string ReportingOrg,
@@ -126,3 +130,7 @@ public sealed record DemoParseFailureSeed(
     string Reason,
     int AttemptCount,
     DateTimeOffset LastAttemptedUtc);
+
+/// <summary>A DNS health alert's remembered state for a demo domain (see DomainAlertState), so the alert monitor
+/// leaves the demo's open DNS health alerts open rather than resolving them on its first cycle.</summary>
+public sealed record DemoAlertStateSeed(string DomainName, string Item, bool HasPassed, string? Baseline);

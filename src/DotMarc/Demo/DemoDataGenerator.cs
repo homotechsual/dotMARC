@@ -1,5 +1,6 @@
 // src/DotMarc/Demo/DemoDataGenerator.cs
 using DotMarc.Data;
+using DotMarc.Notifications;
 using DotMarc.Reporting;
 
 namespace DotMarc.Demo;
@@ -248,13 +249,17 @@ public static class DemoDataGenerator
                 dnsProvider: DetectedDnsProvider.Unknown, dnsNameservers: ["dns1.legacy-registrar.example", "dns2.legacy-registrar.example"]),
         };
 
+        var auroraIndex = domains.FindIndex(domain => domain.Name == "aurora-retail.example");
+        domains[auroraIndex] = domains[auroraIndex] with { DmarcPolicy = DmarcPolicyLevel.Quarantine, DmarcSubdomainPolicy = DmarcPolicyLevel.Quarantine, DmarcPercent = 100 };
+
         return new DemoDataset(
             groups,
             domains,
             BuildPollCycles(random, nowUtc),
             BuildPollCycleDailySummaries(random, nowUtc),
             BuildParseFailures(nowUtc),
-            BuildAlertEvents(nowUtc, domains));
+            BuildAlertEvents(nowUtc, domains),
+            BuildAlertStates());
     }
 
     private static double Lerp(double from, double to, double t) => from + ((to - from) * t);
@@ -385,11 +390,12 @@ public static class DemoDataGenerator
         return reports;
     }
 
-    /// <summary>Three alerts, matching the exact AlertType/message shapes AlertingService itself
-    /// produces (see its EnsureAlertAsync/HandleTlsrptReportAsync call sites) so the demo Alerts
-    /// feed looks like real output, not placeholder text: an active MissedReport for the domain
-    /// that's gone quiet, an active TlsrptFailure for the domain whose TLS deliveries are still
-    /// failing, and a resolved TlsrptFailure for a domain that had one bad day and recovered.</summary>
+    /// <summary>Six alerts, matching the exact AlertType/message shapes AlertingService itself
+    /// produces (see its EnsureAlertAsync/HandleTlsrptReportAsync call sites and DnsHealthAlertEvaluator)
+    /// so the demo Alerts feed looks like real output, not placeholder text: an active MissedReport for
+    /// the domain that's gone quiet, an active TlsrptFailure for the domain whose TLS deliveries are
+    /// still failing, a resolved TlsrptFailure for a domain that had one bad day and recovered, and
+    /// open SPF record broken, DMARC policy weakened and nameservers changed alerts.</summary>
     private static List<DemoAlertEventSeed> BuildAlertEvents(DateTimeOffset nowUtc, List<DemoDomainSeed> domains)
     {
         var quietDomain = domains.Single(d => d.Name == "fleet.cobalt-freight.example");
@@ -411,8 +417,33 @@ public static class DemoDataGenerator
                 "shop.aurora-retail.example", "TlsrptFailure", "Warning", "TLS delivery failures reported",
                 "TLSRPT reported 4 failed TLS delivery session(s) for 'shop.aurora-retail.example'. Failure types: starttls-not-supported.",
                 IsResolved: true, CreatedUtc: nowUtc.AddDays(-2), ResolvedUtc: nowUtc.AddDays(-1)),
+
+            new DemoAlertEventSeed(
+                "brightline-legal.example", AlertTypes.SpfRecordBroken, "Warning", "SPF record broken",
+                "The SPF record check for brightline-legal.example is failing: missing record (No SPF (v=spf1) TXT record found at brightline-legal.example). It was passing before.",
+                IsResolved: false, CreatedUtc: nowUtc.AddHours(-6), ResolvedUtc: null),
+
+            new DemoAlertEventSeed(
+                "aurora-retail.example", AlertTypes.DmarcPolicyWeakened, "Warning", "DMARC policy weakened",
+                "The DMARC policy for aurora-retail.example went from p=reject; sp=reject; pct=100 to p=quarantine; sp=quarantine; pct=100.",
+                IsResolved: false, CreatedUtc: nowUtc.AddHours(-3), ResolvedUtc: null),
+
+            new DemoAlertEventSeed(
+                "northstar-nonprofit.example", AlertTypes.NameserversChanged, "Info", "Nameservers changed",
+                $"The nameservers for northstar-nonprofit.example changed from {string.Join(", ", DnsNameserverSamples[DetectedDnsProvider.Cloudflare])} to dns1.legacy-registrar.example, dns2.legacy-registrar.example. The DNS provider is now Unknown.",
+                IsResolved: false, CreatedUtc: nowUtc.AddHours(-1), ResolvedUtc: null),
         ];
     }
+
+    /// <summary>The states behind the three open DNS health alerts in BuildAlertEvents: SPF that was passing before,
+    /// a policy that used to be reject, and nameservers that used to be Cloudflare's.</summary>
+    private static List<DemoAlertStateSeed> BuildAlertStates() =>
+    [
+        new("brightline-legal.example", DnsHealthItems.Spf, HasPassed: true, Baseline: null),
+        new("aurora-retail.example", DnsHealthItems.DmarcPolicy, HasPassed: false, Baseline: "p=reject; sp=reject; pct=100"),
+        new("northstar-nonprofit.example", DnsHealthItems.Nameservers, HasPassed: false,
+            Baseline: DnsHealthAlertEvaluator.NameserverKey(DnsNameserverSamples[DetectedDnsProvider.Cloudflare])),
+    ];
 
     private static string LegitimateSourceIp(string org) => org switch
     {

@@ -477,4 +477,35 @@ public sealed class DemoDataGeneratorTests
         Assert.Contains(problemSource.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Spf && d.Result == DmarcMechanismResult.Fail);
         Assert.Contains(problemSource.AuthDetails, d => d.Mechanism == DmarcAuthMechanism.Dkim && d.Result == DmarcMechanismResult.Fail);
     }
+
+    [Theory]
+    [InlineData("brightline-legal.example", "SpfRecordBroken")]
+    [InlineData("aurora-retail.example", "DmarcPolicyWeakened")]
+    [InlineData("northstar-nonprofit.example", "NameserversChanged")]
+    public void AlertEvents_IncludeOpenDnsHealthAlerts(string domainName, string alertType)
+    {
+        var dataset = Generate();
+
+        var alert = Assert.Single(dataset.AlertEvents, candidate => candidate.DomainName == domainName);
+        Assert.Equal(alertType, alert.AlertType);
+        Assert.False(alert.IsResolved);
+    }
+
+    [Fact]
+    public void AlertStates_BackTheOpenDnsHealthAlerts_SoTheMonitorLeavesThemOpen()
+    {
+        var dataset = Generate();
+
+        var spf = Assert.Single(dataset.AlertStates, state => state.DomainName == "brightline-legal.example");
+        Assert.Equal(("Spf", true), (spf.Item, spf.HasPassed));
+        Assert.Equal(SpfCheckStatus.MissingRecord, dataset.Domains.Single(domain => domain.Name == "brightline-legal.example").SpfCheckStatus);
+
+        var policy = Assert.Single(dataset.AlertStates, state => state.DomainName == "aurora-retail.example");
+        Assert.Equal(("DmarcPolicy", "p=reject; sp=reject; pct=100"), (policy.Item, policy.Baseline));
+        Assert.Equal(DmarcPolicyLevel.Quarantine, dataset.Domains.Single(domain => domain.Name == "aurora-retail.example").DmarcPolicy);
+
+        var nameservers = Assert.Single(dataset.AlertStates, state => state.DomainName == "northstar-nonprofit.example");
+        Assert.Equal("Nameservers", nameservers.Item);
+        Assert.Contains("cloudflare", nameservers.Baseline);
+    }
 }
