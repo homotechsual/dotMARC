@@ -356,8 +356,10 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(d => d.DmarcCheckedUtc == null || d.DmarcCheckedUtc < cutoff)
+                .Where(d => d.DmarcCheckedUtc == null || d.DmarcCheckedUtc < cutoff
+                    || d.AlertStates.Any(state => (state.Item == DnsHealthItems.Dmarc || state.Item == DnsHealthItems.DmarcPolicy) && state.RecheckDueUtc <= nowUtc && d.DmarcCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -411,8 +413,10 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(domain => domain.TlsrptCheckedUtc == null || domain.TlsrptCheckedUtc < cutoff)
+                .Where(domain => domain.TlsrptCheckedUtc == null || domain.TlsrptCheckedUtc < cutoff
+                    || domain.AlertStates.Any(state => state.Item == DnsHealthItems.Tlsrpt && state.RecheckDueUtc <= nowUtc && domain.TlsrptCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -553,8 +557,10 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(d => d.DnsProviderCheckedUtc == null || d.DnsProviderCheckedUtc < cutoff)
+                .Where(d => d.DnsProviderCheckedUtc == null || d.DnsProviderCheckedUtc < cutoff
+                    || d.AlertStates.Any(state => state.Item == DnsHealthItems.Nameservers && state.RecheckDueUtc <= nowUtc && d.DnsProviderCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -768,8 +774,10 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(d => d.DmarcAuthorizationCheckedUtc == null || d.DmarcAuthorizationCheckedUtc < cutoff)
+                .Where(d => d.DmarcAuthorizationCheckedUtc == null || d.DmarcAuthorizationCheckedUtc < cutoff
+                    || d.AlertStates.Any(state => state.Item == DnsHealthItems.DmarcAuthorization && state.RecheckDueUtc <= nowUtc && d.DmarcAuthorizationCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -825,8 +833,12 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(d => d.SpfCheckedUtc == null || d.SpfCheckedUtc < cutoff)
+                // Also a domain whose DNS health alert is waiting for its confirmation recheck (see
+                // DnsHealthAlertEvaluator): re-running the check now is what confirms or clears the failure.
+                .Where(d => d.SpfCheckedUtc == null || d.SpfCheckedUtc < cutoff
+                    || d.AlertStates.Any(state => state.Item == DnsHealthItems.Spf && state.RecheckDueUtc <= nowUtc && d.SpfCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -882,8 +894,10 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(d => d.MxCheckedUtc == null || d.MxCheckedUtc < cutoff)
+                .Where(d => d.MxCheckedUtc == null || d.MxCheckedUtc < cutoff
+                    || d.AlertStates.Any(state => state.Item == DnsHealthItems.Mx && state.RecheckDueUtc <= nowUtc && d.MxCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -941,8 +955,10 @@ public sealed class PollingService : BackgroundService
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
-                .Where(d => d.DkimCheckedUtc == null || d.DkimCheckedUtc < cutoff)
+                .Where(d => d.DkimCheckedUtc == null || d.DkimCheckedUtc < cutoff
+                    || d.AlertStates.Any(state => state.Item == DnsHealthItems.Dkim && state.RecheckDueUtc <= nowUtc && d.DkimCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
