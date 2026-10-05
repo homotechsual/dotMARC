@@ -207,6 +207,11 @@ builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequ
 builder.Services.AddHttpClient<DotMarc.DnsPush.GoogleCloudDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.GoogleCloudDnsPushProvider>());
 
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.MtaStsChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcAuthorizationChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.TlsrptChangeBuilder>();
+
 builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.DnsPush.DnsProviderDetector>(client =>
 {
     client.BaseAddress = new Uri("https://cloudflare-dns.com/");
@@ -559,17 +564,18 @@ app.MapGet("/audit/export", async (HttpContext httpContext, IDbContextFactory<Do
 }).RequireAuthorization(nameof(Permission.AuditView));
 
 app.MapGet("/dns-push/{provider}/start", async (
-    string provider, int domainId, string target, HttpContext httpContext,
-    IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
+    string provider, int domainId, string target, string? payload, HttpContext httpContext,
+    IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
     IAuthorizationService authorizationService) =>
 {
-    var requiredPolicy = target switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" or "dmarc-auth" => "DomainsEdit", _ => null };
-    if (requiredPolicy is null)
+    // An edited SPF record is a few hundred characters; a payload far longer than that isn't one.
+    var changeBuilder = changeBuilders.Find(target);
+    if (changeBuilder is null || payload?.Length > 4000)
     {
         return Results.BadRequest();
     }
 
-    var authResult = await authorizationService.AuthorizeAsync(httpContext.User, requiredPolicy);
+    var authResult = await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy);
     if (!authResult.Succeeded)
     {
         return Results.Forbid();
@@ -590,11 +596,8 @@ app.MapGet("/dns-push/{provider}/start", async (
 
 app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
-    IEnumerable<IDnsPushProvider> pushProviders, DnsPushStateProtector stateProtector,
-    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDmarcTxtLookup dmarcTxtLookup, ITlsrptTxtLookup tlsrptTxtLookup,
-    IDmarcAuthorizationTxtLookup dmarcAuthorizationTxtLookup, IDnsProviderDetector dnsProviderDetector,
-    IOptions<DotMarc.MtaSts.MtaStsOptions> mtaStsOptions, IOptions<GraphOptions> graphOptions,
-    DotMarc.MtaSts.IMtaStsHostProvisioner mtaStsHostProvisioner, DotMarc.MtaSts.IMtaStsCnameLookup mtaStsCnameLookup,
+    IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
+    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDnsProviderDetector dnsProviderDetector,
     IAuthorizationService authorizationService, DotMarc.Audit.AuditRecorder auditRecorder, ILogger<Program> logger) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -608,19 +611,19 @@ app.MapGet("/dns-push/{provider}/callback", async (
     // whoever's browser lands HERE still holds the permission the push actually needs - re-run the
     // same target-to-policy check /start already made rather than relying solely on the app's
     // FallbackPolicy (any authenticated user).
-    var requiredPolicy = decodedState.PushTarget switch { "mta-sts" => "MtaStsManage", "dmarc" or "tlsrpt" or "dmarc-auth" => "DomainsEdit", _ => null };
-    if (requiredPolicy is null)
+    var changeBuilder = changeBuilders.Find(decodedState.PushTarget);
+    if (changeBuilder is null)
     {
         return DnsPushPopupResult.Close("invalid");
     }
-    var authResult = await authorizationService.AuthorizeAsync(httpContext.User, requiredPolicy);
+    var authResult = await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy);
     if (!authResult.Succeeded)
     {
         return DnsPushPopupResult.Close("invalid");
     }
 
     await using var context = await dbContextFactory.CreateDbContextAsync();
-    var domain = await context.Domains.AsNoTracking().SingleOrDefaultAsync(d => d.Id == decodedState.DomainId);
+    var domain = await context.Domains.AsNoTracking().Include(d => d.DkimRecords).SingleOrDefaultAsync(d => d.Id == decodedState.DomainId);
     if (domain is null)
     {
         return DnsPushPopupResult.Close("invalid");
@@ -636,8 +639,8 @@ app.MapGet("/dns-push/{provider}/callback", async (
     // (rather than trusting whatever the UI's cached provider chip showed when the page loaded)
     // catches the case where DNS moved provider between page load and the user clicking push -
     // treated the same as ZoneNotFound rather than silently pushing to the wrong provider.
-    string domainZone = domain.Name;
-    if (decodedState.PushTarget != "dmarc-auth")
+    string? domainZone = null;
+    if (changeBuilder.WritesToDomainZone)
     {
         DnsProviderDetectionResult domainZoneDetection;
         try
@@ -660,142 +663,13 @@ app.MapGet("/dns-push/{provider}/callback", async (
         domainZone = domainZoneDetection.ZoneName;
     }
 
-    List<DnsRecordChange> changes;
-    if (decodedState.PushTarget == "mta-sts")
+    var plan = await changeBuilder.BuildAsync(new DnsPushRequest(domain, provider, domainZone, null), CancellationToken.None);
+    if (plan.Refusal is not null)
     {
-        var hostingHostname = mtaStsOptions.Value.HostingHostname;
-        if (string.IsNullOrEmpty(hostingHostname))
-        {
-            return DnsPushPopupResult.Close("error");
-        }
-
-        var existingCname = await mtaStsCnameLookup.LookupAsync(domain.Name, CancellationToken.None);
-        var cnameChange = existingCname is null
-            ? new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, null, domainZone)
-            : new DnsRecordChange(DnsRecordChangeKind.Merge, "CNAME", $"mta-sts.{domain.Name}", hostingHostname, existingCname, domainZone);
-        changes = [cnameChange];
-
-        // Azure Container Apps also needs a domain-ownership TXT record before it will bind the
-        // custom domain - see AzureMtaStsHostProvisioner and the design spec's "Fetching the
-        // verification ID" section. Caddy has no such requirement, and a null/empty ID (the ARM
-        // call failed, or this deployment isn't actually Azure-provisioned) just means the push
-        // proceeds with the CNAME alone rather than failing outright.
-        if (string.Equals(mtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
-        {
-            var verificationId = await mtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
-            if (!string.IsNullOrEmpty(verificationId))
-            {
-                var existingAsuid = await mtaStsCnameLookup.LookupAsuidTxtAsync(domain.Name, CancellationToken.None);
-                var asuidChange = existingAsuid is null
-                    ? new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, null, domainZone)
-                    : new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"asuid.mta-sts.{domain.Name}", verificationId, existingAsuid, domainZone);
-                changes.Add(asuidChange);
-            }
-        }
+        return DnsPushPopupResult.Close(plan.Refusal);
     }
-    else if (decodedState.PushTarget == "dmarc")
-    {
-        var existing = await dmarcTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
-        var mailbox = graphOptions.Value.MailboxAddress;
-        if (existing.DelegatedToCname is not null)
-        {
-            // The record is a CNAME delegated to a third party - DNS doesn't allow a CNAME to
-            // coexist with any other record type at the same name, so there's no in-place merge
-            // here, only delete-then-create. The confirm dialog makes this explicit before the
-            // user ever reaches this endpoint (DnsRecordPushDecision.NeedsConfirmation always
-            // returns true when DelegatedToCname is set).
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", existing.DelegatedToCname, domainZone, ExistingRecordType: "CNAME")];
-        }
-        else if (existing.DirectValue is null)
-        {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{domain.Name}", $"v=DMARC1; p=none; rua=mailto:{mailbox}", null, domainZone)];
-        }
-        else
-        {
-            var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, mailbox);
-            if (merged is null)
-            {
-                return DnsPushPopupResult.Close("unmergeable");
-            }
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_dmarc.{domain.Name}", merged, existing.DirectValue, domainZone)];
-        }
-    }
-    else if (decodedState.PushTarget == "dmarc-auth")
-    {
-        // RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being monitored
-        // (the normal MSP shape - a shared mailbox on the MSP's own domain, not each client's),
-        // that mailbox's domain must publish this record proving it accepts reports for the
-        // monitored domain. Unlike the "dmarc"/"tlsrpt" targets above, this record's zone is the
-        // MAILBOX's domain, not domain.Name - ZoneName below reflects that, which is what sends
-        // this push through whichever DNS provider hosts the deployment's own domain rather than
-        // the client's.
-        var mailbox = graphOptions.Value.MailboxAddress;
-        var mailboxDomain = mailbox[(mailbox.IndexOf('@') + 1)..];
-        var authorizationName = $"{domain.Name}._report._dmarc.{mailboxDomain}";
-        const string proposed = "v=DMARC1;";
 
-        DnsProviderDetectionResult mailboxZoneDetection;
-        try
-        {
-            mailboxZoneDetection = await dnsProviderDetector.DetectAsync(mailboxDomain, CancellationToken.None);
-        }
-        catch (HttpRequestException)
-        {
-            return DnsPushPopupResult.Close("error");
-        }
-        var mailboxProviderKey = mailboxZoneDetection.Provider.ToProviderKey();
-        if (!string.Equals(mailboxProviderKey, provider, StringComparison.OrdinalIgnoreCase))
-        {
-            return DnsPushPopupResult.Close("zone-not-found");
-        }
-        var mailboxZone = mailboxZoneDetection.ZoneName;
-
-        var existing = await dmarcAuthorizationTxtLookup.LookupAsync(authorizationName, CancellationToken.None);
-        if (existing.DelegatedToCname is not null)
-        {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", authorizationName, proposed, existing.DelegatedToCname, mailboxZone, ExistingRecordType: "CNAME")];
-        }
-        else if (existing.DirectValue is null)
-        {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", authorizationName, proposed, null, mailboxZone)];
-        }
-        else
-        {
-            // No structured tags to preserve here (unlike DMARC/TLSRPT's rua= merge) - an
-            // authorization record's only job is to exist with v=DMARC1, so an unexpected
-            // existing value is simply overwritten once the confirm dialog (shown for any
-            // existing-differs-from-proposed case, per DnsRecordPushDecision.NeedsConfirmation)
-            // has been accepted.
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", authorizationName, proposed, existing.DirectValue, mailboxZone)];
-        }
-    }
-    else
-    {
-        var mailbox = graphOptions.Value.TlsrptMailboxAddress;
-        if (string.IsNullOrWhiteSpace(mailbox))
-        {
-            return DnsPushPopupResult.Close("error");
-        }
-
-        var existing = await tlsrptTxtLookup.LookupAsync(domain.Name, CancellationToken.None);
-        if (existing.DelegatedToCname is not null)
-        {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", existing.DelegatedToCname, domainZone, ExistingRecordType: "CNAME")];
-        }
-        else if (existing.DirectValue is null)
-        {
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", $"_smtp._tls.{domain.Name}", $"v=TLSRPTv1; rua=mailto:{mailbox}", null, domainZone)];
-        }
-        else
-        {
-            var merged = TlsrptRuaMerge.TryMerge(existing.DirectValue, mailbox);
-            if (merged is null)
-            {
-                return DnsPushPopupResult.Close("unmergeable");
-            }
-            changes = [new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", $"_smtp._tls.{domain.Name}", merged, existing.DirectValue, domainZone)];
-        }
-    }
+    var changes = plan.Changes;
 
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
     var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, changes, CancellationToken.None);
