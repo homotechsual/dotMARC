@@ -9,8 +9,11 @@ internal sealed class FakeDkimDnsChecker : IDkimDnsChecker
     public bool ShouldThrow { get; set; }
     public List<string> CheckedDomains { get; } = [];
 
-    public Task<DkimCheckResult> CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken cancellationToken)
+    public IReadOnlyList<DkimExpectedRecord>? LastExpectedRecords { get; private set; }
+
+    public Task<DkimCheckResult> CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken cancellationToken, IReadOnlyList<DkimExpectedRecord>? expectedRecords = null)
     {
+        LastExpectedRecords = expectedRecords;
         CheckedDomains.Add(domainName);
         if (ShouldThrow)
         {

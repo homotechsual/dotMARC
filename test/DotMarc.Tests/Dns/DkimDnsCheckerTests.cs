@@ -71,4 +71,89 @@ public sealed class DkimDnsCheckerTests
         Assert.DoesNotContain("selector1", result.Detail);
         Assert.Equal(2, handler.Requests.Count);
     }
+
+    private static string Answers(params (int Type, string Data)[] answers) =>
+        System.Text.Json.JsonSerializer.Serialize(new { Status = 0, Answer = answers.Select(answer => new { type = answer.Type, data = answer.Data }) });
+
+    private static readonly DkimExpectedRecord ExpectedCname =
+        new("selector1", DkimRecordType.Cname, "selector1-contoso-io._domainkey.contoso.onmicrosoft.com");
+
+    [Fact]
+    public async Task CheckAsync_CnameExpected_IsMissing_WhenNothingIsThere()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """{"Status":3}""";
+
+        var result = await checker.CheckAsync("contoso.io", ["selector1"], CancellationToken.None, [ExpectedCname]);
+
+        Assert.Equal(DkimCheckStatus.Missing, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckAsync_CnameExpected_IsMisconfigured_WhenItPointsElsewhere()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((5, "old-target.example."), (16, "\"v=DKIM1; p=ABC\""));
+
+        var result = await checker.CheckAsync("contoso.io", ["selector1"], CancellationToken.None, [ExpectedCname]);
+
+        Assert.Equal(DkimCheckStatus.Misconfigured, result.Status);
+        Assert.Contains("selector1 points to old-target.example, expected selector1-contoso-io._domainkey.contoso.onmicrosoft.com", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_CnameExpected_IsMissing_WithAHint_WhenTheKeyIsNotPublishedYet()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((5, "Selector1-contoso-io._domainkey.contoso.onmicrosoft.com."));
+
+        var result = await checker.CheckAsync("contoso.io", ["selector1"], CancellationToken.None, [ExpectedCname]);
+
+        Assert.Equal(DkimCheckStatus.Missing, result.Status);
+        Assert.Contains("turn on DKIM signing", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_CnameExpected_IsOk_WhenItMatchesAndTheKeyIsThere()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((5, "selector1-contoso-io._domainkey.contoso.onmicrosoft.com."), (16, "\"v=DKIM1; k=rsa; p=MIIB\""));
+
+        Assert.Equal(DkimCheckStatus.Ok, (await checker.CheckAsync("contoso.io", ["selector1"], CancellationToken.None, [ExpectedCname])).Status);
+    }
+
+    [Fact]
+    public async Task CheckAsync_CnameExpected_IsMisconfigured_WhenAPlainTxtRecordIsThere()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((16, "\"v=DKIM1; p=ABC\""));
+
+        var result = await checker.CheckAsync("contoso.io", ["selector1"], CancellationToken.None, [ExpectedCname]);
+
+        Assert.Equal(DkimCheckStatus.Misconfigured, result.Status);
+        Assert.Contains("a CNAME", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_TxtExpected_IsMisconfigured_WhenTheKeyDiffers()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((16, "\"v=DKIM1; k=rsa; p=OLDKEY\""));
+
+        var result = await checker.CheckAsync("contoso.io", ["google"], CancellationToken.None, [new DkimExpectedRecord("google", DkimRecordType.Txt, "v=DKIM1; k=rsa; p=NEWKEY")]);
+
+        Assert.Equal(DkimCheckStatus.Misconfigured, result.Status);
+        Assert.Contains("google", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_TxtExpected_MatchesDespiteWhitespace()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((16, "\"v=DKIM1; k=rsa; \" \"p=MIIB IjAN\""));
+
+        var result = await checker.CheckAsync("contoso.io", ["google"], CancellationToken.None, [new DkimExpectedRecord("google", DkimRecordType.Txt, "v=DKIM1; k=rsa; p=MIIBIjAN")]);
+
+        Assert.Equal(DkimCheckStatus.Ok, result.Status);
+    }
 }

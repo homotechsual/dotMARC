@@ -1,3 +1,4 @@
+using DotMarc.Dns;
 using DotMarc.Data;
 using DotMarc.Ingestion;
 using DotMarc.Tests.Internal;
@@ -141,5 +142,20 @@ public sealed class DkimCheckCycleTests : IAsyncLifetime
         var domain = context.Domains.Single();
         Assert.Equal(DkimCheckStatus.NotConfigured, domain.DkimCheckStatus);
         Assert.NotNull(domain.DkimCheckedUtc);
+    }
+
+    [Fact]
+    public async Task RunDkimCheckCycleAsync_PassesTheStoredRecordsToTheCheck()
+    {
+        using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, DkimSelectors = ["google"] };
+        domain.DkimRecords.Add(new DomainDkimRecord { Selector = "google", RecordType = DkimRecordType.Txt, Value = "v=DKIM1; p=ABC" });
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+        var checker = new FakeDkimDnsChecker();
+
+        await CreateService(context).RunDkimCheckCycleAsync(context, checker, CancellationToken.None);
+
+        Assert.Equal([new DkimExpectedRecord("google", DkimRecordType.Txt, "v=DKIM1; p=ABC")], checker.LastExpectedRecords);
     }
 }

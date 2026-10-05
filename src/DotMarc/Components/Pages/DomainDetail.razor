@@ -1221,7 +1221,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
+            var domain = await db.Domains.Include(d => d.DkimRecords).SingleAsync(d => d.Id == _domain!.Id);
             try
             {
                 await PollingService.RunSingleDkimCheckAsync(domain, DkimDnsChecker, CancellationToken.None);

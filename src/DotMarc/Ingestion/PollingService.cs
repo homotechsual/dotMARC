@@ -511,7 +511,8 @@ public sealed class PollingService : BackgroundService
             return;
         }
 
-        var result = await dkimChecker.CheckAsync(domain.Name, domain.DkimSelectors, cancellationToken).ConfigureAwait(false);
+        var expectedRecords = domain.DkimRecords.Select(record => new DkimExpectedRecord(record.Selector, record.RecordType, record.Value)).ToList();
+        var result = await dkimChecker.CheckAsync(domain.Name, domain.DkimSelectors, cancellationToken, expectedRecords).ConfigureAwait(false);
         domain.DkimCheckStatus = result.Status;
         domain.DkimCheckedUtc = DateTimeOffset.UtcNow;
         domain.DkimCheckDetail = result.Detail;
@@ -957,6 +958,7 @@ public sealed class PollingService : BackgroundService
             var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
             var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
+                .Include(d => d.DkimRecords)
                 .Where(d => d.DkimCheckedUtc == null || d.DkimCheckedUtc < cutoff
                     || d.AlertStates.Any(state => state.Item == DnsHealthItems.Dkim && state.RecheckDueUtc <= nowUtc && d.DkimCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
