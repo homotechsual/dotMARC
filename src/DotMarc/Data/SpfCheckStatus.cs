@@ -14,5 +14,6 @@ public enum SpfCheckStatus
     NullSpf,
     MissingRecord,
     MultipleRecords,
-    Misconfigured
+    Misconfigured,
+    TooManyLookups
 }

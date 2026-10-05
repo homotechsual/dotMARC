@@ -12,7 +12,7 @@ public static class SpfStatusPresentation
     {
         SpfCheckStatus.Ok or SpfCheckStatus.NullSpf => Color.Success,
         SpfCheckStatus.MultipleRecords => Color.Warning,
-        SpfCheckStatus.MissingRecord or SpfCheckStatus.Misconfigured => Color.Error,
+        SpfCheckStatus.MissingRecord or SpfCheckStatus.Misconfigured or SpfCheckStatus.TooManyLookups => Color.Error,
         _ => Color.Default
     };
 
@@ -23,6 +23,7 @@ public static class SpfStatusPresentation
         SpfCheckStatus.MissingRecord => "No SPF record",
         SpfCheckStatus.MultipleRecords => "Multiple SPF records",
         SpfCheckStatus.Misconfigured => "Misconfigured",
+        SpfCheckStatus.TooManyLookups => "Too many DNS lookups",
         _ => "Not checked yet"
     };
 }

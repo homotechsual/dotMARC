@@ -12,8 +12,17 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
+    private readonly SpfLookupCounter _lookupCounter;
 
-    public SpfDnsChecker(HttpClient http) => _http = http;
+    public SpfDnsChecker(HttpClient http) : this(http, new TxtRecordLookup(http))
+    {
+    }
+
+    public SpfDnsChecker(HttpClient http, ITxtRecordLookup includeLookup)
+    {
+        _http = http;
+        _lookupCounter = new SpfLookupCounter(includeLookup);
+    }
 
     public async Task<SpfCheckResult> CheckAsync(string domainName, CancellationToken cancellationToken)
     {
@@ -45,6 +54,30 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
         if (mechanisms.Length == 1 && string.Equals(mechanisms[0], "-all", StringComparison.OrdinalIgnoreCase))
         {
             return new SpfCheckResult(SpfCheckStatus.NullSpf, $"{domainName} publishes a null SPF record (v=spf1 -all) - no senders are authorized to send mail as this domain.");
+        }
+
+        SpfLookupCount count;
+        try
+        {
+            count = await _lookupCounter.CountAsync(domainName, SpfRecord.Parse(spfRecords[0]), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException && !cancellationToken.IsCancellationRequested)
+        {
+            // A lookup that fails is a resolver problem, not the domain's: leave the check as it would have been.
+            return new SpfCheckResult(SpfCheckStatus.Ok, null);
+        }
+
+        if (count.IsOverLimit)
+        {
+            var costliest = count.TermCosts.OrderByDescending(cost => cost.Lookups).Take(3).Select(cost => $"{cost.Term} ({cost.Lookups})");
+            return new SpfCheckResult(SpfCheckStatus.TooManyLookups,
+                $"{domainName}'s SPF record needs {count.Total}{(count.Total > 20 ? " or more" : "")} DNS lookups. Receivers stop at {SpfLookupCount.Limit}, so SPF fails. Costliest: {string.Join(", ", costliest)}.");
+        }
+
+        if (count.MissingTargets.Count > 0)
+        {
+            return new SpfCheckResult(SpfCheckStatus.Misconfigured,
+                $"{domainName}'s SPF record points at {string.Join(", ", count.MissingTargets)}, which {(count.MissingTargets.Count == 1 ? "has" : "have")} no SPF record.");
         }
 
         return new SpfCheckResult(SpfCheckStatus.Ok, null);

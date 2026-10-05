@@ -81,6 +81,7 @@ public sealed class DnsHealthAlertEvaluatorTests
     [InlineData(DnsHealthItems.Spf, "MultipleRecords", DnsCheckHealth.Failing)]
     [InlineData(DnsHealthItems.Spf, "Misconfigured", DnsCheckHealth.Failing)]
     [InlineData(DnsHealthItems.Spf, "NotChecked", DnsCheckHealth.Ignored)]
+    [InlineData(DnsHealthItems.Spf, "TooManyLookups", DnsCheckHealth.Failing)]
     [InlineData(DnsHealthItems.Mx, "Ok", DnsCheckHealth.Passing)]
     [InlineData(DnsHealthItems.Mx, "NullMx", DnsCheckHealth.Passing)]
     [InlineData(DnsHealthItems.Mx, "MissingRecord", DnsCheckHealth.Failing)]
