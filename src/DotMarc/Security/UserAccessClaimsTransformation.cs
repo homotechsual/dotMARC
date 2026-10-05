@@ -67,14 +67,7 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
 
         var identity = (ClaimsIdentity)principal.Identity;
         identity.AddClaim(new Claim(ResolvedClaimType, "true"));
-        foreach (var permission in access.Role.Permissions)
-        {
-            identity.AddClaim(new Claim(PermissionClaimType, permission.ToString()));
-        }
-        foreach (var group in access.ScopedGroups)
-        {
-            identity.AddClaim(new Claim(ScopedGroupClaimType, group.Id.ToString()));
-        }
+        identity.AddClaims(AccessClaims.For(access.Role, access.ScopedGroups.Select(group => group.Id)));
 
         return principal;
     }

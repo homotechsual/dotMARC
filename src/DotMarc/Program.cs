@@ -3,6 +3,7 @@ using Azure.Security.KeyVault.Secrets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using DotMarc.Api;
 using DotMarc.Data;
 using DotMarc.Dns;
 using DotMarc.DnsPush;
@@ -345,6 +346,7 @@ else
         });
 }
 
+builder.Services.AddDotMarcApi(builder.Configuration);
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
 builder.Services.AddScoped<DotMarc.Audit.AuditActorAccessor>();
 builder.Services.AddSingleton<DotMarc.Audit.AuditRecorder>();
@@ -371,6 +373,8 @@ builder.Services.AddAuthorization(options =>
         DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
         nameof(Permission.GroupsAdd), nameof(Permission.GroupsRename), nameof(Permission.GroupsDelete),
         nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
+
+    ApiPolicies.Add(options);
 });
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
@@ -424,8 +428,13 @@ if (!app.Environment.IsDevelopment())
 // page's HTML instead of the asset it asked for ("Unexpected token '<'" in the console).
 app.MapStaticAssets().AllowAnonymous();
 
+// Empty error responses from the API (a malformed JSON body, for one) become problem+json; the UI keeps its own pages.
+app.UseWhen(httpContext => httpContext.Request.Path.StartsWithSegments("/api"), api => api.UseStatusCodePages());
+
 app.UseAuthentication();
 app.UseAuthorization();
+// After authorization, so the API's limiter sees the key, not the browser's cookie user.
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapPost("/signout", async (HttpContext httpContext) =>
@@ -795,6 +804,8 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
     webhookActivity.Record(HaloWebhookDelivery.ClosedStatus, payload.TicketId, payload.StatusId, resolvedAnAlert: alert is not null);
     return Results.Ok();
 }).AllowAnonymous();
+
+app.MapDotMarcApi();
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();
