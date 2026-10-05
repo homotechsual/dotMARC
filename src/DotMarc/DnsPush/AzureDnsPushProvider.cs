@@ -306,7 +306,8 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         {
             var txtRecords = zone.GetDnsTxtRecords();
             var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
-            if ((await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
+            var existed = (await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value;
+            if (existed)
             {
                 data = (await txtRecords.GetAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value.Data;
             }
@@ -327,8 +328,15 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
                 data.DnsTxtRecords.Add(ToTxtRecordInfo(change.DesiredValue));
             }
 
-            await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+            // Only write over the version just read (or, for a new set, only if there still isn't one): a value someone
+            // else adds in the meantime then fails this push with a 412 instead of being silently lost.
+            await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data,
+                ifMatch: existed ? data.ETag : null, ifNoneMatch: existed ? null : "*", cancellationToken: cancellationToken).ConfigureAwait(false);
             return new DnsPushResult(DnsPushOutcome.Pushed, null);
+        }
+        catch (RequestFailedException exception) when (exception.Status == 412)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed while this push was running, so nothing was changed. Try again.");
         }
         catch (Exception exception) when (exception is RequestFailedException or TaskCanceledException)
         {

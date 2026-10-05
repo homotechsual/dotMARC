@@ -12,6 +12,20 @@ public sealed class SpfChangeBuilder(ITxtRecordLookup txtLookup, SpfLookupCounte
 
     public async Task<DnsChangePlan> BuildAsync(DnsPushRequest request, CancellationToken cancellationToken)
     {
+        try
+        {
+            return await BuildFromDnsAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException
+                                          && !cancellationToken.IsCancellationRequested)
+        {
+            // A DNS lookup failed: the popup says the push failed rather than showing an error page.
+            return DnsChangePlan.Refuse("error");
+        }
+    }
+
+    private async Task<DnsChangePlan> BuildFromDnsAsync(DnsPushRequest request, CancellationToken cancellationToken)
+    {
         var payload = SpfPushPayload.TryParse(request.Payload);
         if (payload is null || !SpfRecord.IsSpf(payload.Proposed))
         {

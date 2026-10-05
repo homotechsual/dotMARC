@@ -126,8 +126,9 @@
         {
             return await _counter.CountAsync(DomainName, record, CancellationToken.None);
         }
-        catch (HttpRequestException)
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
+            // A timeout or a malformed DNS answer is "couldn't count right now", not a reason to drop the page.
             return null;
         }
     }

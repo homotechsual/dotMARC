@@ -63,4 +63,12 @@ public sealed class SpfChangeBuilderTests
     {
         Assert.Equal("invalid", (await BuildAsync("not spf", [])).Refusal);
     }
+
+    [Fact]
+    public async Task SpfChangeBuilder_ReportsALookupFailureAsAnError()
+    {
+        _lookup.ThrowOnQuery = new HttpRequestException("DNS is down");
+
+        Assert.Equal("error", (await BuildAsync("v=spf1 ~all", [])).Refusal);
+    }
 }

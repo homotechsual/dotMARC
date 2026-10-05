@@ -73,4 +73,12 @@ public sealed class DkimChangeBuilderTests
 
         Assert.Equal("nothing-to-push", (await BuildAsync(Txt("google", "v=DKIM1; p=KEY"))).Refusal);
     }
+
+    [Fact]
+    public async Task ReportsALookupFailureAsAnError()
+    {
+        _lookup.ThrowOnQuery = new TaskCanceledException("Timed out");
+
+        Assert.Equal("error", (await BuildAsync(Txt("google", "v=DKIM1; p=KEY"))).Refusal);
+    }
 }
