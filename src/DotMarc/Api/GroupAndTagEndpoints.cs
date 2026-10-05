@@ -11,12 +11,14 @@ public static class GroupAndTagEndpoints
     {
         api.MapGet("/groups", ListGroupsAsync)
             .RequirePermission(Permission.GroupsView)
+            .WithTags(ApiTags.GroupsAndTags)
             .WithName("ListGroups")
             .WithSummary("List groups")
             .WithDescription("Every group this key can see, with how many domains are in each. A key limited to certain groups sees only those.");
 
         api.MapGet("/tags", ListTagsAsync)
             .RequirePermission(Permission.TagsView)
+            .WithTags(ApiTags.GroupsAndTags)
             .WithName("ListTags")
             .WithSummary("List tags")
             .WithDescription("Every tag, with its colour and how many domains this key can see carry it.");

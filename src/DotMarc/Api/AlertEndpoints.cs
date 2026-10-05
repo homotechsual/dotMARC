@@ -15,12 +15,14 @@ public static class AlertEndpoints
     {
         api.MapGet("/alerts", ListAlertsAsync)
             .RequirePermission(Permission.AlertsView)
+            .WithTags(ApiTags.Alerts)
             .WithName("ListAlerts")
             .WithSummary("List alerts")
             .WithDescription($"Alerts newest first, open ones by default (status=all includes resolved), {DefaultPageSize} a page by default and at most {DomainReadEndpoints.MaximumPageSize}. A key limited to certain groups sees only alerts about its domains.");
 
         api.MapPost("/alerts/{id:int}/acknowledge", AcknowledgeAsync)
             .RequirePermission(Permission.AlertsManage)
+            .WithTags(ApiTags.Alerts)
             .WithName("AcknowledgeAlert")
             .WithSummary("Acknowledge an alert")
             .WithDescription("Closes a DMARC policy weakened or nameservers changed alert and accepts the current value as normal, closing its PSA ticket too. Other alerts close themselves once fixed, so acknowledging them is a conflict. ticketClosed is false when the ticket couldn't be closed and needs closing by hand.");

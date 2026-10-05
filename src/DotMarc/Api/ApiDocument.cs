@@ -34,6 +34,7 @@ public static class ApiDocument
                     Description = "Read domains, DNS health, DMARC report summaries, groups, tags and alerts, and add, import and organise domains. Authenticate with an API key from dotMARC's Access page: `Authorization: Bearer dmk_...`. Each operation needs the permission named in its description, and a key limited to certain groups only sees their domains. Each key may make 120 requests a minute.",
                 };
                 document.Servers = [];
+                document.Tags = new HashSet<OpenApiTag>(ApiTags.All.Select(tag => new OpenApiTag { Name = tag.Name, Description = tag.Description }));
                 document.Components ??= new OpenApiComponents();
                 document.Components.SecuritySchemes = new Dictionary<string, IOpenApiSecurityScheme>
                 {

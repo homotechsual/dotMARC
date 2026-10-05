@@ -91,6 +91,24 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EveryOperation_IsInOneReadableSection_AndEverySectionIsDescribed()
+    {
+        string[] sections = ["Domains", "Imports", "Groups and tags", "Alerts"];
+        using var document = JsonDocument.Parse(await FetchDocumentAsync());
+        var operationTags = document.RootElement.GetProperty("paths").EnumerateObject()
+            .SelectMany(path => path.Value.EnumerateObject())
+            .Select(operation => operation.Value.GetProperty("tags").EnumerateArray().Select(tag => tag.GetString()).ToList())
+            .ToList();
+        var describedTags = document.RootElement.GetProperty("tags").EnumerateArray()
+            .Where(tag => tag.TryGetProperty("description", out _))
+            .Select(tag => tag.GetProperty("name").GetString())
+            .ToList();
+
+        Assert.All(operationTags, tags => Assert.Contains(Assert.Single(tags), sections));
+        Assert.Equal(sections.Order(), describedTags.Order());
+    }
+
+    [Fact]
     public async Task TheDocument_IsValidOpenApi3_WithABearerScheme()
     {
         var json = await FetchDocumentAsync();

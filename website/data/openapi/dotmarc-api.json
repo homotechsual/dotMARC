@@ -940,7 +940,7 @@
         },
         "summary": "List alerts",
         "tags": [
-          "AlertEndpoints"
+          "Alerts"
         ],
         "x-dotmarc-permission": "AlertsView"
       }
@@ -975,7 +975,7 @@
         },
         "summary": "Acknowledge an alert",
         "tags": [
-          "AlertEndpoints"
+          "Alerts"
         ],
         "x-dotmarc-permission": "AlertsManage"
       }
@@ -1049,7 +1049,7 @@
         },
         "summary": "List domains",
         "tags": [
-          "DomainReadEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsView"
       },
@@ -1090,7 +1090,7 @@
         },
         "summary": "Add a domain",
         "tags": [
-          "DomainWriteEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsAdd"
       }
@@ -1142,7 +1142,7 @@
         },
         "summary": "Import domains in bulk",
         "tags": [
-          "ImportEndpoints"
+          "Imports"
         ],
         "x-dotmarc-permission": "DomainsAdd"
       }
@@ -1177,7 +1177,7 @@
         },
         "summary": "Get a domain and its health",
         "tags": [
-          "DomainReadEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsView"
       }
@@ -1225,7 +1225,7 @@
         },
         "summary": "Set a domain's groups",
         "tags": [
-          "DomainWriteEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsEdit"
       }
@@ -1273,7 +1273,7 @@
         },
         "summary": "Turn monitoring on or off",
         "tags": [
-          "DomainWriteEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsEdit"
       }
@@ -1326,7 +1326,7 @@
         },
         "summary": "Summarise a domain's DMARC reports",
         "tags": [
-          "DomainReadEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsView"
       }
@@ -1374,7 +1374,7 @@
         },
         "summary": "Set a domain's tags",
         "tags": [
-          "DomainWriteEndpoints"
+          "Domains"
         ],
         "x-dotmarc-permission": "DomainsEdit"
       }
@@ -1400,7 +1400,7 @@
         },
         "summary": "List groups",
         "tags": [
-          "GroupAndTagEndpoints"
+          "Groups and tags"
         ],
         "x-dotmarc-permission": "GroupsView"
       }
@@ -1426,7 +1426,7 @@
         },
         "summary": "List tags",
         "tags": [
-          "GroupAndTagEndpoints"
+          "Groups and tags"
         ],
         "x-dotmarc-permission": "TagsView"
       }
@@ -1439,19 +1439,20 @@
   ],
   "tags": [
     {
-      "name": "GroupAndTagEndpoints"
+      "description": "List domains with their DNS health and DMARC report summaries, add a domain, and set its groups, tags and monitoring.",
+      "name": "Domains"
     },
     {
-      "name": "DomainReadEndpoints"
+      "description": "Add and update many domains at once, as the Import domains page does.",
+      "name": "Imports"
     },
     {
-      "name": "DomainWriteEndpoints"
+      "description": "The groups and tags domains are organised by.",
+      "name": "Groups and tags"
     },
     {
-      "name": "ImportEndpoints"
-    },
-    {
-      "name": "AlertEndpoints"
+      "description": "List alerts and acknowledge DMARC policy and nameserver alerts.",
+      "name": "Alerts"
     }
   ]
 }

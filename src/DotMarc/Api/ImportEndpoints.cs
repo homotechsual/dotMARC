@@ -19,6 +19,7 @@ public static class ImportEndpoints
     {
         api.MapPost("/domains/import", ImportAsync)
             .RequirePermission(Permission.DomainsAdd)
+            .WithTags(ApiTags.Imports)
             .WithName("ImportDomains")
             .WithSummary("Import domains in bulk")
             .WithDescription($"Adds up to {MaximumRows} domains, with groups, tags and monitoring, exactly as the Import domains page does. existingDomains: skip (default), add (add groups and tags; a name written as -Name removes one) or match (make groups and tags match; send groups and tags on every domain or on none, with an empty list to clear). unknownNames: skip (default) or create (needs GroupsAdd or TagsAdd). Changing existing domains needs DomainsEdit. dryRun=true returns the plan without changing anything.");

@@ -16,18 +16,21 @@ public static class DomainReadEndpoints
     {
         api.MapGet("/domains", ListDomainsAsync)
             .RequirePermission(Permission.DomainsView)
+            .WithTags(ApiTags.Domains)
             .WithName("ListDomains")
             .WithSummary("List domains")
             .WithDescription($"Domains this key can see, in dashboard order, {DefaultPageSize} a page by default and at most {MaximumPageSize}. Filter by group id, tag id or monitoring. The pass rate covers the last 30 days and is null with no reports.");
 
         api.MapGet("/domains/{id:int}", GetDomainAsync)
             .RequirePermission(Permission.DomainsView)
+            .WithTags(ApiTags.Domains)
             .WithName("GetDomain")
             .WithSummary("Get a domain and its health")
             .WithDescription("The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran.");
 
         api.MapGet("/domains/{id:int}/reports/summary", GetReportSummaryAsync)
             .RequirePermission(Permission.DomainsView)
+            .WithTags(ApiTags.Domains)
             .WithName("GetReportSummary")
             .WithSummary("Summarise a domain's DMARC reports")
             .WithDescription("Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30).");
