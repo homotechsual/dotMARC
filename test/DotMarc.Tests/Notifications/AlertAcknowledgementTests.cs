@@ -295,4 +295,60 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         public Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default) => Task.FromResult(9);
         public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default) => Task.FromResult("unused");
     }
+
+    [Fact]
+    public async Task AnAcknowledgementDuringAMonitorCycle_IsNotUndoneByThatCycle()
+    {
+        // The policy weakening is confirmed and the cycle is about to raise it; someone acknowledges it in the moment
+        // between the cycle saving its state and raising the alert. The cycle must not raise it again.
+        await SeedPolicyAlertAsync();
+        await using (var context = CreateContext())
+        {
+            var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
+            settings.TeamsWebhookUrl = "https://example.test/webhook";
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
+            context.AlertEvents.RemoveRange(context.AlertEvents);
+            (await context.Domains.SingleAsync()).DmarcCheckedUtc = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        var factory = new AcknowledgeAfterFirstSaveFactory(_connectionString, async () =>
+        {
+            await using var other = CreateContext();
+            var state = await other.DomainAlertStates.SingleAsync(candidate => candidate.Item == DnsHealthItems.DmarcPolicy);
+            state.Baseline = "p=quarantine; sp=quarantine; pct=100";
+            state.PendingSinceUtc = null;
+            state.RecheckDueUtc = null;
+            await other.SaveChangesAsync();
+        });
+        var notifier = new FakeAlertWebhookClient();
+
+        await new AlertingService(factory, notifier, new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance).CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.AlertEvents);
+        Assert.Equal(0, notifier.CallCount);
+    }
+
+    /// <summary>Runs <paramref name="afterFirstSave"/> once, right after the first save any of its contexts makes: in a
+    /// monitor cycle on a healthy domain, that's the DNS health state save.</summary>
+    private sealed class AcknowledgeAfterFirstSaveFactory(string connectionString, Func<Task> afterFirstSave) : IDbContextFactory<DotMarcDbContext>
+    {
+        private int _saves;
+
+        public DotMarcDbContext CreateDbContext()
+        {
+            var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(connectionString).Options);
+            context.SavedChanges += (_, _) =>
+            {
+                if (Interlocked.Increment(ref _saves) == 1)
+                {
+                    afterFirstSave().GetAwaiter().GetResult();
+                }
+            };
+            return context;
+        }
+
+        public Task<DotMarcDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
 }

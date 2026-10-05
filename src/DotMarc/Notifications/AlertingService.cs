@@ -139,6 +139,12 @@ public sealed class AlertingService : IAlertingService
             {
                 if (action.Kind == DnsHealthActionKind.Raise)
                 {
+                    if (AlertAcknowledgement.IsAcknowledgeable(action.AlertType)
+                        && !await IsStillPendingAsync(db, domain.Id, action.AlertType, cancellationToken).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
                     await EnsureAlertAsync(db, settings, domain.Name, action.AlertType, action.Severity, action.Title, action.Message, cancellationToken).ConfigureAwait(false);
                 }
                 else if (openAlerts.Contains((domain.Name, action.AlertType)))
@@ -238,6 +244,17 @@ public sealed class AlertingService : IAlertingService
 
         var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.{reasonContext}";
         await EnsureAlertAsync(db, settings, domainName, AlertTypes.UnexpectedActivityOnNullRoutedDomain, "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Whether a policy or nameserver change is still waiting, read fresh from the database. Someone may have
+    /// acknowledged it (or closed its ticket) since this cycle read the state; raising it anyway would send a new
+    /// notification and ticket seconds after they dismissed it.</summary>
+    private static Task<bool> IsStillPendingAsync(DotMarcDbContext db, int domainId, string alertType, CancellationToken cancellationToken)
+    {
+        var item = alertType == AlertTypes.DmarcPolicyWeakened ? DnsHealthItems.DmarcPolicy : DnsHealthItems.Nameservers;
+        return db.DomainAlertStates
+            .AsNoTracking()
+            .AnyAsync(state => state.DomainId == domainId && state.Item == item && state.PendingSinceUtc != null, cancellationToken);
     }
 
     /// <summary>Resolves every open copy of a DNS health alert. One left open past the cooldown is raised again as a new
