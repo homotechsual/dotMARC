@@ -1,0 +1,72 @@
+---
+description: Use dotMARC from scripts and other tools with an API key.
+---
+
+# API
+
+dotMARC has a JSON API for the things MSPs most often script: listing domains and their DNS health, pulling DMARC report
+summaries for client reporting, adding or importing domains, organising them into groups and tags, and acknowledging
+alerts. Everything else stays in the web app for now.
+
+Every endpoint, with its request and response shapes and examples, is described in the OpenAPI document your dotMARC
+serves at `/api/v1/openapi.json`. Most API tools (Postman, Insomnia, Bruno and the like) can import it directly.
+
+## Create a key
+
+On the **Access** page's **API keys** tab, give the key a name, choose a role and how long it lasts (30, 90, 180 or 365
+days), and select **Create key**. Copy the key straight away: dotMARC keeps only a hash of it, so it can't be shown again.
+
+* A key can do what its role allows. For a Viewer you can also limit the key to certain groups, so it only sees those
+  clients' domains.
+* Roles that can manage access aren't offered. Keys can't create keys or change who has access.
+* A key can't be edited. To change what it can do, create a new key and revoke the old one.
+* Two weeks before a key expires, dotMARC raises an **API key expiring** alert through your [alert](./alerts.mdx)
+  channels. It doesn't open a ticket unless you turn that on.
+* Changes made with a key appear in the [audit log](./audit-log.mdx) as the key, with the name of the person who created
+  it.
+
+## Authenticate
+
+Send the key as a bearer token:
+
+```bash
+curl https://dotmarc.example.com/api/v1/domains \
+  -H "Authorization: Bearer dmk_..."
+```
+
+A missing, expired or revoked key gets `401`. A key whose role lacks the permission an endpoint needs gets `403`. The
+API ignores browser sign-ins: it only accepts keys.
+
+## Keys limited to groups
+
+A key limited to groups sees only domains in at least one of its groups, and only those groups. A domain or alert outside
+them is reported as not found (`404`). It can't add or import domains, since a new domain isn't in any group yet. When it
+sets a domain's groups, groups outside its own are kept.
+
+## Limits
+
+Each key can make 120 requests a minute. Over that, dotMARC answers `429` with a `Retry-After` header giving the seconds
+to wait. Lists return 50 items a page by default and at most 200; use `page` and `pageSize`.
+
+Health comes from dotMARC's own scheduled checks, so reading it is quick and never queries DNS; each check says when it
+last ran.
+
+## Errors
+
+Errors use the standard problem details format (`application/problem+json`), with a `title`, a `detail` saying what to
+do, and for invalid input an `errors` object naming each field.
+
+| Status | Meaning |
+| --- | --- |
+| 400 | The request is invalid. `errors` says which field. |
+| 401 | No key, or the key is unknown, expired or revoked. |
+| 403 | The key's role doesn't allow this, or a group-limited key tried something it can't. |
+| 404 | No such item, or the key can't see it. |
+| 409 | The domain already exists, or the alert can't be acknowledged. |
+| 429 | Too many requests this minute. Wait for `Retry-After`. |
+
+## Importing domains
+
+`POST /api/v1/domains/import` takes up to 500 domains and behaves like the [Import domains](./import-domains.mdx) page.
+`existingDomains` is `skip` (default), `add` or `match`, and `unknownNames` is `skip` (default) or `create`. Add
+`?dryRun=true` to see what would happen without changing anything.
