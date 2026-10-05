@@ -347,6 +347,7 @@ else
 }
 
 builder.Services.AddDotMarcApi(builder.Configuration);
+builder.Services.AddDotMarcOpenApi();
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, DotMarc.Security.UserAccessClaimsTransformation>();
 builder.Services.AddScoped<DotMarc.Audit.AuditActorAccessor>();
 builder.Services.AddSingleton<DotMarc.Audit.AuditRecorder>();
@@ -806,6 +807,7 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
 }).AllowAnonymous();
 
 app.MapDotMarcApi();
+app.MapDotMarcOpenApi();
 
 app.MapRazorComponents<DotMarc.Components.App>()
     .AddInteractiveServerRenderMode();

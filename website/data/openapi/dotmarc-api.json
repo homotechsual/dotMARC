@@ -1,0 +1,1457 @@
+{
+  "components": {
+    "schemas": {
+      "ApiAcknowledgement": {
+        "example": {
+          "ticketClosed": true
+        },
+        "properties": {
+          "ticketClosed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ticketClosed"
+        ],
+        "type": "object"
+      },
+      "ApiAddDomainRequest": {
+        "example": {
+          "name": "contoso.com"
+        },
+        "properties": {
+          "name": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ApiAlert": {
+        "example": {
+          "acknowledgeable": false,
+          "domain": {
+            "id": 42,
+            "name": "contoso.com"
+          },
+          "id": 901,
+          "message": "contoso.com's SPF record has more than 10 DNS lookups.",
+          "raisedUtc": "2026-10-01T09:30:00+00:00",
+          "resolved": false,
+          "resolvedUtc": null,
+          "severity": "Warning",
+          "subject": "contoso.com",
+          "title": "SPF record broken",
+          "type": "SpfRecordBroken",
+          "typeName": "SPF record broken"
+        },
+        "properties": {
+          "acknowledgeable": {
+            "type": "boolean"
+          },
+          "domain": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ApiNamedRef"
+              }
+            ],
+            "type": "object"
+          },
+          "id": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "message": {
+            "type": "string"
+          },
+          "raisedUtc": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "resolved": {
+            "type": "boolean"
+          },
+          "resolvedUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "typeName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "typeName",
+          "subject",
+          "domain",
+          "severity",
+          "title",
+          "message",
+          "raisedUtc",
+          "resolved",
+          "resolvedUtc",
+          "acknowledgeable"
+        ],
+        "type": "object"
+      },
+      "ApiCheck": {
+        "example": {
+          "checkedUtc": "2026-10-01T09:30:00+00:00",
+          "detail": null,
+          "status": "Ok"
+        },
+        "properties": {
+          "checkedUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "detail": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "checkedUtc",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "ApiDmarcPolicy": {
+        "properties": {
+          "percent": {
+            "format": "int32",
+            "nullable": true,
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "policy": {
+            "nullable": true,
+            "type": "string"
+          },
+          "subdomainPolicy": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy",
+          "subdomainPolicy",
+          "percent"
+        ],
+        "type": "object"
+      },
+      "ApiDnsProvider": {
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "zone": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "zone"
+        ],
+        "type": "object"
+      },
+      "ApiDomain": {
+        "example": {
+          "groups": [
+            {
+              "id": 3,
+              "name": "Contoso"
+            }
+          ],
+          "id": 42,
+          "lastReportReceivedUtc": "2026-10-01T09:30:00+00:00",
+          "monitored": true,
+          "name": "contoso.com",
+          "passRate": 0.987,
+          "tags": [
+            {
+              "id": 7,
+              "name": "Microsoft 365"
+            }
+          ]
+        },
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ApiNamedRef"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "lastReportReceivedUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "monitored": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "passRate": {
+            "format": "double",
+            "nullable": true,
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/ApiNamedRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "monitored",
+          "groups",
+          "tags",
+          "lastReportReceivedUtc",
+          "passRate"
+        ],
+        "type": "object"
+      },
+      "ApiDomainDetail": {
+        "properties": {
+          "dmarcPolicy": {
+            "$ref": "#/components/schemas/ApiDmarcPolicy"
+          },
+          "dnsProvider": {
+            "$ref": "#/components/schemas/ApiDnsProvider"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ApiNamedRef"
+            },
+            "type": "array"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ApiDomainHealth"
+          },
+          "id": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "lastReportReceivedUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "monitored": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "passRate": {
+            "format": "double",
+            "nullable": true,
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/ApiNamedRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "monitored",
+          "groups",
+          "tags",
+          "lastReportReceivedUtc",
+          "passRate",
+          "health",
+          "dmarcPolicy",
+          "dnsProvider"
+        ],
+        "type": "object"
+      },
+      "ApiDomainHealth": {
+        "properties": {
+          "dkim": {
+            "$ref": "#/components/schemas/ApiCheck"
+          },
+          "dmarc": {
+            "$ref": "#/components/schemas/ApiCheck"
+          },
+          "dmarcAuthorization": {
+            "$ref": "#/components/schemas/ApiCheck"
+          },
+          "mtaSts": {
+            "$ref": "#/components/schemas/ApiCheck"
+          },
+          "mx": {
+            "$ref": "#/components/schemas/ApiCheck"
+          },
+          "spf": {
+            "$ref": "#/components/schemas/ApiCheck"
+          },
+          "tlsrpt": {
+            "$ref": "#/components/schemas/ApiCheck"
+          }
+        },
+        "required": [
+          "dmarc",
+          "spf",
+          "dkim",
+          "mx",
+          "tlsrpt",
+          "mtaSts",
+          "dmarcAuthorization"
+        ],
+        "type": "object"
+      },
+      "ApiGroup": {
+        "example": {
+          "domainCount": 12,
+          "id": 3,
+          "name": "Contoso"
+        },
+        "properties": {
+          "domainCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "id": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "domainCount"
+        ],
+        "type": "object"
+      },
+      "ApiImportDomain": {
+        "properties": {
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "monitored": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "name": {
+            "nullable": true,
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "groups",
+          "tags",
+          "monitored"
+        ],
+        "type": "object"
+      },
+      "ApiImportRequest": {
+        "example": {
+          "domains": [
+            {
+              "groups": [
+                "Contoso"
+              ],
+              "monitored": true,
+              "name": "contoso.com",
+              "tags": [
+                "Microsoft 365"
+              ]
+            },
+            {
+              "groups": [
+                "Fabrikam"
+              ],
+              "monitored": null,
+              "name": "fabrikam.com",
+              "tags": null
+            }
+          ],
+          "existingDomains": "skip",
+          "unknownNames": "skip"
+        },
+        "properties": {
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/ApiImportDomain"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "existingDomains": {
+            "nullable": true,
+            "type": "string"
+          },
+          "unknownNames": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "existingDomains",
+          "unknownNames",
+          "domains"
+        ],
+        "type": "object"
+      },
+      "ApiImportResponse": {
+        "properties": {
+          "added": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "duplicates": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "invalid": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ApiImportRow"
+            },
+            "type": "array"
+          },
+          "skippedExisting": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "unchanged": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "unknownNames": {
+            "items": {
+              "$ref": "#/components/schemas/ApiImportUnknownName"
+            },
+            "type": "array"
+          },
+          "updated": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          }
+        },
+        "required": [
+          "dryRun",
+          "added",
+          "updated",
+          "unchanged",
+          "skippedExisting",
+          "invalid",
+          "duplicates",
+          "rows",
+          "unknownNames",
+          "notices"
+        ],
+        "type": "object"
+      },
+      "ApiImportRow": {
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "line": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "domain",
+          "outcome",
+          "notes"
+        ],
+        "type": "object"
+      },
+      "ApiImportUnknownName": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "resolution"
+        ],
+        "type": "object"
+      },
+      "ApiNamedRef": {
+        "properties": {
+          "id": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ApiPageOfApiAlert": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiAlert"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "pageSize": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "totalCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount"
+        ],
+        "type": "object"
+      },
+      "ApiPageOfApiDomain": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiDomain"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "pageSize": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "totalCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount"
+        ],
+        "type": "object"
+      },
+      "ApiReasonBreakdown": {
+        "properties": {
+          "benignOverride": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "inferredBothFailure": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "inferredDkimFailure": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "inferredSpfFailure": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "localPolicy": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "noReasonGiven": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "other": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          }
+        },
+        "required": [
+          "benignOverride",
+          "localPolicy",
+          "other",
+          "noReasonGiven",
+          "inferredSpfFailure",
+          "inferredDkimFailure",
+          "inferredBothFailure"
+        ],
+        "type": "object"
+      },
+      "ApiReportSummary": {
+        "properties": {
+          "days": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "domainId": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "domainName": {
+            "type": "string"
+          },
+          "passRate": {
+            "format": "double",
+            "nullable": true,
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$"
+          },
+          "reasonBreakdown": {
+            "$ref": "#/components/schemas/ApiReasonBreakdown"
+          },
+          "topSources": {
+            "items": {
+              "$ref": "#/components/schemas/ApiSource"
+            },
+            "type": "array"
+          },
+          "totalVolume": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          }
+        },
+        "required": [
+          "domainId",
+          "domainName",
+          "days",
+          "totalVolume",
+          "passRate",
+          "reasonBreakdown",
+          "topSources"
+        ],
+        "type": "object"
+      },
+      "ApiSetGroupsRequest": {
+        "example": {
+          "groupIds": [
+            3,
+            5
+          ]
+        },
+        "properties": {
+          "groupIds": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "groupIds"
+        ],
+        "type": "object"
+      },
+      "ApiSetMonitoringRequest": {
+        "example": {
+          "monitored": true
+        },
+        "properties": {
+          "monitored": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "monitored"
+        ],
+        "type": "object"
+      },
+      "ApiSetTagsRequest": {
+        "example": {
+          "tagIds": [
+            7
+          ]
+        },
+        "properties": {
+          "tagIds": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "tagIds"
+        ],
+        "type": "object"
+      },
+      "ApiSource": {
+        "example": {
+          "disposition": "None",
+          "dkim": "Pass",
+          "sourceIp": "203.0.113.25",
+          "spf": "Pass",
+          "volume": 1480
+        },
+        "properties": {
+          "disposition": {
+            "type": "string"
+          },
+          "dkim": {
+            "type": "string"
+          },
+          "sourceIp": {
+            "type": "string"
+          },
+          "spf": {
+            "type": "string"
+          },
+          "volume": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          }
+        },
+        "required": [
+          "sourceIp",
+          "volume",
+          "spf",
+          "dkim",
+          "disposition"
+        ],
+        "type": "object"
+      },
+      "ApiTag": {
+        "example": {
+          "color": "Primary",
+          "domainCount": 30,
+          "id": 7,
+          "name": "Microsoft 365"
+        },
+        "properties": {
+          "color": {
+            "type": "string"
+          },
+          "domainCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "id": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "domainCount"
+        ],
+        "type": "object"
+      },
+      "HttpValidationProblemDetails": {
+        "properties": {
+          "detail": {
+            "nullable": true,
+            "type": "string"
+          },
+          "errors": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          },
+          "instance": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "nullable": true,
+            "pattern": "^-?(?:0|[1-9]\\d*)$"
+          },
+          "title": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "bearerFormat": "dmk_ API key",
+        "description": "An API key created on dotMARC's Access page.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Read domains, DNS health, DMARC report summaries, groups, tags and alerts, and add, import and organise domains. Authenticate with an API key from dotMARC's Access page: `Authorization: Bearer dmk_...`. Each operation needs the permission named in its description, and a key limited to certain groups only sees their domains. Each key may make 120 requests a minute.",
+    "title": "dotMARC API",
+    "version": "0.7.3"
+  },
+  "openapi": "3.0.4",
+  "paths": {
+    "/api/v1/alerts": {
+      "get": {
+        "description": "Alerts newest first, open ones by default (status=all includes resolved), 50 a page by default and at most 200. A key limited to certain groups sees only alerts about its domains.\n\nNeeds the AlertsView permission.",
+        "operationId": "ListAlerts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiPageOfApiAlert"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "List alerts",
+        "tags": [
+          "AlertEndpoints"
+        ],
+        "x-dotmarc-permission": "AlertsView"
+      }
+    },
+    "/api/v1/alerts/{id}/acknowledge": {
+      "post": {
+        "description": "Closes a DMARC policy weakened or nameservers changed alert and accepts the current value as normal, closing its PSA ticket too. Other alerts close themselves once fixed, so acknowledging them is a conflict. ticketClosed is false when the ticket couldn't be closed and needs closing by hand.\n\nNeeds the AlertsManage permission.",
+        "operationId": "AcknowledgeAlert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiAcknowledgement"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Acknowledge an alert",
+        "tags": [
+          "AlertEndpoints"
+        ],
+        "x-dotmarc-permission": "AlertsManage"
+      }
+    },
+    "/api/v1/domains": {
+      "get": {
+        "description": "Domains this key can see, in dashboard order, 50 a page by default and at most 200. Filter by group id, tag id or monitoring. The pass rate covers the last 30 days and is null with no reports.\n\nNeeds the DomainsView permission.",
+        "operationId": "ListDomains",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "monitored",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiPageOfApiDomain"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "List domains",
+        "tags": [
+          "DomainReadEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsView"
+      },
+      "post": {
+        "description": "Adds a domain for dotMARC to monitor. It shows as missing reports until its first DMARC report arrives.\n\nNeeds the DomainsAdd permission.",
+        "operationId": "AddDomain",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiAddDomainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiDomain"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Add a domain",
+        "tags": [
+          "DomainWriteEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsAdd"
+      }
+    },
+    "/api/v1/domains/import": {
+      "post": {
+        "description": "Adds up to 500 domains, with groups, tags and monitoring, exactly as the Import domains page does. existingDomains: skip (default), add (add groups and tags; a name written as -Name removes one) or match (make groups and tags match). unknownNames: skip (default) or create (needs GroupsAdd or TagsAdd). Changing existing domains needs DomainsEdit. dryRun=true returns the plan without changing anything.\n\nNeeds the DomainsAdd permission.",
+        "operationId": "ImportDomains",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dryRun",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiImportResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Import domains in bulk",
+        "tags": [
+          "ImportEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsAdd"
+      }
+    },
+    "/api/v1/domains/{id}": {
+      "get": {
+        "description": "The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran.\n\nNeeds the DomainsView permission.",
+        "operationId": "GetDomain",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiDomainDetail"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get a domain and its health",
+        "tags": [
+          "DomainReadEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsView"
+      }
+    },
+    "/api/v1/domains/{id}/groups": {
+      "put": {
+        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them.\n\nNeeds the DomainsEdit permission.",
+        "operationId": "SetDomainGroups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSetGroupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Set a domain's groups",
+        "tags": [
+          "DomainWriteEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsEdit"
+      }
+    },
+    "/api/v1/domains/{id}/monitoring": {
+      "put": {
+        "description": "Whether dotMARC alerts on the domain's missing reports and DNS health.\n\nNeeds the DomainsEdit permission.",
+        "operationId": "SetDomainMonitoring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSetMonitoringRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Turn monitoring on or off",
+        "tags": [
+          "DomainWriteEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsEdit"
+      }
+    },
+    "/api/v1/domains/{id}/reports/summary": {
+      "get": {
+        "description": "Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30).\n\nNeeds the DomainsView permission.",
+        "operationId": "GetReportSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiReportSummary"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Summarise a domain's DMARC reports",
+        "tags": [
+          "DomainReadEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsView"
+      }
+    },
+    "/api/v1/domains/{id}/tags": {
+      "put": {
+        "description": "Replaces the domain's tags with exactly these.\n\nNeeds the DomainsEdit permission.",
+        "operationId": "SetDomainTags",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSetTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Set a domain's tags",
+        "tags": [
+          "DomainWriteEndpoints"
+        ],
+        "x-dotmarc-permission": "DomainsEdit"
+      }
+    },
+    "/api/v1/groups": {
+      "get": {
+        "description": "Every group this key can see, with how many domains are in each. A key limited to certain groups sees only those.\n\nNeeds the GroupsView permission.",
+        "operationId": "ListGroups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiGroup"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List groups",
+        "tags": [
+          "GroupAndTagEndpoints"
+        ],
+        "x-dotmarc-permission": "GroupsView"
+      }
+    },
+    "/api/v1/tags": {
+      "get": {
+        "description": "Every tag, with its colour and how many domains this key can see carry it.\n\nNeeds the TagsView permission.",
+        "operationId": "ListTags",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiTag"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List tags",
+        "tags": [
+          "GroupAndTagEndpoints"
+        ],
+        "x-dotmarc-permission": "TagsView"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "GroupAndTagEndpoints"
+    },
+    {
+      "name": "DomainReadEndpoints"
+    },
+    {
+      "name": "DomainWriteEndpoints"
+    },
+    {
+      "name": "ImportEndpoints"
+    },
+    {
+      "name": "AlertEndpoints"
+    }
+  ]
+}

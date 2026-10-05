@@ -8,6 +8,8 @@ import {fileURLToPath} from 'node:url';
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const projectVersionFile = join(repositoryRoot, 'Directory.Build.props');
 const blogDirectory = join(repositoryRoot, 'website', 'blog');
+const openApiFile = join(repositoryRoot, 'website', 'data', 'openapi', 'dotmarc-api.json');
+const openApiRelativePath = 'website/data/openapi/dotmarc-api.json';
 
 function fail(message) {
   console.error(`[release] ${message}`);
@@ -52,6 +54,11 @@ function check(version, allowExistingTag = false) {
     fail(`Project version is ${projectVersion}, expected ${version}`);
   }
 
+  const openApiVersion = JSON.parse(readFileSync(openApiFile, 'utf8')).info?.version;
+  if (openApiVersion !== version) {
+    fail(`${openApiRelativePath} is for ${openApiVersion}, expected ${version}. Run: node scripts/update-openapi.mjs`);
+  }
+
   const blogFiles = blogFilesFor(slug);
   if (blogFiles.length !== 1) {
     fail(`Expected exactly one blog post with slug ${slug}, found ${blogFiles.length}`);
@@ -86,6 +93,8 @@ function prepare(version) {
     const contents = readFileSync(projectVersionFile, 'utf8');
     writeFileSync(projectVersionFile, contents.replace(/<VersionPrefix>[^<]+<\/VersionPrefix>/, `<VersionPrefix>${version}</VersionPrefix>`));
     console.log(`[release] Updated project version to ${version}`);
+    run('node', [join('scripts', 'update-openapi.mjs')]);
+    console.log(`[release] Regenerated ${openApiRelativePath} for ${version}`);
   }
 
   if (!existsSync(blogPath)) {
@@ -110,12 +119,12 @@ function tag(version) {
     .split('\n')
     .filter(Boolean)
     .map((line) => line.slice(3))
-    .filter((file) => file !== 'Directory.Build.props' && file !== `website/blog/${blogFile}`);
+    .filter((file) => file !== 'Directory.Build.props' && file !== `website/blog/${blogFile}` && file !== openApiRelativePath);
   if (unexpectedChanges.length) {
     fail(`Refusing to create a release with unrelated worktree changes: ${unexpectedChanges.join(', ')}`);
   }
 
-  run('git', ['add', 'Directory.Build.props', `website/blog/${blogFile}`]);
+  run('git', ['add', 'Directory.Build.props', `website/blog/${blogFile}`, openApiRelativePath]);
   run('git', ['commit', '-m', `Release v${version}`]);
   run('git', ['tag', '-a', `v${version}`, '-m', `Release v${version}`]);
   console.log(`[release] Created commit and tag v${version}`);
