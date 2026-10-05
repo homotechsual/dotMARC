@@ -68,7 +68,7 @@ The `/api/v1` route group requires the `ApiKey` scheme only. Its policies are bu
 
 ### Audit
 
-`AuditActorKind.ApiKey` and `AuditActor.ForApiKey(int keyId, string keyName, string createdBy)`. The entry reads as "API key 'Halo sync' (created by Jo Smith)". `AuditActor.FromPrincipal` returns the API key actor when the principal carries `dotmarc:api-key-id`, so services that take the actor from the principal need no change. The audit log's actor filter and export show the new kind.
+`AuditActorKind.ApiKey` and `AuditActor.ForApiKey(int keyId, string keyName, string createdBy)`. The entry reads as "API key 'Halo sync' (created by Jo Smith)". `AuditActor.FromPrincipal` returns the API key actor when the principal carries `dotmarc:api-key-id`, so services that take the actor from the principal need no change. The audit log and its export show the key's actor name; the entry's actor kind is stored as `ApiKey`.
 
 New `AuditActions`: `ApiKeyCreated`, `ApiKeyRevoked`, both in `AuditActions.All`.
 
