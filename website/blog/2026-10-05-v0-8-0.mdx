@@ -1,0 +1,101 @@
+---
+slug: v0-8-0
+date: 2026-10-05T18:22:55.861Z
+title: "dotMARC v0.8.0: an audit log, bulk import, DNS health alerts, SPF and DKIM push, and an API"
+description: Every change is now recorded in an audit log. Domains can be imported in bulk from a list, CSV or Excel file. dotMARC alerts when a domain's DNS breaks, its DMARC policy weakens or its nameservers change. SPF records can be edited and pushed, DKIM records stored and pushed, and there's a key-authenticated API for scripts and integrations.
+authors: [mikey]
+tags: [release]
+---
+
+The biggest release since [`v0.7.0`](/releases-updates/v0-7-0). dotMARC now keeps a record of who changed what,
+takes domains in bulk, warns you when a domain's DNS goes wrong rather than waiting for the reports to show it, can
+fix SPF and DKIM for you, and can be driven from your own scripts and tools.
+
+{/* truncate */}
+
+## An audit log
+
+The new **Audit log** page records every change made in dotMARC: domains, groups, tags, roles and access, settings
+and ticket rules, DNS pushes, HaloPSA actions, sign-ins and page views. Each entry says who did it, when, and what
+changed, field by field, with secrets recorded as changed but never stored. Filter by person, action, target or date,
+and export what you see as CSV. Entries are kept for a period you choose and cleaned up daily.
+
+Two new permissions control it: **AuditView** to read the log and **AuditManage** to set how long it's kept. Admin
+has both. See [the audit log docs](/docs/audit-log).
+
+## Import domains in bulk
+
+**Manage domains > Import domains** adds many domains at once from a pasted list, a CSV file or an Excel file, with
+their groups, tags, Halo client, monitoring, DKIM selectors and MTA-STS settings. Nothing is saved until you've seen
+a preview of every row: new domains, changes to existing ones (shown in red where something is removed), duplicates
+and anything invalid, with suggestions for group and tag names that look mistyped. Existing domains can be skipped,
+added to, or made to match the file. The whole import is saved at once or not at all. See
+[importing domains](/docs/import-domains).
+
+## DNS health alerts
+
+dotMARC already checks each domain's DMARC, SPF, DKIM, MX, TLS-RPT and MTA-STS records. It now alerts when they go
+wrong, through your usual Teams, webhook and HaloPSA channels:
+
+* **A check breaks.** A failing check is rechecked within minutes before it alerts, so a brief DNS blip doesn't open
+  a ticket. Each check can alert when it breaks (the default, which stays quiet for records that were never set up),
+  whenever it fails, or not at all.
+* **The DMARC policy weakens.** Moving from `reject` to `quarantine` or `none`, or lowering the percentage.
+* **The nameservers change**, often the first sign of a DNS migration. This one doesn't open a ticket by default.
+
+Alerts close themselves once the problem is fixed. Policy and nameserver changes can be deliberate, so those can be
+acknowledged with a button, by closing their Halo ticket, or automatically after a number of days you choose. See
+[DNS health alerts](/docs/alerts#dns-health-alerts).
+
+## SPF and DKIM push
+
+The DNS push that already set up MTA-STS, DMARC and TLS-RPT records now covers SPF and DKIM too:
+
+* **An SPF editor** on each domain shows the record term by term, counts its DNS lookups by following every include,
+  and warns when it needs more than the 10 lookups SPF allows. Add or remove senders (with a catalogue of common
+  services), merge duplicate records into one, and choose how the record ends. A new setting picks whether new
+  records end in `~all` or `-all`.
+* **DKIM records** for each selector can be stored in dotMARC, checked against what's published, and pushed.
+
+Pushes to Cloudflare, Azure DNS and Google Cloud DNS change only the value they mean to, keep every other TXT
+record exactly as it was, and refuse rather than guess when the zone isn't what dotMARC expects. See
+[editing SPF](/docs/dns-provider-push#editing-spf) and [DKIM records](/docs/dns-provider-push#dkim-records).
+
+## An API
+
+dotMARC has a JSON API for scripted bulk work, client reporting and integrations it doesn't have built in. It covers
+the common jobs: list domains and their DNS health, summarise a domain's DMARC reports, list groups, tags and alerts,
+add or import domains, set a domain's groups, tags and monitoring, and acknowledge alerts.
+
+* **API keys** are created on the Access page, which now has **People**, **Roles** and **API keys** tabs. A key gets a
+  role just as a person does, and a Viewer key can be limited to certain groups so it only ever sees those clients.
+  Keys can't manage access, last 30 to 365 days, and are announced two weeks before they expire.
+* **Everything a key does is in the audit log**, as that key and the person who created it.
+* **The API is described in OpenAPI** at `/api/v1/openapi.json` on your own dotMARC, which tools like Postman can
+  import directly.
+
+See [the API docs](/docs/api).
+
+## Fixes along the way
+
+* Domain names must now be real hostnames everywhere they're entered.
+* A DNS push that fails partway through is recorded as such, rather than looking like it never ran.
+* A nameserver lookup that fails is treated as an error rather than as "no nameservers", and dotMARC never reports a
+  top-level domain's nameservers as a domain's own.
+
+## Upgrading
+
+The database is migrated automatically on startup. There are no new required settings.
+
+* **Admin** gets the new permissions automatically. Custom roles that should read the audit log need **AuditView**
+  added on the Access page's **Roles** tab.
+* **DNS health alerts are on**, in "when it breaks" mode for every check, as long as alerting is enabled. A check only
+  alerts after it has passed at least once, so records that were never set up stay quiet. Look over **Alerts >
+  Settings** after upgrading if you'd rather start differently.
+* The API is available as soon as you create a key. Each key may make 120 requests a minute; set `Api__RequestsPerMinute`
+  to change that.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.8.0) for everything that
+shipped between these two tags.
