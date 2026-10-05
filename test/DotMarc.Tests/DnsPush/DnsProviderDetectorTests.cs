@@ -208,4 +208,40 @@ public sealed class DnsProviderDetectorTests
 
         await Assert.ThrowsAsync<HttpRequestException>(() => detector.DetectAsync("contoso.io", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task DetectAsync_Throws_WhenTheResolverFails()
+    {
+        // SERVFAIL (an outage at the domain's DNS) must not be read as "not delegated here", or the walk carries on
+        // up to the TLD and reports its nameservers as the domain's.
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBody = """{"Status":2}""";
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => detector.DetectAsync("contoso.io", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DetectAsync_NeverReportsATopLevelDomainsNameservers()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBodies.Enqueue("""{"Status":3}""");
+        handler.ResponseBody = """{"Status":0,"Answer":[{"type":2,"data":"a0.nic.io."}]}""";
+
+        var result = await detector.DetectAsync("contoso.io", CancellationToken.None);
+
+        Assert.Empty(result.Nameservers);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task DetectAsync_StillWalksUpFromASubdomainWithNoRecordsOfItsOwn()
+    {
+        var (detector, handler) = CreateDetector();
+        handler.ResponseBodies.Enqueue("""{"Status":3}""");
+        handler.ResponseBody = """{"Status":0,"Answer":[{"type":2,"data":"ana.ns.cloudflare.com."}]}""";
+
+        var result = await detector.DetectAsync("mail.contoso.io", CancellationToken.None);
+
+        Assert.Equal(("contoso.io", DetectedDnsProvider.Cloudflare), (result.ZoneName, result.Provider));
+    }
 }

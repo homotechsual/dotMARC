@@ -61,8 +61,10 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
                 return new DnsProviderDetectionResult(DetectProvider(nsHosts), candidate, nsHosts);
             }
 
+            // Stop before a top-level domain: its nameservers (a.gtld-servers.net and the like) are never the
+            // domain's own, and reporting them would read as the domain having moved DNS provider.
             var nextDot = candidate.IndexOf('.');
-            if (nextDot < 0)
+            if (nextDot < 0 || !candidate[(nextDot + 1)..].Contains('.'))
             {
                 break;
             }
@@ -151,6 +153,13 @@ public sealed class DnsProviderDetector : IDnsProviderDetector
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
+
+        // 0 (an answer, or none here) and 3 (no such name) let the walk carry on up. Anything else, such as SERVFAIL
+        // during an outage at the domain's DNS, means the resolver couldn't find out: an error, not "not delegated".
+        if (parsed.Status is not (0 or 3))
+        {
+            throw new HttpRequestException($"The DNS resolver couldn't look up the nameservers for {name} (status {parsed.Status}).");
+        }
 
         return (parsed.Answer ?? []).Where(a => a.Type == 2).Select(a => a.Data.TrimEnd('.')).ToList();
     }
