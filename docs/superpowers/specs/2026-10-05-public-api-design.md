@@ -42,7 +42,7 @@ The secret is `dmk_` followed by 32 random bytes in base64url. It is shown once,
 
 ### Management
 
-A new **API keys** tab on the Access page, gated by `AccessManage`. It lists keys (name, prefix, role, groups, created by and when, expires, last used, status), and has:
+The Access page (gated by `AccessManage`) becomes three tabs, each with its own URL: **People** (`/access/people`, the default, today's access grants), **Roles** (`/access/roles`) and **API keys** (`/access/api-keys`). It lists keys (name, prefix, role, groups, created by and when, expires, last used, status), and has:
 
 - **Create:** name, role, groups (when the role is scopable, as for user grants), and expiry of 30, 90, 180 or 365 days (default 90). Audited as `ApiKeyCreated`.
 - **Revoke:** with confirmation. Audited as `ApiKeyRevoked`. Revoked keys stay listed, greyed, for the record.

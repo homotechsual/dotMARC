@@ -48,7 +48,7 @@
 - `src/DotMarc/Api/ApiOptions.cs`, `ApiPolicies.cs`, `ApiPermissionMetadata.cs`, `ApiProblems.cs`, `ApiScope.cs`, `ApiServices.cs`, `ApiEndpoints.cs`, `ApiModels.cs`: plumbing and DTOs.
 - `src/DotMarc/Api/GroupAndTagEndpoints.cs`, `DomainReadEndpoints.cs`, `DomainWriteEndpoints.cs`, `ImportEndpoints.cs`, `AlertEndpoints.cs`: endpoints.
 - `src/DotMarc/Api/ApiDocument.cs`: OpenAPI registration, transformers, examples.
-- `src/DotMarc/Components/Shared/ApiKeysSection.razor`: the Access page section.
+- `src/DotMarc/Components/Shared/ApiKeysSection.razor`: the API keys tab's content.
 - `scripts/update-openapi.mjs`, `website/data/openapi/dotmarc-api.json`, `website/docs/api.mdx`.
 - Tests under `test/DotMarc.Tests/Api/` and `test/DotMarc.Tests/Data/ApiKeyManagementServiceTests.cs`, `test/DotMarc.Tests/Security/AccessClaimsTests.cs`.
 
@@ -3357,14 +3357,15 @@ git commit -m "Warn two weeks before an API key expires"
 
 ---
 
-### Task 8: API keys on the Access page
+### Task 8: Access page tabs, with API keys
 
 **Files:**
 - Create: `src/DotMarc/Components/Shared/ApiKeysSection.razor`
-- Modify: `src/DotMarc/Components/Pages/ManageAccess.razor`
+- Modify: `src/DotMarc/Components/Pages/ManageAccess.razor` (split into People, Roles and API keys tabs)
 
 **Interfaces:**
 - Consumes: `ApiKeyManagementService.CreateAsync/RevokeAsync/ListAsync/LifetimeDays`, `AlertingService.ApiKeyExpiryWarning`, `AuditActorAccessor`, `CreateApiKeyError`.
+- Produces: routes `/access` (People), `/access/people`, `/access/roles`, `/access/api-keys`.
 
 There is no component test framework in the test project; this task is verified in the browser (Step 3). The service behaviour it calls is covered by Task 1.
 
@@ -3594,9 +3595,94 @@ There is no component test framework in the test project; this task is verified 
 
 If `ShowMessageBoxAsync`'s signature in MudBlazor 9.8 differs, follow how `ManageAccess.razor` (or another page) already confirms a removal, and record the ruling.
 
-- [ ] **Step 2: Add the section to the page**
+- [ ] **Step 2: Split the Access page into tabs**
 
-In `ManageAccess.razor`, add `<ApiKeysSection />` after the last `</MudPaper>` of the page's markup (before `@code`). `DotMarc.Components.Shared` is already imported at the top.
+The page today is two stacked cards, Roles then Access grants. It becomes three tabs, following DomainDetail.razor's
+pattern of a slug in the URL so each tab can be linked to and survives a reload:
+
+| Tab | Slug | Content |
+| --- | --- | --- |
+| People | `people` (default) | the existing "Access grants" card's contents |
+| Roles | `roles` | the existing "Roles" card's contents |
+| API keys | `api-keys` | `<ApiKeysSection />` |
+
+People comes first because granting and revoking people is what the page is opened for most.
+
+1. Add a second route under the first:
+
+```razor
+@page "/access"
+@page "/access/{Tab}"
+```
+
+and `@inject NavigationManager Navigation` with the other injects.
+
+2. Replace the two `<MudPaper>` cards (Roles, then Access grants) with tabs. Move each card's inner markup unchanged into
+its panel, dropping the card's own `<MudText Typo="Typo.h6">` heading (the tab names it) and keeping everything else,
+including the Roles card's `Class` spacing on inner elements:
+
+```razor
+<MudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged" Elevation="1" Rounded="true" PanelClass="pa-4">
+    <MudTabPanel Text="People" Icon="@Icons.Material.Filled.People">
+        @* the former "Access grants" card's contents, minus its heading *@
+    </MudTabPanel>
+    <MudTabPanel Text="Roles" Icon="@Icons.Material.Filled.Badge">
+        @* the former "Roles" card's contents, minus its heading *@
+    </MudTabPanel>
+    <MudTabPanel Text="API keys" Icon="@Icons.Material.Filled.Key">
+        <ApiKeysSection />
+    </MudTabPanel>
+</MudTabs>
+```
+
+(The two comments mark where the moved markup goes; they are not left in the file.)
+
+`ApiKeysSection` renders its own `<MudPaper>`; inside a tab that doubles the card, so change its outer element from
+`<MudPaper Class="pa-4 mb-4" Elevation="1">` to a plain `<div>` and drop its `<MudText Typo="Typo.h6">API keys</MudText>`
+heading, keeping the docs link and the explanation.
+
+3. Update the intro paragraph under "Manage access" to cover keys:
+
+```razor
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+    Roles are built from fine-grained permissions and control what someone can see and do. Admin and Viewer come built
+    in; custom roles can cover any subset. A Viewer can optionally be scoped to specific Groups, for external clients who
+    should only see their own domains. API keys get a role the same way, for scripts and other tools.
+</MudText>
+```
+
+4. In `@code`, add:
+
+```csharp
+    private static readonly string[] TabSlugs = ["people", "roles", "api-keys"];
+
+    [Parameter]
+    public string? Tab { get; set; }
+
+    private int _activeTabIndex;
+
+    protected override void OnParametersSet()
+    {
+        var index = Tab is null ? -1 : Array.IndexOf(TabSlugs, Tab.ToLowerInvariant());
+        _activeTabIndex = index >= 0 ? index : 0;
+    }
+
+    private void OnActiveTabIndexChanged(int index)
+    {
+        _activeTabIndex = index;
+        var slug = TabSlugs[index >= 0 && index < TabSlugs.Length ? index : 0];
+        Navigation.NavigateTo($"/access/{slug}", replace: true);
+    }
+```
+
+If `ManageAccess.razor` already overrides `OnParametersSet`, put the two lines into the existing override.
+
+5. The role list on the People tab and the key form's role list read roles when each loads. A role added on the Roles
+tab must show in the other two without a reload: if People's grant form caches roles in a field loaded once in
+`OnInitializedAsync`, reload that list after a role is added, renamed or removed (call the page's existing load method
+at the end of those handlers, if it doesn't already). `ApiKeysSection` reloads its roles every time its panel renders,
+since MudTabs only renders the active panel: confirm by switching tabs after adding a role; if it doesn't, add
+`KeepPanelsAlive="false"` (the default) and leave `OnInitializedAsync` loading as written.
 
 Run: `dotnet build src/DotMarc`
 Expected: build succeeds with no new warnings.
@@ -3604,19 +3690,23 @@ Expected: build succeeds with no new warnings.
 - [ ] **Step 3: Verify in the browser (playwright-edge, never install Chrome)**
 
 Stop any running demo, then run the app in demo mode: `dotnet run --project src/DotMarc --Demo:Enabled=true` (in the background). With the playwright-edge tools:
-1. Open the demo page and sign in as the admin persona, then open `/access`.
+1. Open the demo page and sign in as the admin persona, then open `/access`. Expect the People tab, with the grants
+   table as before. Click Roles: the URL becomes `/access/roles` and the roles table shows; reload and Roles is still
+   selected. Open `/access/api-keys` directly: the API keys tab is selected. Open `/access/nonsense`: People.
+   Add a role on the Roles tab, switch to API keys, and check the new role is in the key form's role list.
 2. Create a key named "Browser check" with the Viewer role, limited to one group, 30 days. Expect the success alert with a `dmk_` key and a copy button; the table lists the key with its prefix, role, group and "Never".
 3. Confirm the role list has no role that includes AccessManage (Admin isn't offered).
 4. Call `/api/v1/groups` with the copied key (`browser_evaluate` with `fetch('/api/v1/groups', { headers: { Authorization: 'Bearer ' + key } })`) and expect 200 with only the chosen group. Reload `/access`: "Last used" now has a time.
 5. Revoke the key, confirm in the dialog; the row dims and shows "Revoked"; the same fetch now returns 401.
-6. Take a screenshot at phone width (390px) and check the section doesn't scroll sideways.
+6. Take a screenshot of each tab at phone width (390px) and check none scrolls sideways and the tab bar fits or
+   scrolls within itself.
 Stop the demo afterwards.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add src/DotMarc
-git commit -m "Create and revoke API keys on the Access page"
+git commit -m "Split the Access page into People, Roles and API keys tabs"
 ```
 
 ---
@@ -4004,7 +4094,7 @@ The [interactive reference](/api) lists every endpoint with examples. The same d
 
 ## Create a key
 
-On the **Access** page, under **API keys**, give the key a name, choose a role and how long it lasts (30, 90, 180 or 365
+On the **Access** page's **API keys** tab, give the key a name, choose a role and how long it lasts (30, 90, 180 or 365
 days), and select **Create key**. Copy the key straight away: dotMARC keeps only a hash of it, so it can't be shown again.
 
 - A key can do what its role allows. For a Viewer you can also limit the key to certain groups, so it only sees those
