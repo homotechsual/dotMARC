@@ -255,6 +255,13 @@ builder.Services.AddHttpClient<DotMarc.Dns.IMailServiceDetector, DotMarc.Dns.Mai
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 
+builder.Services.AddHttpClient<DotMarc.Dns.ITxtRecordLookup, DotMarc.Dns.TxtRecordLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
+builder.Services.AddTransient<DotMarc.Dns.SpfLookupCounter>();
+
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts.MtaStsCnameLookup>(client =>
 {
     client.BaseAddress = new Uri("https://cloudflare-dns.com/");
