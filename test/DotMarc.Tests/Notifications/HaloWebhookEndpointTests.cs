@@ -8,6 +8,7 @@ using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace DotMarc.Tests.Notifications;
@@ -39,7 +40,15 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         {
             builder.UseSetting("ConnectionStrings:DotMarc", _connectionString);
             builder.UseSetting("Demo:Enabled", "true");
-            builder.ConfigureServices(services => services.AddSingleton<IHaloPsaClient>(_statusLookup));
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IHaloPsaClient>(_statusLookup);
+                // The background health monitor would close the policy alert this test seeds before the webhook arrives.
+                foreach (var monitor in services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(PinnedDomainHealthMonitor)).ToList())
+                {
+                    services.Remove(monitor);
+                }
+            });
         });
 
         // Booting the host with Demo:Enabled=true runs DemoDataSeeder.ResetAsync at startup (see

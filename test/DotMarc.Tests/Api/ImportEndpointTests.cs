@@ -161,4 +161,30 @@ public sealed class ImportEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    [Fact]
+    public async Task MatchMode_RefusesRowsThatLeaveOutTagsOthersSend_RatherThanClearingThem()
+    {
+        var tagId = await _host.SeedTagAsync("api-match-mixed-tag");
+        await _host.SeedDomainAsync("api-match-mixed-a.example", tagIds: [tagId]);
+        await _host.SeedDomainAsync("api-match-mixed-b.example", tagIds: [tagId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsAdd, Permission.DomainsEdit]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PostAsJsonAsync("/api/v1/domains/import", new
+        {
+            existingDomains = "match",
+            domains = new object[]
+            {
+                new { name = "api-match-mixed-a.example", tags = new[] { "api-match-mixed-tag" } },
+                new { name = "api-match-mixed-b.example" },
+            },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("tags", await response.Content.ReadAsStringAsync());
+        await using var context = _host.CreateContext();
+        var untouched = await context.Domains.Include(domain => domain.Tags).SingleAsync(domain => domain.Name == "api-match-mixed-b.example");
+        Assert.Equal([tagId], untouched.Tags.Select(tag => tag.Id));
+    }
 }

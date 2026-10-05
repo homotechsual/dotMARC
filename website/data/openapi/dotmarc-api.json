@@ -1097,7 +1097,7 @@
     },
     "/api/v1/domains/import": {
       "post": {
-        "description": "Adds up to 500 domains, with groups, tags and monitoring, exactly as the Import domains page does. existingDomains: skip (default), add (add groups and tags; a name written as -Name removes one) or match (make groups and tags match). unknownNames: skip (default) or create (needs GroupsAdd or TagsAdd). Changing existing domains needs DomainsEdit. dryRun=true returns the plan without changing anything.\n\nNeeds the DomainsAdd permission.",
+        "description": "Adds up to 500 domains, with groups, tags and monitoring, exactly as the Import domains page does. existingDomains: skip (default), add (add groups and tags; a name written as -Name removes one) or match (make groups and tags match; send groups and tags on every domain or on none, with an empty list to clear). unknownNames: skip (default) or create (needs GroupsAdd or TagsAdd). Changing existing domains needs DomainsEdit. dryRun=true returns the plan without changing anything.\n\nNeeds the DomainsAdd permission.",
         "operationId": "ImportDomains",
         "parameters": [
           {

@@ -1,10 +1,13 @@
 using System.Net.Http.Headers;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using DotMarc.Security;
 using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using MudBlazor;
 
 namespace DotMarc.Tests.Api;
@@ -38,6 +41,14 @@ internal sealed class ApiTestHost : IAsyncDisposable
         {
             builder.UseSetting("ConnectionStrings:DotMarc", connectionString);
             builder.UseSetting("Demo:Enabled", "true");
+            builder.ConfigureServices(services =>
+            {
+                // The background health monitor would raise and close alerts on the data a test seeds, racing it.
+                foreach (var monitor in services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(PinnedDomainHealthMonitor)).ToList())
+                {
+                    services.Remove(monitor);
+                }
+            });
             foreach (var (key, value) in settings ?? new Dictionary<string, string>())
             {
                 builder.UseSetting(key, value);

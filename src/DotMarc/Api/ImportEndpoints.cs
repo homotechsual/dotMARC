@@ -21,7 +21,7 @@ public static class ImportEndpoints
             .RequirePermission(Permission.DomainsAdd)
             .WithName("ImportDomains")
             .WithSummary("Import domains in bulk")
-            .WithDescription($"Adds up to {MaximumRows} domains, with groups, tags and monitoring, exactly as the Import domains page does. existingDomains: skip (default), add (add groups and tags; a name written as -Name removes one) or match (make groups and tags match). unknownNames: skip (default) or create (needs GroupsAdd or TagsAdd). Changing existing domains needs DomainsEdit. dryRun=true returns the plan without changing anything.");
+            .WithDescription($"Adds up to {MaximumRows} domains, with groups, tags and monitoring, exactly as the Import domains page does. existingDomains: skip (default), add (add groups and tags; a name written as -Name removes one) or match (make groups and tags match; send groups and tags on every domain or on none, with an empty list to clear). unknownNames: skip (default) or create (needs GroupsAdd or TagsAdd). Changing existing domains needs DomainsEdit. dryRun=true returns the plan without changing anything.");
     }
 
     private static async Task<Results<Ok<ApiImportResponse>, ValidationProblem, ProblemHttpResult>> ImportAsync(
@@ -57,6 +57,24 @@ public static class ImportEndpoints
         if (domains.Any(domain => (domain.Groups ?? []).Concat(domain.Tags ?? []).Any(name => name.Contains(';'))))
         {
             return ApiProblems.Validation("domains", "Group and tag names can't contain ';'.");
+        }
+
+        // In match mode a blank cell clears the list. A row that leaves out a list other rows send would become a blank
+        // cell, so its groups or tags would be wiped although it never mentioned them.
+        if (mode == ExistingDomainMode.Match)
+        {
+            foreach (var (field, sentBy) in new (string Field, Func<ApiImportDomain, bool> SentBy)[]
+                     {
+                         ("groups", domain => domain.Groups is not null),
+                         ("tags", domain => domain.Tags is not null),
+                     })
+            {
+                if (domains.Any(sentBy) && !domains.All(sentBy))
+                {
+                    return ApiProblems.Validation("domains",
+                        $"In match mode, send {field} on every domain or on none. Use an empty list to clear a domain's {field}.");
+                }
+            }
         }
 
         ImportTable table;

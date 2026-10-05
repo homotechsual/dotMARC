@@ -68,5 +68,7 @@ do, and for invalid input an `errors` object naming each field.
 ## Importing domains
 
 `POST /api/v1/domains/import` takes up to 500 domains and behaves like the [Import domains](./import-domains.mdx) page.
-`existingDomains` is `skip` (default), `add` or `match`, and `unknownNames` is `skip` (default) or `create`. Add
-`?dryRun=true` to see what would happen without changing anything.
+`existingDomains` is `skip` (default), `add` or `match`, and `unknownNames` is `skip` (default) or `create`. In `match`
+mode, send `groups` and `tags` on every domain or on none: an empty list clears them, and a domain that left them out
+while others sent them would otherwise be cleared by mistake, so that's refused. Add `?dryRun=true` to see what would
+happen without changing anything.
