@@ -109,6 +109,47 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Numbers_AreDescribedAsNumbers_NotAsPatternedStrings()
+    {
+        var numberSchemas = new List<JsonObject>();
+        void Collect(JsonNode? node)
+        {
+            switch (node)
+            {
+                case JsonObject jsonObject:
+                    if (jsonObject["format"]?.GetValue<string>() is "int32" or "int64" or "double" or "float")
+                    {
+                        numberSchemas.Add(jsonObject);
+                    }
+
+                    foreach (var property in jsonObject)
+                    {
+                        Collect(property.Value);
+                    }
+
+                    break;
+                case JsonArray jsonArray:
+                    foreach (var item in jsonArray)
+                    {
+                        Collect(item);
+                    }
+
+                    break;
+            }
+        }
+
+        Collect(JsonNode.Parse(await FetchDocumentAsync()));
+
+        Assert.NotEmpty(numberSchemas);
+        Assert.All(numberSchemas, schema =>
+        {
+            var expectedType = schema["format"]!.GetValue<string>() is "int32" or "int64" ? "integer" : "number";
+            Assert.Equal(expectedType, schema["type"]?.GetValue<string>());
+            Assert.Null(schema["pattern"]);
+        });
+    }
+
+    [Fact]
     public async Task TheDocument_IsValidOpenApi3_WithABearerScheme()
     {
         var json = await FetchDocumentAsync();

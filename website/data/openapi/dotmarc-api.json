@@ -63,7 +63,7 @@
           },
           "id": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "message": {
             "type": "string"
@@ -144,7 +144,7 @@
           "percent": {
             "format": "int32",
             "nullable": true,
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "policy": {
             "nullable": true,
@@ -207,7 +207,7 @@
           },
           "id": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "lastReportReceivedUtc": {
             "format": "date-time",
@@ -223,7 +223,7 @@
           "passRate": {
             "format": "double",
             "nullable": true,
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$"
+            "type": "number"
           },
           "tags": {
             "items": {
@@ -262,7 +262,7 @@
           },
           "id": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "lastReportReceivedUtc": {
             "format": "date-time",
@@ -278,7 +278,7 @@
           "passRate": {
             "format": "double",
             "nullable": true,
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$"
+            "type": "number"
           },
           "tags": {
             "items": {
@@ -345,11 +345,11 @@
         "properties": {
           "domainCount": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "id": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "name": {
             "type": "string"
@@ -448,18 +448,18 @@
         "properties": {
           "added": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "dryRun": {
             "type": "boolean"
           },
           "duplicates": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "invalid": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "notices": {
             "items": {
@@ -475,11 +475,11 @@
           },
           "skippedExisting": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "unchanged": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "unknownNames": {
             "items": {
@@ -489,7 +489,7 @@
           },
           "updated": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           }
         },
         "required": [
@@ -513,7 +513,7 @@
           },
           "line": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "notes": {
             "items": {
@@ -556,7 +556,7 @@
         "properties": {
           "id": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "name": {
             "type": "string"
@@ -578,15 +578,15 @@
           },
           "page": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "pageSize": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "totalCount": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           }
         },
         "required": [
@@ -607,15 +607,15 @@
           },
           "page": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "pageSize": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "totalCount": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           }
         },
         "required": [
@@ -630,31 +630,31 @@
         "properties": {
           "benignOverride": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "inferredBothFailure": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "inferredDkimFailure": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "inferredSpfFailure": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "localPolicy": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "noReasonGiven": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "other": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           }
         },
         "required": [
@@ -672,11 +672,11 @@
         "properties": {
           "days": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "domainId": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "domainName": {
             "type": "string"
@@ -684,7 +684,7 @@
           "passRate": {
             "format": "double",
             "nullable": true,
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$"
+            "type": "number"
           },
           "reasonBreakdown": {
             "$ref": "#/components/schemas/ApiReasonBreakdown"
@@ -697,7 +697,7 @@
           },
           "totalVolume": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           }
         },
         "required": [
@@ -722,7 +722,7 @@
           "groupIds": {
             "items": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             },
             "nullable": true,
             "type": "array"
@@ -758,7 +758,7 @@
           "tagIds": {
             "items": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             },
             "nullable": true,
             "type": "array"
@@ -792,7 +792,7 @@
           },
           "volume": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           }
         },
         "required": [
@@ -817,11 +817,11 @@
           },
           "domainCount": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "id": {
             "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "name": {
             "type": "string"
@@ -857,7 +857,7 @@
           "status": {
             "format": "int32",
             "nullable": true,
-            "pattern": "^-?(?:0|[1-9]\\d*)$"
+            "type": "integer"
           },
           "title": {
             "nullable": true,
@@ -904,7 +904,7 @@
             "name": "page",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           },
           {
@@ -912,7 +912,7 @@
             "name": "pageSize",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           }
         ],
@@ -956,7 +956,6 @@
             "required": true,
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": "integer"
             }
           }
@@ -990,7 +989,7 @@
             "name": "page",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           },
           {
@@ -998,7 +997,7 @@
             "name": "pageSize",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           },
           {
@@ -1006,7 +1005,7 @@
             "name": "group",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           },
           {
@@ -1014,7 +1013,7 @@
             "name": "tag",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           },
           {
@@ -1158,7 +1157,6 @@
             "required": true,
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": "integer"
             }
           }
@@ -1193,7 +1191,6 @@
             "required": true,
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": "integer"
             }
           }
@@ -1241,7 +1238,6 @@
             "required": true,
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": "integer"
             }
           }
@@ -1289,7 +1285,6 @@
             "required": true,
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": "integer"
             }
           },
@@ -1298,7 +1293,7 @@
             "name": "days",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$"
+              "type": "integer"
             }
           }
         ],
@@ -1342,7 +1337,6 @@
             "required": true,
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": "integer"
             }
           }

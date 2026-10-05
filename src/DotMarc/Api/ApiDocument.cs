@@ -65,6 +65,21 @@ public static class ApiDocument
 
             options.AddSchemaTransformer((schema, context, cancellationToken) =>
             {
+                // The API reads numbers sent as strings too, so ASP.NET describes each number as "number or string" with a
+                // digits pattern. OpenAPI 3.0 can't say "or", so the type was dropped and doc tools showed `any` and a
+                // regex. Describe them as the numbers they are, keeping nullability.
+                var numberType = schema.Format switch
+                {
+                    "int32" or "int64" => JsonSchemaType.Integer,
+                    "double" or "float" => JsonSchemaType.Number,
+                    _ => (JsonSchemaType?)null,
+                };
+                if (numberType is { } type)
+                {
+                    schema.Type = type | (schema.Type ?? 0) & JsonSchemaType.Null;
+                    schema.Pattern = null;
+                }
+
                 if (ApiExamples.For(context.JsonTypeInfo.Type) is { } example)
                 {
                     schema.Example = example;
