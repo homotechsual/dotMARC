@@ -1,6 +1,7 @@
 @* src/DotMarc/Components/Dialogs/ConfigureDkimSelectorsDialog.razor *@
 @using DotMarc.Data
 @using DotMarc.Dns
+@inject IDkimDnsChecker DkimDnsChecker
 <MudDialog>
     <TitleContent>Configure DKIM selectors</TitleContent>
     <DialogContent>
@@ -8,13 +9,28 @@
             One selector per line (e.g. <code>selector1</code>, <code>google</code>). dotMARC checks
             <code>&lt;selector&gt;._domainkey.@DomainName</code> for each one you list here.
         </MudText>
-        <MudTextField T="string" Value="_selectorsText" ValueChanged="OnSelectorsChanged" Label="Selectors" Lines="4" Immediate="true" DebounceInterval="300" />
+        <MudTextField T="string" Value="_selectorsText" ValueChanged="OnSelectorsChangedAsync" Label="Selectors" Lines="4" Immediate="true" DebounceInterval="300" />
 
         <MudText Typo="Typo.subtitle2" Class="mt-4">Records (optional)</MudText>
         <MudText Typo="Typo.caption" Class="d-block mb-2 mud-text-secondary">
             Paste the record your mail platform gives you for each selector, and dotMARC can push it and check DNS matches it.
+            Records already published are filled in for you.
             @HelpText()
         </MudText>
+
+        @if (IsMicrosoft365)
+        {
+            @* Labelled from outside: a floating label sits over the text once a long paste scrolls. *@
+            <MudText Typo="Typo.body2" Class="mb-1">Paste from Microsoft 365 (optional)</MudText>
+            <MudTextField T="string" Value="_microsoftPaste" ValueChanged="OnMicrosoftPasteChanged" Lines="3" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Immediate="true" Class="mb-1" Placeholder="Selector1CNAME : selector1-...&#10;Selector2CNAME : selector2-..."
+                          HelperText="The output of Get-DkimSigningConfig, or the Defender portal's Publish CNAMEs section. Both targets are read from it." />
+            @if (_microsoftPasteNote is not null)
+            {
+                <MudText Typo="Typo.caption" Class="d-block mb-2" Color="@(_microsoftPasteFilled ? Color.Success : Color.Warning)">@_microsoftPasteNote</MudText>
+            }
+        }
+
         @foreach (var row in _rows)
         {
             @* Both fields are labelled and dense, so their inputs line up; the selector is named in the value's label. *@
@@ -28,7 +44,7 @@
                 <div style="flex:1 1 auto; min-width:0">
                     @* A CNAME target is one line; a TXT value is a long key, so it gets room to wrap. *@
                     <MudTextField T="string" @bind-Value="row.Value" Label="@ValueLabel(row)" Margin="Margin.Dense"
-                                  Lines="@(row.Type == DkimRecordType.Txt ? 3 : 1)" />
+                                  Lines="@(row.Type == DkimRecordType.Txt ? 3 : 1)" HelperText="@RowHint(row)" />
                 </div>
             </div>
         }
@@ -48,8 +64,13 @@
 
     private string _selectorsText = "";
     private List<RecordRow> _rows = [];
+    private string _microsoftPaste = "";
+    private string? _microsoftPasteNote;
+    private bool _microsoftPasteFilled;
 
-    protected override void OnInitialized()
+    private bool IsMicrosoft365 => DetectedInboxProvider == "Microsoft 365";
+
+    protected override async Task OnInitializedAsync()
     {
         if (CurrentSelectors.Count > 0)
         {
@@ -61,18 +82,21 @@
         }
 
         RebuildRows();
+        await FillFromPublishedAsync();
     }
 
-    private void OnSelectorsChanged(string text)
+    private async Task OnSelectorsChangedAsync(string text)
     {
         _selectorsText = text;
         RebuildRows();
+        await FillFromPublishedAsync();
     }
 
     private List<string> Selectors() =>
         _selectorsText.Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-    /// <summary>One row per selector, keeping what's been typed for selectors that are still listed.</summary>
+    /// <summary>One row per selector, keeping what's been typed for selectors that are still listed. A new row starts
+    /// from the stored record, then Fastmail's predictable target, then the known start of a Microsoft 365 target.</summary>
     private void RebuildRows()
     {
         _rows = Selectors().Select(selector =>
@@ -84,17 +108,102 @@
 
             if (CurrentRecords.FirstOrDefault(record => string.Equals(record.Selector, selector, StringComparison.OrdinalIgnoreCase)) is { } stored)
             {
-                return new RecordRow(selector) { Type = stored.RecordType, Value = stored.Value };
+                return new RecordRow(selector) { Type = stored.RecordType, Value = stored.Value, Origin = RowOrigin.Stored };
             }
 
-            return DkimRecordValue.FastmailTarget(selector, DomainName) is { } fastmail
-                ? new RecordRow(selector) { Type = DkimRecordType.Cname, Value = fastmail }
-                : new RecordRow(selector) { Type = DetectedInboxProvider is "Google Workspace" or "Zoho Mail" ? DkimRecordType.Txt : DkimRecordType.Cname };
+            if (DkimRecordValue.FastmailTarget(selector, DomainName) is { } fastmail)
+            {
+                return new RecordRow(selector) { Type = DkimRecordType.Cname, Value = fastmail, Origin = RowOrigin.Predicted };
+            }
+
+            if (IsMicrosoft365 && DkimRecordValue.Microsoft365TargetStart(selector, DomainName) is { } start)
+            {
+                return new RecordRow(selector) { Type = DkimRecordType.Cname, Value = start, Origin = RowOrigin.Template };
+            }
+
+            return new RecordRow(selector) { Type = DetectedInboxProvider is "Google Workspace" or "Zoho Mail" ? DkimRecordType.Txt : DkimRecordType.Cname };
         }).ToList();
+    }
+
+    /// <summary>Looks up each selector that has nothing stored and fills in what it publishes now, unless someone has
+    /// typed over the row meanwhile. A failed lookup just leaves the row as it was.</summary>
+    private async Task FillFromPublishedAsync()
+    {
+        var pending = _rows.Where(row => !row.LookedUp && row.Origin is RowOrigin.None or RowOrigin.Template).ToList();
+        foreach (var row in pending)
+        {
+            row.LookedUp = true;
+        }
+
+        var lookups = pending.Select(async row =>
+        {
+            // What the row held before the lookup, so a value typed while it ran is never replaced.
+            var valueBefore = row.Value;
+            try
+            {
+                var published = await DkimDnsChecker.LookupSelectorAsync(DomainName, row.Selector, CancellationToken.None);
+                return (Row: row, Record: DkimRecordValue.FromPublished(published), ValueBefore: valueBefore);
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+            {
+                return (Row: row, Record: ((DkimRecordType Type, string Value)?)null, ValueBefore: valueBefore);
+            }
+        });
+
+        foreach (var (row, record, valueBefore) in await Task.WhenAll(lookups))
+        {
+            var untouched = row.Value == valueBefore && row.Origin is RowOrigin.None or RowOrigin.Template;
+            if (record is { } found && untouched)
+            {
+                row.Type = found.Type;
+                row.Value = found.Value;
+                row.Origin = RowOrigin.Published;
+            }
+        }
+    }
+
+    private void OnMicrosoftPasteChanged(string pasted)
+    {
+        _microsoftPaste = pasted;
+        if (string.IsNullOrWhiteSpace(pasted))
+        {
+            _microsoftPasteNote = null;
+            return;
+        }
+
+        var targets = DkimRecordValue.Microsoft365Targets(pasted);
+        var filled = new List<string>();
+        foreach (var row in _rows)
+        {
+            if (targets.TryGetValue(row.Selector, out var target))
+            {
+                row.Type = DkimRecordType.Cname;
+                row.Value = target;
+                row.Origin = RowOrigin.Pasted;
+                filled.Add(row.Selector);
+            }
+        }
+
+        _microsoftPasteFilled = filled.Count > 0;
+        _microsoftPasteNote = targets.Count == 0
+            ? "No selector1 or selector2 targets found in that text."
+            : filled.Count == 0
+                ? "Found targets, but selector1 and selector2 aren't in the selector list above."
+                : $"Filled in {string.Join(" and ", filled)}.";
     }
 
     private static string ValueLabel(RecordRow row) =>
         row.Type == DkimRecordType.Cname ? $"{row.Selector}: CNAME target" : $"{row.Selector}: TXT value (v=DKIM1; ... p=...)";
+
+    /// <summary>Where a pre-filled value came from, or what's still needed to finish a Microsoft 365 template.</summary>
+    private string? RowHint(RecordRow row) => row.Origin switch
+    {
+        RowOrigin.Template when row.Value == DkimRecordValue.Microsoft365TargetStart(row.Selector, DomainName) =>
+            "Add your tenant: <tenant>.<letter>-v1.dkim.mail.microsoft, or <tenant>.onmicrosoft.com for domains added before May 2025. Microsoft 365 shows the exact value.",
+        RowOrigin.Published => "Filled in from what's published in DNS now.",
+        RowOrigin.Pasted => "Filled in from the Microsoft 365 text.",
+        _ => null,
+    };
 
     private string HelpText() => DetectedInboxProvider switch
     {
@@ -113,11 +222,16 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Where a row's value came from: shown as a hint, and it decides whether a published record may replace it.</summary>
+    private enum RowOrigin { None, Stored, Predicted, Template, Published, Pasted }
+
     private sealed class RecordRow(string selector)
     {
         public string Selector { get; } = selector;
         public DkimRecordType Type { get; set; } = DkimRecordType.Cname;
         public string? Value { get; set; }
+        public RowOrigin Origin { get; set; }
+        public bool LookedUp { get; set; }
     }
 
     public sealed record DkimSelectorsDialogResult(List<string> Selectors, List<DkimRecordInput> Records);

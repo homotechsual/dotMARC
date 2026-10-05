@@ -156,4 +156,32 @@ public sealed class DkimDnsCheckerTests
 
         Assert.Equal(DkimCheckStatus.Ok, result.Status);
     }
+
+    [Fact]
+    public async Task LookupSelectorAsync_ReportsAPublishedCname()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":5,"data":"selector1-contoso-io._domainkey.contoso.n-v1.dkim.mail.microsoft."}]}
+            """;
+
+        var published = await checker.LookupSelectorAsync("contoso.io", "selector1", CancellationToken.None);
+
+        Assert.Equal("selector1-contoso-io._domainkey.contoso.n-v1.dkim.mail.microsoft.", published.DelegatedToCname);
+        Assert.Contains("name=selector1._domainkey.contoso.io", handler.Requests[0].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task LookupSelectorAsync_ReportsAPublishedTxtKey()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DKIM1; k=rsa; p=MIIBIjANBgkq\""}]}
+            """;
+
+        var published = await checker.LookupSelectorAsync("contoso.io", "google", CancellationToken.None);
+
+        Assert.Equal("v=DKIM1; k=rsa; p=MIIBIjANBgkq", published.DirectValue);
+        Assert.Null(published.DelegatedToCname);
+    }
 }

@@ -88,6 +88,9 @@ public sealed class DkimDnsChecker : IDkimDnsChecker
         return new DkimCheckResult(DkimCheckStatus.Ok, null);
     }
 
+    public Task<DnsRecordLookupResult> LookupSelectorAsync(string domainName, string selector, CancellationToken cancellationToken) =>
+        LookupAsync($"{selector}._domainkey.{domainName}", cancellationToken);
+
     private async Task<DnsRecordLookupResult> LookupAsync(string name, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type=TXT");

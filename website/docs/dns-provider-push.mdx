@@ -62,13 +62,18 @@ a CNAME target or a TXT value with the key. Where to find them:
 
 | Mail platform | Where |
 | --- | --- |
-| Microsoft 365 | The Defender portal's DKIM page, or `Get-DkimSigningConfig` (`Selector1CNAME` and `Selector2CNAME`). |
+| Microsoft 365 | The Defender portal's DKIM page, or `Get-DkimSigningConfig` (`Selector1CNAME` and `Selector2CNAME`). Paste either into **Paste from Microsoft 365** to fill both selectors at once. |
 | Google Workspace | Admin console > Apps > Google Workspace > Gmail > Authenticate email. |
 | Zoho Mail | Admin console > Domains > Email configuration > DKIM. |
 | Proton Mail | Settings > Domain names, the domain's DKIM step. |
 | Fastmail | Filled in for you. |
 
-Paste them as the console shows them: quotes and line breaks are tidied away. Once a selector has a record, the DKIM
+Selectors that already have a record in DNS are filled in from it, whatever the mail platform. For a Microsoft 365
+domain with nothing published yet, each selector starts with the part of its target that follows from the domain
+(`selector1-contoso-com._domainkey.`). The rest, your tenant's `onmicrosoft.com` name and a letter Microsoft assigns,
+can only come from Microsoft 365, and dotMARC won't save a target that stops at `._domainkey`.
+
+Paste records as the console shows them: quotes and line breaks are tidied away. Once a selector has a record, the DKIM
 check also checks DNS matches it, and says so if a CNAME is in place but the mail platform hasn't published the key
 yet (turn on DKIM signing there). **Push DKIM records** then creates or updates the records that don't match,
 showing anything it would overwrite first.

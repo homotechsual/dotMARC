@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using DotMarc.Data;
+using DotMarc.DnsPush;
 
 namespace DotMarc.Dns;
 
@@ -30,6 +31,9 @@ public static partial class DkimRecordValue
     /// <summary>Why a value can't be used, or null if it can.</summary>
     public static string? Validate(DkimRecordType type, string value) => type switch
     {
+        // An unfinished Microsoft 365 template: the tenant part after ._domainkey is still to be filled in.
+        DkimRecordType.Cname when value.EndsWith("_domainkey", StringComparison.OrdinalIgnoreCase) =>
+            "The target stops at _domainkey. Finish it with the rest your mail platform gives you.",
         DkimRecordType.Cname when !HostName().IsMatch(value) => "That isn't a host name. Paste the CNAME target the mail platform gives you.",
         DkimRecordType.Txt when string.IsNullOrEmpty(PublicKey(value)) => "A DKIM TXT value needs a p= tag with the public key.",
         _ => null
@@ -46,6 +50,42 @@ public static partial class DkimRecordValue
     public static string? FastmailTarget(string selector, string domainName) =>
         selector is "fm1" or "fm2" or "fm3" ? $"{selector}.{domainName}.dkim.fmhosted.com" : null;
 
+    /// <summary>A selector's record as it's published now, ready to store: the CNAME target if it's delegated, otherwise
+    /// a TXT value that carries a key. Null when nothing usable is published.</summary>
+    public static (DkimRecordType Type, string Value)? FromPublished(DnsRecordLookupResult published)
+    {
+        if (!string.IsNullOrWhiteSpace(published.DelegatedToCname))
+        {
+            return (DkimRecordType.Cname, Normalize(DkimRecordType.Cname, published.DelegatedToCname));
+        }
+
+        if (published.DirectValue is { } direct && !string.IsNullOrEmpty(PublicKey(Normalize(DkimRecordType.Txt, direct))))
+        {
+            return (DkimRecordType.Txt, Normalize(DkimRecordType.Txt, direct));
+        }
+
+        return null;
+    }
+
+    /// <summary>The part of a Microsoft 365 selector's CNAME target that follows from the selector and domain. The rest,
+    /// the tenant's onmicrosoft.com prefix and (for domains added since May 2025) a partition letter Microsoft assigns, can't
+    /// be known, so only this much is filled in.</summary>
+    public static string? Microsoft365TargetStart(string selector, string domainName) =>
+        selector is "selector1" or "selector2" ? $"{selector}-{domainName.ToLowerInvariant().Replace('.', '-')}._domainkey." : null;
+
+    /// <summary>The selector1 and selector2 targets found in text pasted from Microsoft 365: Get-DkimSigningConfig's
+    /// Selector1CNAME and Selector2CNAME, or the Defender portal's Publish CNAMEs section. Either target format is read.</summary>
+    public static IReadOnlyDictionary<string, string> Microsoft365Targets(string pasted)
+    {
+        var targets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in Microsoft365Target().Matches(pasted))
+        {
+            targets.TryAdd($"selector{match.Groups[1].Value}", Normalize(DkimRecordType.Cname, match.Value));
+        }
+
+        return targets;
+    }
+
     /// <summary>How a stored record reads in the audit log, such as "CNAME target.example".</summary>
     public static string Describe(DomainDkimRecord record) => $"{record.RecordType.ToString().ToUpperInvariant()} {record.Value}";
 
@@ -54,6 +94,9 @@ public static partial class DkimRecordValue
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
+
+    [GeneratedRegex(@"\bselector([12])-[a-z0-9-]+\._domainkey\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\.?", RegexOptions.IgnoreCase)]
+    private static partial Regex Microsoft365Target();
 
     [GeneratedRegex(@"p=([^;]*)", RegexOptions.IgnoreCase)]
     private static partial Regex PublicKeyTag();
