@@ -7,6 +7,10 @@
 # Generated files
 .docusaurus
 .cache-loader
+# The API reference, generated from data/openapi/dotmarc-api.json by `docusaurus gen-api-docs all`. The folder
+# itself is kept (.gitkeep) because the api docs plugin needs it to exist before anything is generated into it.
+/api/*
+!/api/.gitkeep
 
 # Misc
 .DS_Store

@@ -4,16 +4,17 @@
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
-    "start": "docusaurus start",
-    "build": "docusaurus build",
+    "start": "docusaurus gen-api-docs all && docusaurus start",
+    "build": "docusaurus gen-api-docs all && docusaurus build",
     "swizzle": "docusaurus swizzle",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "screenshots": "node scripts/capture-screenshots.mjs",
-    "typecheck": "tsc",
-    "prebuild": "tsc --project tsconfig.json"
+    "typecheck": "docusaurus gen-api-docs all && tsc",
+    "gen-api-docs": "docusaurus clean-api-docs all && docusaurus gen-api-docs all",
+    "prebuild": "docusaurus gen-api-docs all && tsc --project tsconfig.json"
   },
   "dependencies": {
     "@docusaurus/core": "3.10.2",
@@ -28,7 +29,9 @@
     "@tailwindcss/postcss": "^4.3.3",
     "autoprefixer": "^10.6.1",
     "clsx": "^2.1.1",
-    "postcss": "^8.5.28",
+    "docusaurus-plugin-openapi-docs": "^5.2.0",
+    "docusaurus-theme-openapi-docs": "^5.2.0",
+    "postcss": "^8.5.29",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -57,5 +60,5 @@
   "engines": {
     "node": ">=20.0"
   },
-  "packageManager": "yarn@4.18.0+sha512.fcb8716fe7cd0eece141ffc18b92193a9df9204c1ba83189c288835223fc0bbe64af473bab0d5e9927a7daeb5caf2bb07eb2787cc9338ca040ea125f2a1f2f7e"
+  "packageManager": "yarn@4.18.1+sha512.b2e1e7524f654f2749d32b4ebcb4622473cb5bcbc485df2007e12a154e50162a4d795526768bc5f5b8f81717bfd79deb2472813d86fb5ae2eb551fa9c872b08f"
 }

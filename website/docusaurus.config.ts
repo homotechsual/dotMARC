@@ -5,6 +5,7 @@ import plausiblePlugin from '@homotechsual/docusaurus-plugin-plausible';
 import type {PluginOptions as PlausiblePluginOptions} from '@homotechsual/docusaurus-plugin-plausible';
 import faqsPlugin from '@homotechsual/docusaurus-plugin-faqs';
 import type {PluginOptions as FaqsPluginOptions} from '@homotechsual/docusaurus-plugin-faqs';
+import type * as OpenApiPlugin from "docusaurus-plugin-openapi-docs";
 
 const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = require('./lib/ImageRenderers.cjs');
 const ogPlugin = require('@homotechsual/docusaurus-og');
@@ -83,6 +84,16 @@ const config: Config = {
 
   plugins: [
     [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'api',
+        path: 'api',
+        routeBasePath: 'api',
+        sidebarPath: './apiSidebar.ts',
+        docItemComponent: '@theme/ApiItem',
+      },
+    ],
+    [
       // Keeps every old /blog/* link working (release notes linked from Canny changelog entries, GitHub
       // releases, the app footer and other sites). It writes a small redirect page for each existing
       // /releases-updates route at the matching /blog route, and only does so in a production build.
@@ -121,8 +132,27 @@ const config: Config = {
         routeBasePath: 'faqs',
       } satisfies FaqsPluginOptions,
     ],
+    [ 
+      'docusaurus-plugin-openapi-docs',
+      {
+        id: 'api',
+        docsPluginId: 'api',
+        config: {
+          dotmarc: {
+            specPath: 'data/openapi/dotmarc-api.json',
+            outputDir: 'api',
+            sidebarOptions: {
+              categoryLinkSource: 'tag',
+              groupPathsBy: 'tag',
+            }
+          } satisfies OpenApiPlugin.Options,
+        },
+      } 
+    ],
   ],
-
+  themes: [
+    'docusaurus-theme-openapi-docs',
+  ],
   themeConfig: {
     image: 'img/og-backgrounds/pages-gradient.svg',
     colorMode: {
@@ -138,6 +168,7 @@ const config: Config = {
       },
       items: [
         {to: '/docs/getting-started', label: 'Docs', position: 'left'},
+        {to: '/api/dotmarc-api', label: 'API', position: 'left', activeBaseRegex: '^/api/'},
         {to: '/faqs', label: 'FAQs', position: 'left'},
         {to: '/releases-updates', label: 'Releases and Updates', position: 'left'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
