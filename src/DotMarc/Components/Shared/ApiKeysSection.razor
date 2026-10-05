@@ -167,6 +167,12 @@
                 Snackbar.Add("That role can't be given to a key. Choose another.", Severity.Error);
             }
 
+            if (result.Error is CreateApiKeyError.GroupNotFound)
+            {
+                Snackbar.Add("One of the chosen groups no longer exists. Check the groups and try again.", Severity.Error);
+                await LoadAsync();
+            }
+
             if (result.Secret is not null)
             {
                 _newSecret = result.Secret;

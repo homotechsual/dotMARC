@@ -253,4 +253,36 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
         Assert.Equal("Changed the groups for contoso.com", entry.Summary);
         Assert.Equal([new AuditFieldChange("Groups", "Client A", "Client A, Client B")], entry.Changes);
     }
+
+    [Fact]
+    public async Task RemoveGroup_IsRefused_WhileAnUnrevokedApiKeyIsLimitedToIt_AndAllowedOnceRevoked()
+    {
+        int groupId;
+        int keyId;
+        await using (var context = CreateContext())
+        {
+            var group = new Group { Name = "Offboarded client" };
+            var role = new Role { Name = "Client viewer", IsScopable = true, Permissions = [Permission.DomainsView] };
+            context.Groups.Add(group);
+            context.Roles.Add(role);
+            await context.SaveChangesAsync();
+            groupId = group.Id;
+            keyId = (await ApiKeyManagementService.CreateAsync(context, TestActors.Admin, "Client portal", role.Id, [groupId], 90)).Key!.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            // Deleting the group would leave the key with no groups, which means every group.
+            Assert.Equal(GroupManagementService.RemoveGroupResult.InUseByApiKey, await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, groupId));
+            await ApiKeyManagementService.RevokeAsync(context, TestActors.Admin, keyId);
+        }
+
+        await using (var context = CreateContext())
+        {
+            Assert.Equal(GroupManagementService.RemoveGroupResult.Removed, await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, groupId));
+        }
+
+        await using var verify = CreateContext();
+        Assert.False(await verify.Groups.AnyAsync(group => group.Id == groupId));
+    }
 }

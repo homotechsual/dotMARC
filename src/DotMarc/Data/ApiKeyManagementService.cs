@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace DotMarc.Data;
 
-public enum CreateApiKeyError { InvalidName, NameInUse, RoleNotFound, RoleCanManageAccess, InvalidLifetime }
+public enum CreateApiKeyError { InvalidName, NameInUse, RoleNotFound, RoleCanManageAccess, InvalidLifetime, GroupNotFound }
 
 public enum RevokeApiKeyResult { Revoked, NotFound, AlreadyRevoked }
 
@@ -57,6 +57,12 @@ public static class ApiKeyManagementService
         var groups = role.IsScopable
             ? await context.Groups.Where(group => groupIds.Contains(group.Id)).ToListAsync(cancellationToken).ConfigureAwait(false)
             : [];
+
+        // A key with no groups sees every group, so a group deleted while the form was open must not quietly widen it.
+        if (role.IsScopable && groups.Count != groupIds.Distinct().Count())
+        {
+            return CreateApiKeyResult.Refused(CreateApiKeyError.GroupNotFound);
+        }
         var secret = ApiKeySecrets.Generate();
         var nowUtc = DateTimeOffset.UtcNow;
         var apiKey = new ApiKey

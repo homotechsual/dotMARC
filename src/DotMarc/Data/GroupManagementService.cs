@@ -86,15 +86,28 @@ public static class GroupManagementService
         return AddGroupResult.Added;
     }
 
+    public enum RemoveGroupResult { Removed, InUseByApiKey }
+
     /// <summary>Permanently deletes a Group row. DotMarcDbContext.cs's implicit many-to-many
     /// skip navigation between Domain and Group means EF removes the join rows via the join
-    /// table's own cascade-delete foreign key - no Domain or Report data is touched.</summary>
-    public static async Task RemoveGroupAsync(DotMarcDbContext context, AuditActor actor, int groupId, CancellationToken cancellationToken = default)
+    /// table's own cascade-delete foreign key - no Domain or Report data is touched. Refused while
+    /// an unrevoked API key is limited to the group: a key left with no groups would see every
+    /// group, and a key can't be edited, so it has to be revoked first.</summary>
+    public static async Task<RemoveGroupResult> RemoveGroupAsync(DotMarcDbContext context, AuditActor actor, int groupId, CancellationToken cancellationToken = default)
     {
         var group = await context.Groups.SingleAsync(g => g.Id == groupId, cancellationToken).ConfigureAwait(false);
+        var limitsAnApiKey = await context.ApiKeys
+            .AnyAsync(key => key.RevokedUtc == null && key.ScopedGroups.Any(scopedGroup => scopedGroup.Id == groupId), cancellationToken)
+            .ConfigureAwait(false);
+        if (limitsAnApiKey)
+        {
+            return RemoveGroupResult.InUseByApiKey;
+        }
+
         AuditLog.Record(context, actor, AuditActions.GroupRemoved, AuditTarget.For(group), $"Removed group {group.Name}");
         context.Groups.Remove(group);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return RemoveGroupResult.Removed;
     }
 
     /// <summary>Replaces a domain's full set of group memberships with exactly the given group

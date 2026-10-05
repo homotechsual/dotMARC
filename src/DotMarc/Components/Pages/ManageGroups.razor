@@ -554,7 +554,12 @@
             try
             {
                 await using var db = await DbFactory.CreateDbContextAsync();
-                await GroupManagementService.RemoveGroupAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
+                var removeResult = await GroupManagementService.RemoveGroupAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
+                if (removeResult == GroupManagementService.RemoveGroupResult.InUseByApiKey)
+                {
+                    Snackbar.Add($"Can't remove {row.Name}. An API key is limited to it. Revoke that key on the Access page first.", Severity.Error);
+                }
+
                 await LoadAsync();
             }
             catch (Exception)

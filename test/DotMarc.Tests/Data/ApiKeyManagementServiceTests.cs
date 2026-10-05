@@ -174,4 +174,16 @@ public sealed class ApiKeyManagementServiceTests : IAsyncLifetime
 
         Assert.Equal(RevokeApiKeyResult.NotFound, await ApiKeyManagementService.RevokeAsync(context, TestActors.Admin, 999));
     }
+
+    [Fact]
+    public async Task Create_RefusesAGroupThatDoesntExist_RatherThanMakingAnUnrestrictedKey()
+    {
+        var roleId = await SeedRoleAsync("Client viewer", isScopable: true, Permission.DomainsView);
+        await using var context = CreateContext();
+
+        var result = await ApiKeyManagementService.CreateAsync(context, TestActors.Admin, "Deleted group", roleId, [987654], 90);
+
+        Assert.Equal(CreateApiKeyError.GroupNotFound, result.Error);
+        Assert.False(await context.ApiKeys.AnyAsync());
+    }
 }
