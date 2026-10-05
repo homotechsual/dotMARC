@@ -69,3 +69,17 @@ public sealed record ApiSetGroupsRequest(IReadOnlyList<int>? GroupIds);
 public sealed record ApiSetTagsRequest(IReadOnlyList<int>? TagIds);
 
 public sealed record ApiSetMonitoringRequest(bool? Monitored);
+
+public sealed record ApiImportDomain(string? Name, IReadOnlyList<string>? Groups, IReadOnlyList<string>? Tags, bool? Monitored);
+
+public sealed record ApiImportRequest(string? ExistingDomains, string? UnknownNames, IReadOnlyList<ApiImportDomain>? Domains);
+
+/// <summary>Outcome is add, update, unchanged, skip, duplicate or invalid in a dry run; after applying, the import's
+/// own outcome text.</summary>
+public sealed record ApiImportRow(int Line, string Domain, string Outcome, IReadOnlyList<string> Notes);
+
+public sealed record ApiImportUnknownName(string Kind, string Name, string Resolution);
+
+public sealed record ApiImportResponse(
+    bool DryRun, int Added, int Updated, int Unchanged, int SkippedExisting, int Invalid, int Duplicates,
+    IReadOnlyList<ApiImportRow> Rows, IReadOnlyList<ApiImportUnknownName> UnknownNames, IReadOnlyList<string> Notices);
