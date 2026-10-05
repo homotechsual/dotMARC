@@ -107,6 +107,7 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         {
             DnsRecordChangeKind.Merge => await UpdateExistingRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false),
             DnsRecordChangeKind.Replace => await ReplaceRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false),
+            DnsRecordChangeKind.ReplaceTxtValues => await ReplaceTxtValuesAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false),
             _ => await CreateRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false)
         };
     }
@@ -272,6 +273,52 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         }
     }
 
+    /// <summary>Replaces only the given values among the TXT records at change.Name. The new record is created before
+    /// the old ones are deleted, so the name is never left without SPF; if a delete then fails, the name briefly has
+    /// two SPF records, which the message says.</summary>
+    private async Task<DnsPushResult> ReplaceTxtValuesAsync(string zoneId, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
+    {
+        using var findRequest = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/zones/{zoneId}/dns_records?type=TXT&name={Uri.EscapeDataString(change.Name)}");
+        findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
+        if (!findResponse.IsSuccessStatusCode)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}) - nothing was changed.");
+        }
+
+        var existing = (await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<RecordWithContent>>>(cancellationToken: cancellationToken).ConfigureAwait(false))?.Result ?? [];
+        var records = existing.Select(record => (record.Id, Value: TxtValues.FromQuotedText(record.Content))).ToList();
+        var remove = change.ValuesToRemove ?? [];
+        var (_, missing) = TxtValues.ReplaceValues(records.Select(record => record.Value), remove, change.DesiredValue);
+        if (missing.Count > 0)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed since this push started, so nothing was changed. Try again.");
+        }
+
+        if (!records.Any(record => record.Value == change.DesiredValue))
+        {
+            var created = await CreateRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false);
+            if (created.Outcome != DnsPushOutcome.Pushed)
+            {
+                return created;
+            }
+        }
+
+        foreach (var record in records.Where(record => remove.Contains(record.Value) && record.Value != change.DesiredValue))
+        {
+            using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"{ApiBase}/zones/{zoneId}/dns_records/{record.Id}");
+            deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
+            if (!deleteResponse.IsSuccessStatusCode)
+            {
+                return new DnsPushResult(DnsPushOutcome.ProviderError,
+                    $"The new record was added at {change.Name}, but removing the old \"{record.Value}\" failed ({(int)deleteResponse.StatusCode}), so the name now has more than one SPF record. Remove the old one by hand.");
+            }
+        }
+
+        return new DnsPushResult(DnsPushOutcome.Pushed, null);
+    }
+
     /// <summary>Cloudflare's own API treats an unquoted TXT content value as non-conformant - it
     /// accepts it and normalizes on their side (functionally identical either way), but flags the
     /// record with a validation warning in their dashboard. Wrapping it here avoids that warning and
@@ -281,12 +328,13 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     /// non-TXT type) content is never zone-file text and must NOT be quoted.</summary>
     private static string BuildContent(DnsRecordChange change) =>
         string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase)
-            ? $"\"{change.DesiredValue.Replace("\"", "\\\"")}\""
+            ? TxtValues.ToQuotedText(change.DesiredValue)
             : change.DesiredValue;
 
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string? AccessToken);
     private sealed record ApiResponse<T>([property: JsonPropertyName("result")] T? Result);
     private sealed record IdRecord([property: JsonPropertyName("id")] string Id);
+    private sealed record RecordWithContent([property: JsonPropertyName("id")] string Id, [property: JsonPropertyName("content")] string Content);
     private sealed record DnsRecordPayload(
         [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("name")] string Name,

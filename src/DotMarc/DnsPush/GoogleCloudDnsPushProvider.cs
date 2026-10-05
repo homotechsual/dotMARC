@@ -127,6 +127,7 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
         {
             DnsRecordChangeKind.Merge => await UpdateExistingRecordAsync(projectId, managedZoneName, accessToken, change, cancellationToken).ConfigureAwait(false),
             DnsRecordChangeKind.Replace => await ReplaceRecordAsync(projectId, managedZoneName, accessToken, change, cancellationToken).ConfigureAwait(false),
+            DnsRecordChangeKind.ReplaceTxtValues => await ReplaceTxtValuesAsync(projectId, managedZoneName, accessToken, change, cancellationToken).ConfigureAwait(false),
             _ => await CreateRecordAsync(projectId, managedZoneName, accessToken, change, cancellationToken).ConfigureAwait(false)
         };
     }
@@ -292,6 +293,29 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
             : new DnsPushResult(DnsPushOutcome.ProviderError, $"{result.DetailMessage} Nothing was changed - Google applies this kind of change atomically, so a failed request never leaves {change.Name} without a record.");
     }
 
+    /// <summary>Replaces only the given values in the TXT rrset at change.Name, in one atomic change that deletes the
+    /// rrset and adds it back with the other values kept.</summary>
+    private async Task<DnsPushResult> ReplaceTxtValuesAsync(string projectId, string managedZoneName, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
+    {
+        var fqdn = change.Name.TrimEnd('.') + ".";
+        var existing = await GetExistingRrsetAsync(projectId, managedZoneName, fqdn, "TXT", accessToken, cancellationToken).ConfigureAwait(false);
+        if (existing.ErrorStatusCode.HasValue)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Google rejected the record lookup ({existing.ErrorStatusCode}) - nothing was changed.");
+        }
+
+        var current = existing.Rrset?.Rrdatas.Select(TxtValues.FromQuotedText).ToList() ?? [];
+        var (values, missing) = TxtValues.ReplaceValues(current, change.ValuesToRemove ?? [], change.DesiredValue);
+        if (missing.Count > 0)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed since this push started, so nothing was changed. Try again.");
+        }
+
+        var additions = new List<ResourceRecordSet> { new(fqdn, "TXT", existing.Rrset?.Ttl ?? 3600, values.Select(TxtValues.ToQuotedText).ToList()) };
+        var deletions = existing.Rrset is null ? new List<ResourceRecordSet>() : [existing.Rrset];
+        return await ApplyChangeAsync(projectId, managedZoneName, accessToken, additions, deletions, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<(ResourceRecordSet? Rrset, int? ErrorStatusCode)> GetExistingRrsetAsync(string projectId, string managedZoneName, string fqdn, string recordType, string accessToken, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get,
@@ -327,7 +351,7 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
     /// non-TXT type) content is never zone-file text and must NOT be quoted.</summary>
     private static string BuildRrdata(DnsRecordChange change) =>
         string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase)
-            ? $"\"{change.DesiredValue.Replace("\"", "\\\"")}\""
+            ? TxtValues.ToQuotedText(change.DesiredValue)
             : change.DesiredValue;
 
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string? AccessToken);

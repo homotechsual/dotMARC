@@ -4,7 +4,9 @@ namespace DotMarc.DnsPush;
 /// creates a new RecordType record in its place - used when the existing record is a CNAME
 /// delegating elsewhere (DNS doesn't allow a CNAME to coexist with any other record type at the
 /// same name, so there is no in-place "merge" for this case, only delete-then-create).</summary>
-public enum DnsRecordChangeKind { Create, Merge, Replace }
+/// ReplaceTxtValues removes ValuesToRemove from the TXT values at Name and adds DesiredValue, leaving every other
+/// value there alone: the SPF push at a domain's apex, where site verification records live too.
+public enum DnsRecordChangeKind { Create, Merge, Replace, ReplaceTxtValues }
 
 /// <summary>One DNS record change to push, independent of which provider ends up handling it.
 /// ExistingValue is set for Kind == Merge (the pushed value replaces, not appends to, whatever's
@@ -19,4 +21,5 @@ public sealed record DnsRecordChange(
     string DesiredValue,
     string? ExistingValue,
     string ZoneName,
-    string? ExistingRecordType = null);
+    string? ExistingRecordType = null,
+    IReadOnlyList<string>? ValuesToRemove = null);

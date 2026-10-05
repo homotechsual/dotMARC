@@ -149,11 +149,16 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     private static async Task<DnsPushResult> PushRecordAsync(DnsZoneResource zone, string zoneName, DnsRecordChange change, CancellationToken cancellationToken)
     {
         // "mta-sts.contoso.co.uk" under zone "contoso.co.uk" -> relative record name "mta-sts".
-        var relativeName = change.Name[..^(zoneName.Length + 1)];
+        var relativeName = RelativeName(change.Name, zoneName);
 
         if (change.Kind == DnsRecordChangeKind.Replace)
         {
             return await ReplaceRecordAsync(zone, relativeName, change, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (change.Kind == DnsRecordChangeKind.ReplaceTxtValues)
+        {
+            return await ReplaceTxtValuesAsync(zone, relativeName, change, cancellationToken).ConfigureAwait(false);
         }
 
         try
@@ -182,7 +187,7 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
                 }
 
                 var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
-                data.DnsTxtRecords.Add(new DnsTxtRecordInfo { Values = { change.DesiredValue } });
+                data.DnsTxtRecords.Add(ToTxtRecordInfo(change.DesiredValue));
                 await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
         }
@@ -205,23 +210,27 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
     {
         var existingType = change.ExistingRecordType ?? change.RecordType;
 
-        if (!string.Equals(existingType, "CNAME", StringComparison.OrdinalIgnoreCase))
+        // Only these two conversions are ever built (a third party's CNAME delegation replaced by a TXT record, and a
+        // DKIM selector switching between a CNAME and a TXT key), so anything else fails loudly here.
+        var isCnameToTxt = string.Equals(existingType, "CNAME", StringComparison.OrdinalIgnoreCase) && string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase);
+        var isTxtToCname = string.Equals(existingType, "TXT", StringComparison.OrdinalIgnoreCase) && string.Equals(change.RecordType, "CNAME", StringComparison.OrdinalIgnoreCase);
+        if (!isCnameToTxt && !isTxtToCname)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to delete an existing {existingType} record - only CNAME is supported for a replace. Nothing was changed.");
-        }
-        if (!string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase))
-        {
-            // Mirrors the guard above: Replace is only ever built (in Program.cs) as CNAME-to-TXT
-            // today. Guarding this side too means a future record type added without updating this
-            // method fails loudly here instead of silently creating a TXT record under the wrong
-            // type's name, then reporting the wrong type back in the error message.
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to create a {change.RecordType} record for a replace - only TXT is supported. Nothing was changed.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Don't know how to replace a {existingType} record with a {change.RecordType} record. Nothing was changed.");
         }
 
         try
         {
-            var existingRecord = await zone.GetDnsCnameRecords().GetAsync(relativeName, cancellationToken).ConfigureAwait(false);
-            await existingRecord.Value.DeleteAsync(WaitUntil.Completed, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (isCnameToTxt)
+            {
+                var existingRecord = await zone.GetDnsCnameRecords().GetAsync(relativeName, cancellationToken).ConfigureAwait(false);
+                await existingRecord.Value.DeleteAsync(WaitUntil.Completed, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var existingRecord = await zone.GetDnsTxtRecords().GetAsync(relativeName, cancellationToken).ConfigureAwait(false);
+                await existingRecord.Value.DeleteAsync(WaitUntil.Completed, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -250,10 +259,18 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         // - the same silent-failure gap this outcome exists to prevent.
         try
         {
-            var txtRecords = zone.GetDnsTxtRecords();
-            var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
-            data.DnsTxtRecords.Add(new DnsTxtRecordInfo { Values = { change.DesiredValue } });
-            await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (isCnameToTxt)
+            {
+                var txtRecords = zone.GetDnsTxtRecords();
+                var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
+                data.DnsTxtRecords.Add(ToTxtRecordInfo(change.DesiredValue));
+                await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var data = new DnsCnameRecordData { TtlInSeconds = 3600, Cname = change.DesiredValue };
+                await zone.GetDnsCnameRecords().CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ex is RequestFailedException or TaskCanceledException)
         {
@@ -261,6 +278,60 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
+    }
+
+    /// <summary>The record name relative to its zone, as Azure DNS wants it: "@" for the zone apex itself.</summary>
+    internal static string RelativeName(string recordName, string zoneName)
+    {
+        var name = recordName.TrimEnd('.');
+        return string.Equals(name, zoneName.TrimEnd('.'), StringComparison.OrdinalIgnoreCase) ? "@" : name[..^(zoneName.TrimEnd('.').Length + 1)];
+    }
+
+    private static DnsTxtRecordInfo ToTxtRecordInfo(string value)
+    {
+        var info = new DnsTxtRecordInfo();
+        foreach (var chunk in TxtValues.Split(value))
+        {
+            info.Values.Add(chunk);
+        }
+
+        return info;
+    }
+
+    /// <summary>Replaces only the given values in the TXT record set at relativeName, keeping its other values and TTL.</summary>
+    private static async Task<DnsPushResult> ReplaceTxtValuesAsync(DnsZoneResource zone, string relativeName, DnsRecordChange change, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var txtRecords = zone.GetDnsTxtRecords();
+            var current = new List<string>();
+            long ttl = 3600;
+            if ((await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
+            {
+                var existing = (await txtRecords.GetAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value;
+                current = existing.Data.DnsTxtRecords.Select(record => string.Concat(record.Values)).ToList();
+                ttl = existing.Data.TtlInSeconds ?? 3600;
+            }
+
+            var (values, missing) = TxtValues.ReplaceValues(current, change.ValuesToRemove ?? [], change.DesiredValue);
+            if (missing.Count > 0)
+            {
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed since this push started, so nothing was changed. Try again.");
+            }
+
+            var data = new DnsTxtRecordData { TtlInSeconds = ttl };
+            foreach (var value in values)
+            {
+                data.DnsTxtRecords.Add(ToTxtRecordInfo(value));
+            }
+
+            await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return new DnsPushResult(DnsPushOutcome.Pushed, null);
+        }
+        catch (RequestFailedException exception)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the record push: {exception.Message}");
+        }
     }
 
     /// <summary>Wraps an access token already obtained via the delegated authorization-code
