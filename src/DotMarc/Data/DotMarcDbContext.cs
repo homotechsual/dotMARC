@@ -34,6 +34,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
+    public DbSet<DomainDkimRecord> DomainDkimRecords => Set<DomainDkimRecord>();
+    public DbSet<DnsRecordSettings> DnsRecordSettings => Set<DnsRecordSettings>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
     public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
@@ -295,6 +297,20 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.HasOne<Domain>().WithMany(domain => domain.AlertStates).HasForeignKey(state => state.DomainId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<DomainDkimRecord>(entity =>
+        {
+            entity.Property(record => record.Selector).HasMaxLength(63);
+            entity.Property(record => record.RecordType).HasConversion<string>().HasMaxLength(10);
+            entity.Property(record => record.Value).HasMaxLength(4096);
+            entity.HasIndex(record => new { record.DomainId, record.Selector }).IsUnique();
+            entity.HasOne<Domain>().WithMany(domain => domain.DkimRecords).HasForeignKey(record => record.DomainId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DnsRecordSettings>(entity =>
+        {
+            entity.Property(settings => settings.SpfAllQualifier).HasConversion<string>().HasMaxLength(10);
+        });
+
         modelBuilder.Entity<NotificationSettings>(entity =>
         {
             entity.Property(settings => settings.DmarcAlertMode).HasConversion<string>().HasMaxLength(20);
@@ -346,5 +362,6 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<CloudflareDnsSettings>().HasData(new CloudflareDnsSettings { Id = 1 });
         modelBuilder.Entity<AzureDnsSettings>().HasData(new AzureDnsSettings { Id = 1 });
         modelBuilder.Entity<GoogleCloudDnsSettings>().HasData(new GoogleCloudDnsSettings { Id = 1 });
+        modelBuilder.Entity<DnsRecordSettings>().HasData(new DnsRecordSettings { Id = 1 });
     }
 }

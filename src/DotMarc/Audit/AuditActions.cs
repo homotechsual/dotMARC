@@ -9,6 +9,7 @@ public static class AuditActions
     public const string DomainHaloClientChanged = "domain.halo_client_changed";
     public const string DomainMtaStsChanged = "domain.mta_sts_changed";
     public const string DomainDkimSelectorsChanged = "domain.dkim_selectors_changed";
+    public const string DomainDkimRecordsChanged = "domain.dkim_records_changed";
     public const string DomainsReordered = "domains.reordered";
     public const string DomainsImported = "domains.imported";
     public const string DomainGroupsChanged = "domain.groups_changed";
@@ -34,6 +35,7 @@ public static class AuditActions
     public const string CloudflareDnsSettingsSaved = "settings.cloudflare_dns.saved";
     public const string AzureDnsSettingsSaved = "settings.azure_dns.saved";
     public const string GoogleCloudDnsSettingsSaved = "settings.google_cloud_dns.saved";
+    public const string DnsRecordSettingsSaved = "settings.dns_records.saved";
     public const string AuditSettingsSaved = "settings.audit.saved";
     public const string DnsPushed = "dns.pushed";
     public const string DnsPushFailed = "dns.push_failed";
@@ -53,6 +55,7 @@ public static class AuditActions
         (DomainHaloClientChanged, "Domain Halo client changed"),
         (DomainMtaStsChanged, "Domain MTA-STS changed"),
         (DomainDkimSelectorsChanged, "Domain DKIM selectors changed"),
+        (DomainDkimRecordsChanged, "Domain DKIM records changed"),
         (DomainsReordered, "Domains reordered"),
         (DomainsImported, "Domains imported"),
         (DomainGroupsChanged, "Domain groups changed"),
@@ -78,6 +81,7 @@ public static class AuditActions
         (CloudflareDnsSettingsSaved, "Cloudflare DNS settings saved"),
         (AzureDnsSettingsSaved, "Azure DNS settings saved"),
         (GoogleCloudDnsSettingsSaved, "Google Cloud DNS settings saved"),
+        (DnsRecordSettingsSaved, "DNS record settings saved"),
         (AuditSettingsSaved, "Audit retention changed"),
         (DnsPushed, "DNS records pushed"),
         (DnsPushFailed, "DNS push failed partway"),

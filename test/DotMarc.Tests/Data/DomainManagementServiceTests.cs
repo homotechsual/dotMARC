@@ -386,4 +386,82 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
         var entry = await LatestEntryAsync(verify);
         Assert.Equal((AuditActions.DomainRemoved, "contoso.com", "Removed domain contoso.com"), (entry.Action, entry.TargetName, entry.Summary));
     }
+
+    private async Task<int> SeedDomainWithSelectorsAsync(params string[] selectors)
+    {
+        await using var context = CreateContext();
+        var domain = new Domain { Name = "dkim.example", FirstSeenUtc = DateTimeOffset.UtcNow, IsMonitored = true, DkimSelectors = [.. selectors] };
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+        return domain.Id;
+    }
+
+    [Fact]
+    public async Task SetDkimRecordsAsync_SavesTidiedValues_AndAuditsThem()
+    {
+        var domainId = await SeedDomainWithSelectorsAsync("selector1", "google");
+
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.SetDkimRecordsAsync(context, TestActors.Admin, domainId,
+            [
+                new DkimRecordInput("selector1", DkimRecordType.Cname, "Selector1-dkim-example._domainkey.contoso.onmicrosoft.com."),
+                new DkimRecordInput("google", DkimRecordType.Txt, "\"v=DKIM1; k=rsa; \" \"p=MIIBIjAN\""),
+                new DkimRecordInput("not-a-selector", DkimRecordType.Txt, "v=DKIM1; p=IGNORED"),
+            ]);
+        }
+
+        await using var verify = CreateContext();
+        var records = await verify.DomainDkimRecords.OrderBy(record => record.Selector).ToListAsync();
+        Assert.Equal(
+            [("google", DkimRecordType.Txt, "v=DKIM1; k=rsa; p=MIIBIjAN"), ("selector1", DkimRecordType.Cname, "selector1-dkim-example._domainkey.contoso.onmicrosoft.com")],
+            records.Select(record => (record.Selector, record.RecordType, record.Value)));
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Equal(AuditActions.DomainDkimRecordsChanged, entry.Action);
+        Assert.Contains(new AuditFieldChange("DKIM selector1", null, "CNAME selector1-dkim-example._domainkey.contoso.onmicrosoft.com"), entry.Changes);
+    }
+
+    [Fact]
+    public async Task SetDkimRecordsAsync_ABlankValueRemovesTheRecord()
+    {
+        var domainId = await SeedDomainWithSelectorsAsync("google");
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.SetDkimRecordsAsync(context, TestActors.Admin, domainId, [new DkimRecordInput("google", DkimRecordType.Txt, "v=DKIM1; p=ABC")]);
+            await DomainManagementService.SetDkimRecordsAsync(context, TestActors.Admin, domainId, [new DkimRecordInput("google", DkimRecordType.Txt, "  ")]);
+        }
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.DomainDkimRecords);
+    }
+
+    [Fact]
+    public async Task SetDkimRecordsAsync_RefusesAnInvalidValue_NamingTheSelector()
+    {
+        var domainId = await SeedDomainWithSelectorsAsync("google");
+        await using var context = CreateContext();
+
+        var refusal = await Assert.ThrowsAsync<ArgumentException>(() =>
+            DomainManagementService.SetDkimRecordsAsync(context, TestActors.Admin, domainId, [new DkimRecordInput("google", DkimRecordType.Txt, "v=DKIM1; k=rsa")]));
+
+        Assert.StartsWith("google:", refusal.Message);
+    }
+
+    [Fact]
+    public async Task SetDkimSelectorsAsync_RemovesTheRecordsOfRemovedSelectors()
+    {
+        var domainId = await SeedDomainWithSelectorsAsync("selector1", "selector2");
+        await using (var context = CreateContext())
+        {
+            await DomainManagementService.SetDkimRecordsAsync(context, TestActors.Admin, domainId,
+            [
+                new DkimRecordInput("selector1", DkimRecordType.Txt, "v=DKIM1; p=ONE"),
+                new DkimRecordInput("selector2", DkimRecordType.Txt, "v=DKIM1; p=TWO"),
+            ]);
+            await DomainManagementService.SetDkimSelectorsAsync(context, TestActors.Admin, domainId, ["selector1"]);
+        }
+
+        await using var verify = CreateContext();
+        Assert.Equal(["selector1"], await verify.DomainDkimRecords.Select(record => record.Selector).ToListAsync());
+    }
 }

@@ -1,4 +1,5 @@
 using DotMarc.Audit;
+using DotMarc.Dns;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -143,15 +144,75 @@ public static class DomainManagementService
     /// MTA-STS" flow's immediate-check-after-save pattern.</summary>
     public static async Task SetDkimSelectorsAsync(DotMarcDbContext context, AuditActor actor, int domainId, List<string> selectors, CancellationToken cancellationToken = default)
     {
-        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var domain = await context.Domains.Include(d => d.DkimRecords).SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges().Set("DKIM selectors", domain.DkimSelectors, selectors);
         if (!changes.Any)
         {
             return;
         }
 
+        // A removed selector's stored record goes with it.
+        foreach (var orphan in domain.DkimRecords.Where(record => !selectors.Contains(record.Selector, StringComparer.OrdinalIgnoreCase)).ToList())
+        {
+            changes.Field($"DKIM {orphan.Selector}", DkimRecordValue.Describe(orphan), (string?)null);
+            domain.DkimRecords.Remove(orphan);
+        }
+
         domain.DkimSelectors = selectors;
         AuditLog.Record(context, actor, AuditActions.DomainDkimSelectorsChanged, AuditTarget.For(domain), $"Changed the DKIM selectors for {domain.Name}", changes);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Sets the stored DKIM record for each of the domain's selectors: a blank value removes it, and inputs
+    /// for selectors the domain doesn't have are ignored. Values are tidied, then checked; an invalid one throws an
+    /// ArgumentException naming its selector, and nothing is saved.</summary>
+    public static async Task SetDkimRecordsAsync(DotMarcDbContext context, AuditActor actor, int domainId, IReadOnlyList<DkimRecordInput> records, CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.Include(d => d.DkimRecords).SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var changes = new AuditChanges();
+        foreach (var selector in domain.DkimSelectors)
+        {
+            var input = records.FirstOrDefault(candidate => string.Equals(candidate.Selector, selector, StringComparison.OrdinalIgnoreCase));
+            var existing = domain.DkimRecords.FirstOrDefault(record => string.Equals(record.Selector, selector, StringComparison.OrdinalIgnoreCase));
+            var before = existing is null ? null : DkimRecordValue.Describe(existing);
+
+            if (input is null || string.IsNullOrWhiteSpace(input.Value))
+            {
+                if (existing is not null)
+                {
+                    domain.DkimRecords.Remove(existing);
+                    changes.Field($"DKIM {selector}", before, (string?)null);
+                }
+
+                continue;
+            }
+
+            var value = DkimRecordValue.Normalize(input.Type, input.Value);
+            if (DkimRecordValue.Validate(input.Type, value) is { } problem)
+            {
+                throw new ArgumentException($"{selector}: {problem}", nameof(records));
+            }
+
+            if (existing is null)
+            {
+                existing = new DomainDkimRecord { Selector = selector, RecordType = input.Type, Value = value };
+                domain.DkimRecords.Add(existing);
+            }
+            else
+            {
+                existing.RecordType = input.Type;
+                existing.Value = value;
+            }
+
+            changes.Field($"DKIM {selector}", before, DkimRecordValue.Describe(existing));
+        }
+
+        if (!changes.Any)
+        {
+            return;
+        }
+
+        AuditLog.Record(context, actor, AuditActions.DomainDkimRecordsChanged, AuditTarget.For(domain), $"Changed the DKIM records for {domain.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
