@@ -9,8 +9,8 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 # DNS Provider Push
 
-If a domain's DNS is hosted on Cloudflare, Azure DNS, or Google Cloud DNS, dotMARC can push the
-MTA-STS CNAME or the DMARC TXT record straight there instead of you copying it in by hand. Each
+If a domain's DNS is hosted on Cloudflare, Azure DNS, or Google Cloud DNS, dotMARC can push its
+MTA-STS, DMARC, TLS reporting, SPF and DKIM records straight there instead of you copying them in by hand. Each
 push is authenticated fresh through that provider's own consent screen, with nothing about that
 authentication stored.
 
@@ -29,6 +29,49 @@ provider.
     dark: useBaseUrl('/img/screenshots/dns-push-settings-dark.png'),
   }}
 />
+
+## Editing SPF
+
+**Edit SPF** on a domain's SPF check opens the SPF editor. It starts from the live record. If the domain has more
+than one SPF record (an error, since receivers allow only one), it starts from them merged into one. With no record,
+it starts with an include for each mail service dotMARC detected.
+
+In the editor you can:
+
+* add an include, from a list of common mail services or by typing a host name;
+* remove an include;
+* set the ending: `~all` (softfail) or `-all` (fail);
+* choose **This domain sends no mail**, which publishes `v=spf1 -all`.
+
+Every other part of the record is kept as it is.
+
+The editor counts the DNS lookups the record needs, following each include. Receivers stop at 10 and SPF then fails,
+so a record over 10 can't be pushed. If the live record is already over 10, any edit that lowers the count can be,
+so you can work your way back under.
+
+The domain's apex usually holds other TXT records too, such as site verifications. The push changes only the SPF
+record and leaves the others alone. If someone changes SPF in the DNS provider after you open the editor, the push
+stops and asks you to reopen it.
+
+The ending for new records is set under **Manage → DNS push settings → DNS records** (`~all` by default).
+
+## DKIM records
+
+**Configure selectors** on a domain's DKIM check takes, for each selector, the record your mail platform gives you:
+a CNAME target or a TXT value with the key. Where to find them:
+
+| Mail platform | Where |
+| --- | --- |
+| Microsoft 365 | The Defender portal's DKIM page, or `Get-DkimSigningConfig` (`Selector1CNAME` and `Selector2CNAME`). |
+| Google Workspace | Admin console > Apps > Google Workspace > Gmail > Authenticate email. |
+| Zoho Mail | Admin console > Domains > Email configuration > DKIM. |
+| Proton Mail | Settings > Domain names, the domain's DKIM step. |
+| Fastmail | Filled in for you. |
+
+Paste them as the console shows them: quotes and line breaks are tidied away. Once a selector has a record, the DKIM
+check also checks DNS matches it, and says so if a CNAME is in place but the mail platform hasn't published the key
+yet (turn on DKIM signing there). **Push DKIM records** then creates or updates the records that don't match,
+showing anything it would overwrite first.
 
 ## Cloudflare
 

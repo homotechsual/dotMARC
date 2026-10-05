@@ -20,12 +20,14 @@ receivers use both to decide whether a message "authenticates" as being from you
 
 * **SPF** (RFC 7208) publishes which mail servers are allowed to send for your domain, as a
   `v=spf1 ...` TXT record at the domain apex. dotMARC's SPF check confirms exactly one such record
-  exists and starts with the right prefix - it doesn't evaluate `include:`/`redirect=` chains or
-  the 10-DNS-lookup limit those can hit.
+  exists and starts with the right prefix. It also counts the DNS lookups the record needs, following
+  its includes, and flags a record that needs more than 10 (**Too many DNS lookups**) or includes a
+  domain with no SPF record.
 * **DKIM** (RFC 6376) signs outgoing mail with a private key, verified against a public key
   published at `<selector>._domainkey.<domain>`. Because selectors are provider-specific strings
   with no DNS-discoverable convention, dotMARC can't guess yours - the DKIM check only runs once
-  you've told it which selector(s) to look for.
+  you've told it which selector(s) to look for. If you've stored the record your mail platform gives
+  you for a selector, the check also confirms DNS matches it.
 
 A message can fail SPF or DKIM individually and still pass DMARC (it only needs one of the two to
 align with the visible From: domain) - which is exactly why DMARC aggregate reports are useful:
