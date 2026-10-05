@@ -1,0 +1,197 @@
+@* src/DotMarc/Components/Dialogs/SpfEditorDialog.razor *@
+@using DotMarc.Dns
+@using DotMarc.DnsPush
+@inject ITxtRecordLookup TxtRecordLookup
+
+<MudDialog>
+    <TitleContent>Edit SPF for @DomainName</TitleContent>
+    <DialogContent>
+        @if (_isMerge)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                @DomainName has @LiveValues.Count SPF records, and receivers treat that as an error. This starts from them merged into one.
+            </MudAlert>
+        }
+        @if (_record.AllTerm is { Qualifier: '+' or '?' })
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                The record ends with @_record.AllTerm.Text, which doesn't protect the domain. Pick an ending below.
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.subtitle2">Record</MudText>
+        <MudPaper Outlined="true" Class="pa-2 mb-2" Style="font-family:monospace; word-break:break-all">@_record.Format()</MudPaper>
+        <MudText Typo="Typo.caption" Class="d-block mb-3" Color="@(_proposedCount?.IsOverLimit == true ? Color.Error : Color.Default)">
+            @(_proposedCount is null ? "Counting DNS lookups..." : $"{_proposedCount.Total} of {SpfLookupCount.Limit} DNS lookups") · @_record.Format().Length characters
+            @if (_record.Format().Length > SpfEditor.LengthWarning)
+            {
+                <span>(some resolvers truncate TXT answers this long)</span>
+            }
+        </MudText>
+
+        <MudText Typo="Typo.subtitle2">Includes</MudText>
+        @foreach (var include in _record.Includes)
+        {
+            <div class="d-flex align-center" style="gap:0.5rem">
+                <MudText Typo="Typo.body2" Style="font-family:monospace">include:@include</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@CostOf(include)</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" title="Remove" OnClick="@(() => RemoveIncludeAsync(include))" />
+            </div>
+        }
+        <div class="d-flex align-center mt-2" style="gap:0.5rem">
+            <MudSelect T="string" Label="Add a service" @bind-Value="_serviceToAdd" Dense="true" Style="min-width:220px" Clearable="true">
+                @foreach (var service in OrderedCatalog())
+                {
+                    <MudSelectItem T="string" Value="service.Include">@service.Name (@service.Include)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField T="string" Label="Or an include host" @bind-Value="_typedInclude" Margin="Margin.Dense" />
+            <MudButton Variant="Variant.Outlined" OnClick="AddIncludeAsync">Add</MudButton>
+        </div>
+        @if (_includeError is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error">@_includeError</MudText>
+        }
+
+        <div class="d-flex align-center mt-3" style="gap:1rem">
+            <MudSelect T="char" Label="Ending" Value="@(_record.AllTerm?.Qualifier ?? ' ')" ValueChanged="SetEndingAsync" Dense="true" Style="max-width:260px">
+                <MudSelectItem T="char" Value="'~'">~all (softfail)</MudSelectItem>
+                <MudSelectItem T="char" Value="'-'">-all (fail)</MudSelectItem>
+            </MudSelect>
+            <MudButton Variant="Variant.Text" OnClick="SendsNoMailAsync">This domain sends no mail</MudButton>
+        </div>
+
+        @if (_proposedCount is { Problems.Count: > 0 })
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-3">Problems</MudText>
+            @foreach (var problem in _proposedCount.Problems)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Warning">@problem</MudText>
+            }
+        }
+
+        @if (!CanPush)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">@CannotPushReason</MudAlert>
+        }
+        else if (BlockMessage() is { } blocked)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">@blocked</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanPush || _proposedCount is null || BlockMessage() is not null)" OnClick="Push">Push</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string DomainName { get; set; } = "";
+    [Parameter] public List<string> LiveValues { get; set; } = [];
+    [Parameter] public List<string> SuggestedIncludes { get; set; } = [];
+    [Parameter] public char DefaultEnding { get; set; } = '~';
+    [Parameter] public bool CanPush { get; set; }
+    [Parameter] public string? CannotPushReason { get; set; }
+
+    private SpfRecord _record = SpfRecord.Parse("v=spf1");
+    private bool _isMerge;
+    private SpfLookupCounter _counter = default!;
+    private SpfLookupCount? _proposedCount;
+    private SpfLookupCount? _worstLiveCount;
+    private string? _serviceToAdd;
+    private string? _typedInclude;
+    private string? _includeError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // One cache for the dialog's lifetime, so recounting after each edit doesn't re-query includes.
+        _counter = new SpfLookupCounter(new CachingTxtRecordLookup(TxtRecordLookup));
+        (_record, _isMerge) = SpfEditor.StartingPoint(LiveValues, SuggestedIncludes, DefaultEnding);
+        foreach (var liveValue in LiveValues)
+        {
+            var liveCount = await CountSafelyAsync(SpfRecord.Parse(liveValue));
+            if (liveCount is not null && (_worstLiveCount is null || liveCount.Total > _worstLiveCount.Total))
+            {
+                _worstLiveCount = liveCount;
+            }
+        }
+
+        await RecountAsync();
+    }
+
+    private async Task<SpfLookupCount?> CountSafelyAsync(SpfRecord record)
+    {
+        try
+        {
+            return await _counter.CountAsync(DomainName, record, CancellationToken.None);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    private async Task RecountAsync()
+    {
+        _proposedCount = null;
+        StateHasChanged();
+        _proposedCount = await CountSafelyAsync(_record) ?? new SpfLookupCount(0, [], [], ["DNS lookups couldn't be counted right now. Try again in a moment."]);
+    }
+
+    private IEnumerable<(string Name, string Include)> OrderedCatalog() =>
+        SpfIncludeCatalog.All.OrderBy(service => SuggestedIncludes.Contains(service.Include) ? 0 : 1);
+
+    private string CostOf(string include) =>
+        _proposedCount?.TermCosts.FirstOrDefault(cost => cost.Term.EndsWith($"include:{include}", StringComparison.OrdinalIgnoreCase)) is { } cost
+            ? $"{cost.Lookups} lookup{(cost.Lookups == 1 ? "" : "s")}"
+            : "";
+
+    private async Task AddIncludeAsync()
+    {
+        _includeError = null;
+        var host = (string.IsNullOrWhiteSpace(_typedInclude) ? _serviceToAdd : _typedInclude)?.Trim().TrimEnd('.');
+        if (string.IsNullOrEmpty(host))
+        {
+            return;
+        }
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(host, @"^[a-zA-Z0-9_-]{1,63}(\.[a-zA-Z0-9_-]{1,63})+$"))
+        {
+            _includeError = "That isn't a host name.";
+            return;
+        }
+
+        _record = _record.WithInclude(host);
+        (_serviceToAdd, _typedInclude) = (null, null);
+        await RecountAsync();
+    }
+
+    private async Task RemoveIncludeAsync(string include)
+    {
+        _record = _record.WithoutInclude(include);
+        await RecountAsync();
+    }
+
+    private async Task SetEndingAsync(char qualifier)
+    {
+        _record = _record.WithAll(qualifier);
+        await RecountAsync();
+    }
+
+    private async Task SendsNoMailAsync()
+    {
+        _record = SpfRecord.Parse("v=spf1 -all");
+        await RecountAsync();
+    }
+
+    private string? BlockMessage() => _proposedCount is null ? null : SpfEditor.BlockReason(_record.Format(), _proposedCount, LiveValues, _worstLiveCount) switch
+    {
+        "nothing-to-push" => "This is the same as the live record, so there's nothing to push.",
+        "spf-too-many-lookups" => $"This record needs {_proposedCount.Total} DNS lookups. Receivers stop at {SpfLookupCount.Limit}, so it can't be pushed. Remove an include to bring it down.",
+        _ => null
+    };
+
+    private void Push() =>
+        MudDialog.Close(DialogResult.Ok(new SpfPushPayload(_record.Format(), SpfEditor.Fingerprint(LiveValues)).Serialize()));
+}

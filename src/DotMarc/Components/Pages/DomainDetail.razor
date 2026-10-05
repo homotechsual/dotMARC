@@ -14,6 +14,7 @@
 @using DotMarc.Ingestion
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
+@using DotMarc.Notifications
 @inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IIpInfoLookup IpLookup
@@ -31,6 +32,8 @@
 @inject IMxDnsChecker MxDnsChecker
 @inject IDkimDnsChecker DkimDnsChecker
 @inject IMailServiceDetector MailServiceDetector
+@inject ITxtRecordLookup TxtRecordLookup
+@inject IEnumerable<IDnsChangeBuilder> ChangeBuilders
 @inject IOptions<GraphOptions> GraphOptions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -216,6 +219,7 @@ else
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckSpfAsync" title="Recheck now" />
                                 }
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="EditSpfAsync">Edit SPF</MudButton>
                             </Authorized>
                         </AuthorizeView>
                     </ActionContent>
@@ -257,6 +261,10 @@ else
                                 else if (_domain.DkimSelectors.Count > 0)
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDkimAsync" title="Recheck now" />
+                                }
+                                @if (_domain.DkimRecords.Count > 0 && _domain.DkimCheckStatus is DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured)
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync" OnClick="PushDkimRecordsAsync">Push DKIM records</MudButton>
                                 }
                                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenDkimSelectorsDialogAsync">Configure selectors</MudButton>
                             </Authorized>
@@ -668,6 +676,7 @@ else
             .ThenInclude(r => r.Policies)
             .ThenInclude(policy => policy.FailureDetails)
             .Include(d => d.Groups)
+            .Include(d => d.DkimRecords)
             // Several sibling collections (auth details, override reasons, TLSRPT policies, groups)
             // in one result would multiply rows and repeat every report's RawXml on each of them.
             .AsSplitQuery()
@@ -1279,6 +1288,7 @@ else
         {
             { x => x.DomainName, DomainName },
             { x => x.CurrentSelectors, _domain!.DkimSelectors },
+            { x => x.CurrentRecords, _domain!.DkimRecords },
             { x => x.DetectedInboxProvider, _detectedMailServices.FirstOrDefault(s => s.Kind == DetectedMailServiceKind.Inbox)?.ProviderName }
         };
         var dialogRef = await DialogService.ShowAsync<ConfigureDkimSelectorsDialog>("Configure DKIM selectors", parameters);
@@ -1288,19 +1298,113 @@ else
             return;
         }
 
-        var selectors = (List<string>)result.Data!;
+        var dialogResult = (ConfigureDkimSelectorsDialog.DkimSelectorsDialogResult)result.Data!;
         await using var db = await DbFactory.CreateDbContextAsync();
-        await DomainManagementService.SetDkimSelectorsAsync(db, await AuditActorAccessor.GetAsync(), _domain!.Id, selectors, CancellationToken.None);
-        _domain.DkimSelectors = selectors;
+        var actor = await AuditActorAccessor.GetAsync();
+        await DomainManagementService.SetDkimSelectorsAsync(db, actor, _domain!.Id, dialogResult.Selectors, CancellationToken.None);
+        try
+        {
+            await DomainManagementService.SetDkimRecordsAsync(db, actor, _domain.Id, dialogResult.Records, CancellationToken.None);
+        }
+        catch (ArgumentException refusal)
+        {
+            Snackbar.Add($"The selectors were saved, but a DKIM record wasn't: {refusal.Message}", Severity.Warning);
+        }
+
+        _domain.DkimSelectors = dialogResult.Selectors;
+        _domain.DkimRecords = await db.DomainDkimRecords.AsNoTracking().Where(record => record.DomainId == _domain.Id).ToListAsync();
 
         await RecheckDkimAsync();
     }
 
-    private async Task OpenDnsPushPopupAsync(string providerKey, int domainId, string target)
+    // A separate overload rather than an optional parameter: DomainMtaStsPanel takes this as a three-argument delegate.
+    private Task OpenDnsPushPopupAsync(string providerKey, int domainId, string target) =>
+        OpenDnsPushPopupAsync(providerKey, domainId, target, null);
+
+    private async Task OpenDnsPushPopupAsync(string providerKey, int domainId, string target, string? payload)
     {
         _dotNetRef ??= DotNetObjectReference.Create(this);
         await JSRuntime.InvokeVoidAsync("dotMarcOpenDnsPush",
-            $"/dns-push/{providerKey}/start?domainId={domainId}&target={target}", _dotNetRef);
+            $"/dns-push/{providerKey}/start?domainId={domainId}&target={target}" + (payload is null ? "" : $"&payload={Uri.EscapeDataString(payload)}"), _dotNetRef);
+    }
+
+    private async Task EditSpfAsync()
+    {
+        var providerKey = _domain!.DnsProvider.ToProviderKey();
+        var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
+
+        List<string> live;
+        try
+        {
+            live = (await TxtRecordLookup.GetTxtValuesAsync(DomainName, CancellationToken.None)).Where(SpfRecord.IsSpf).ToList();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to look up {DomainName}'s current SPF record. Try again.", Severity.Error);
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var settings = await DnsRecordSettingsService.GetAsync(db);
+        var parameters = new DialogParameters<SpfEditorDialog>
+        {
+            { x => x.DomainName, DomainName },
+            { x => x.LiveValues, live },
+            { x => x.SuggestedIncludes, SpfIncludeCatalog.SuggestedIncludes(_detectedMailServices).ToList() },
+            { x => x.DefaultEnding, DnsRecordSettings.ToQualifier(settings.SpfAllQualifier) },
+            { x => x.CanPush, pushProvider is not null },
+            { x => x.CannotPushReason, "No DNS push option is configured for this domain's DNS provider, so you can preview changes here but not push them." },
+        };
+        var dialogRef = await DialogService.ShowAsync<SpfEditorDialog>("Edit SPF", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled || pushProvider is null)
+        {
+            return;
+        }
+
+        await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "spf", (string)result.Data!);
+    }
+
+    private async Task PushDkimRecordsAsync()
+    {
+        var pushProvider = await DnsPushProviders.FindConfiguredAsync(_domain!.DnsProvider.ToProviderKey());
+        if (pushProvider is null)
+        {
+            Snackbar.Add("Couldn't find a configured DNS push option for this domain - add the records manually.", Severity.Warning);
+            return;
+        }
+
+        DnsChangePlan plan;
+        try
+        {
+            plan = await ChangeBuilders.Find("dkim")!.BuildAsync(new DnsPushRequest(_domain, pushProvider.ProviderKey, _domain.DnsZone ?? DomainName, null), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to look up {DomainName}'s current DKIM records. Try again.", Severity.Error);
+            return;
+        }
+
+        if (plan.Refusal == "nothing-to-push")
+        {
+            Snackbar.Add("DNS already matches the stored DKIM records, so there's nothing to push.", Severity.Info);
+            return;
+        }
+
+        var overwritten = plan.Changes.Where(change => change.Kind != DnsRecordChangeKind.Create).ToList();
+        if (overwritten.Count > 0)
+        {
+            var lines = string.Join("<br>", overwritten.Select(change =>
+                System.Net.WebUtility.HtmlEncode($"{change.Name}: {change.ExistingRecordType ?? change.RecordType} {change.ExistingValue} → {change.RecordType} {change.DesiredValue}")));
+            var confirmed = await DialogService.ShowMessageBoxAsync("Push DKIM records",
+                (MarkupString)$"These records will be overwritten:<br>{lines}", yesText: "Push", cancelText: "Cancel");
+            if (confirmed != true)
+            {
+                return;
+            }
+        }
+
+        await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "dkim");
     }
 
     [JSInvokable]
@@ -1331,6 +1435,15 @@ else
                 break;
             case "error":
                 Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
+                break;
+            case "spf-changed":
+                Snackbar.Add("SPF changed since you opened the editor. Reopen it to start from the current record.", Severity.Warning);
+                break;
+            case "spf-too-many-lookups":
+                Snackbar.Add("This record would need more than 10 DNS lookups, so it wasn't pushed.", Severity.Warning);
+                break;
+            case "nothing-to-push":
+                Snackbar.Add("DNS already matches, so there was nothing to push.", Severity.Info);
                 break;
         }
     }

@@ -18,7 +18,9 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
     {
     }
 
-    public SpfDnsChecker(HttpClient http, ITxtRecordLookup includeLookup)
+    // Internal, not public: the app registers ITxtRecordLookup too, so a second public constructor would leave
+    // typed-client activation with two it could use, and it refuses to choose.
+    internal SpfDnsChecker(HttpClient http, ITxtRecordLookup includeLookup)
     {
         _http = http;
         _lookupCounter = new SpfLookupCounter(includeLookup);

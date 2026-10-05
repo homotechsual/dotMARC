@@ -190,7 +190,7 @@ public static class DomainManagementService
             var value = DkimRecordValue.Normalize(input.Type, input.Value);
             if (DkimRecordValue.Validate(input.Type, value) is { } problem)
             {
-                throw new ArgumentException($"{selector}: {problem}", nameof(records));
+                throw new ArgumentException($"{selector}: {problem}");
             }
 
             if (existing is null)

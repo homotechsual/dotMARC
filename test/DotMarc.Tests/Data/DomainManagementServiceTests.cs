@@ -445,6 +445,7 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
             DomainManagementService.SetDkimRecordsAsync(context, TestActors.Admin, domainId, [new DkimRecordInput("google", DkimRecordType.Txt, "v=DKIM1; k=rsa")]));
 
         Assert.StartsWith("google:", refusal.Message);
+        Assert.DoesNotContain("Parameter", refusal.Message);
     }
 
     [Fact]

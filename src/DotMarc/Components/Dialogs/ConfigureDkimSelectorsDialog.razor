@@ -1,4 +1,5 @@
 @* src/DotMarc/Components/Dialogs/ConfigureDkimSelectorsDialog.razor *@
+@using DotMarc.Data
 @using DotMarc.Dns
 <MudDialog>
     <TitleContent>Configure DKIM selectors</TitleContent>
@@ -7,7 +8,24 @@
             One selector per line (e.g. <code>selector1</code>, <code>google</code>). dotMARC checks
             <code>&lt;selector&gt;._domainkey.@DomainName</code> for each one you list here.
         </MudText>
-        <MudTextField @bind-Value="_selectorsText" Label="Selectors" Lines="4" />
+        <MudTextField T="string" Value="_selectorsText" ValueChanged="OnSelectorsChanged" Label="Selectors" Lines="4" Immediate="true" DebounceInterval="300" />
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4">Records (optional)</MudText>
+        <MudText Typo="Typo.caption" Class="d-block mb-2 mud-text-secondary">
+            Paste the record your mail platform gives you for each selector, and dotMARC can push it and check DNS matches it.
+            @HelpText()
+        </MudText>
+        @foreach (var row in _rows)
+        {
+            <div class="d-flex align-start mb-2" style="gap:0.5rem">
+                <MudText Typo="Typo.body2" Style="min-width:110px; padding-top:1.1rem">@row.Selector</MudText>
+                <MudSelect T="DkimRecordType" @bind-Value="row.Type" Dense="true" Style="max-width:110px">
+                    <MudSelectItem T="DkimRecordType" Value="DkimRecordType.Cname">CNAME</MudSelectItem>
+                    <MudSelectItem T="DkimRecordType" Value="DkimRecordType.Txt">TXT</MudSelectItem>
+                </MudSelect>
+                <MudTextField T="string" @bind-Value="row.Value" Label="@(row.Type == DkimRecordType.Cname ? "CNAME target" : "TXT value (v=DKIM1; ... p=...)")" Lines="2" Margin="Margin.Dense" />
+            </div>
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -19,9 +37,11 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public string DomainName { get; set; } = "";
     [Parameter] public List<string> CurrentSelectors { get; set; } = [];
+    [Parameter] public List<DomainDkimRecord> CurrentRecords { get; set; } = [];
     [Parameter] public string? DetectedInboxProvider { get; set; }
 
     private string _selectorsText = "";
+    private List<RecordRow> _rows = [];
 
     protected override void OnInitialized()
     {
@@ -33,15 +53,63 @@
         {
             _selectorsText = string.Join('\n', suggested);
         }
+
+        RebuildRows();
     }
 
-    private void Save()
+    private void OnSelectorsChanged(string text)
     {
-        var selectors = _selectorsText
-            .Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-        MudDialog.Close(DialogResult.Ok(selectors));
+        _selectorsText = text;
+        RebuildRows();
     }
+
+    private List<string> Selectors() =>
+        _selectorsText.Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    /// <summary>One row per selector, keeping what's been typed for selectors that are still listed.</summary>
+    private void RebuildRows()
+    {
+        _rows = Selectors().Select(selector =>
+        {
+            if (_rows.FirstOrDefault(row => row.Selector == selector) is { } kept)
+            {
+                return kept;
+            }
+
+            if (CurrentRecords.FirstOrDefault(record => string.Equals(record.Selector, selector, StringComparison.OrdinalIgnoreCase)) is { } stored)
+            {
+                return new RecordRow(selector) { Type = stored.RecordType, Value = stored.Value };
+            }
+
+            return DkimRecordValue.FastmailTarget(selector, DomainName) is { } fastmail
+                ? new RecordRow(selector) { Type = DkimRecordType.Cname, Value = fastmail }
+                : new RecordRow(selector) { Type = DetectedInboxProvider is "Google Workspace" or "Zoho Mail" ? DkimRecordType.Txt : DkimRecordType.Cname };
+        }).ToList();
+    }
+
+    private string HelpText() => DetectedInboxProvider switch
+    {
+        "Microsoft 365" => "Microsoft 365: the Defender portal's DKIM page, or Get-DkimSigningConfig's Selector1CNAME and Selector2CNAME.",
+        "Google Workspace" => "Google Workspace: Admin console > Apps > Google Workspace > Gmail > Authenticate email.",
+        "Zoho Mail" => "Zoho Mail: Admin console > Domains > Email configuration > DKIM.",
+        "ProtonMail" => "Proton Mail: Settings > Domain names > the domain's DKIM step.",
+        "Fastmail" => "Fastmail's records are filled in for you.",
+        _ => ""
+    };
+
+    private void Save() =>
+        MudDialog.Close(DialogResult.Ok(new DkimSelectorsDialogResult(
+            Selectors(),
+            _rows.Select(row => new DkimRecordInput(row.Selector, row.Type, row.Value ?? "")).ToList())));
 
     private void Cancel() => MudDialog.Cancel();
+
+    private sealed class RecordRow(string selector)
+    {
+        public string Selector { get; } = selector;
+        public DkimRecordType Type { get; set; } = DkimRecordType.Cname;
+        public string? Value { get; set; }
+    }
+
+    public sealed record DkimSelectorsDialogResult(List<string> Selectors, List<DkimRecordInput> Records);
 }
