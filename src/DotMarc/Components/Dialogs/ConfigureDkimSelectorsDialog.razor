@@ -17,13 +17,19 @@
         </MudText>
         @foreach (var row in _rows)
         {
-            <div class="d-flex align-start mb-2" style="gap:0.5rem">
-                <MudText Typo="Typo.body2" Style="min-width:110px; padding-top:1.1rem">@row.Selector</MudText>
-                <MudSelect T="DkimRecordType" @bind-Value="row.Type" Dense="true" Style="max-width:110px">
-                    <MudSelectItem T="DkimRecordType" Value="DkimRecordType.Cname">CNAME</MudSelectItem>
-                    <MudSelectItem T="DkimRecordType" Value="DkimRecordType.Txt">TXT</MudSelectItem>
-                </MudSelect>
-                <MudTextField T="string" @bind-Value="row.Value" Label="@(row.Type == DkimRecordType.Cname ? "CNAME target" : "TXT value (v=DKIM1; ... p=...)")" Lines="2" Margin="Margin.Dense" />
+            @* Both fields are labelled and dense, so their inputs line up; the selector is named in the value's label. *@
+            <div class="d-flex align-start mb-2" style="gap:0.75rem">
+                <div style="flex:0 0 110px">
+                    <MudSelect T="DkimRecordType" @bind-Value="row.Type" Label="Type" Margin="Margin.Dense">
+                        <MudSelectItem T="DkimRecordType" Value="DkimRecordType.Cname">CNAME</MudSelectItem>
+                        <MudSelectItem T="DkimRecordType" Value="DkimRecordType.Txt">TXT</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <div style="flex:1 1 auto; min-width:0">
+                    @* A CNAME target is one line; a TXT value is a long key, so it gets room to wrap. *@
+                    <MudTextField T="string" @bind-Value="row.Value" Label="@ValueLabel(row)" Margin="Margin.Dense"
+                                  Lines="@(row.Type == DkimRecordType.Txt ? 3 : 1)" />
+                </div>
             </div>
         }
     </DialogContent>
@@ -86,6 +92,9 @@
                 : new RecordRow(selector) { Type = DetectedInboxProvider is "Google Workspace" or "Zoho Mail" ? DkimRecordType.Txt : DkimRecordType.Cname };
         }).ToList();
     }
+
+    private static string ValueLabel(RecordRow row) =>
+        row.Type == DkimRecordType.Cname ? $"{row.Selector}: CNAME target" : $"{row.Selector}: TXT value (v=DKIM1; ... p=...)";
 
     private string HelpText() => DetectedInboxProvider switch
     {
