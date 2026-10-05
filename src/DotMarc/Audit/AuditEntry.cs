@@ -2,8 +2,8 @@ namespace DotMarc.Audit;
 
 public enum AuditEntryKind { Change, SignIn, PageView }
 
-/// <summary>Who did something. <c>ApiKey</c> joins this when the public API is built.</summary>
-public enum AuditActorKind { User, System }
+/// <summary>Who did something: a person, dotMARC itself, or an API key.</summary>
+public enum AuditActorKind { User, System, ApiKey }
 
 /// <summary>One changed field in an audit entry. For a secret, <see cref="Old"/> and <see cref="New"/> are null and
 /// <see cref="Secret"/> is true, so the value itself is never stored.</summary>

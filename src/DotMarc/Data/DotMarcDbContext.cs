@@ -29,6 +29,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
@@ -250,6 +251,23 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.HasMany(u => u.ScopedGroups)
                 .WithMany()
                 .UsingEntity("UserAccessScopedGroups");
+        });
+
+        modelBuilder.Entity<ApiKey>(entity =>
+        {
+            entity.Property(key => key.Name).HasMaxLength(ApiKeyManagementService.MaximumNameLength);
+            entity.Property(key => key.Prefix).HasMaxLength(16);
+            entity.Property(key => key.Hash).HasMaxLength(64);
+            entity.Property(key => key.CreatedBy).HasMaxLength(256);
+            entity.Property(key => key.RevokedBy).HasMaxLength(256);
+            entity.HasIndex(key => key.Hash).IsUnique();
+            // Unique among keys still in use; a revoked key's name can be reused.
+            entity.HasIndex(key => key.Name).IsUnique().HasFilter("\"RevokedUtc\" IS NULL");
+            // Keys still in use block deleting their role (RoleManagementService checks first); revoked keys keep their
+            // row for the record and lose the role.
+            entity.HasOne(key => key.Role).WithMany().HasForeignKey(key => key.RoleId).OnDelete(DeleteBehavior.SetNull);
+            // Group has no navigation back to ApiKey, so the join table is configured explicitly, as for UserAccess.
+            entity.HasMany(key => key.ScopedGroups).WithMany().UsingEntity("ApiKeyScopedGroups");
         });
 
         modelBuilder.Entity<IpInfo>(entity =>

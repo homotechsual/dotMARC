@@ -1,3 +1,4 @@
+using DotMarc.Security;
 using System.Security.Claims;
 using DotMarc.Audit;
 using Xunit;
@@ -40,5 +41,21 @@ public sealed class AuditActorTests
     public void ForSystem_NamesTheSystemActor()
     {
         Assert.Equal(new AuditActor(AuditActorKind.System, "Startup"), AuditActor.ForSystem("Startup"));
+    }
+
+    [Fact]
+    public void FromPrincipal_ForAnApiKey_NamesTheKeyAndItsCreator()
+    {
+        var identity = new ClaimsIdentity("ApiKey", ClaimTypes.Name, ClaimTypes.Role);
+        identity.AddClaim(new Claim(ClaimTypes.Name, "Halo sync"));
+        identity.AddClaim(new Claim(ApiKeyClaims.IdClaimType, "7"));
+        identity.AddClaim(new Claim(ApiKeyClaims.CreatedByClaimType, "Jo Smith"));
+
+        var actor = AuditActor.FromPrincipal(new ClaimsPrincipal(identity));
+
+        Assert.Equal(AuditActorKind.ApiKey, actor.Kind);
+        Assert.Equal("API key 'Halo sync' (created by Jo Smith)", actor.Name);
+        Assert.Equal("api-key:7", actor.ObjectId);
+        Assert.Null(actor.Email);
     }
 }

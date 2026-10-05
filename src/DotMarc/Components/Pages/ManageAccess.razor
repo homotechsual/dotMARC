@@ -342,7 +342,7 @@
             var result = await RoleManagementService.RemoveRoleAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
             if (result == RoleManagementService.RemoveRoleResult.InUse)
             {
-                Snackbar.Add($"Can't remove {row.Name} - it's still granted to at least one person. Revoke or reassign their access first.", Severity.Error);
+                Snackbar.Add($"Can't remove {row.Name}. It's still granted to at least one person or API key. Revoke or reassign those first.", Severity.Error);
             }
         }
         catch (Exception)

@@ -240,4 +240,33 @@ public sealed class RoleManagementServiceTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.DoesNotContain(verify.AuditEntries, entry => entry.Action == AuditActions.RoleRemoved);
     }
+
+    [Fact]
+    public async Task RemoveRole_IsRefused_WhileAnUnrevokedApiKeyUsesIt_AndAllowedOnceRevoked()
+    {
+        int roleId;
+        int keyId;
+        await using (var context = CreateContext())
+        {
+            var role = new Role { Name = "Integration", Permissions = [Permission.DomainsView] };
+            context.Roles.Add(role);
+            await context.SaveChangesAsync();
+            roleId = role.Id;
+            keyId = (await ApiKeyManagementService.CreateAsync(context, TestActors.Admin, "Integration key", roleId, [], 90)).Key!.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            Assert.Equal(RoleManagementService.RemoveRoleResult.InUse, await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, roleId));
+            await ApiKeyManagementService.RevokeAsync(context, TestActors.Admin, keyId);
+        }
+
+        await using (var context = CreateContext())
+        {
+            Assert.Equal(RoleManagementService.RemoveRoleResult.Removed, await RoleManagementService.RemoveRoleAsync(context, TestActors.Admin, roleId));
+        }
+
+        await using var verify = CreateContext();
+        Assert.Null((await verify.ApiKeys.SingleAsync()).RoleId);
+    }
 }

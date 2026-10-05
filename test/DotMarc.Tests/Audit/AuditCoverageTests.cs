@@ -13,7 +13,7 @@ public sealed class AuditCoverageTests
     private static readonly Type[] AuditedServices =
     [
         typeof(DomainManagementService), typeof(GroupManagementService), typeof(TagManagementService),
-        typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(AlertTicketRuleService),
+        typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(ApiKeyManagementService), typeof(AlertTicketRuleService),
         typeof(NotificationSettingsService), typeof(HaloPsaSettingsService), typeof(CloudflareDnsSettingsService),
         typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService), typeof(AuditSettingsService),
     ];

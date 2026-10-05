@@ -102,7 +102,8 @@ public static class RoleManagementService
             return RemoveRoleResult.Locked;
         }
 
-        var inUse = await context.UserAccesses.AnyAsync(u => u.RoleId == roleId, cancellationToken).ConfigureAwait(false);
+        var inUse = await context.UserAccesses.AnyAsync(u => u.RoleId == roleId, cancellationToken).ConfigureAwait(false)
+            || await context.ApiKeys.AnyAsync(key => key.RoleId == roleId && key.RevokedUtc == null, cancellationToken).ConfigureAwait(false);
         if (inUse)
         {
             return RemoveRoleResult.InUse;
