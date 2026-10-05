@@ -248,4 +248,30 @@ public sealed class DnsHealthAlertingTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.Empty(verify.DomainAlertStates);
     }
+
+    [Fact]
+    public async Task AFixedCheck_ClosesEveryOpenCopyOfItsAlert_InOneCycle()
+    {
+        // A long outage re-raises the alert each cooldown, leaving several open copies, each with its own ticket.
+        await EnableAlertsAsync();
+        await SeedDomainAsync("contoso.example");
+        await using (var context = CreateContext())
+        {
+            for (var copy = 0; copy < 3; copy++)
+            {
+                context.AlertEvents.Add(new AlertEvent
+                {
+                    DomainName = "contoso.example", AlertType = AlertTypes.SpfRecordBroken, Severity = "Warning", Title = "SPF record broken",
+                    Message = "m", CreatedUtc = DateTimeOffset.UtcNow.AddHours(-copy * 3),
+                });
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        await CreateService(new FakeAlertWebhookClient()).CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        Assert.All(await verify.AlertEvents.ToListAsync(), alert => Assert.True(alert.IsResolved));
+    }
 }

@@ -143,7 +143,7 @@ public sealed class AlertingService : IAlertingService
                 }
                 else if (openAlerts.Contains((domain.Name, action.AlertType)))
                 {
-                    await ResolveAlertAsync(domain.Name, action.AlertType, cancellationToken).ConfigureAwait(false);
+                    await ResolveAllCopiesAsync(domain.Name, action.AlertType, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -152,7 +152,7 @@ public sealed class AlertingService : IAlertingService
         var monitoredNames = domains.Select(domain => domain.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var (domainName, alertType) in openAlerts.Where(alert => !monitoredNames.Contains(alert.DomainName)))
         {
-            await ResolveAlertAsync(domainName, alertType, cancellationToken).ConfigureAwait(false);
+            await ResolveAllCopiesAsync(domainName, alertType, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -238,6 +238,35 @@ public sealed class AlertingService : IAlertingService
 
         var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.{reasonContext}";
         await EnsureAlertAsync(db, settings, domainName, AlertTypes.UnexpectedActivityOnNullRoutedDomain, "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Resolves every open copy of a DNS health alert. One left open past the cooldown is raised again as a new
+    /// row with its own ticket, so after a long outage there can be several; they all close once the condition clears,
+    /// not one per cycle.</summary>
+    private async Task ResolveAllCopiesAsync(string domainName, string alertType, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var openCopies = await db.AlertEvents
+            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var resolvedUtc = DateTimeOffset.UtcNow;
+        foreach (var copy in openCopies)
+        {
+            copy.IsResolved = true;
+            copy.ResolvedUtc = resolvedUtc;
+            try
+            {
+                await _psaTicketService.CloseTicketAsync(db, copy, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to close PSA ticket for {DomainName} alert {AlertType}.", copy.DomainName, copy.AlertType);
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ResolveAlertAsync(string domainName, string alertType, CancellationToken cancellationToken)
