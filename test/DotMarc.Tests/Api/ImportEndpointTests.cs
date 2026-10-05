@@ -187,4 +187,18 @@ public sealed class ImportEndpointTests : IAsyncLifetime
         var untouched = await context.Domains.Include(domain => domain.Tags).SingleAsync(domain => domain.Name == "api-match-mixed-b.example");
         Assert.Equal([tagId], untouched.Tags.Select(tag => tag.Id));
     }
+
+    [Theory]
+    [InlineData("{\"domains\":[{\"name\":\"api-null-name.example\",\"groups\":[\"A\",null]}]}")]
+    [InlineData("{\"domains\":[{\"name\":\"api-blank-name.example\",\"tags\":[\"  \"]}]}")]
+    public async Task Import_RefusesANullOrBlankGroupOrTagName(string body)
+    {
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsAdd]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PostAsync("/api/v1/domains/import", new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
 }

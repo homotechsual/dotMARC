@@ -29,7 +29,8 @@ internal sealed class ApiTestHost : IAsyncDisposable
     public string ConnectionString { get; }
     public WebApplicationFactory<Program> Factory { get; }
 
-    public static async Task<ApiTestHost> StartAsync(PostgresContainerFixture fixture, IReadOnlyDictionary<string, string>? settings = null)
+    public static async Task<ApiTestHost> StartAsync(PostgresContainerFixture fixture, IReadOnlyDictionary<string, string>? settings = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var (connectionString, databaseCleanup) = await fixture.CreateDatabaseAsync();
         await using (var context = CreateContext(connectionString))
@@ -48,6 +49,8 @@ internal sealed class ApiTestHost : IAsyncDisposable
                 {
                     services.Remove(monitor);
                 }
+
+                configureServices?.Invoke(services);
             });
             foreach (var (key, value) in settings ?? new Dictionary<string, string>())
             {

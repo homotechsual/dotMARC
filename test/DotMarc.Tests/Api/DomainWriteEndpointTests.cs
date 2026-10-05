@@ -203,4 +203,55 @@ public sealed class DomainWriteEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task AScopedKey_NamingAGroupIdThatDoesntExist_Is403_SoItCantTellMissingFromHidden()
+    {
+        var ownGroupId = await _host.SeedGroupAsync("api-scoped-missing-own");
+        var domainId = await _host.SeedDomainAsync("api-scoped-missing.example", groupIds: [ownGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsEdit], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/domains/{domainId}/groups", new { groupIds = new[] { 987654 } });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AWrongMethod_Is405WithTheAllowedMethods()
+    {
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.DeleteAsync("/api/v1/domains");
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(["GET", "POST"], response.Content.Headers.Allow.Order());
+    }
+
+    [Fact]
+    public async Task AnIdThatIsntANumber_IsStill404()
+    {
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.GetAsync("/api/v1/domains/not-a-number");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MalformedJson_SaysWhereTheProblemIs()
+    {
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsAdd]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PostAsync("/api/v1/domains", new StringContent("{\"name\": 42}", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var errors = body.RootElement.GetProperty("errors");
+        Assert.Contains(errors.EnumerateObject(), error => error.Name.Contains("name"));
+    }
 }

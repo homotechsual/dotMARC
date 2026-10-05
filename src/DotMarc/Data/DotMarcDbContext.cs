@@ -261,8 +261,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(key => key.CreatedBy).HasMaxLength(256);
             entity.Property(key => key.RevokedBy).HasMaxLength(256);
             entity.HasIndex(key => key.Hash).IsUnique();
-            // Unique among keys still in use; a revoked key's name can be reused.
-            entity.HasIndex(key => key.Name).IsUnique().HasFilter("\"RevokedUtc\" IS NULL");
+            // Names are unique among keys still in use, ignoring case, so a revoked key's name can be reused. EF can't model
+            // an index on lower("Name"), so the AddApiKeyNameCaseInsensitiveIndex migration creates it in SQL.
             // Keys still in use block deleting their role (RoleManagementService checks first); revoked keys keep their
             // row for the record and lose the role.
             entity.HasOne(key => key.Role).WithMany().HasForeignKey(key => key.RoleId).OnDelete(DeleteBehavior.SetNull);

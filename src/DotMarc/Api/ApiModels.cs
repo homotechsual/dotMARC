@@ -1,5 +1,4 @@
 using DotMarc.Data;
-using DotMarc.Reporting;
 
 namespace DotMarc.Api;
 
@@ -15,15 +14,15 @@ public sealed record ApiDomain(
     int Id, string Name, bool Monitored, IReadOnlyList<ApiNamedRef> Groups, IReadOnlyList<ApiNamedRef> Tags,
     DateTimeOffset? LastReportReceivedUtc, double? PassRate)
 {
-    /// <summary>Needs Groups, Tags and the 30-day window's Reports with their Records loaded.</summary>
-    public static ApiDomain From(Domain domain, ApiScope scope) => new(
+    /// <summary>Needs Groups and Tags loaded; the pass rate comes from DomainReadEndpoints.PassRatesAsync.</summary>
+    public static ApiDomain From(Domain domain, ApiScope scope, double? passRate) => new(
         domain.Id,
         domain.Name,
         domain.IsMonitored,
         domain.Groups.Where(group => scope.Includes(group.Id)).OrderBy(group => group.Name).Select(group => new ApiNamedRef(group.Id, group.Name)).ToList(),
         domain.Tags.OrderBy(tag => tag.Name).Select(tag => new ApiNamedRef(tag.Id, tag.Name)).ToList(),
         domain.LastReportReceivedUtc,
-        DomainStatistics.GetPassRate(domain.Reports));
+        passRate);
 }
 
 public sealed record ApiCheck(string Status, DateTimeOffset? CheckedUtc, string? Detail);
@@ -38,9 +37,9 @@ public sealed record ApiDomainDetail(
     int Id, string Name, bool Monitored, IReadOnlyList<ApiNamedRef> Groups, IReadOnlyList<ApiNamedRef> Tags,
     DateTimeOffset? LastReportReceivedUtc, double? PassRate, ApiDomainHealth Health, ApiDmarcPolicy DmarcPolicy, ApiDnsProvider DnsProvider)
 {
-    public static ApiDomainDetail From(Domain domain, ApiScope scope)
+    public static ApiDomainDetail From(Domain domain, ApiScope scope, double? passRate)
     {
-        var summary = ApiDomain.From(domain, scope);
+        var summary = ApiDomain.From(domain, scope, passRate);
         return new ApiDomainDetail(
             summary.Id, summary.Name, summary.Monitored, summary.Groups, summary.Tags, summary.LastReportReceivedUtc, summary.PassRate,
             new ApiDomainHealth(

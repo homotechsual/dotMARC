@@ -429,6 +429,8 @@ if (!app.Environment.IsDevelopment())
 // page's HTML instead of the asset it asked for ("Unexpected token '<'" in the console).
 app.MapStaticAssets().AllowAnonymous();
 
+app.UseDotMarcBadRequests();
+
 // Empty error responses from the API (a malformed JSON body, for one) become problem+json; the UI keeps its own pages.
 app.UseWhen(httpContext => httpContext.Request.Path.StartsWithSegments("/api"), api => api.UseStatusCodePages());
 

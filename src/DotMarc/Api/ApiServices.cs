@@ -15,6 +15,8 @@ public static class ApiServices
         services.Configure<ApiOptions>(configuration.GetSection(ApiOptions.SectionName));
         services.TryAddSingleton(TimeProvider.System);
         services.AddProblemDetails();
+        // Lets UseDotMarcBadRequests say which field of a request couldn't be read.
+        services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, configureOptions: null);
 

@@ -186,4 +186,25 @@ public sealed class ApiKeyManagementServiceTests : IAsyncLifetime
         Assert.Equal(CreateApiKeyError.GroupNotFound, result.Error);
         Assert.False(await context.ApiKeys.AnyAsync());
     }
+
+    [Fact]
+    public async Task TheDatabase_RefusesTwoActiveKeysWhoseNamesDifferOnlyInCase()
+    {
+        var roleId = await SeedRoleAsync("Reader", isScopable: false, Permission.DomainsView);
+        ApiKey KeyNamed(string name) => new()
+        {
+            Name = name, Prefix = "dmk_" + name, Hash = Guid.NewGuid().ToString("N"), RoleId = roleId, CreatedBy = "Test Admin",
+            CreatedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+        };
+        await using (var context = CreateContext())
+        {
+            context.ApiKeys.Add(KeyNamed("Halo"));
+            await context.SaveChangesAsync();
+        }
+
+        await using var racingContext = CreateContext();
+        racingContext.ApiKeys.Add(KeyNamed("halo"));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => racingContext.SaveChangesAsync());
+    }
 }

@@ -33,23 +33,37 @@ public static class DomainReadEndpoints
             .WithDescription("Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30).");
     }
 
-    /// <summary>One domain the scope can see, with what ApiDomain.From needs, or null.</summary>
-    public static Task<Domain?> LoadForApiAsync(DotMarcDbContext context, ApiScope scope, int domainId, CancellationToken cancellationToken)
-    {
-        var cutoffUtc = DomainStatistics.GetWindowCutoffUtc();
-        return scope.Domains(context.Domains.AsNoTracking())
+    /// <summary>One domain the scope can see, with its groups and tags, or null.</summary>
+    public static Task<Domain?> LoadForApiAsync(DotMarcDbContext context, ApiScope scope, int domainId, CancellationToken cancellationToken) =>
+        scope.Domains(context.Domains.AsNoTracking())
             .Where(domain => domain.Id == domainId)
             .Include(domain => domain.Groups)
             .Include(domain => domain.Tags)
-            .Include(domain => domain.Reports.Where(report => report.ReceivedUtc >= cutoffUtc))
-            .ThenInclude(report => report.Records)
             .AsSplitQuery()
             .SingleOrDefaultAsync(cancellationToken);
+
+    /// <summary>Each domain's volume-weighted pass rate since the cutoff, worked out by the database rather than by
+    /// loading every record. A record passes when SPF or DKIM passed, as in DomainStatistics.GetPassRate. Domains with
+    /// no volume are left out, meaning null.</summary>
+    public static async Task<Dictionary<int, double>> PassRatesAsync(DotMarcDbContext context, IReadOnlyCollection<int> domainIds,
+        DateTimeOffset cutoffUtc, CancellationToken cancellationToken)
+    {
+        var totals = await context.ReportRecords
+            .Where(record => domainIds.Contains(record.Report.DomainId) && record.Report.ReceivedUtc >= cutoffUtc)
+            .GroupBy(record => record.Report.DomainId)
+            .Select(grouping => new
+            {
+                DomainId = grouping.Key,
+                Total = grouping.Sum(record => (long)record.MessageCount),
+                Passing = grouping.Sum(record => record.SpfResult == AuthResult.Pass || record.DkimResult == AuthResult.Pass ? (long)record.MessageCount : 0L),
+            })
+            .ToListAsync(cancellationToken);
+        return totals.Where(total => total.Total > 0).ToDictionary(total => total.DomainId, total => (double)total.Passing / total.Total);
     }
 
     private static async Task<Results<Ok<ApiPage<ApiDomain>>, ValidationProblem>> ListDomainsAsync(
-        ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, int? page, int? pageSize, int? group, int? tag, bool? monitored,
-        CancellationToken cancellationToken)
+        ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, int? page, int? pageSize, int? group, int? tag,
+        bool? monitored, CancellationToken cancellationToken)
     {
         var pageNumber = page ?? 1;
         var size = pageSize ?? DefaultPageSize;
@@ -68,7 +82,10 @@ public static class DomainReadEndpoints
         var query = scope.Domains(context.Domains.AsNoTracking());
         if (group is { } groupId)
         {
-            query = query.Where(domain => domain.Groups.Any(candidate => candidate.Id == groupId));
+            // A group outside the key's scope matches nothing, rather than revealing which visible domains are in it.
+            query = scope.Includes(groupId)
+                ? query.Where(domain => domain.Groups.Any(candidate => candidate.Id == groupId))
+                : query.Where(_ => false);
         }
 
         if (tag is { } tagId)
@@ -82,7 +99,6 @@ public static class DomainReadEndpoints
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var cutoffUtc = DomainStatistics.GetWindowCutoffUtc();
         var domains = await query
             .OrderBy(domain => domain.SortOrder)
             .ThenBy(domain => domain.Name)
@@ -90,24 +106,31 @@ public static class DomainReadEndpoints
             .Take(size)
             .Include(domain => domain.Groups)
             .Include(domain => domain.Tags)
-            .Include(domain => domain.Reports.Where(report => report.ReceivedUtc >= cutoffUtc))
-            .ThenInclude(report => report.Records)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
-        return TypedResults.Ok(new ApiPage<ApiDomain>(domains.Select(domain => ApiDomain.From(domain, scope)).ToList(), pageNumber, size, totalCount));
+        var passRates = await PassRatesAsync(context, domains.Select(domain => domain.Id).ToList(),
+            DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow()), cancellationToken);
+        var items = domains.Select(domain => ApiDomain.From(domain, scope, PassRateOf(passRates, domain.Id))).ToList();
+        return TypedResults.Ok(new ApiPage<ApiDomain>(items, pageNumber, size, totalCount));
     }
 
     private static async Task<Results<Ok<ApiDomainDetail>, ProblemHttpResult>> GetDomainAsync(
-        int id, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
+        int id, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         var scope = ApiScope.From(user);
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
         var domain = await LoadForApiAsync(context, scope, id, cancellationToken);
-        return domain is null ? ApiProblems.NotFound($"domain {id}") : TypedResults.Ok(ApiDomainDetail.From(domain, scope));
+        if (domain is null)
+        {
+            return ApiProblems.NotFound($"domain {id}");
+        }
+
+        var passRates = await PassRatesAsync(context, [domain.Id], DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow()), cancellationToken);
+        return TypedResults.Ok(ApiDomainDetail.From(domain, scope, PassRateOf(passRates, domain.Id)));
     }
 
     private static async Task<Results<Ok<ApiReportSummary>, ValidationProblem, ProblemHttpResult>> GetReportSummaryAsync(
-        int id, int? days, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
+        int id, int? days, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         var maximumDays = (int)DomainStatistics.ReportWindow.TotalDays;
         var windowDays = days ?? maximumDays;
@@ -116,7 +139,7 @@ public static class DomainReadEndpoints
             return ApiProblems.Validation("days", $"Must be between 1 and {maximumDays}.");
         }
 
-        var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-windowDays);
+        var cutoffUtc = timeProvider.GetUtcNow().AddDays(-windowDays);
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
         var domain = await ApiScope.From(user).Domains(context.Domains.AsNoTracking())
             .Where(candidate => candidate.Id == id)
@@ -146,4 +169,7 @@ public static class DomainReadEndpoints
                 breakdown.InferredSpfFailure, breakdown.InferredDkimFailure, breakdown.InferredBothFailure),
             topSources));
     }
+
+    private static double? PassRateOf(Dictionary<int, double> passRates, int domainId) =>
+        passRates.TryGetValue(domainId, out var passRate) ? passRate : null;
 }

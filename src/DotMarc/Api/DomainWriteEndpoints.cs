@@ -63,7 +63,8 @@ public static class DomainWriteEndpoints
 
         var domainId = await context.Domains.Where(domain => domain.Name == normalizedName).Select(domain => domain.Id).SingleAsync(cancellationToken);
         var added = await DomainReadEndpoints.LoadForApiAsync(context, scope, domainId, cancellationToken);
-        return TypedResults.Created($"/api/v1/domains/{domainId}", ApiDomain.From(added!, scope));
+        // Just added, so it has no reports and no pass rate yet.
+        return TypedResults.Created($"/api/v1/domains/{domainId}", ApiDomain.From(added!, scope, passRate: null));
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> SetGroupsAsync(
@@ -82,17 +83,19 @@ public static class DomainWriteEndpoints
             return ApiProblems.NotFound($"domain {id}");
         }
 
+        // Scope first: a scoped key's own groups exist, so answering "no such group" for others would tell it which
+        // hidden group ids exist.
         var distinctIds = requestedIds.Distinct().ToList();
+        if (distinctIds.Any(groupId => !scope.Includes(groupId)))
+        {
+            return ApiProblems.Forbidden("This key can only put domains in its own groups.");
+        }
+
         var existingIds = await context.Groups.Where(group => distinctIds.Contains(group.Id)).Select(group => group.Id).ToListAsync(cancellationToken);
         var missingIds = distinctIds.Except(existingIds).ToList();
         if (missingIds.Count > 0)
         {
             return ApiProblems.Validation("groupIds", $"There's no group {missingIds[0]}.");
-        }
-
-        if (distinctIds.Any(groupId => !scope.Includes(groupId)))
-        {
-            return ApiProblems.Forbidden("This key can only put domains in its own groups.");
         }
 
         // A scoped key can't see the domain's other groups, so it can't remove them either.

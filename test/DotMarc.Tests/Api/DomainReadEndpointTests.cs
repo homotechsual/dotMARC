@@ -191,4 +191,19 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task AScopedKey_FilteringByAGroupOutsideItsScope_GetsNothing()
+    {
+        var ownGroupId = await _host.SeedGroupAsync("api-filter-own");
+        var hiddenGroupId = await _host.SeedGroupAsync("api-filter-hidden");
+        await _host.SeedDomainAsync("api-filter-shared.example", groupIds: [ownGroupId, hiddenGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var page = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?group={hiddenGroupId}");
+
+        Assert.Empty(page!.Items);
+        Assert.Equal(0, page.TotalCount);
+    }
 }

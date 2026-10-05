@@ -21,7 +21,8 @@ days), and select **Create key**. Copy the key straight away: dotMARC keeps only
 * Roles that can manage access aren't offered. Keys can't create keys or change who has access.
 * A key can't be edited. To change what it can do, create a new key and revoke the old one.
 * Two weeks before a key expires, dotMARC raises an **API key expiring** alert through your [alert](./alerts.mdx)
-  channels. It doesn't open a ticket unless you turn that on.
+  channels, once rather than every cooldown, while alerting is turned on. It doesn't open a ticket unless you turn that
+  on.
 * Changes made with a key appear in the [audit log](./audit-log.mdx) as the key, with the name of the person who created
   it.
 
@@ -62,6 +63,7 @@ do, and for invalid input an `errors` object naming each field.
 | 401 | No key, or the key is unknown, expired or revoked. |
 | 403 | The key's role doesn't allow this, or a group-limited key tried something it can't. |
 | 404 | No such item, or the key can't see it. |
+| 405 | The path exists but not with that method. The `Allow` header lists the ones it accepts. |
 | 409 | The domain already exists, or the alert can't be acknowledged. |
 | 429 | Too many requests this minute. Wait for `Retry-After`. |
 

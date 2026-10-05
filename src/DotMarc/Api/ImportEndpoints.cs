@@ -54,7 +54,13 @@ public static class ImportEndpoints
             return ApiProblems.Validation("domains", $"Send between 1 and {MaximumRows} domains.");
         }
 
-        if (domains.Any(domain => (domain.Groups ?? []).Concat(domain.Tags ?? []).Any(name => name.Contains(';'))))
+        var names = domains.SelectMany(domain => (domain.Groups ?? []).Concat(domain.Tags ?? [])).ToList();
+        if (names.Any(string.IsNullOrWhiteSpace))
+        {
+            return ApiProblems.Validation("domains", "Group and tag names can't be null or blank.");
+        }
+
+        if (names.Any(name => name.Contains(';')))
         {
             return ApiProblems.Validation("domains", "Group and tag names can't contain ';'.");
         }

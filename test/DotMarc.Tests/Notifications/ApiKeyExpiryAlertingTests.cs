@@ -104,4 +104,26 @@ public sealed class ApiKeyExpiryAlertingTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.True((await verify.AlertEvents.SingleAsync(candidate => candidate.AlertType == AlertTypes.ApiKeyExpiring)).IsResolved);
     }
+
+    [Fact]
+    public async Task AnExpiringKey_IsAnnouncedOnce_NotEveryCooldown()
+    {
+        await using (var context = CreateContext())
+        {
+            var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
+            settings.CooldownMinutes = 0;
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
+        }
+
+        await SeedKeyAsync("announced", DateTimeOffset.UtcNow.AddDays(10));
+        var notifier = new FakeAlertWebhookClient();
+        var service = CreateService(notifier);
+
+        await service.CheckPinnedDomainsAsync();
+        await service.CheckPinnedDomainsAsync();
+
+        await using var verify = CreateContext();
+        Assert.Equal(1, await verify.AlertEvents.CountAsync(candidate => candidate.AlertType == AlertTypes.ApiKeyExpiring));
+        Assert.Equal(1, notifier.Sent.Count(sent => sent.AlertType == AlertTypes.ApiKeyExpiring));
+    }
 }

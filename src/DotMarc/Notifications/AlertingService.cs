@@ -317,7 +317,9 @@ public sealed class AlertingService : IAlertingService
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken)
+    /// <summary>Raises an alert unless the same one is open and younger than the cooldown, which is the settings' cooldown
+    /// unless <paramref name="cooldown"/> overrides it.</summary>
+    private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken, TimeSpan? cooldown = null)
     {
         if (AlertTypes.Find(alertType) is null)
         {
@@ -334,8 +336,7 @@ public sealed class AlertingService : IAlertingService
 
         if (activeAlert is not null)
         {
-            var cooldown = TimeSpan.FromMinutes(settings.CooldownMinutes);
-            if (activeAlert.CreatedUtc > DateTimeOffset.UtcNow.Subtract(cooldown))
+            if (activeAlert.CreatedUtc > DateTimeOffset.UtcNow.Subtract(cooldown ?? TimeSpan.FromMinutes(settings.CooldownMinutes)))
             {
                 return;
             }
@@ -380,8 +381,9 @@ public sealed class AlertingService : IAlertingService
     /// and prefix never change, so the same key always has the same subject.</summary>
     public static string ApiKeyAlertSubject(ApiKey key) => $"API key {key.Name} ({key.Prefix})";
 
-    /// <summary>Warns before an API key expires so whatever uses it doesn't break unannounced. The alert closes when the
-    /// key is revoked or finally expires.</summary>
+    /// <summary>Warns before an API key expires so whatever uses it doesn't break unannounced. An expiry is a known date,
+    /// so it's announced once (the cooldown is the whole warning period) rather than every cooldown like a fault. The
+    /// alert closes when the key is revoked or finally expires.</summary>
     private async Task CheckApiKeyExpiryAsync(DotMarcDbContext db, NotificationSettings settings, CancellationToken cancellationToken)
     {
         var nowUtc = DateTimeOffset.UtcNow;
@@ -399,7 +401,7 @@ public sealed class AlertingService : IAlertingService
             {
                 await EnsureAlertAsync(db, settings, subject, AlertTypes.ApiKeyExpiring, "Warning", "API key expiring soon",
                     $"The API key '{apiKey.Name}' ({apiKey.Prefix}...) expires on {apiKey.ExpiresUtc:yyyy-MM-dd}. Create a replacement on the Access page, switch whatever uses this key over to it, then revoke this one.",
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken, cooldown: ApiKeyExpiryWarning).ConfigureAwait(false);
             }
             else if (openSubjects.Contains(subject))
             {
