@@ -12,6 +12,7 @@ public static class ApiEndpoints
 
         GroupAndTagEndpoints.Map(api);
         DomainReadEndpoints.Map(api);
+        DomainWriteEndpoints.Map(api);
 
         // Without this, a path under /api that isn't an endpoint falls to the UI's fallback policy and redirects to
         // sign-in.

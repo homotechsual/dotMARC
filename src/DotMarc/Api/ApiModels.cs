@@ -61,3 +61,11 @@ public sealed record ApiReasonBreakdown(int BenignOverride, int LocalPolicy, int
 public sealed record ApiSource(string SourceIp, int Volume, string Spf, string Dkim, string Disposition);
 
 public sealed record ApiReportSummary(int DomainId, string DomainName, int Days, int TotalVolume, double? PassRate, ApiReasonBreakdown ReasonBreakdown, IReadOnlyList<ApiSource> TopSources);
+
+public sealed record ApiAddDomainRequest(string? Name);
+
+public sealed record ApiSetGroupsRequest(IReadOnlyList<int>? GroupIds);
+
+public sealed record ApiSetTagsRequest(IReadOnlyList<int>? TagIds);
+
+public sealed record ApiSetMonitoringRequest(bool? Monitored);
