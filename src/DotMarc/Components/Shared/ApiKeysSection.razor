@@ -1,0 +1,214 @@
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JS
+
+<div>
+    <div class="d-flex align-center mb-1">
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Keys let scripts and other tools use dotMARC's API with a role's permissions. A key for a Viewer can be limited
+            to certain groups. Roles that can manage access aren't offered. To change what a key can do, create a new one and
+            revoke the old. The API's description is at <MudLink Href="/api/v1/openapi.json" Target="_blank">/api/v1/openapi.json</MudLink>.
+        </MudText>
+        <DocsLink Href="https://dotmarc.app/docs/api" Text="Using the API" Class="ml-2" />
+    </div>
+
+    @if (_newSecret is not null)
+    {
+        <MudAlert Severity="Severity.Success" Class="my-4" ShowCloseIcon="true" CloseIconClicked="@(() => _newSecret = null)">
+            <MudText Typo="Typo.body2" Class="mb-2">Copy this key now. dotMARC only stores a hash of it, so it can't be shown again.</MudText>
+            <div class="d-flex align-center">
+                <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">@_newSecret</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Class="ml-2" aria-label="Copy key" OnClick="CopySecretAsync" />
+            </div>
+        </MudAlert>
+    }
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_name" Label="Name" Placeholder="Halo sync" Variant="Variant.Outlined" Immediate="true"
+                          Error="@(_nameError is not null)" ErrorText="@_nameError" MaxLength="@ApiKeyManagementService.MaximumNameLength" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect T="int?" @bind-Value="_roleId" Label="Role" Variant="Variant.Outlined">
+                @foreach (var role in _offeredRoles)
+                {
+                    <MudSelectItem T="int?" Value="@role.Id">@role.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="int" @bind-Value="_lifetimeDays" Label="Expires after" Variant="Variant.Outlined">
+                @foreach (var days in ApiKeyManagementService.LifetimeDays)
+                {
+                    <MudSelectItem T="int" Value="@days">@days days</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3" Class="d-flex align-start">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Key"
+                       Disabled="@(_roleId is null || _busy)" OnClick="CreateAsync">Create key</MudButton>
+        </MudItem>
+        @if (SelectedRoleIsScopable)
+        {
+            <MudItem xs="12" md="6">
+                <SearchableMultiSelect TValue="int" Options="@(_groups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList())"
+                                       @bind-SelectedValues="_groupIds" Label="Groups" Variant="Variant.Outlined"
+                                       MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "All (unrestricted)" : $"{selected.Count} group(s)")" />
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (_keys is { Count: > 0 })
+    {
+        <MudTable Items="_keys" Hover="true" Dense="true" Class="mt-4" T="ApiKey" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Key</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh>Groups</MudTh>
+                <MudTh>Created</MudTh>
+                <MudTh>Expires</MudTh>
+                <MudTh>Last used</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name" Style="@(IsInUse(context) ? "" : "opacity: 0.55")">@context.Name</MudTd>
+                <MudTd DataLabel="Key" Style="font-family: monospace">@context.Prefix...</MudTd>
+                <MudTd DataLabel="Role">@(context.Role?.Name ?? "(deleted role)")</MudTd>
+                <MudTd DataLabel="Groups">@(context.ScopedGroups.Count == 0 ? "All" : string.Join(", ", context.ScopedGroups.Select(group => group.Name)))</MudTd>
+                <MudTd DataLabel="Created">@context.CreatedUtc.ToString("yyyy-MM-dd") by @context.CreatedBy</MudTd>
+                <MudTd DataLabel="Expires">
+                    @context.ExpiresUtc.ToString("yyyy-MM-dd")
+                    @if (context.RevokedUtc is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Class="ml-1">Revoked</MudChip>
+                    }
+                    else if (context.ExpiresUtc <= _nowUtc)
+                    {
+                        <MudChip T="string" Size="Size.Small" Class="ml-1">Expired</MudChip>
+                    }
+                    else if (context.ExpiresUtc - _nowUtc <= AlertingService.ApiKeyExpiryWarning)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Expires soon</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last used">@(context.LastUsedUtc?.ToString("yyyy-MM-dd HH:mm") ?? "Never")</MudTd>
+                <MudTd>
+                    @if (context.RevokedUtc is null)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RevokeAsync(context))">Revoke</MudButton>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+    else if (_keys is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mt-4">No API keys yet.</MudText>
+    }
+</div>
+
+@code {
+    private List<ApiKey>? _keys;
+    private List<Role> _offeredRoles = [];
+    private List<Group> _groups = [];
+    private string _name = "";
+    private string? _nameError;
+    private int? _roleId;
+    private int _lifetimeDays = 90;
+    private IReadOnlyCollection<int> _groupIds = [];
+    private string? _newSecret;
+    private bool _busy;
+    private DateTimeOffset _nowUtc = DateTimeOffset.UtcNow;
+
+    private bool SelectedRoleIsScopable => _offeredRoles.FirstOrDefault(role => role.Id == _roleId)?.IsScopable == true;
+
+    private bool IsInUse(ApiKey key) => key.IsActive(_nowUtc);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _nowUtc = DateTimeOffset.UtcNow;
+        _keys = await ApiKeyManagementService.ListAsync(db);
+        _offeredRoles = (await db.Roles.AsNoTracking().OrderBy(role => role.Name).ToListAsync())
+            .Where(role => !role.Permissions.Contains(Permission.AccessManage))
+            .ToList();
+        _groups = await db.Groups.AsNoTracking().OrderBy(group => group.Name).ToListAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        if (_roleId is not { } roleId)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var groupIds = SelectedRoleIsScopable ? _groupIds.ToList() : [];
+            var result = await ApiKeyManagementService.CreateAsync(db, await AuditActorAccessor.GetAsync(), _name, roleId, groupIds, _lifetimeDays);
+            _nameError = result.Error switch
+            {
+                CreateApiKeyError.InvalidName => $"Give the key a name of up to {ApiKeyManagementService.MaximumNameLength} characters.",
+                CreateApiKeyError.NameInUse => "A key in use already has that name.",
+                _ => null,
+            };
+            if (result.Error is CreateApiKeyError.RoleNotFound or CreateApiKeyError.RoleCanManageAccess or CreateApiKeyError.InvalidLifetime)
+            {
+                Snackbar.Add("That role can't be given to a key. Choose another.", Severity.Error);
+            }
+
+            if (result.Secret is not null)
+            {
+                _newSecret = result.Secret;
+                _name = "";
+                _groupIds = [];
+                await LoadAsync();
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to create the key. Try again.", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RevokeAsync(ApiKey key)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Revoke API key",
+            $"Revoke {key.Name}? Anything using it stops working straight away. This can't be undone.", yesText: "Revoke", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await ApiKeyManagementService.RevokeAsync(db, await AuditActorAccessor.GetAsync(), key.Id);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to revoke {key.Name}. Try again.", Severity.Error);
+        }
+    }
+
+    private async Task CopySecretAsync()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newSecret);
+        Snackbar.Add("Key copied.", Severity.Success);
+    }
+}

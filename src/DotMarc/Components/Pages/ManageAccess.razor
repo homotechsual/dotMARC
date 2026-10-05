@@ -1,4 +1,5 @@
 @page "/access"
+@page "/access/{Tab}"
 @attribute [Authorize(Policy = "AccessManage")]
 @using DotMarc.Components.Shared
 @using DotMarc.Data
@@ -7,6 +8,7 @@
 @inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 <PageTitle>dotMARC - Manage Access</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -17,175 +19,186 @@
 <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
     Roles are built from fine-grained permissions and control what someone can see and do. Admin
     and Viewer come built in; custom roles can cover any subset. A Viewer can optionally be scoped
-    to specific Groups, for external clients who should only see their own domains.
+    to specific Groups, for external clients who should only see their own domains. API keys get a
+    role the same way, for scripts and other tools.
 </MudText>
 
-<MudPaper Class="pa-4 mb-4" Elevation="1">
-    <MudText Typo="Typo.h6" Class="mb-2">Roles</MudText>
-    <MudGrid>
-        <MudItem xs="9">
-            <MudTextField @bind-Value="_newRoleName" Label="Role name" Placeholder="Domain Manager" Variant="Variant.Outlined"
-                          Error="@(_addRoleError is not null)" ErrorText="@_addRoleError" Immediate="true" />
-        </MudItem>
-        <MudItem xs="3" Class="d-flex align-start">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="AddRoleAsync">Add role</MudButton>
-        </MudItem>
-    </MudGrid>
-
-    @if (_roles is { Count: > 0 })
-    {
-        <MudTable Items="_roles" Hover="true" T="RoleRow" Class="mt-4" CustomHeader="true" Filter="RoleMatchesFilters">
-            <ToolBarContent>
-                <MudSpacer />
-                <MudButton Variant="@(_showRoleFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                           OnClick="@(() => _showRoleFilters = !_showRoleFilters)">@(_showRoleFilters ? "Hide filters" : "Filters")</MudButton>
-            </ToolBarContent>
-            <HeaderContent>
-                <tr>
-                    <MudTh><MudTableSortLabel SortBy="new Func<RoleRow, object>(r => r.Name)">Name</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<RoleRow, object>(r => r.IsLocked ? int.MaxValue : r.Permissions.Count)">Permissions</MudTableSortLabel></MudTh>
-                    <MudTh></MudTh>
-                </tr>
-                @if (_showRoleFilters)
-                {
-                <tr>
-                    <MudTh><MudTextField T="string" @bind-Value="_roleNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                    <MudTh>
-                        <MudSelect T="Permission?" Value="_rolePermissionFilter" ValueChanged="@(v => _rolePermissionFilter = v)" Clearable="true" Placeholder="Has permission" Margin="Margin.Dense">
-                            @foreach (var permission in Enum.GetValues<Permission>())
-                            {
-                                <MudSelectItem T="Permission?" Value="permission">@permission</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudTh>
-                    <MudTh></MudTh>
-                </tr>
-                }
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>
-                    @if (context.IsLocked)
-                    {
-                        <MudText>@context.Name</MudText>
-                    }
-                    else
-                    {
-                        <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameRoleAsync(context, v))" />
-                    }
-                </MudTd>
-                <MudTd>
-                    @if (context.IsLocked)
-                    {
-                        <MudText Typo="Typo.body2">All permissions</MudText>
-                    }
-                    else
-                    {
-                        <MudSelect T="Permission" MultiSelection="true" SelectedValues="context.Permissions"
-                                   SelectedValuesChanged="@(p => SetRolePermissionsAsync(context, p))"
-                                   MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} permission(s)")"
-                                   RelativeWidth="DropdownWidth.Adaptive">
-                            @foreach (var permission in Enum.GetValues<Permission>())
-                            {
-                                <MudSelectItem T="Permission" Value="permission">@permission</MudSelectItem>
-                            }
-                        </MudSelect>
-                    }
-                </MudTd>
-                <MudTd>
-                    @if (!context.IsLocked)
-                    {
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteRoleAsync(context))" />
-                    }
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
-</MudPaper>
-
 <MudPaper Class="pa-4" Elevation="1">
-    <MudText Typo="Typo.h6" Class="mb-2">Access grants</MudText>
-    <MudGrid>
-        <MudItem xs="5">
-            <MudTextField @bind-Value="_newGrantEmail" Label="Email" Placeholder="person@example.com" Variant="Variant.Outlined"
-                          Error="@(_addGrantError is not null)" ErrorText="@_addGrantError" Immediate="true" />
-        </MudItem>
-        <MudItem xs="3">
-            <MudSelect T="int" @bind-Value="_newGrantRoleId" Label="Role" Variant="Variant.Outlined">
-                @foreach (var role in _roles ?? [])
-                {
-                    <MudSelectItem T="int" Value="role.Id">@role.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        @if (SelectedNewGrantRoleIsScopable)
-        {
-            <MudItem xs="4">
-                <SearchableMultiSelect TValue="int" Options="@(_allGroups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList())"
-                                       @bind-SelectedValues="_newGrantGroupIds" Label="Groups" Variant="Variant.Outlined"
-                                       MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "All (unrestricted)" : $"{selected.Count} group(s)")" />
+<MudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged">
+    <MudTabPanel Text="People" Icon="@Icons.Material.Filled.People">
+        <div class="pt-4">
+        <MudGrid>
+            <MudItem xs="5">
+                <MudTextField @bind-Value="_newGrantEmail" Label="Email" Placeholder="person@example.com" Variant="Variant.Outlined"
+                              Error="@(_addGrantError is not null)" ErrorText="@_addGrantError" Immediate="true" />
             </MudItem>
-        }
-        <MudItem xs="12" Class="d-flex justify-end">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="GrantAccessAsync">Grant access</MudButton>
-        </MudItem>
-    </MudGrid>
+            <MudItem xs="3">
+                <MudSelect T="int" @bind-Value="_newGrantRoleId" Label="Role" Variant="Variant.Outlined">
+                    @foreach (var role in _roles ?? [])
+                    {
+                        <MudSelectItem T="int" Value="role.Id">@role.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            @if (SelectedNewGrantRoleIsScopable)
+            {
+                <MudItem xs="4">
+                    <SearchableMultiSelect TValue="int" Options="@(_allGroups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList())"
+                                           @bind-SelectedValues="_newGrantGroupIds" Label="Groups" Variant="Variant.Outlined"
+                                           MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "All (unrestricted)" : $"{selected.Count} group(s)")" />
+                </MudItem>
+            }
+            <MudItem xs="12" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="GrantAccessAsync">Grant access</MudButton>
+            </MudItem>
+        </MudGrid>
 
-    @if (_grants is { Count: > 0 })
-    {
-        <MudTable Items="_grants" Hover="true" T="GrantRow" Class="mt-4" CustomHeader="true" Filter="GrantMatchesFilters">
-            <ToolBarContent>
-                <MudSpacer />
-                <MudButton Variant="@(_showGrantFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                           OnClick="@(() => _showGrantFilters = !_showGrantFilters)">@(_showGrantFilters ? "Hide filters" : "Filters")</MudButton>
-            </ToolBarContent>
-            <HeaderContent>
-                <tr>
-                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.Email)">Email</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.IsBound)">Status</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.RoleName)">Role</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.ScopedGroupsDisplay)">Groups</MudTableSortLabel></MudTh>
-                    <MudTh></MudTh>
-                </tr>
-                @if (_showGrantFilters)
-                {
-                <tr>
-                    <MudTh><MudTextField T="string" @bind-Value="_grantEmailFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                    <MudTh>
-                        <MudSelect T="bool?" Value="_grantIsBoundFilter" ValueChanged="@(v => _grantIsBoundFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                            <MudSelectItem T="bool?" Value="true">Active</MudSelectItem>
-                            <MudSelectItem T="bool?" Value="false">Pending first sign-in</MudSelectItem>
-                        </MudSelect>
-                    </MudTh>
-                    <MudTh>
-                        <MudSelect T="string" Value="_grantRoleFilter" ValueChanged="@(v => _grantRoleFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                            @foreach (var roleName in _grants.Select(g => g.RoleName).Distinct().OrderBy(n => n))
-                            {
-                                <MudSelectItem T="string" Value="roleName">@roleName</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudTh>
-                    <MudTh><MudTextField T="string" @bind-Value="_grantGroupsFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                    <MudTh></MudTh>
-                </tr>
-                }
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>@context.Email</MudTd>
-                <MudTd>@(context.IsBound ? "Active" : "Pending first sign-in")</MudTd>
-                <MudTd>@context.RoleName</MudTd>
-                <MudTd>@context.ScopedGroupsDisplay</MudTd>
-                <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RevokeAccessAsync(context))" />
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
-    else if (_grants is not null)
-    {
-        <MudText Typo="Typo.body2" Class="mt-4">No one has been granted access yet.</MudText>
-    }
+        @if (_grants is { Count: > 0 })
+        {
+            <MudTable Items="_grants" Hover="true" T="GrantRow" Class="mt-4" CustomHeader="true" Filter="GrantMatchesFilters">
+                <ToolBarContent>
+                    <MudSpacer />
+                    <MudButton Variant="@(_showGrantFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                               OnClick="@(() => _showGrantFilters = !_showGrantFilters)">@(_showGrantFilters ? "Hide filters" : "Filters")</MudButton>
+                </ToolBarContent>
+                <HeaderContent>
+                    <tr>
+                        <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.Email)">Email</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.IsBound)">Status</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.RoleName)">Role</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.ScopedGroupsDisplay)">Groups</MudTableSortLabel></MudTh>
+                        <MudTh></MudTh>
+                    </tr>
+                    @if (_showGrantFilters)
+                    {
+                    <tr>
+                        <MudTh><MudTextField T="string" @bind-Value="_grantEmailFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                        <MudTh>
+                            <MudSelect T="bool?" Value="_grantIsBoundFilter" ValueChanged="@(v => _grantIsBoundFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                                <MudSelectItem T="bool?" Value="true">Active</MudSelectItem>
+                                <MudSelectItem T="bool?" Value="false">Pending first sign-in</MudSelectItem>
+                            </MudSelect>
+                        </MudTh>
+                        <MudTh>
+                            <MudSelect T="string" Value="_grantRoleFilter" ValueChanged="@(v => _grantRoleFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                                @foreach (var roleName in _grants.Select(g => g.RoleName).Distinct().OrderBy(n => n))
+                                {
+                                    <MudSelectItem T="string" Value="roleName">@roleName</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTh>
+                        <MudTh><MudTextField T="string" @bind-Value="_grantGroupsFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                        <MudTh></MudTh>
+                    </tr>
+                    }
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Email</MudTd>
+                    <MudTd>@(context.IsBound ? "Active" : "Pending first sign-in")</MudTd>
+                    <MudTd>@context.RoleName</MudTd>
+                    <MudTd>@context.ScopedGroupsDisplay</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RevokeAccessAsync(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else if (_grants is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-4">No one has been granted access yet.</MudText>
+        }
+        </div>
+    </MudTabPanel>
+    <MudTabPanel Text="Roles" Icon="@Icons.Material.Filled.Badge">
+        <div class="pt-4">
+        <MudGrid>
+            <MudItem xs="9">
+                <MudTextField @bind-Value="_newRoleName" Label="Role name" Placeholder="Domain Manager" Variant="Variant.Outlined"
+                              Error="@(_addRoleError is not null)" ErrorText="@_addRoleError" Immediate="true" />
+            </MudItem>
+            <MudItem xs="3" Class="d-flex align-start">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddRoleAsync">Add role</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_roles is { Count: > 0 })
+        {
+            <MudTable Items="_roles" Hover="true" T="RoleRow" Class="mt-4" CustomHeader="true" Filter="RoleMatchesFilters">
+                <ToolBarContent>
+                    <MudSpacer />
+                    <MudButton Variant="@(_showRoleFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                               OnClick="@(() => _showRoleFilters = !_showRoleFilters)">@(_showRoleFilters ? "Hide filters" : "Filters")</MudButton>
+                </ToolBarContent>
+                <HeaderContent>
+                    <tr>
+                        <MudTh><MudTableSortLabel SortBy="new Func<RoleRow, object>(r => r.Name)">Name</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<RoleRow, object>(r => r.IsLocked ? int.MaxValue : r.Permissions.Count)">Permissions</MudTableSortLabel></MudTh>
+                        <MudTh></MudTh>
+                    </tr>
+                    @if (_showRoleFilters)
+                    {
+                    <tr>
+                        <MudTh><MudTextField T="string" @bind-Value="_roleNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                        <MudTh>
+                            <MudSelect T="Permission?" Value="_rolePermissionFilter" ValueChanged="@(v => _rolePermissionFilter = v)" Clearable="true" Placeholder="Has permission" Margin="Margin.Dense">
+                                @foreach (var permission in Enum.GetValues<Permission>())
+                                {
+                                    <MudSelectItem T="Permission?" Value="permission">@permission</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTh>
+                        <MudTh></MudTh>
+                    </tr>
+                    }
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        @if (context.IsLocked)
+                        {
+                            <MudText>@context.Name</MudText>
+                        }
+                        else
+                        {
+                            <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameRoleAsync(context, v))" />
+                        }
+                    </MudTd>
+                    <MudTd>
+                        @if (context.IsLocked)
+                        {
+                            <MudText Typo="Typo.body2">All permissions</MudText>
+                        }
+                        else
+                        {
+                            <MudSelect T="Permission" MultiSelection="true" SelectedValues="context.Permissions"
+                                       SelectedValuesChanged="@(p => SetRolePermissionsAsync(context, p))"
+                                       MultiSelectionTextFunc="@(selected => selected.Count == 0 ? "None" : $"{selected.Count} permission(s)")"
+                                       RelativeWidth="DropdownWidth.Adaptive">
+                                @foreach (var permission in Enum.GetValues<Permission>())
+                                {
+                                    <MudSelectItem T="Permission" Value="permission">@permission</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        @if (!context.IsLocked)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteRoleAsync(context))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        </div>
+    </MudTabPanel>
+    <MudTabPanel Text="API keys" Icon="@Icons.Material.Filled.Key">
+        <div class="pt-4">
+        <ApiKeysSection />
+        </div>
+    </MudTabPanel>
+</MudTabs>
 </MudPaper>
 
 @code {
@@ -242,6 +255,26 @@
             return false;
         }
         return true;
+    }
+
+    private static readonly string[] TabSlugs = ["people", "roles", "api-keys"];
+
+    [Parameter]
+    public string? Tab { get; set; }
+
+    private int _activeTabIndex;
+
+    protected override void OnParametersSet()
+    {
+        var index = Tab is null ? -1 : Array.IndexOf(TabSlugs, Tab.ToLowerInvariant());
+        _activeTabIndex = index >= 0 ? index : 0;
+    }
+
+    private void OnActiveTabIndexChanged(int index)
+    {
+        _activeTabIndex = index;
+        var slug = TabSlugs[index >= 0 && index < TabSlugs.Length ? index : 0];
+        Navigation.NavigateTo($"/access/{slug}", replace: true);
     }
 
     private bool SelectedNewGrantRoleIsScopable => _roles?.SingleOrDefault(r => r.Id == _newGrantRoleId)?.IsScopable ?? false;
