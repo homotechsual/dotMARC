@@ -1,4 +1,5 @@
 using System.Text;
+using DotMarc.Dns;
 
 namespace DotMarc.DnsPush;
 
@@ -44,18 +45,40 @@ public static class TxtValues
         return value.ToString();
     }
 
-    /// <summary>The values at a name after removing <paramref name="remove"/> and adding <paramref name="add"/>, and
-    /// any of <paramref name="remove"/> that weren't there (a sign the name changed since the push was planned).</summary>
-    public static (List<string> Values, IReadOnlyList<string> Missing) ReplaceValues(IEnumerable<string> current, IReadOnlyList<string> remove, string add)
+    /// <summary>Plans replacing values in the TXT set at a name. Values are matched by their trimmed text, but the
+    /// items kept are each provider's originals, untouched, so a push never rewrites a value it isn't changing. The
+    /// plan has a <see cref="TxtSetEdit{T}.Problem"/> (and must not be applied) if a value to remove is no longer
+    /// there, or if adding an SPF record would leave the name with anything but exactly one, the error receivers
+    /// treat as no SPF at all.</summary>
+    public static TxtSetEdit<T> PlanReplace<T>(IReadOnlyList<T> current, Func<T, string> valueOf, IReadOnlyList<string> remove, string add)
     {
-        var currentValues = current.Select(value => value.Trim()).ToList();
-        var missing = remove.Where(value => !currentValues.Contains(value.Trim(), StringComparer.Ordinal)).ToList();
-        var values = currentValues.Where(value => !remove.Contains(value, StringComparer.Ordinal)).ToList();
-        if (!values.Contains(add, StringComparer.Ordinal))
+        var addKey = add.Trim();
+        var removeKeys = remove.Select(value => value.Trim()).ToHashSet(StringComparer.Ordinal);
+        var currentKeys = current.Select(item => valueOf(item).Trim()).ToList();
+        var missing = remove.Where(value => !currentKeys.Contains(value.Trim(), StringComparer.Ordinal)).ToList();
+
+        var removed = current.Where(item => removeKeys.Contains(valueOf(item).Trim()) && valueOf(item).Trim() != addKey).ToList();
+        var kept = current.Except(removed).ToList();
+        var addNew = !kept.Any(item => valueOf(item).Trim() == addKey);
+
+        string? problem = null;
+        if (missing.Count > 0)
         {
-            values.Add(add);
+            problem = "The TXT records at this name changed since this push started, so nothing was changed. Try again.";
+        }
+        else if (SpfRecord.IsSpf(addKey))
+        {
+            var spfCount = kept.Count(item => SpfRecord.IsSpf(valueOf(item).Trim())) + (addNew ? 1 : 0);
+            if (spfCount != 1)
+            {
+                problem = $"This push would leave {spfCount} SPF records at this name, and receivers treat more than one as no SPF at all, so nothing was changed. Reopen the SPF editor to start from what's there now.";
+            }
         }
 
-        return (values, missing);
+        return new TxtSetEdit<T>(kept, removed, addNew, missing, problem);
     }
 }
+
+/// <summary>A planned change to a TXT set: the items to keep and remove (each provider's own originals), whether the
+/// new value still needs adding, and why the plan mustn't be applied, if it mustn't.</summary>
+public sealed record TxtSetEdit<T>(IReadOnlyList<T> Kept, IReadOnlyList<T> Removed, bool AddNew, IReadOnlyList<string> Missing, string? Problem);

@@ -31,31 +31,57 @@ public sealed class TxtValuesTests
         Assert.Equal(expected, TxtValues.FromQuotedText(text));
     }
 
-    [Fact]
-    public void ReplaceValues_KeepsEveryOtherValue()
-    {
-        var (values, missing) = TxtValues.ReplaceValues(
-            ["google-site-verification=abc", "v=spf1 include:old.example ~all", "MS=ms123"],
-            ["v=spf1 include:old.example ~all"],
-            "v=spf1 include:new.example ~all");
+    private static TxtSetEdit<string> Plan(string[] current, string[] remove, string add) =>
+        TxtValues.PlanReplace(current, value => value, remove, add);
 
-        Assert.Equal(["google-site-verification=abc", "MS=ms123", "v=spf1 include:new.example ~all"], values);
-        Assert.Empty(missing);
+    [Fact]
+    public void PlanReplace_KeepsEveryOtherValueExactlyAsItWas()
+    {
+        var edit = Plan(["google-site-verification=abc ", "v=spf1 include:old.example ~all", "MS=ms123"], ["v=spf1 include:old.example ~all"], "v=spf1 include:new.example ~all");
+
+        Assert.Null(edit.Problem);
+        Assert.Equal(["google-site-verification=abc ", "MS=ms123"], edit.Kept);
+        Assert.Equal(["v=spf1 include:old.example ~all"], edit.Removed);
+        Assert.True(edit.AddNew);
     }
 
     [Fact]
-    public void ReplaceValues_ReportsValuesNoLongerThere()
+    public void PlanReplace_MatchesAValueWithStraySpaces()
     {
-        var (_, missing) = TxtValues.ReplaceValues(["v=spf1 -all"], ["v=spf1 include:old.example ~all"], "v=spf1 ~all");
+        // A trailing space pasted into a DNS console mustn't stop the old SPF record being found and removed.
+        var edit = Plan(["v=spf1 include:old.example ~all "], ["v=spf1 include:old.example ~all "], "v=spf1 include:new.example ~all");
 
-        Assert.Equal(["v=spf1 include:old.example ~all"], missing);
+        Assert.Null(edit.Problem);
+        Assert.Equal(["v=spf1 include:old.example ~all "], edit.Removed);
+        Assert.Empty(edit.Kept);
     }
 
     [Fact]
-    public void ReplaceValues_DoesntAddAValueTwice()
+    public void PlanReplace_RefusesWhenAValueToRemoveIsGone()
     {
-        var (values, _) = TxtValues.ReplaceValues(["v=spf1 a ~all", "v=spf1 mx ~all"], ["v=spf1 mx ~all"], "v=spf1 a ~all");
+        var edit = Plan(["v=spf1 -all"], ["v=spf1 include:old.example ~all"], "v=spf1 ~all");
 
-        Assert.Equal(["v=spf1 a ~all"], values);
+        Assert.Equal(["v=spf1 include:old.example ~all"], edit.Missing);
+        Assert.NotNull(edit.Problem);
+    }
+
+    [Fact]
+    public void PlanReplace_RefusesToLeaveTwoSpfRecords()
+    {
+        // The zone has an SPF record the push didn't know about (a stale DNS read), so adding one would make two.
+        var edit = Plan(["v=spf1 include:someone-else.example ~all"], [], "v=spf1 include:new.example ~all");
+
+        Assert.NotNull(edit.Problem);
+        Assert.Contains("2 SPF records", edit.Problem);
+    }
+
+    [Fact]
+    public void PlanReplace_DoesntAddAValueTwice()
+    {
+        var edit = Plan(["v=spf1 a ~all", "v=spf1 mx ~all"], ["v=spf1 mx ~all"], "v=spf1 a ~all");
+
+        Assert.Null(edit.Problem);
+        Assert.False(edit.AddNew);
+        Assert.Equal(["v=spf1 a ~all"], edit.Kept);
     }
 }

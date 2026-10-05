@@ -67,4 +67,16 @@ public sealed class TxtRecordLookupTests
 
         Assert.Single(inner.Queried);
     }
+
+    [Fact]
+    public async Task AResolverFailure_IsAnError_NotAnEmptyAnswer()
+    {
+        // SERVFAIL comes back as HTTP 200 with Status 2 and no answers; reading that as "no record" would invent a
+        // missing SPF include, or let a push start from nothing and add a second SPF record.
+        var (lookup, handler) = Create();
+        handler.ResponseBody = """{"Status":2}""";
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => lookup.GetTxtValuesAsync("contoso.com", CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() => lookup.LookupWithCnameAsync("contoso.com", CancellationToken.None));
+    }
 }

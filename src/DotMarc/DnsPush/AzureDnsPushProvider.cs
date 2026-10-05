@@ -298,38 +298,41 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         return info;
     }
 
-    /// <summary>Replaces only the given values in the TXT record set at relativeName, keeping its other values and TTL.</summary>
+    /// <summary>Replaces only the given values in the TXT record set at relativeName. It edits the set Azure returned, so
+    /// the values it isn't changing, the TTL and the set's metadata are written back exactly as they were.</summary>
     private static async Task<DnsPushResult> ReplaceTxtValuesAsync(DnsZoneResource zone, string relativeName, DnsRecordChange change, CancellationToken cancellationToken)
     {
         try
         {
             var txtRecords = zone.GetDnsTxtRecords();
-            var current = new List<string>();
-            long ttl = 3600;
+            var data = new DnsTxtRecordData { TtlInSeconds = 3600 };
             if ((await txtRecords.ExistsAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value)
             {
-                var existing = (await txtRecords.GetAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value;
-                current = existing.Data.DnsTxtRecords.Select(record => string.Concat(record.Values)).ToList();
-                ttl = existing.Data.TtlInSeconds ?? 3600;
+                data = (await txtRecords.GetAsync(relativeName, cancellationToken).ConfigureAwait(false)).Value.Data;
             }
 
-            var (values, missing) = TxtValues.ReplaceValues(current, change.ValuesToRemove ?? [], change.DesiredValue);
-            if (missing.Count > 0)
+            var plan = TxtValues.PlanReplace(data.DnsTxtRecords.ToList(), record => string.Concat(record.Values), change.ValuesToRemove ?? [], change.DesiredValue);
+            if (plan.Problem is not null)
             {
-                return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed since this push started, so nothing was changed. Try again.");
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"{change.Name}: {plan.Problem}");
             }
 
-            var data = new DnsTxtRecordData { TtlInSeconds = ttl };
-            foreach (var value in values)
+            foreach (var removed in plan.Removed)
             {
-                data.DnsTxtRecords.Add(ToTxtRecordInfo(value));
+                data.DnsTxtRecords.Remove(removed);
+            }
+
+            if (plan.AddNew)
+            {
+                data.DnsTxtRecords.Add(ToTxtRecordInfo(change.DesiredValue));
             }
 
             await txtRecords.CreateOrUpdateAsync(WaitUntil.Completed, relativeName, data, cancellationToken: cancellationToken).ConfigureAwait(false);
             return new DnsPushResult(DnsPushOutcome.Pushed, null);
         }
-        catch (RequestFailedException exception)
+        catch (Exception exception) when (exception is RequestFailedException or TaskCanceledException)
         {
+            // A single write to the whole set: if it failed, nothing changed.
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the record push: {exception.Message}");
         }
     }

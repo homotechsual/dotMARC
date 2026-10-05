@@ -294,7 +294,7 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>Replaces only the given values in the TXT rrset at change.Name, in one atomic change that deletes the
-    /// rrset and adds it back with the other values kept.</summary>
+    /// rrset and adds it back. The values it isn't changing go back exactly as Cloud DNS returned them.</summary>
     private async Task<DnsPushResult> ReplaceTxtValuesAsync(string projectId, string managedZoneName, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
     {
         var fqdn = change.Name.TrimEnd('.') + ".";
@@ -304,14 +304,19 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
             return new DnsPushResult(DnsPushOutcome.ProviderError, $"Google rejected the record lookup ({existing.ErrorStatusCode}) - nothing was changed.");
         }
 
-        var current = existing.Rrset?.Rrdatas.Select(TxtValues.FromQuotedText).ToList() ?? [];
-        var (values, missing) = TxtValues.ReplaceValues(current, change.ValuesToRemove ?? [], change.DesiredValue);
-        if (missing.Count > 0)
+        var plan = TxtValues.PlanReplace(existing.Rrset?.Rrdatas ?? [], TxtValues.FromQuotedText, change.ValuesToRemove ?? [], change.DesiredValue);
+        if (plan.Problem is not null)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed since this push started, so nothing was changed. Try again.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"{change.Name}: {plan.Problem}");
         }
 
-        var additions = new List<ResourceRecordSet> { new(fqdn, "TXT", existing.Rrset?.Ttl ?? 3600, values.Select(TxtValues.ToQuotedText).ToList()) };
+        var rrdatas = plan.Kept.ToList();
+        if (plan.AddNew)
+        {
+            rrdatas.Add(TxtValues.ToQuotedText(change.DesiredValue));
+        }
+
+        var additions = new List<ResourceRecordSet> { new(fqdn, "TXT", existing.Rrset?.Ttl ?? 3600, rrdatas) };
         var deletions = existing.Rrset is null ? new List<ResourceRecordSet>() : [existing.Rrset];
         return await ApplyChangeAsync(projectId, managedZoneName, accessToken, additions, deletions, cancellationToken).ConfigureAwait(false);
     }
@@ -352,6 +357,8 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
     private static string BuildRrdata(DnsRecordChange change) =>
         string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase)
             ? TxtValues.ToQuotedText(change.DesiredValue)
+            // Cloud DNS wants a CNAME target fully qualified, with the trailing dot.
+            : string.Equals(change.RecordType, "CNAME", StringComparison.OrdinalIgnoreCase) ? change.DesiredValue.TrimEnd('.') + "."
             : change.DesiredValue;
 
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string? AccessToken);

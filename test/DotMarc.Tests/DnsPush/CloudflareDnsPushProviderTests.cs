@@ -102,4 +102,44 @@ public sealed class CloudflareDnsPushProviderTests : IAsyncLifetime
 
         Assert.Contains("\\u0022 \\u0022", handler.RequestBodies[2].Replace("\\\" \\\"", "\\u0022 \\u0022"));
     }
+
+    [Fact]
+    public async Task ReplaceTxtValues_ReportsTheDuplicate_WhenTheOldRecordCantBeDeleted()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"zone1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"r2","content":"\"v=spf1 include:old.example ~all \""}]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        handler.ResponseBodies.Enqueue("{}");
+        foreach (var status in new[] { System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.InternalServerError })
+        {
+            handler.StatusCodes.Enqueue(status);
+        }
+
+        var provider = await CreateProviderAsync(handler);
+        var change = new DnsRecordChange(DnsRecordChangeKind.ReplaceTxtValues, "TXT", "contoso.com", "v=spf1 include:new.example ~all",
+            "v=spf1 include:old.example ~all ", "contoso.com", ValuesToRemove: ["v=spf1 include:old.example ~all "]);
+
+        var result = await provider.ExchangeAndPushAsync("code", "verifier", "https://dotmarc.example/callback", [change], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.LeftDuplicateRecord, result.Outcome);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[4].Method);
+    }
+
+    [Fact]
+    public async Task ReplaceTxtValues_RefusesToAddASecondSpfRecord()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"zone1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"r9","content":"\"v=spf1 include:added-in-the-console.example ~all\""}]}""");
+        var provider = await CreateProviderAsync(handler);
+        var change = new DnsRecordChange(DnsRecordChangeKind.ReplaceTxtValues, "TXT", "contoso.com", "v=spf1 include:new.example ~all", null, "contoso.com", ValuesToRemove: []);
+
+        var result = await provider.ExchangeAndPushAsync("code", "verifier", "https://dotmarc.example/callback", [change], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.ProviderError, result.Outcome);
+        Assert.Equal(3, handler.Requests.Count);
+    }
 }

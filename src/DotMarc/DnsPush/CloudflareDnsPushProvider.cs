@@ -274,45 +274,68 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>Replaces only the given values among the TXT records at change.Name. The new record is created before
-    /// the old ones are deleted, so the name is never left without SPF; if a delete then fails, the name briefly has
-    /// two SPF records, which the message says.</summary>
+    /// the old ones are deleted, so the name is never left without SPF; if a delete then fails, the name has two SPF
+    /// records, reported as LeftDuplicateRecord so the person is told to remove the old one.</summary>
     private async Task<DnsPushResult> ReplaceTxtValuesAsync(string zoneId, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
     {
-        using var findRequest = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/zones/{zoneId}/dns_records?type=TXT&name={Uri.EscapeDataString(change.Name)}");
-        findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
-        if (!findResponse.IsSuccessStatusCode)
+        List<RecordWithContent> existing;
+        try
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}) - nothing was changed.");
-        }
-
-        var existing = (await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<RecordWithContent>>>(cancellationToken: cancellationToken).ConfigureAwait(false))?.Result ?? [];
-        var records = existing.Select(record => (record.Id, Value: TxtValues.FromQuotedText(record.Content))).ToList();
-        var remove = change.ValuesToRemove ?? [];
-        var (_, missing) = TxtValues.ReplaceValues(records.Select(record => record.Value), remove, change.DesiredValue);
-        if (missing.Count > 0)
-        {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"The TXT records at {change.Name} changed since this push started, so nothing was changed. Try again.");
-        }
-
-        if (!records.Any(record => record.Value == change.DesiredValue))
-        {
-            var created = await CreateRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false);
-            if (created.Outcome != DnsPushOutcome.Pushed)
+            using var findRequest = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/zones/{zoneId}/dns_records?type=TXT&name={Uri.EscapeDataString(change.Name)}");
+            findRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var findResponse = await _http.SendAsync(findRequest, cancellationToken).ConfigureAwait(false);
+            if (!findResponse.IsSuccessStatusCode)
             {
-                return created;
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"Cloudflare rejected the record lookup ({(int)findResponse.StatusCode}) - nothing was changed.");
+            }
+
+            existing = (await findResponse.Content.ReadFromJsonAsync<ApiResponse<List<RecordWithContent>>>(cancellationToken: cancellationToken).ConfigureAwait(false))?.Result ?? [];
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Couldn't reach Cloudflare to look up the TXT records at {change.Name}: {exception.Message} - nothing was changed.");
+        }
+
+        var plan = TxtValues.PlanReplace(existing, record => TxtValues.FromQuotedText(record.Content), change.ValuesToRemove ?? [], change.DesiredValue);
+        if (plan.Problem is not null)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, $"{change.Name}: {plan.Problem}");
+        }
+
+        if (plan.AddNew)
+        {
+            try
+            {
+                var created = await CreateRecordAsync(zoneId, accessToken, change, cancellationToken).ConfigureAwait(false);
+                if (created.Outcome != DnsPushOutcome.Pushed)
+                {
+                    return created;
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                return new DnsPushResult(DnsPushOutcome.ProviderError, $"Couldn't reach Cloudflare to add the new record at {change.Name}: {exception.Message}. Check the zone: the record may or may not have been added.");
             }
         }
 
-        foreach (var record in records.Where(record => remove.Contains(record.Value) && record.Value != change.DesiredValue))
+        foreach (var record in plan.Removed)
         {
-            using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"{ApiBase}/zones/{zoneId}/dns_records/{record.Id}");
-            deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
-            if (!deleteResponse.IsSuccessStatusCode)
+            var oldValue = TxtValues.FromQuotedText(record.Content);
+            try
             {
-                return new DnsPushResult(DnsPushOutcome.ProviderError,
-                    $"The new record was added at {change.Name}, but removing the old \"{record.Value}\" failed ({(int)deleteResponse.StatusCode}), so the name now has more than one SPF record. Remove the old one by hand.");
+                using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"{ApiBase}/zones/{zoneId}/dns_records/{record.Id}");
+                deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
+                if (!deleteResponse.IsSuccessStatusCode)
+                {
+                    return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
+                        $"The new record was added at {change.Name}, but removing the old \"{oldValue}\" failed ({(int)deleteResponse.StatusCode}), so the name now has more than one SPF record. Remove the old one by hand.");
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
+                    $"The new record was added at {change.Name}, but Cloudflare couldn't be reached to remove the old \"{oldValue}\" ({exception.Message}), so the name now has more than one SPF record. Remove the old one by hand.");
             }
         }
 

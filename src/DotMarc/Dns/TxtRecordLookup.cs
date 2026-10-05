@@ -33,9 +33,20 @@ public sealed class TxtRecordLookup : ITxtRecordLookup
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)?.Answer ?? [];
+        var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions);
+
+        // 0 is an answer and 3 (NXDOMAIN) is a real "nothing here". Anything else, such as SERVFAIL, means the resolver
+        // couldn't find out, which must not be read as "no record".
+        if (parsed is null || parsed.Status is not (0 or 3))
+        {
+            throw new HttpRequestException($"The DNS resolver couldn't look up {name} (status {parsed?.Status}).");
+        }
+
+        return parsed.Answer ?? [];
     }
 
-    private sealed record DnsOverHttpsResponse([property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
+    private sealed record DnsOverHttpsResponse(
+        [property: JsonPropertyName("Status")] int Status,
+        [property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
     private sealed record DnsAnswer([property: JsonPropertyName("type")] int Type, [property: JsonPropertyName("data")] string Data);
 }

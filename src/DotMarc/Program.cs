@@ -577,6 +577,12 @@ app.MapGet("/dns-push/{provider}/start", async (
         return Results.BadRequest();
     }
 
+    // Only from dotMARC's own pages: see DnsPushStartGuard for why a link from elsewhere mustn't start a push.
+    if (!DnsPushStartGuard.IsFromThisSite(httpContext.Request))
+    {
+        return Results.BadRequest();
+    }
+
     var authResult = await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy);
     if (!authResult.Succeeded)
     {
@@ -688,6 +694,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         DnsPushOutcome.Pushed => "pushed",
         DnsPushOutcome.ZoneNotFound => "zone-not-found",
         DnsPushOutcome.ReplaceFailedAfterDelete => "replace-failed",
+        DnsPushOutcome.LeftDuplicateRecord => "spf-duplicate",
         _ => "error"
     };
 

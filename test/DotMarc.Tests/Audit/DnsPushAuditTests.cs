@@ -68,4 +68,13 @@ public sealed class DnsPushAuditTests
 
         Assert.Equal([new AuditFieldChange("SPF contoso.com", "v=spf1 include:old.example ~all", "v=spf1 include:new.example ~all")], entry!.Changes);
     }
+
+    [Fact]
+    public void CreateEntry_RecordsAnSpfPushThatLeftADuplicate_AsFailed()
+    {
+        var entry = DnsPushAudit.CreateEntry(TestActors.Admin, Contoso, "cloudflare", OneChange, DnsPushOutcome.LeftDuplicateRecord);
+
+        Assert.Equal(AuditActions.DnsPushFailed, entry!.Action);
+        Assert.Contains("more than one SPF record", entry.Summary);
+    }
 }

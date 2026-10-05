@@ -6,7 +6,9 @@ namespace DotMarc.DnsPush;
 /// has NO record at all, which is worse than the state before the push was attempted. It gets its
 /// own outcome specifically so the UI can't collapse it into the same generic "try again" message
 /// every other failure gets.</summary>
-public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError, ReplaceFailedAfterDelete }
+/// LeftDuplicateRecord means an SPF push added the new record but couldn't remove the old one, so the name now has
+/// more than one SPF record (which receivers treat as none) until someone removes the old one by hand.
+public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError, ReplaceFailedAfterDelete, LeftDuplicateRecord }
 
 public sealed record DnsPushResult(DnsPushOutcome Outcome, string? DetailMessage);
 

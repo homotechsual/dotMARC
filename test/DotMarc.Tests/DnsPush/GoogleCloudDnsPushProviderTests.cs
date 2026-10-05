@@ -70,4 +70,43 @@ public sealed class GoogleCloudDnsPushProviderTests : IAsyncLifetime
             added.GetProperty("rrdatas").EnumerateArray().Select(rrdata => rrdata.GetString()));
         Assert.Equal(2, body.RootElement.GetProperty("deletions")[0].GetProperty("rrdatas").GetArrayLength());
     }
+
+    [Fact]
+    public async Task ReplaceTxtValues_SendsOtherValuesBackExactlyAsTheyWere()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"projects":[{"projectId":"p1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"managedZones":[{"name":"z1","dnsName":"contoso.com."}]}""");
+        handler.ResponseBodies.Enqueue("""{"rrsets":[{"name":"contoso.com.","type":"TXT","ttl":300,"rrdatas":["\"caf\\195\\169 verification\"","\"v=spf1 include:old.example ~all \""]}]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        var provider = await CreateProviderAsync(handler);
+        var change = new DnsRecordChange(DnsRecordChangeKind.ReplaceTxtValues, "TXT", "contoso.com", "v=spf1 include:new.example ~all",
+            "v=spf1 include:old.example ~all ", "contoso.com", ValuesToRemove: ["v=spf1 include:old.example ~all "]);
+
+        var result = await provider.ExchangeAndPushAsync("code", "verifier", "https://dotmarc.example/callback", [change], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.Pushed, result.Outcome);
+        using var body = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[4]);
+        Assert.Equal(["\"caf\\195\\169 verification\"", "\"v=spf1 include:new.example ~all\""],
+            body.RootElement.GetProperty("additions")[0].GetProperty("rrdatas").EnumerateArray().Select(rrdata => rrdata.GetString()));
+    }
+
+    [Fact]
+    public async Task ACnameIsSentFullyQualified()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"projects":[{"projectId":"p1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"managedZones":[{"name":"z1","dnsName":"contoso.com."}]}""");
+        handler.ResponseBodies.Enqueue("""{"rrsets":[]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        var provider = await CreateProviderAsync(handler);
+        var change = new DnsRecordChange(DnsRecordChangeKind.Create, "CNAME", "selector1._domainkey.contoso.com", "selector1-contoso-com._domainkey.contoso.onmicrosoft.com", null, "contoso.com");
+
+        await provider.ExchangeAndPushAsync("code", "verifier", "https://dotmarc.example/callback", [change], CancellationToken.None);
+
+        using var body = System.Text.Json.JsonDocument.Parse(handler.RequestBodies[4]);
+        Assert.Equal("selector1-contoso-com._domainkey.contoso.onmicrosoft.com.", body.RootElement.GetProperty("additions")[0].GetProperty("rrdatas")[0].GetString());
+    }
 }
