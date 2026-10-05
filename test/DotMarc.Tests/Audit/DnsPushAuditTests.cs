@@ -54,4 +54,18 @@ public sealed class DnsPushAuditTests
     {
         Assert.Null(DnsPushAudit.CreateEntry(TestActors.Admin, Contoso, "cloudflare", OneChange, DnsPushOutcome.ZoneNotFound));
     }
+
+    [Fact]
+    public void CreateEntry_NamesAnSpfReplacementAsSpf()
+    {
+        IReadOnlyList<DnsRecordChange> spf =
+        [
+            new(DnsRecordChangeKind.ReplaceTxtValues, "TXT", "contoso.com", "v=spf1 include:new.example ~all", "v=spf1 include:old.example ~all", "contoso.com",
+                ValuesToRemove: ["v=spf1 include:old.example ~all"]),
+        ];
+
+        var entry = DnsPushAudit.CreateEntry(TestActors.Admin, Contoso, "cloudflare", spf, DnsPushOutcome.Pushed);
+
+        Assert.Equal([new AuditFieldChange("SPF contoso.com", "v=spf1 include:old.example ~all", "v=spf1 include:new.example ~all")], entry!.Changes);
+    }
 }

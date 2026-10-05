@@ -211,6 +211,8 @@ builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcAuthorizationChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.TlsrptChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.SpfChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DkimChangeBuilder>();
 
 builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.DnsPush.DnsProviderDetector>(client =>
 {
@@ -588,7 +590,7 @@ app.MapGet("/dns-push/{provider}/start", async (
     }
 
     var (codeVerifier, codeChallenge) = PkceGenerator.Generate();
-    var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow);
+    var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow, payload);
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
 
     return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
@@ -663,7 +665,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         domainZone = domainZoneDetection.ZoneName;
     }
 
-    var plan = await changeBuilder.BuildAsync(new DnsPushRequest(domain, provider, domainZone, null), CancellationToken.None);
+    var plan = await changeBuilder.BuildAsync(new DnsPushRequest(domain, provider, domainZone, decodedState.Payload), CancellationToken.None);
     if (plan.Refusal is not null)
     {
         return DnsPushPopupResult.Close(plan.Refusal);

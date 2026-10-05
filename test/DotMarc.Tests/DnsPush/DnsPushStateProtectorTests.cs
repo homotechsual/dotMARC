@@ -47,4 +47,16 @@ public sealed class DnsPushStateProtectorTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public void Payload_RoundTrips()
+    {
+        var protector = new DnsPushStateProtector(new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+        var now = DateTimeOffset.UtcNow;
+
+        var state = protector.Unprotect(protector.Protect(1, "spf", "verifier", now, "the payload"), now);
+
+        Assert.Equal("the payload", state!.Payload);
+        Assert.Null(protector.Unprotect(protector.Protect(1, "dmarc", "verifier", now), now)!.Payload);
+    }
 }
