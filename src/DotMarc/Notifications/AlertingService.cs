@@ -100,6 +100,7 @@ public sealed class AlertingService : IAlertingService
         }
 
         await CheckDnsHealthAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
+        await CheckApiKeyExpiryAsync(db, settings, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs DnsHealthAlertEvaluator for every monitored domain, saves what it remembers, then raises and
@@ -370,6 +371,40 @@ public sealed class AlertingService : IAlertingService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to create PSA ticket for {DomainName} alert {AlertType}.", domainName, alertType);
+        }
+    }
+
+    public static readonly TimeSpan ApiKeyExpiryWarning = TimeSpan.FromDays(14);
+
+    /// <summary>What an expiring key's alert is about. Stored where a domain alert stores its domain name; a key's name
+    /// and prefix never change, so the same key always has the same subject.</summary>
+    public static string ApiKeyAlertSubject(ApiKey key) => $"API key {key.Name} ({key.Prefix})";
+
+    /// <summary>Warns before an API key expires so whatever uses it doesn't break unannounced. The alert closes when the
+    /// key is revoked or finally expires.</summary>
+    private async Task CheckApiKeyExpiryAsync(DotMarcDbContext db, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        var openSubjects = (await db.AlertEvents
+            .Where(alert => alert.AlertType == AlertTypes.ApiKeyExpiring && !alert.IsResolved)
+            .Select(alert => alert.DomainName)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false)).ToHashSet();
+        var keys = await db.ApiKeys.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var apiKey in keys)
+        {
+            var subject = ApiKeyAlertSubject(apiKey);
+            var expiresSoon = apiKey.IsActive(nowUtc) && apiKey.ExpiresUtc - nowUtc <= ApiKeyExpiryWarning;
+            if (expiresSoon)
+            {
+                await EnsureAlertAsync(db, settings, subject, AlertTypes.ApiKeyExpiring, "Warning", "API key expiring soon",
+                    $"The API key '{apiKey.Name}' ({apiKey.Prefix}...) expires on {apiKey.ExpiresUtc:yyyy-MM-dd}. Create a replacement on the Access page, switch whatever uses this key over to it, then revoke this one.",
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else if (openSubjects.Contains(subject))
+            {
+                await ResolveAllCopiesAsync(subject, AlertTypes.ApiKeyExpiring, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
