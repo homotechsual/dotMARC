@@ -92,8 +92,8 @@ All under `/api/v1`, JSON in and out, camelCase. Each endpoint requires the same
 | PUT | `/domains/{id}/monitoring` | DomainsEdit | `{ "monitored": true }` through `SetMonitoredAsync`. 204. |
 | GET | `/groups` | GroupsView | id, name, domainCount. |
 | GET | `/tags` | TagsView | id, name, color, domainCount. |
-| GET | `/alerts` | AlertsView | `status` = open (default) or all, plus paging as for domains. Items: id, type, domain (id, name; null for non-domain alerts), raisedUtc, acknowledgedUtc, acknowledgedBy, resolvedUtc. |
-| POST | `/alerts/{id}/acknowledge` | AlertsManage | Through `AlertAcknowledgement.AcknowledgeAsync`, so a PSA ticket closes exactly as from the UI. 204, or 409 when the alert is already acknowledged or resolved. |
+| GET | `/alerts` | AlertsView | `status` = open (default) or all, plus paging as for domains. Items: id, type, typeName, subject, domain (id, name; null when the subject isn't a domain the key can see), severity, title, message, raisedUtc, resolved, resolvedUtc, acknowledgeable. dotMARC records no acknowledged-by; acknowledging resolves the alert. |
+| POST | `/alerts/{id}/acknowledge` | AlertsManage | Through `AlertAcknowledgement.AcknowledgeAsync`, so a PSA ticket closes exactly as from the UI. 200 with `{ ticketClosed }`, or 409 when the alert is already closed or isn't a policy or nameserver alert. |
 
 ### Rules for every endpoint
 

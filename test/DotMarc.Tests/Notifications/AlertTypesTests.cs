@@ -33,18 +33,18 @@ public sealed class AlertTypesTests
         Assert.Equal(
             ["MissedReport", "SuspiciousRejectActivity", "TlsrptFailure", "UnexpectedActivityOnNullRoutedDomain",
              "DmarcRecordBroken", "DmarcAuthorizationBroken", "TlsrptRecordBroken", "SpfRecordBroken", "MxRecordBroken",
-             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "NameserversChanged"],
+             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "NameserversChanged", "ApiKeyExpiring"],
             AlertTypes.All.Select(alertType => alertType.Key));
     }
 
     [Fact]
-    public void EveryAlertType_HasANameAndADescription_AndAllButNameserverChangesCreateTickets()
+    public void EveryAlertType_HasANameAndADescription_AndAllButNameserverChangesAndExpiringKeysCreateTickets()
     {
         foreach (var alertType in AlertTypes.All)
         {
             Assert.False(string.IsNullOrWhiteSpace(alertType.DisplayName));
             Assert.False(string.IsNullOrWhiteSpace(alertType.Description));
-            Assert.Equal(alertType.Key != AlertTypes.NameserversChanged, alertType.CreatesTicketByDefault);
+            Assert.Equal(alertType.Key is not (AlertTypes.NameserversChanged or AlertTypes.ApiKeyExpiring), alertType.CreatesTicketByDefault);
         }
     }
 

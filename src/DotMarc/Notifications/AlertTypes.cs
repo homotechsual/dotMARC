@@ -21,6 +21,7 @@ public static class AlertTypes
     public const string MtaStsFailing = "MtaStsFailing";
     public const string DmarcPolicyWeakened = "DmarcPolicyWeakened";
     public const string NameserversChanged = "NameserversChanged";
+    public const string ApiKeyExpiring = "ApiKeyExpiring";
 
     public static IReadOnlyList<AlertTypeInfo> All { get; } =
     [
@@ -37,6 +38,7 @@ public static class AlertTypes
         new(MtaStsFailing, "MTA-STS failing", "dotMARC stopped being able to serve the domain's MTA-STS policy."),
         new(DmarcPolicyWeakened, "DMARC policy weakened", "The domain's DMARC policy, subdomain policy or percentage went down."),
         new(NameserversChanged, "Nameservers changed", "The domain's nameservers changed, often the start of a DNS migration.", CreatesTicketByDefault: false),
+        new(ApiKeyExpiring, "API key expiring", "An API key expires within 14 days. Make a replacement before whatever uses it stops working.", CreatesTicketByDefault: false),
     ];
 
     /// <summary>The DNS health alert types (see DnsHealthAlertEvaluator), which close themselves when the domain stops

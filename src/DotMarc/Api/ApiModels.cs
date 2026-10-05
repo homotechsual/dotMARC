@@ -83,3 +83,11 @@ public sealed record ApiImportUnknownName(string Kind, string Name, string Resol
 public sealed record ApiImportResponse(
     bool DryRun, int Added, int Updated, int Unchanged, int SkippedExisting, int Invalid, int Duplicates,
     IReadOnlyList<ApiImportRow> Rows, IReadOnlyList<ApiImportUnknownName> UnknownNames, IReadOnlyList<string> Notices);
+
+/// <summary>Subject is what the alert is about: a domain name, or for alerts not about a domain (an expiring API key),
+/// a description. Domain is set when the subject is a domain this key can see.</summary>
+public sealed record ApiAlert(
+    int Id, string Type, string TypeName, string Subject, ApiNamedRef? Domain, string Severity, string Title, string Message,
+    DateTimeOffset RaisedUtc, bool Resolved, DateTimeOffset? ResolvedUtc, bool Acknowledgeable);
+
+public sealed record ApiAcknowledgement(bool TicketClosed);
