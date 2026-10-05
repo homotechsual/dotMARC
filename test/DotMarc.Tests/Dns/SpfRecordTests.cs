@@ -90,9 +90,10 @@ public sealed class SpfRecordTests
 
     [Theory]
     [InlineData("v=spf1 a +all", '~', "v=spf1 a ~all")]
-    [InlineData("v=spf1 include:a.example redirect=b.example", '-', "v=spf1 include:a.example -all")]
+    [InlineData("v=spf1 include:a.example redirect=b.example", '-', "v=spf1 include:a.example include:b.example -all")]
+    [InlineData("v=spf1 redirect=_spf.provider.example", '~', "v=spf1 include:_spf.provider.example ~all")]
     [InlineData("v=spf1 include:a.example", '~', "v=spf1 include:a.example ~all")]
-    public void WithAll_SetsTheEnding_AndDropsRedirect(string record, char qualifier, string expected)
+    public void WithAll_SetsTheEnding_AndTurnsARedirectIntoAnInclude(string record, char qualifier, string expected)
     {
         Assert.Equal(expected, SpfRecord.Parse(record).WithAll(qualifier).Format());
     }
@@ -100,7 +101,8 @@ public sealed class SpfRecordTests
     [Theory]
     [InlineData(new[] { "v=spf1 include:a.example ~all", "v=spf1 include:b.example include:a.example -all" }, "v=spf1 include:a.example include:b.example -all")]
     [InlineData(new[] { "v=spf1 ip4:192.0.2.1", "v=spf1 redirect=x.example" }, "v=spf1 ip4:192.0.2.1 redirect=x.example")]
-    [InlineData(new[] { "v=spf1 redirect=x.example", "v=spf1 ?all" }, "v=spf1 ?all")]
+    [InlineData(new[] { "v=spf1 redirect=x.example", "v=spf1 ?all" }, "v=spf1 include:x.example ?all")]
+    [InlineData(new[] { "v=spf1 a exp=one.example ~all", "v=spf1 mx exp=two.example ~all" }, "v=spf1 a exp=one.example mx ~all")]
     [InlineData(new[] { "v=spf1 +all", "v=spf1 ~all" }, "v=spf1 ~all")]
     public void Merge_CombinesTermsInOrder_WithTheStrictestEnding(string[] records, string expected)
     {

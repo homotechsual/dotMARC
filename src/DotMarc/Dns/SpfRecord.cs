@@ -114,25 +114,43 @@ public sealed record SpfRecord(IReadOnlyList<SpfTerm> Terms)
     public SpfRecord WithoutInclude(string host) =>
         new(Terms.Where(term => !(term.IsInclude && string.Equals(term.Target, host, StringComparison.OrdinalIgnoreCase))).ToList());
 
-    /// <summary>Sets the ending. Any redirect is dropped too: once an all term is present, receivers ignore it.</summary>
-    public SpfRecord WithAll(char qualifier) =>
-        new(Terms.Where(term => !term.IsAll && !term.IsRedirect).Append(SpfTerm.All(qualifier)).ToList());
+    /// <summary>Sets the ending. Once an all term is present receivers ignore redirect=, so a redirect becomes an include
+    /// of the same domain: the senders it authorised stay authorised, for the same one lookup.</summary>
+    public SpfRecord WithAll(char qualifier)
+    {
+        var record = new SpfRecord(Terms.Where(term => !term.IsAll && !term.IsRedirect).ToList());
+        foreach (var redirect in Terms.Where(term => term.IsRedirect && !string.IsNullOrEmpty(term.Target)))
+        {
+            record = record.WithInclude(redirect.Target!);
+        }
+
+        return new SpfRecord(record.Terms.Append(SpfTerm.All(qualifier)).ToList());
+    }
 
     /// <summary>Several SPF records combined into one (RFC 7208 allows only one): their terms in order of appearance
-    /// with duplicates removed, and one ending, the strictest all present. A redirect is kept only if no record has
-    /// an all term, since an all term makes it ignored.</summary>
+    /// with duplicates removed (and only the first of each modifier, since a repeated one is an error), and one ending,
+    /// the strictest all present. With an all term, any redirect becomes an include, as in <see cref="WithAll"/>;
+    /// without one, the first redirect is kept.</summary>
     public static SpfRecord Merge(IReadOnlyList<SpfRecord> records)
     {
         var allTerms = records.SelectMany(record => record.Terms).ToList();
         var terms = allTerms
             .Where(term => !term.IsAll && !term.IsRedirect)
-            .DistinctBy(term => $"{term.Qualifier}{term.Name.ToLowerInvariant()}{term.Argument.ToLowerInvariant()}")
+            .DistinctBy(term => term.Kind == SpfTermKind.Modifier
+                ? $"modifier {term.Name.ToLowerInvariant()}"
+                : $"{term.Qualifier}{term.Name.ToLowerInvariant()}{term.Argument.ToLowerInvariant()}")
             .ToList();
 
         var strictestAll = allTerms.Where(term => term.IsAll).OrderByDescending(term => term.Strictness).FirstOrDefault();
         if (strictestAll is not null)
         {
-            terms.Add(strictestAll);
+            var merged = new SpfRecord(terms);
+            foreach (var redirect in allTerms.Where(term => term.IsRedirect && !string.IsNullOrEmpty(term.Target)))
+            {
+                merged = merged.WithInclude(redirect.Target!);
+            }
+
+            terms = [.. merged.Terms, strictestAll];
         }
         else if (allTerms.FirstOrDefault(term => term.IsRedirect) is { } redirect)
         {

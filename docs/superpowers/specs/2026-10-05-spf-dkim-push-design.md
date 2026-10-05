@@ -67,7 +67,7 @@ starting point:
 
 - **One live SPF record:** that record.
 - **Several:** one record merged from them: their terms in order of appearance, duplicates removed, one `all` term
-  (the strictest present: `-` over `~` over `?` over `+`), and `redirect=` dropped if an `all` is present. The editor
+  (the strictest present: `-` over `~` over `?` over `+`), and, if an `all` is present, any `redirect=` turned into an `include:` of the same domain (receivers ignore a redirect alongside `all`, so dropping it would de-authorise its senders). Only the first of each modifier is kept. The editor
   says it's a merge of N records.
 - **None:** `v=spf1 include:<service> <default ending>` for each detected sending or inbox service that has a known
   include, or just `v=spf1 <default ending>` with a prompt to add an include. A **This domain sends no mail** option
