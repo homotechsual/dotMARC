@@ -140,7 +140,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
     private static AlertEvent NewPolicyAlert(string ticketId) => new()
     {
         DomainName = "contoso.example", AlertType = AlertTypes.DmarcPolicyWeakened, Severity = "Warning", Title = "DMARC policy weakened",
-        Message = "m", ExternalTicketProvider = "HaloPSA", ExternalTicketId = ticketId,
+        Message = "m", Tickets = [new DotMarc.Psa.AlertTicket { Psa = DotMarc.Psa.PsaKind.HaloPsa, TicketId = ticketId, IsOpen = true }],
     };
 
     [Fact]
@@ -149,13 +149,14 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         var alertId = await SeedPolicyAlertAsync(secondOpenCopy: true);
         var halo = new ClosingHaloPsaClient();
 
-        AcknowledgeOutcome outcome;
+        AcknowledgeResult result;
         await using (var context = CreateContext())
         {
-            outcome = await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, new PsaTicketService(halo));
+            result = await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, PsaTestSupport.ForHalo(halo));
         }
 
-        Assert.Equal(AcknowledgeOutcome.Acknowledged, outcome);
+        Assert.Equal(AcknowledgeOutcome.Acknowledged, result.Outcome);
+        Assert.Equal(new DotMarc.Psa.PsaCloseResult(2, 0), result.Tickets);
         Assert.Equal(["777", "778"], halo.ClosedTicketIds.Order());
         await using var verify = CreateContext();
         Assert.All(await verify.AlertEvents.ToListAsync(), alert => Assert.True(alert.IsResolved));
@@ -176,11 +177,11 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
             var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
             settings.TeamsWebhookUrl = "https://example.test/webhook";
             await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
-            await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, new PsaTicketService(new ClosingHaloPsaClient()));
+            await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, PsaTestSupport.ForHalo(new ClosingHaloPsaClient()));
         }
 
         var notifier = new FakeAlertWebhookClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), notifier, new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), notifier, PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
         await service.CheckPinnedDomainsAsync();
         await service.CheckPinnedDomainsAsync();
 
@@ -194,15 +195,18 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
     {
         var alertId = await SeedPolicyAlertAsync();
 
-        AcknowledgeOutcome outcome;
+        AcknowledgeResult result;
         await using (var context = CreateContext())
         {
-            outcome = await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, new PsaTicketService(new ClosingHaloPsaClient { Fails = true }));
+            result = await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, PsaTestSupport.ForHalo(new ClosingHaloPsaClient { Fails = true }));
         }
 
-        Assert.Equal(AcknowledgeOutcome.AcknowledgedButTicketNotClosed, outcome);
+        Assert.Equal(AcknowledgeOutcome.AcknowledgedButTicketNotClosed, result.Outcome);
+        Assert.Equal(new DotMarc.Psa.PsaCloseResult(0, 1), result.Tickets);
         await using var verify = CreateContext();
         Assert.True((await verify.AlertEvents.SingleAsync()).IsResolved);
+        // Left open, so the poller tries again.
+        Assert.True((await verify.AlertTickets.SingleAsync()).IsOpen);
     }
 
     [Fact]
@@ -220,7 +224,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         await using (var context = CreateContext())
         {
             Assert.Equal(AcknowledgeOutcome.NotAcknowledgeable,
-                await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, new PsaTicketService(new ClosingHaloPsaClient())));
+                (await AlertAcknowledgement.AcknowledgeAsync(context, TestActors.Admin, alertId, PsaTestSupport.ForHalo(new ClosingHaloPsaClient()))).Outcome);
         }
 
         await using var verify = CreateContext();
@@ -242,7 +246,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
             await context.SaveChangesAsync();
         }
 
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
         await service.CheckPinnedDomainsAsync();
 
         await using var verify = CreateContext();
@@ -264,7 +268,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
             await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
         }
 
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
         await service.CheckPinnedDomainsAsync();
 
         await using var verify = CreateContext();
@@ -323,7 +327,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         });
         var notifier = new FakeAlertWebhookClient();
 
-        await new AlertingService(factory, notifier, new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance).CheckPinnedDomainsAsync();
+        await new AlertingService(factory, notifier, PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance).CheckPinnedDomainsAsync();
 
         await using var verify = CreateContext();
         Assert.Empty(verify.AlertEvents);

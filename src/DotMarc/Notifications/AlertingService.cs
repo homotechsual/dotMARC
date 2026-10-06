@@ -276,7 +276,7 @@ public sealed class AlertingService : IAlertingService
             copy.ResolvedUtc = resolvedUtc;
             try
             {
-                await _psaTicketService.CloseTicketAsync(db, copy, cancellationToken).ConfigureAwait(false);
+                await _psaTicketService.CloseTicketsAsync(db, copy, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -307,7 +307,7 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _psaTicketService.CloseTicketAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
+            await _psaTicketService.CloseTicketsAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -366,7 +366,7 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _psaTicketService.CreateTicketAsync(context, alert, cancellationToken).ConfigureAwait(false);
+            await _psaTicketService.CreateTicketsAsync(context, alert, cancellationToken).ConfigureAwait(false);
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -433,10 +433,10 @@ public sealed class AlertingService : IAlertingService
         foreach (var alertId in staleAlertIds)
         {
             await using var alertContext = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-            var outcome = await AlertAcknowledgement.AcknowledgeAsync(alertContext, AutoCloseActor, alertId, _psaTicketService, cancellationToken).ConfigureAwait(false);
-            if (outcome == AcknowledgeOutcome.AcknowledgedButTicketNotClosed)
+            var result = await AlertAcknowledgement.AcknowledgeAsync(alertContext, AutoCloseActor, alertId, _psaTicketService, cancellationToken).ConfigureAwait(false);
+            if (result.Outcome == AcknowledgeOutcome.AcknowledgedButTicketNotClosed)
             {
-                _logger.LogWarning("Closed alert {AlertId} automatically, but couldn't close its PSA ticket.", alertId);
+                _logger.LogWarning("Closed alert {AlertId} automatically, but couldn't close all its PSA tickets. dotMARC will keep trying.", alertId);
             }
         }
     }

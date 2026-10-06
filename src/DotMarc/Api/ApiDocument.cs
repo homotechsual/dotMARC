@@ -118,7 +118,7 @@ internal static class ApiExamples
         [typeof(ApiSetMonitoringRequest)] = new ApiSetMonitoringRequest(true),
         [typeof(ApiImportRequest)] = new ApiImportRequest("skip", "skip",
             [new ApiImportDomain("contoso.com", ["Contoso"], ["Microsoft 365"], true), new ApiImportDomain("fabrikam.com", ["Fabrikam"], null, null)]),
-        [typeof(ApiAcknowledgement)] = new ApiAcknowledgement(true),
+        [typeof(ApiAcknowledgement)] = new ApiAcknowledgement(true, 1, 0),
     };
 
     public static JsonNode? For(Type type) =>

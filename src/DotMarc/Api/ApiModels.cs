@@ -89,4 +89,6 @@ public sealed record ApiAlert(
     int Id, string Type, string TypeName, string Subject, ApiNamedRef? Domain, string Severity, string Title, string Message,
     DateTimeOffset RaisedUtc, bool Resolved, DateTimeOffset? ResolvedUtc, bool Acknowledgeable);
 
-public sealed record ApiAcknowledgement(bool TicketClosed);
+/// <summary>The outcome of acknowledging an alert. TicketClosed is true when no PSA ticket failed to close (also when the
+/// alert had none); a ticket that failed stays open in dotMARC and is retried.</summary>
+public sealed record ApiAcknowledgement(bool TicketClosed, int TicketsClosed, int TicketsFailed);

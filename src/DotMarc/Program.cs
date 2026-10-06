@@ -105,7 +105,8 @@ if (serverLogStore.IsCapturing)
     builder.Logging.AddProvider(new DotMarc.ServerLogs.InMemoryLoggerProvider(serverLogStore));
 }
 
-builder.Services.AddSingleton<IPsaTicketService, PsaTicketService>();
+builder.Services.AddSingleton<PsaTicketService>();
+builder.Services.AddSingleton<IPsaTicketService>(services => services.GetRequiredService<PsaTicketService>());
 builder.Services.AddSingleton<IAlertingService, AlertingService>();
 
 if (!demoOptions.Enabled)
@@ -169,6 +170,7 @@ builder.Services.AddSingleton<HaloPsaTokenCache>();
 builder.Services.AddSingleton<HaloWebhookActivity>();
 builder.Services.AddTransient<HaloIntegrationTestService>();
 builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
+builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, HaloPsaProvider>();
 
 // Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
 // mailbox dependency), so it's just as meaningful against seeded demo data as against real

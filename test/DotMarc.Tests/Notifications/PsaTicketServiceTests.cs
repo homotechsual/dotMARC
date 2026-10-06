@@ -1,8 +1,10 @@
 // test/DotMarc.Tests/Notifications/PsaTicketServiceTests.cs
 using DotMarc.Data;
 using DotMarc.Notifications;
+using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace DotMarc.Tests.Notifications;
@@ -34,292 +36,185 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
     private DotMarcDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
-    private sealed class FakeHaloPsaClient : IHaloPsaClient
+    private static PsaCompanyLink Link(PsaKind psa, string companyId) => new() { Psa = psa, CompanyId = companyId, CompanyName = $"Company {companyId}" };
+
+    private static PsaTicketService CreateService(params FakePsaProvider[] providers) =>
+        new(providers, NullLogger<PsaTicketService>.Instance);
+
+    /// <summary>A domain in one Group linked in the given PSAs, and one new alert for it.</summary>
+    private static async Task<AlertEvent> SeedAlertAsync(DotMarcDbContext context, params PsaCompanyLink[] groupLinks)
     {
-        public int CreateCallCount { get; private set; }
-        public int CloseCallCount { get; private set; }
-        public string NextTicketId { get; set; } = "1000";
-
-        public Task<IReadOnlyList<HaloClient>> ListClientsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloClient>>([]);
-        public Task<IReadOnlyList<HaloTicketType>> ListTicketTypesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketType>>([]);
-        public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
-        public Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloPriority>>([]);
-        public Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloAgent>>([]);
-        public Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default) => Task.FromResult(9);
-
-        public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
-        {
-            CreateCallCount++;
-            return Task.FromResult(NextTicketId);
-        }
-
-        public Task CloseTicketAsync(HaloPsaSettings settings, string ticketId, string note, CancellationToken cancellationToken = default)
-        {
-            CloseCallCount++;
-            return Task.CompletedTask;
-        }
-    }
-
-    private async Task EnableHaloAsync()
-    {
-        await using var context = CreateContext();
-        var settings = await context.HaloPsaSettings.SingleAsync();
-        settings.Enabled = true;
-        settings.AccountName = "contoso";
-        await context.SaveChangesAsync();
-    }
-
-    [Fact]
-    public async Task CreateTicketAsync_CreatesATicket_ForADomainInAMappedGroup()
-    {
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
-        context.Groups.Add(group);
-        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
-        context.Domains.Add(domain);
-        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [.. groupLinks] };
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] });
+        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = AlertTypes.MissedReport, Severity = "Warning", Title = "t", Message = "m" };
         context.AlertEvents.Add(alert);
         await context.SaveChangesAsync();
-
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CreateTicketAsync(context, alert);
-        await context.SaveChangesAsync();
-
-        Assert.Equal(1, fakeClient.CreateCallCount);
-        var saved = await context.AlertEvents.SingleAsync();
-        Assert.Equal("HaloPSA", saved.ExternalTicketProvider);
-        Assert.Equal("1000", saved.ExternalTicketId);
+        return alert;
     }
 
     [Fact]
-    public async Task CreateTicketAsync_SkipsTicketCreation_WhenAnEarlierUnresolvedAlertForTheSameDomainAndTypeAlreadyHasAnOpenTicket()
+    public async Task CreateTicketsAsync_RaisesATicketInEveryReadyPsaTheDomainMapsTo()
     {
-        await EnableHaloAsync();
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
-        context.Groups.Add(group);
-        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
-        context.Domains.Add(domain);
+        var alert = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"), Link(PsaKind.ConnectWise, "250"));
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise);
+        var autotask = new FakePsaProvider(PsaKind.Autotask);
 
-        // An earlier alert for the same domain+type, still unresolved, already has an open Halo
-        // ticket - this is what a cooldown-driven re-fire of AlertingService.EnsureAlertAsync looks
-        // like for a domain that's stayed unhealthy across multiple cooldown windows.
-        var earlierAlert = new AlertEvent
-        {
-            DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m",
-            ExternalTicketProvider = "HaloPSA", ExternalTicketId = "1000"
-        };
-        context.AlertEvents.Add(earlierAlert);
-        var newAlert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
-        context.AlertEvents.Add(newAlert);
+        await CreateService(halo, connectWise, autotask).CreateTicketsAsync(context, alert);
         await context.SaveChangesAsync();
 
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CreateTicketAsync(context, newAlert);
-        await context.SaveChangesAsync();
-
-        Assert.Equal(0, fakeClient.CreateCallCount);
-        var saved = await context.AlertEvents.SingleAsync(a => a.Id == newAlert.Id);
-        Assert.Null(saved.ExternalTicketProvider);
-        Assert.Null(saved.ExternalTicketId);
+        Assert.Equal("7", Assert.Single(halo.Created).CompanyId);
+        Assert.Equal("250", Assert.Single(connectWise.Created).CompanyId);
+        Assert.Empty(autotask.Created);
+        var tickets = await context.AlertTickets.ToListAsync();
+        Assert.All(tickets, ticket => Assert.True(ticket.IsOpen));
+        Assert.Equal([PsaKind.HaloPsa, PsaKind.ConnectWise], tickets.Select(ticket => ticket.Psa).OrderBy(psa => psa));
     }
 
     [Fact]
-    public async Task CreateTicketAsync_DoesNothing_ForADomainWithNoMapping()
+    public async Task CreateTicketsAsync_SkipsAPsaThatIsntReady()
     {
-        await EnableHaloAsync();
         await using var context = CreateContext();
-        var domain = new Domain { Name = "unmapped.io", FirstSeenUtc = DateTimeOffset.UtcNow };
-        context.Domains.Add(domain);
-        var alert = new AlertEvent { DomainName = "unmapped.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
-        context.AlertEvents.Add(alert);
+        var alert = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"));
+        var halo = new FakePsaProvider(PsaKind.HaloPsa) { Ready = false };
+
+        await CreateService(halo).CreateTicketsAsync(context, alert);
         await context.SaveChangesAsync();
 
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CreateTicketAsync(context, alert);
-
-        Assert.Equal(0, fakeClient.CreateCallCount);
-        Assert.Null((await context.AlertEvents.SingleAsync()).ExternalTicketId);
+        Assert.Empty(halo.Created);
+        Assert.Empty(await context.AlertTickets.ToListAsync());
     }
 
     [Fact]
-    public async Task CreateTicketAsync_DoesNothing_WhenHaloIsDisabled()
+    public async Task CreateTicketsAsync_OnePsaFailing_DoesntStopTheOthers()
     {
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
-        context.Groups.Add(group);
-        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
-        context.Domains.Add(domain);
-        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
-        context.AlertEvents.Add(alert);
+        var alert = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"), Link(PsaKind.ConnectWise, "250"));
+        var halo = new FakePsaProvider(PsaKind.HaloPsa) { FailWith = new HttpRequestException("Halo is down") };
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise);
+
+        await CreateService(halo, connectWise).CreateTicketsAsync(context, alert);
         await context.SaveChangesAsync();
 
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CreateTicketAsync(context, alert);
-
-        Assert.Equal(0, fakeClient.CreateCallCount);
-        Assert.Null((await context.AlertEvents.SingleAsync()).ExternalTicketId);
+        Assert.Single(connectWise.Created);
+        Assert.Equal(PsaKind.ConnectWise, (await context.AlertTickets.SingleAsync()).Psa);
     }
 
     [Fact]
-    public async Task CreateTicketAsync_DoesNothing_WhenTheDomainDoesNotExist()
+    public async Task CreateTicketsAsync_AReRaisedAlert_OnlyGetsTicketsInPsasWithoutAnOpenOne()
     {
-        await EnableHaloAsync();
         await using var context = CreateContext();
-        var alert = new AlertEvent { DomainName = "missing.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
-        context.AlertEvents.Add(alert);
+        var earlier = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"), Link(PsaKind.ConnectWise, "250"));
+        context.AlertTickets.Add(new AlertTicket { AlertEventId = earlier.Id, Psa = PsaKind.HaloPsa, TicketId = "900", IsOpen = true });
+        var reRaised = new AlertEvent { DomainName = "contoso.io", AlertType = AlertTypes.MissedReport, Severity = "Warning", Title = "t", Message = "m" };
+        context.AlertEvents.Add(reRaised);
+        await context.SaveChangesAsync();
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise);
+
+        await CreateService(halo, connectWise).CreateTicketsAsync(context, reRaised);
         await context.SaveChangesAsync();
 
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CreateTicketAsync(context, alert);
-
-        Assert.Equal(0, fakeClient.CreateCallCount);
-        Assert.Null((await context.AlertEvents.SingleAsync()).ExternalTicketId);
+        Assert.Empty(halo.Created);
+        Assert.Single(connectWise.Created);
     }
 
     [Fact]
-    public async Task CloseTicketAsync_ClosesTheTicket_WhenOneWasCreated()
+    public async Task CreateTicketsAsync_AResolvedEarlierAlertsTicket_DoesntBlockANewOne()
     {
-        await EnableHaloAsync();
         await using var context = CreateContext();
-        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m", ExternalTicketProvider = "HaloPSA", ExternalTicketId = "4242" };
-        context.AlertEvents.Add(alert);
+        var earlier = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"));
+        earlier.IsResolved = true;
+        context.AlertTickets.Add(new AlertTicket { AlertEventId = earlier.Id, Psa = PsaKind.HaloPsa, TicketId = "900", IsOpen = true });
+        var later = new AlertEvent { DomainName = "contoso.io", AlertType = AlertTypes.MissedReport, Severity = "Warning", Title = "t", Message = "m" };
+        context.AlertEvents.Add(later);
+        await context.SaveChangesAsync();
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
+
+        await CreateService(halo).CreateTicketsAsync(context, later);
+
+        Assert.Single(halo.Created);
+    }
+
+    [Fact]
+    public async Task CreateTicketsAsync_FollowsTheTicketRules_ForEachPsasDecidingGroup()
+    {
+        await using var context = CreateContext();
+        var alert = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"));
+        var groupId = (await context.Groups.SingleAsync()).Id;
+        context.AlertTicketRules.Add(new AlertTicketRule { AlertType = AlertTypes.MissedReport, GroupId = groupId, CreateTicket = false });
+        await context.SaveChangesAsync();
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
+
+        await CreateService(halo).CreateTicketsAsync(context, alert);
+
+        Assert.Empty(halo.Created);
+    }
+
+    [Fact]
+    public async Task CreateTicketsAsync_UsesTheDomainsOwnLink_OverItsGroups()
+    {
+        await using var context = CreateContext();
+        var alert = await SeedAlertAsync(context, Link(PsaKind.HaloPsa, "7"));
+        var domain = await context.Domains.Include(candidate => candidate.PsaCompanyLinks).SingleAsync();
+        domain.PsaCompanyLinks.Add(Link(PsaKind.HaloPsa, "99"));
+        await context.SaveChangesAsync();
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
+
+        await CreateService(halo).CreateTicketsAsync(context, alert);
+
+        Assert.Equal("99", Assert.Single(halo.Created).CompanyId);
+    }
+
+    [Fact]
+    public async Task CloseTicketsAsync_ClosesEachOpenTicket_AndKeepsAFailedOneOpenForTheRetry()
+    {
+        await using var context = CreateContext();
+        var alert = await SeedAlertAsync(context);
+        context.AlertTickets.AddRange(
+            new AlertTicket { AlertEventId = alert.Id, Psa = PsaKind.HaloPsa, TicketId = "1", IsOpen = true },
+            new AlertTicket { AlertEventId = alert.Id, Psa = PsaKind.ConnectWise, TicketId = "2", IsOpen = true });
+        await context.SaveChangesAsync();
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise) { FailWith = new HttpRequestException("ConnectWise is down") };
+
+        var result = await CreateService(halo, connectWise).CloseTicketsAsync(context, alert);
         await context.SaveChangesAsync();
 
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CloseTicketAsync(context, alert);
-
-        Assert.Equal(1, fakeClient.CloseCallCount);
+        Assert.Equal(new PsaCloseResult(1, 1), result);
+        Assert.Equal(["1"], halo.Closed);
+        var stillOpen = await context.AlertTickets.SingleAsync(ticket => ticket.IsOpen);
+        Assert.Equal(PsaKind.ConnectWise, stillOpen.Psa);
     }
 
     [Fact]
-    public async Task CloseTicketAsync_DoesNothing_WhenNoTicketWasCreated()
+    public async Task CloseTicketsAsync_ATicketInAPsaThatIsNoLongerRegistered_CountsAsFailed()
     {
         await using var context = CreateContext();
-        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m" };
-        context.AlertEvents.Add(alert);
+        var alert = await SeedAlertAsync(context);
+        context.AlertTickets.Add(new AlertTicket { AlertEventId = alert.Id, Psa = PsaKind.Autotask, TicketId = "5", IsOpen = true });
         await context.SaveChangesAsync();
 
-        var fakeClient = new FakeHaloPsaClient();
-        var service = new PsaTicketService(fakeClient);
-        await service.CloseTicketAsync(context, alert);
+        var result = await CreateService(new FakePsaProvider(PsaKind.HaloPsa)).CloseTicketsAsync(context, alert);
 
-        Assert.Equal(0, fakeClient.CloseCallCount);
+        Assert.Equal(new PsaCloseResult(0, 1), result);
     }
 
-    private async Task<(Group Group, Domain Domain, AlertEvent Alert)> SeedMappedDomainAsync(DotMarcDbContext context, string alertType = "MissedReport")
+    [Fact]
+    public async Task CloseTicketsAsync_SkipsATicketThisContextHasAlreadyMarkedClosed()
     {
-        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
-        context.Groups.Add(group);
-        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
-        context.Domains.Add(domain);
-        var alert = new AlertEvent { DomainName = "contoso.io", AlertType = alertType, Severity = "Warning", Title = "t", Message = "m" };
-        context.AlertEvents.Add(alert);
+        await using var context = CreateContext();
+        var alert = await SeedAlertAsync(context);
+        var ticket = new AlertTicket { AlertEventId = alert.Id, Psa = PsaKind.HaloPsa, TicketId = "1", IsOpen = true };
+        context.AlertTickets.Add(ticket);
         await context.SaveChangesAsync();
-        return (group, domain, alert);
-    }
+        ticket.IsOpen = false;
+        var halo = new FakePsaProvider(PsaKind.HaloPsa);
 
-    [Fact]
-    public async Task CreateTicketAsync_CreatesNoTicket_WhenTheGlobalRuleTurnsThatAlertTypeOff_ButTheAlertIsStillRecorded()
-    {
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var (_, _, alert) = await SeedMappedDomainAsync(context);
-        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
+        var result = await CreateService(halo).CloseTicketsAsync(context, alert);
 
-        var fakeClient = new FakeHaloPsaClient();
-        await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
-        await context.SaveChangesAsync();
-
-        Assert.Equal(0, fakeClient.CreateCallCount);
-        var saved = await context.AlertEvents.SingleAsync();
-        Assert.Null(saved.ExternalTicketId);
-    }
-
-    [Fact]
-    public async Task CreateTicketAsync_StillCreatesTickets_ForOtherAlertTypes_WhenOneTypeIsTurnedOff()
-    {
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var (_, _, alert) = await SeedMappedDomainAsync(context, AlertTypes.TlsrptFailure);
-        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
-
-        var fakeClient = new FakeHaloPsaClient();
-        await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
-
-        Assert.Equal(1, fakeClient.CreateCallCount);
-    }
-
-    [Fact]
-    public async Task CreateTicketAsync_HonoursAGroupOverrideOfNever_EvenWhenTheGlobalRuleSaysYes()
-    {
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var (group, _, alert) = await SeedMappedDomainAsync(context);
-        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
-        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);
-
-        var fakeClient = new FakeHaloPsaClient();
-        await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
-
-        Assert.Equal(0, fakeClient.CreateCallCount);
-    }
-
-    [Fact]
-    public async Task CreateTicketAsync_HonoursAGroupOverrideOfAlways_EvenWhenTheGlobalRuleSaysNo()
-    {
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var (group, _, alert) = await SeedMappedDomainAsync(context);
-        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
-        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, true);
-
-        var fakeClient = new FakeHaloPsaClient();
-        await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
-
-        Assert.Equal(1, fakeClient.CreateCallCount);
-    }
-
-    [Fact]
-    public async Task CreateTicketAsync_UsesTheGlobalRule_ForADomainWithItsOwnHaloClient_IgnoringTheGroupsOverride()
-    {
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var (group, domain, alert) = await SeedMappedDomainAsync(context);
-        domain.PsaCompanyLinks.Add(new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "99", CompanyName = "Own client" });
-        await context.SaveChangesAsync();
-        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
-        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);
-
-        var fakeClient = new FakeHaloPsaClient();
-        await new PsaTicketService(fakeClient).CreateTicketAsync(context, alert);
-
-        Assert.Equal(1, fakeClient.CreateCallCount);
-    }
-
-    [Fact]
-    public async Task CloseTicketAsync_StillClosesAnExistingTicket_EvenWhenTheRuleIsNowOff()
-    {
-        // Rules only decide whether a ticket is created. A ticket that already exists is closed when its alert resolves.
-        await EnableHaloAsync();
-        await using var context = CreateContext();
-        var (group, _, alert) = await SeedMappedDomainAsync(context);
-        alert.ExternalTicketProvider = "HaloPSA";
-        alert.ExternalTicketId = "1000";
-        await context.SaveChangesAsync();
-        await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, false);
-        await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);
-
-        var fakeClient = new FakeHaloPsaClient();
-        await new PsaTicketService(fakeClient).CloseTicketAsync(context, alert);
-
-        Assert.Equal(1, fakeClient.CloseCallCount);
+        Assert.Equal(PsaCloseResult.None, result);
+        Assert.Empty(halo.Closed);
     }
 }

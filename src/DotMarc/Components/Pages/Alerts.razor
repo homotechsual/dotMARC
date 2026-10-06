@@ -154,7 +154,7 @@ else
         var accepted = alert.AlertType == AlertTypes.DmarcPolicyWeakened ? "its current DMARC policy" : "its current nameservers";
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Acknowledge alert",
-            $"Close this alert for {alert.DomainName} and accept {accepted} as the new normal? Its Halo ticket is closed too, if it has one.",
+            $"Close this alert for {alert.DomainName} and accept {accepted} as the new normal? Its PSA tickets are closed too, if it has any.",
             yesText: "Acknowledge", cancelText: "Cancel");
         if (confirmed != true)
         {
@@ -163,14 +163,16 @@ else
 
         // The button only renders with AlertsManage, and Blazor only runs handlers for rendered elements.
         await using var db = await DbFactory.CreateDbContextAsync();
-        var outcome = await AlertAcknowledgement.AcknowledgeAsync(db, await AuditActorAccessor.GetAsync(), alert.Id, PsaTicketService);
-        switch (outcome)
+        var result = await AlertAcknowledgement.AcknowledgeAsync(db, await AuditActorAccessor.GetAsync(), alert.Id, PsaTicketService);
+        var closed = result.Tickets.Closed;
+        var failed = result.Tickets.Failed;
+        switch (result.Outcome)
         {
             case AcknowledgeOutcome.Acknowledged:
-                Snackbar.Add("Alert acknowledged.", Severity.Success);
+                Snackbar.Add(closed == 0 ? "Alert acknowledged." : $"Alert acknowledged. Closed {closed} ticket{(closed == 1 ? "" : "s")}.", Severity.Success);
                 break;
             case AcknowledgeOutcome.AcknowledgedButTicketNotClosed:
-                Snackbar.Add("Alert acknowledged, but its Halo ticket couldn't be closed. Close it in Halo.", Severity.Warning);
+                Snackbar.Add($"Alert acknowledged, but {failed} ticket{(failed == 1 ? "" : "s")} couldn't be closed. dotMARC will keep trying, or close {(failed == 1 ? "it" : "them")} in the PSA.", Severity.Warning);
                 break;
             default:
                 Snackbar.Add("That alert is already closed.", Severity.Info);

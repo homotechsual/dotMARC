@@ -1,5 +1,6 @@
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.Psa;
 using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.Notifications;
@@ -8,10 +9,12 @@ public enum AcknowledgeOutcome
 {
     Acknowledged,
 
-    /// <summary>The alert is closed, but its Halo ticket couldn't be closed and needs closing by hand.</summary>
+    /// <summary>The alert is closed, but not all its PSA tickets could be closed. dotMARC keeps retrying them.</summary>
     AcknowledgedButTicketNotClosed,
     NotAcknowledgeable
 }
+
+public sealed record AcknowledgeResult(AcknowledgeOutcome Outcome, PsaCloseResult Tickets);
 
 /// <summary>Closes a DMARC policy weakened or nameservers changed alert, which may describe a deliberate change, and
 /// accepts the current value. Check alerts close themselves when the check passes, so they can't be acknowledged.</summary>
@@ -20,12 +23,12 @@ public static class AlertAcknowledgement
     public static bool IsAcknowledgeable(string alertType) =>
         alertType is AlertTypes.DmarcPolicyWeakened or AlertTypes.NameserversChanged;
 
-    public static async Task<AcknowledgeOutcome> AcknowledgeAsync(DotMarcDbContext context, AuditActor actor, int alertId, IPsaTicketService psaTicketService, CancellationToken cancellationToken = default)
+    public static async Task<AcknowledgeResult> AcknowledgeAsync(DotMarcDbContext context, AuditActor actor, int alertId, IPsaTicketService psaTicketService, CancellationToken cancellationToken = default)
     {
         var alert = await context.AlertEvents.SingleOrDefaultAsync(candidate => candidate.Id == alertId, cancellationToken).ConfigureAwait(false);
         if (alert is null || alert.IsResolved || !IsAcknowledgeable(alert.AlertType))
         {
-            return AcknowledgeOutcome.NotAcknowledgeable;
+            return new AcknowledgeResult(AcknowledgeOutcome.NotAcknowledgeable, PsaCloseResult.None);
         }
 
         // An alert left open past the cooldown is raised again as a new row, so close every open copy of it.
@@ -44,19 +47,13 @@ public static class AlertAcknowledgement
         AuditLog.Record(context, actor, AuditActions.AlertAcknowledged, AuditTarget.For(alert), $"Acknowledged \"{alert.Title}\" for {alert.DomainName}");
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        var ticketsClosed = true;
+        var tickets = PsaCloseResult.None;
         foreach (var copy in openCopies)
         {
-            try
-            {
-                await psaTicketService.CloseTicketAsync(context, copy, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                ticketsClosed = false;
-            }
+            tickets = tickets.Add(await psaTicketService.CloseTicketsAsync(context, copy, cancellationToken).ConfigureAwait(false));
         }
 
-        return ticketsClosed ? AcknowledgeOutcome.Acknowledged : AcknowledgeOutcome.AcknowledgedButTicketNotClosed;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return new AcknowledgeResult(tickets.Failed == 0 ? AcknowledgeOutcome.Acknowledged : AcknowledgeOutcome.AcknowledgedButTicketNotClosed, tickets);
     }
 }

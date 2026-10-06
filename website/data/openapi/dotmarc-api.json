@@ -3,15 +3,27 @@
     "schemas": {
       "ApiAcknowledgement": {
         "example": {
-          "ticketClosed": true
+          "ticketClosed": true,
+          "ticketsClosed": 1,
+          "ticketsFailed": 0
         },
         "properties": {
           "ticketClosed": {
             "type": "boolean"
+          },
+          "ticketsClosed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "ticketsFailed": {
+            "format": "int32",
+            "type": "integer"
           }
         },
         "required": [
-          "ticketClosed"
+          "ticketClosed",
+          "ticketsClosed",
+          "ticketsFailed"
         ],
         "type": "object"
       },
