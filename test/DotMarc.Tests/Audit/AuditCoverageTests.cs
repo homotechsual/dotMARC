@@ -14,7 +14,7 @@ public sealed class AuditCoverageTests
     [
         typeof(DomainManagementService), typeof(GroupManagementService), typeof(TagManagementService),
         typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(ApiKeyManagementService), typeof(AlertTicketRuleService),
-        typeof(NotificationSettingsService), typeof(HaloPsaSettingsService), typeof(CloudflareDnsSettingsService),
+        typeof(NotificationSettingsService), typeof(HaloPsaSettingsService), typeof(DotMarc.Psa.ConnectWise.ConnectWiseSettingsService), typeof(CloudflareDnsSettingsService),
         typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService), typeof(AuditSettingsService),
     ];
 

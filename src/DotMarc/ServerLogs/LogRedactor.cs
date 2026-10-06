@@ -3,7 +3,8 @@ using System.Text.RegularExpressions;
 namespace DotMarc.ServerLogs;
 
 /// <summary>Masks the kinds of secret that can end up inside log text (a webhook secret in a request
-/// path, an OAuth token or client secret in a query string or form, a bearer token) before the text
+/// path, an OAuth token or client secret in a query string or form, a bearer token, Basic credentials and the PSA
+/// credential headers) before the text
 /// is kept in memory or shown on the Server logs page. It is a safety net for the known shapes, not
 /// a guarantee: nothing should log secrets in the first place.</summary>
 public static partial class LogRedactor
@@ -20,6 +21,8 @@ public static partial class LogRedactor
         text = WebhookSecretInPath().Replace(text, "$1" + Mask);
         text = SecretInQueryOrForm().Replace(text, "$1=" + Mask);
         text = BearerToken().Replace(text, "Bearer " + Mask);
+        text = BasicCredentials().Replace(text, "Basic " + Mask);
+        text = PsaCredentialHeader().Replace(text, "$1$2" + Mask);
         return text;
     }
 
@@ -31,4 +34,12 @@ public static partial class LogRedactor
 
     [GeneratedRegex(@"Bearer\s+[A-Za-z0-9\-._~+/]+=*", RegexOptions.IgnoreCase)]
     private static partial Regex BearerToken();
+
+    // ConnectWise signs in with Basic auth over "company+publicKey:privateKey".
+    [GeneratedRegex(@"Basic\s+[A-Za-z0-9+/]+=*", RegexOptions.IgnoreCase)]
+    private static partial Regex BasicCredentials();
+
+    // ConnectWise's clientId header and Autotask's ApiIntegrationCode, UserName and Secret headers.
+    [GeneratedRegex(@"\b(clientId|ApiIntegrationCode|Secret|UserName)(\s*:\s*)[^\s,;""']+", RegexOptions.IgnoreCase)]
+    private static partial Regex PsaCredentialHeader();
 }
