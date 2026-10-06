@@ -11,6 +11,14 @@ const {docs: docsOgRenderer, pages: pagesOgRenderer, blog: blogOgRenderer} = req
 const ogPlugin = require('@homotechsual/docusaurus-og');
 const {getLatestVersion} = require('./lib/latest-version.cjs');
 
+// Docusaurus gives Rspack a persistent cache in node_modules/.cache even with rspackPersistentCache off, and it isn't
+// invalidated when packages change or branches switch, so `start` can crash with "ModuleGraphModule ... not found"
+// until `yarn clear`. Turn it off for the dev server only: `docusaurus build` sets NODE_ENV to production before
+// loading this file, so builds keep their cache. It's read when the bundler config is built, after this file loads.
+if (process.env.NODE_ENV === 'development') {
+  process.env.DOCUSAURUS_NO_PERSISTENT_CACHE ??= 'true';
+}
+
 const siteTitle = 'dotMARC';
 const siteTagline = 'Self-hosted DMARC monitoring for every client domain, from one mailbox.';
 const siteDescription =
@@ -144,6 +152,7 @@ const config: Config = {
             sidebarOptions: {
               categoryLinkSource: 'tag',
               groupPathsBy: 'tag',
+              sidebarCollapsed: false,
             }
           } satisfies OpenApiPlugin.Options,
         },
@@ -209,6 +218,118 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+      additionalLanguages: [
+        "ruby",
+        "csharp",
+        "php",
+        "java",
+        "powershell",
+        "json",
+        "bash",
+        "dart",
+        "objectivec",
+        "r",
+      ],
+    },
+    languageTabs: [
+      {
+        highlight: "python",
+        language: "python",
+        logoClass: "python",
+      },
+      {
+        highlight: "bash",
+        language: "curl",
+        logoClass: "curl",
+      },
+      {
+        highlight: "csharp",
+        language: "csharp",
+        logoClass: "csharp",
+      },
+      {
+        highlight: "go",
+        language: "go",
+        logoClass: "go",
+      },
+      {
+        highlight: "javascript",
+        language: "nodejs",
+        logoClass: "nodejs",
+      },
+      {
+        highlight: "ruby",
+        language: "ruby",
+        logoClass: "ruby",
+      },
+      {
+        highlight: "php",
+        language: "php",
+        logoClass: "php",
+      },
+      {
+        highlight: "java",
+        language: "java",
+        logoClass: "java",
+        variant: "unirest",
+      },
+      {
+        highlight: "powershell",
+        language: "powershell",
+        logoClass: "powershell",
+      },
+      {
+        highlight: "dart",
+        language: "dart",
+        logoClass: "dart",
+      },
+      {
+        highlight: "javascript",
+        language: "javascript",
+        logoClass: "javascript",
+      },
+      {
+        highlight: "c",
+        language: "c",
+        logoClass: "c",
+      },
+      {
+        highlight: "objective-c",
+        language: "objective-c",
+        logoClass: "objective-c",
+      },
+      {
+        highlight: "ocaml",
+        language: "ocaml",
+        logoClass: "ocaml",
+      },
+      {
+        highlight: "r",
+        language: "r",
+        logoClass: "r",
+      },
+      {
+        highlight: "swift",
+        language: "swift",
+        logoClass: "swift",
+      },
+      {
+        highlight: "kotlin",
+        language: "kotlin",
+        logoClass: "kotlin",
+      },
+      {
+        highlight: "rust",
+        language: "rust",
+        logoClass: "rust",
+      },
+    ],
+    api: {
+      schemaExpansion: {
+        enabled: true,
+        default: 1,
+        max: 4,
+      },
     },
   } satisfies Preset.ThemeConfig,
 };
