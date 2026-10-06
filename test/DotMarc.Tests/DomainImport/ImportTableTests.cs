@@ -53,6 +53,25 @@ public sealed class ImportTableTests
     }
 
     [Fact]
+    public void WithoutAHeader_TheAutotaskColumnComesAfterConnectWise()
+    {
+        var row = Table("contoso.com,Client A,primary,Contoso,no,s1,testing,mail.contoso.com,86400,Contoso Ltd,Contoso Limited").Rows.Single();
+
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.ConnectWise]);
+        Assert.Equal("Contoso Limited", row.PsaCompanies[PsaKind.Autotask]);
+    }
+
+    [Theory]
+    [InlineData("autotask company")]
+    [InlineData("Autotask")]
+    public void TheAutotaskCompanyColumn_IsReadByEitherHeaderName(string header)
+    {
+        var row = Table($"domain,{header}\ncontoso.io,Contoso Ltd").Rows.Single();
+
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.Autotask]);
+    }
+
+    [Fact]
     public void WithoutAHeader_AColumnThatIsBlankOnEveryRow_IsNotPresent()
     {
         // A trailing comma, or a spreadsheet whose used range is wider than its data, must not make Match mode read the

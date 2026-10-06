@@ -82,6 +82,7 @@
     {
         PsaKind.HaloPsa => AuditActions.HaloIntegrationTested,
         PsaKind.ConnectWise => AuditActions.ConnectWiseIntegrationTested,
+        PsaKind.Autotask => AuditActions.AutotaskIntegrationTested,
         _ => throw new ArgumentOutOfRangeException(nameof(psa), psa, "No audit action for this PSA's integration test.")
     };
 

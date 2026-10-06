@@ -8,7 +8,7 @@ public enum ExistingDomainMode { Skip, Add, Match }
 
 public enum ImportRowStatus { New, AlreadyMonitored, Duplicate, Invalid }
 
-public enum ImportNameKind { Group, Tag, HaloClient, ConnectWiseCompany }
+public enum ImportNameKind { Group, Tag, HaloClient, ConnectWiseCompany, AutotaskCompany }
 
 public enum NameChoice { Create, MapTo, LeaveOut }
 

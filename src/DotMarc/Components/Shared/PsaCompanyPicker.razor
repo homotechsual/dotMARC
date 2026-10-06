@@ -7,8 +7,11 @@
 }
 else
 {
-    <SearchableSelect TValue="string" Options="_options" Value="Current?.CompanyId" ValueChanged="OnChangedAsync"
-                      Clearable="true" Placeholder="@Placeholder" Disabled="Disabled" />
+    @* With one column per PSA the table gets narrow, so keep room for a company name or "Use Group's". *@
+    <div style="min-width: 9rem;">
+        <SearchableSelect TValue="string" Options="_options" Value="Current?.CompanyId" ValueChanged="OnChangedAsync"
+                          Clearable="true" Placeholder="@Placeholder" Disabled="Disabled" />
+    </div>
 }
 
 @code {

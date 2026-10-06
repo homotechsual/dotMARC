@@ -1,0 +1,68 @@
+---
+title: Autotask
+sidebar_position: 3
+description: Raise and complete Datto Autotask tickets from dotMARC alerts, and resolve alerts when a tech completes the ticket.
+---
+
+# Autotask
+
+dotMARC can open a Datto Autotask ticket when an alert fires, complete it when the alert resolves, and resolve the
+alert when a tech completes the ticket in Autotask. It can do this alongside HaloPSA and ConnectWise: see
+[PSA integration](../psa-integration.mdx) for how several PSAs work together.
+
+## 1. Create an API user
+
+In Autotask, go to **Admin > Resources (Users)**, and add an **API User**:
+
+- Give it a security level that can read companies and add and edit tickets. **API User (system)** works.
+- Under **API Tracking Identifier**, choose **Integration vendor** or **Custom (internal integration)**, and note
+  the identifier.
+- Generate the **Secret** and copy it. Autotask doesn't show it again.
+
+## 2. The API tracking identifier
+
+Autotask asks every integration to identify itself. Until dotMARC has its own identifier from Datto, enter the one you
+chose for the API user under **API tracking identifier**. When dotMARC ships with its own, the field becomes optional.
+
+## 3. Connect dotMARC
+
+In dotMARC, open **Manage > PSA settings** and choose the **Autotask** tab.
+
+1. Enter the API user's **Username** and **Secret**, and the **API tracking identifier**.
+2. Select **Save Autotask settings**.
+3. Select **Load options from Autotask**, then choose:
+   - the **Queue** alert tickets go to
+   - the **Ticket type**
+   - an **Issue type**, if you use them
+   - the **Priority**
+   - the **Closed status** (Complete, unless you've added your own)
+4. Turn on **Enable Autotask tickets** and save again.
+
+dotMARC finds your Autotask zone (the datacentre your tenant is in) from the username, and remembers it. If Autotask
+moves your tenant, or you change the API user, select **Clear cached zone**.
+
+## 4. Due dates
+
+Autotask won't create a ticket without a due date unless the ticket category sets one. dotMARC sets each alert
+ticket's due date to a day after it's raised. Your SLA or workflow rules may change it.
+
+## 5. Link companies
+
+Tickets go to the Autotask company linked to the domain's Group. On **Manage > Groups**, each Group has an
+**Autotask company** column. **Companies without a group** lists active Autotask companies that no Group matches yet,
+and can create a Group for each, already linked. A Domain can override its Groups' company on **Manage > Domains**.
+
+## 6. How closing works
+
+When an alert resolves, dotMARC sets the ticket to your closed status and writes "Resolved automatically by dotMARC."
+in the ticket's **Resolution**.
+
+dotMARC checks its open Autotask tickets every few minutes (every 5 by default, set with the `Psa:PollIntervalMinutes`
+setting). A ticket a tech moves to the closed status resolves its alert at the next check. If completing a ticket fails,
+dotMARC keeps trying at each check. A ticket deleted in Autotask is no longer checked, and its alert stays open.
+
+## 7. Test the integration
+
+**Test the integration** on the Autotask tab runs the whole lifecycle against your live Autotask with the saved
+settings. It creates a clearly marked test ticket, reads it back as open, completes it, and reads it back as complete,
+which is exactly how dotMARC notices a tech's close. Real alerts aren't touched. If a step fails, it says what to check.

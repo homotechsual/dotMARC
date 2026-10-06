@@ -23,12 +23,16 @@
     <MudTabPanel Text="ConnectWise" Icon="@TabIcon(_connectWiseEnabled)">
         <div class="pt-4"><ConnectWiseSettingsTab EnabledChanged="@(enabled => _connectWiseEnabled = enabled)" /></div>
     </MudTabPanel>
+    <MudTabPanel Text="Autotask" Icon="@TabIcon(_autotaskEnabled)">
+        <div class="pt-4"><AutotaskSettingsTab EnabledChanged="@(enabled => _autotaskEnabled = enabled)" /></div>
+    </MudTabPanel>
 </MudTabs>
 
 @code {
     private int _activeTab;
     private bool _haloEnabled;
     private bool _connectWiseEnabled;
+    private bool _autotaskEnabled;
 
     /// <summary>A tick on the tab of each PSA that is switched on.</summary>
     private static string? TabIcon(bool enabled) => enabled ? Icons.Material.Filled.CheckCircle : null;

@@ -12,6 +12,7 @@ public static class PsaImportColumns
     [
         new(PsaKind.HaloPsa, ImportColumn.HaloClient, ImportNameKind.HaloClient),
         new(PsaKind.ConnectWise, ImportColumn.ConnectWiseCompany, ImportNameKind.ConnectWiseCompany),
+        new(PsaKind.Autotask, ImportColumn.AutotaskCompany, ImportNameKind.AutotaskCompany),
     ];
 
     public static PsaImportColumn? ForNameKind(ImportNameKind kind) => All.FirstOrDefault(column => column.NameKind == kind);
