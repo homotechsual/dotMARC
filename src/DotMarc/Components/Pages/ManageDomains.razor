@@ -4,6 +4,7 @@
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
+@using DotMarc.Psa
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -11,7 +12,7 @@
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IHaloPsaClient HaloPsaClient
+@inject PsaDirectory PsaDirectory
 
 <PageTitle>dotMARC - Manage Domains</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -43,6 +44,12 @@
 }
 else
 {
+    @foreach (var failed in _psaLists.Where(list => list.FailureReason is not null))
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            @failed.FailureReason Its column shows the saved companies but can't be changed until it loads.
+        </MudAlert>
+    }
     <MudTable Items="_domains" Hover="true" T="DomainRow" CustomHeader="true" Filter="RowMatchesFilters">
         @* The filters apply to every column, so the toggle sits above the table rather than inside a column heading. *@
         <ToolBarContent>
@@ -56,9 +63,9 @@ else
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.Name)">Domain</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.GroupIds.Count)">Groups</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.TagIds.Count)">Tags</MudTableSortLabel></MudTh>
-                @if (_haloConfigured)
+                @foreach (var list in _psaLists)
                 {
-                    <MudTh>Halo Client override</MudTh>
+                    <MudTh>@list.Psa.CompanyLabel() override</MudTh>
                 }
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DomainRow, object>(d => d.ReportCount)">Reports</MudTableSortLabel></MudTh>
@@ -76,10 +83,11 @@ else
                 <MudTh>
                     <SearchableSelect TValue="int?" Options="_tagFilterOptions" Value="_tagFilter" ValueChanged="@(v => _tagFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
                 </MudTh>
-                @if (_haloConfigured)
+                @foreach (var list in _psaLists)
                 {
                     <MudTh>
-                        <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="_haloClientFilter" ValueChanged="@(v => _haloClientFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
+                        <SearchableSelect TValue="string" Options="@_companyFilterOptions.GetValueOrDefault(list.Psa, [])" Value="@_companyFilters.GetValueOrDefault(list.Psa)"
+                                          ValueChanged="@(companyId => _companyFilters[list.Psa] = companyId)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
                     </MudTh>
                 }
                 <MudTh>
@@ -143,10 +151,11 @@ else
                     </NotAuthorized>
                 </AuthorizeView>
             </MudTd>
-            @if (_haloConfigured)
+            @foreach (var list in _psaLists)
             {
                 <MudTd>
-                    <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true" />
+                    <PsaCompanyPicker Psa="list.Psa" Companies="list.Companies" Current="@context.Links.FirstOrDefault(link => link.Psa == list.Psa)"
+                                      Placeholder="Use Group's" CompanyChanged="@(company => SetPsaCompanyAsync(context, list.Psa, company))" />
                 </MudTd>
             }
             <MudTd>
@@ -174,22 +183,21 @@ else
     private List<DomainRow>? _domains;
     private List<Group> _allGroups = [];
     private List<Tag> _allTags = [];
-    private List<HaloClient> _haloClients = [];
-    private bool _haloConfigured;
+    private List<PsaCompanyList> _psaLists = [];
 
     // Built once per load rather than per row, since every row's pickers share them.
     private List<SelectOption<int>> _groupOptions = [];
     private List<SelectOption<int>> _tagOptions = [];
     private List<SelectOption<int?>> _groupFilterOptions = [];
     private List<SelectOption<int?>> _tagFilterOptions = [];
-    private List<SelectOption<int?>> _haloClientOptions = [];
+    private Dictionary<PsaKind, List<SelectOption<string>>> _companyFilterOptions = [];
     private string _newDomainName = "";
     private string? _addError;
 
     private string? _domainFilter;
     private int? _groupFilter;
     private int? _tagFilter;
-    private int? _haloClientFilter;
+    private readonly Dictionary<PsaKind, string?> _companyFilters = [];
     private bool? _monitoredFilter;
     private int? _minReportCountFilter;
     private string? _lastReportFilter;
@@ -209,9 +217,12 @@ else
         {
             return false;
         }
-        if (_haloClientFilter is { } haloClientId && row.HaloClientId != haloClientId)
+        foreach (var (psa, companyId) in _companyFilters)
         {
-            return false;
+            if (companyId is not null && row.Links.FirstOrDefault(link => link.Psa == psa)?.CompanyId != companyId)
+            {
+                return false;
+            }
         }
         if (_monitoredFilter is { } monitored && row.IsMonitored != monitored)
         {
@@ -241,34 +252,24 @@ else
         _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
         _domains = await db.Domains
             .AsNoTracking()
-            // Two collections (Groups and Tags) are projected, so without this EF joins both into one result set.
+            // Several collections are projected, so without this EF joins them all into one result set.
             .AsSplitQuery()
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
             .Select(d => new DomainRow(d.Id, d.Name, d.IsMonitored, d.Reports.Count, d.LastReportReceivedUtc,
-                d.Groups.Select(g => g.Id).ToList(), d.Tags.Select(t => t.Id).ToList(), d.HaloClientId))
+                d.Groups.Select(g => g.Id).ToList(), d.Tags.Select(t => t.Id).ToList(), d.PsaCompanyLinks.ToList()))
             .ToListAsync();
 
-        await using var haloSettingsDb = await DbFactory.CreateDbContextAsync();
-        var haloSettings = await HaloPsaSettingsService.GetAsync(haloSettingsDb);
-        _haloConfigured = haloSettings.Enabled && haloSettings.ClientSecretConfigured;
-        if (_haloConfigured)
-        {
-            try
-            {
-                _haloClients = (await HaloPsaClient.ListClientsAsync(haloSettings)).ToList();
-            }
-            catch (Exception)
-            {
-                _haloClients = [];
-            }
-        }
+        await using var psaDb = await DbFactory.CreateDbContextAsync();
+        _psaLists = (await PsaDirectory.LoadAsync(psaDb)).ToList();
 
         _groupOptions = _allGroups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList();
         _tagOptions = _allTags.Select(tag => new SelectOption<int>(tag.Id, tag.Name)).ToList();
         _groupFilterOptions = _allGroups.Select(group => new SelectOption<int?>(group.Id, group.Name)).ToList();
         _tagFilterOptions = _allTags.Select(tag => new SelectOption<int?>(tag.Id, tag.Name)).ToList();
-        _haloClientOptions = _haloClients.Select(haloClient => new SelectOption<int?>(haloClient.Id, haloClient.Name)).ToList();
+        _companyFilterOptions = _psaLists.ToDictionary(
+            list => list.Psa,
+            list => (list.Companies ?? []).Select(company => new SelectOption<string>(company.Id, company.Name)).ToList());
     }
 
     private async Task AddDomainAsync()
@@ -407,19 +408,19 @@ else
         await LoadAsync();
     }
 
-    private async Task SetHaloClientIdAsync(DomainRow row, int? haloClientId)
+    private async Task SetPsaCompanyAsync(DomainRow row, PsaKind psa, PsaCompany? company)
     {
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await DomainManagementService.SetHaloClientIdAsync(db, await AuditActorAccessor.GetAsync(), row.Id, haloClientId, CancellationToken.None);
+            await DomainManagementService.SetPsaCompanyAsync(db, await AuditActorAccessor.GetAsync(), row.Id, psa, company, CancellationToken.None);
         }
         catch (Exception)
         {
-            Snackbar.Add($"Failed to update {row.Name}'s Halo client. Try again.", Severity.Error);
+            Snackbar.Add($"Failed to update {row.Name}'s {psa.CompanyLabel()}. Try again.", Severity.Error);
         }
         await LoadAsync();
     }
 
-    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc, List<int> GroupIds, List<int> TagIds, int? HaloClientId);
+    private sealed record DomainRow(int Id, string Name, bool IsMonitored, int ReportCount, DateTimeOffset? LastReportReceivedUtc, List<int> GroupIds, List<int> TagIds, List<PsaCompanyLink> Links);
 }

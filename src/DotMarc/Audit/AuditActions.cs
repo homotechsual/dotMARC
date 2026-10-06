@@ -7,6 +7,7 @@ public static class AuditActions
     public const string DomainRemoved = "domain.removed";
     public const string DomainMonitoringChanged = "domain.monitoring_changed";
     public const string DomainHaloClientChanged = "domain.halo_client_changed";
+    public const string DomainPsaCompanyChanged = "domain.psa_company_changed";
     public const string DomainMtaStsChanged = "domain.mta_sts_changed";
     public const string DomainDkimSelectorsChanged = "domain.dkim_selectors_changed";
     public const string DomainDkimRecordsChanged = "domain.dkim_records_changed";
@@ -18,6 +19,7 @@ public static class AuditActions
     public const string GroupRenamed = "group.renamed";
     public const string GroupRemoved = "group.removed";
     public const string GroupHaloClientChanged = "group.halo_client_changed";
+    public const string GroupPsaCompanyChanged = "group.psa_company_changed";
     public const string TagAdded = "tag.added";
     public const string TagUpdated = "tag.updated";
     public const string TagRemoved = "tag.removed";
@@ -56,6 +58,7 @@ public static class AuditActions
         (DomainRemoved, "Domain removed"),
         (DomainMonitoringChanged, "Domain monitoring changed"),
         (DomainHaloClientChanged, "Domain Halo client changed"),
+        (DomainPsaCompanyChanged, "Domain PSA company changed"),
         (DomainMtaStsChanged, "Domain MTA-STS changed"),
         (DomainDkimSelectorsChanged, "Domain DKIM selectors changed"),
         (DomainDkimRecordsChanged, "Domain DKIM records changed"),
@@ -67,6 +70,7 @@ public static class AuditActions
         (GroupRenamed, "Group renamed"),
         (GroupRemoved, "Group removed"),
         (GroupHaloClientChanged, "Group Halo client changed"),
+        (GroupPsaCompanyChanged, "Group PSA company changed"),
         (TagAdded, "Tag added"),
         (TagUpdated, "Tag updated"),
         (TagRemoved, "Tag removed"),

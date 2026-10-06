@@ -119,7 +119,9 @@ public static class DomainImportService
 
         if (target.SetHaloClient)
         {
-            await DomainManagementService.SetHaloClientIdAsync(context, actor, domainId, target.HaloClientId, cancellationToken).ConfigureAwait(false);
+            var haloClientId = target.HaloClientId?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            await DomainManagementService.SetPsaCompanyAsync(context, actor, domainId, DotMarc.Psa.PsaKind.HaloPsa,
+                haloClientId is null ? null : new DotMarc.Psa.PsaCompany(haloClientId, haloClientId), cancellationToken).ConfigureAwait(false);
         }
 
         if (target.Monitored is { } monitored)

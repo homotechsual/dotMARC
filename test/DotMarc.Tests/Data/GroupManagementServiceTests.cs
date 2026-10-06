@@ -1,5 +1,6 @@
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -50,11 +51,12 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Compute (Bridgend) Limited", CancellationToken.None, haloClientId: 37);
+        var result = await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Compute (Bridgend) Limited", CancellationToken.None, (PsaKind.HaloPsa, new PsaCompany("37", "Compute (Bridgend) Limited")));
 
         Assert.Equal(GroupManagementService.AddGroupResult.Added, result);
         using var verify = CreateContext();
-        Assert.Equal(37, verify.Groups.Single().HaloClientId);
+        var link = verify.PsaCompanyLinks.Single();
+        Assert.Equal((PsaKind.HaloPsa, "37", verify.Groups.Single().Id), (link.Psa, link.CompanyId, link.GroupId!.Value));
     }
 
     [Fact]
@@ -65,7 +67,7 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
         await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client A", CancellationToken.None);
 
         using var verify = CreateContext();
-        Assert.Null(verify.Groups.Single().HaloClientId);
+        Assert.Empty(verify.PsaCompanyLinks);
     }
 
     [Fact]
@@ -161,31 +163,50 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SetHaloClientIdAsync_UpdatesTheGroupsMapping()
+    public async Task SetPsaCompanyAsync_LinksAndRelinksInOnePsa_AndAuditsEachChange()
     {
         await using var context = CreateContext();
         var group = new Group { Name = "Client A" };
         context.Groups.Add(group);
         await context.SaveChangesAsync();
 
-        await GroupManagementService.SetHaloClientIdAsync(context, TestActors.Admin, group.Id, 42);
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.ConnectWise, new PsaCompany("250", "Contoso Ltd"));
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.ConnectWise, new PsaCompany("251", "Contoso Group"));
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.HaloPsa, new PsaCompany("7", "Contoso"));
 
         await using var verify = CreateContext();
-        Assert.Equal(42, (await verify.Groups.SingleAsync(g => g.Id == group.Id)).HaloClientId);
+        var links = (await verify.PsaCompanyLinks.Where(link => link.GroupId == group.Id).ToListAsync()).OrderBy(link => link.Psa).ToList();
+        Assert.Equal([(PsaKind.HaloPsa, "7", "Contoso"), (PsaKind.ConnectWise, "251", "Contoso Group")], links.Select(link => (link.Psa, link.CompanyId, link.CompanyName)));
+        var entries = await verify.AuditEntries.Where(entry => entry.Action == AuditActions.GroupPsaCompanyChanged).ToListAsync();
+        Assert.Equal(3, entries.Count);
     }
 
     [Fact]
-    public async Task SetHaloClientIdAsync_ClearsTheMapping_WhenPassedNull()
+    public async Task SetPsaCompanyAsync_WithNoCompany_RemovesThatPsasLinkOnly()
     {
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", HaloClientId = 42 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }, new PsaCompanyLink { Psa = PsaKind.ConnectWise, CompanyId = "250", CompanyName = "Contoso Ltd" }] };
         context.Groups.Add(group);
         await context.SaveChangesAsync();
 
-        await GroupManagementService.SetHaloClientIdAsync(context, TestActors.Admin, group.Id, null);
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.HaloPsa, null);
 
         await using var verify = CreateContext();
-        Assert.Null((await verify.Groups.SingleAsync(g => g.Id == group.Id)).HaloClientId);
+        Assert.Equal(PsaKind.ConnectWise, (await verify.PsaCompanyLinks.SingleAsync()).Psa);
+    }
+
+    [Fact]
+    public async Task SetPsaCompanyAsync_TheSameCompanyAgain_ChangesAndAuditsNothing()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }] };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.HaloPsa, new PsaCompany("7", "Contoso"));
+
+        await using var verify = CreateContext();
+        Assert.Empty(await verify.AuditEntries.ToListAsync());
     }
 
     [Fact]
@@ -193,14 +214,14 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     {
         await using (var context = CreateContext())
         {
-            await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client A", CancellationToken.None, haloClientId: 37);
+            await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client A", CancellationToken.None, (PsaKind.HaloPsa, new PsaCompany("37", "Client A Ltd")));
         }
 
         await using var verify = CreateContext();
         var group = await verify.Groups.SingleAsync();
         var entry = await verify.AuditEntries.SingleAsync();
         Assert.Equal((AuditActions.GroupAdded, group.Id.ToString(), "Added group Client A"), (entry.Action, entry.TargetId, entry.Summary));
-        Assert.Equal([new AuditFieldChange("Halo client", null, "37")], entry.Changes);
+        Assert.Equal([new AuditFieldChange("Halo client", null, "Client A Ltd")], entry.Changes);
     }
 
     [Fact]

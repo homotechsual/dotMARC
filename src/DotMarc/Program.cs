@@ -172,6 +172,7 @@ builder.Services.AddSingleton<HaloWebhookActivity>();
 builder.Services.AddTransient<HaloIntegrationTestService>();
 builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
 builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, HaloPsaProvider>();
+builder.Services.AddScoped<DotMarc.Psa.PsaDirectory>();
 
 // Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
 // mailbox dependency), so it's just as meaningful against seeded demo data as against real

@@ -1,3 +1,4 @@
+using DotMarc.Psa;
 using DotMarc.Audit;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -14,7 +15,7 @@ public static class GroupManagementService
 
     /// <param name="haloClientId">Links the new group to this Halo client straight away, as when a group is created
     /// from a Halo client on Manage groups.</param>
-    public static async Task<AddGroupResult> AddGroupAsync(DotMarcDbContext context, AuditActor actor, string rawName, CancellationToken cancellationToken = default, int? haloClientId = null)
+    public static async Task<AddGroupResult> AddGroupAsync(DotMarcDbContext context, AuditActor actor, string rawName, CancellationToken cancellationToken = default, (PsaKind Psa, PsaCompany Company)? linkTo = null)
     {
         var name = rawName.Trim();
         if (string.IsNullOrEmpty(name))
@@ -28,14 +29,21 @@ public static class GroupManagementService
             return AddGroupResult.AlreadyExists;
         }
 
-        var group = new Group { Name = name, HaloClientId = haloClientId };
+        var group = new Group { Name = name };
+        var changes = new AuditChanges();
+        if (linkTo is { } link)
+        {
+            group.PsaCompanyLinks.Add(new PsaCompanyLink { Psa = link.Psa, CompanyId = link.Company.Id, CompanyName = link.Company.Name });
+            changes.Field(link.Psa.CompanyLabel(), (string?)null, link.Company.Name);
+        }
+
         context.Groups.Add(group);
 
         try
         {
             await AuditLog.SaveAndRecordAsync(context,
                 () => AuditLog.Record(context, actor, AuditActions.GroupAdded, AuditTarget.For(group), $"Added group {group.Name}",
-                    new AuditChanges().Field("Halo client", (int?)null, haloClientId)),
+                    changes),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
@@ -128,19 +136,23 @@ public static class GroupManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Sets (or clears, with null) a Group's Halo client mapping, from the "Halo Client"
-    /// column on Manage Groups.</summary>
-    public static async Task SetHaloClientIdAsync(DotMarcDbContext context, AuditActor actor, int groupId, int? haloClientId, CancellationToken cancellationToken = default)
+    /// <summary>Links (or, with null, unlinks) a Group to a company in one PSA, from that PSA's column on Manage groups.</summary>
+    public static async Task SetPsaCompanyAsync(DotMarcDbContext context, AuditActor actor, int groupId, PsaKind psa, PsaCompany? company, CancellationToken cancellationToken = default)
     {
-        var group = await context.Groups.SingleAsync(g => g.Id == groupId, cancellationToken).ConfigureAwait(false);
-        var changes = new AuditChanges().Field("Halo client", group.HaloClientId, haloClientId);
-        if (!changes.Any)
+        var group = await context.Groups.Include(candidate => candidate.PsaCompanyLinks).SingleAsync(candidate => candidate.Id == groupId, cancellationToken).ConfigureAwait(false);
+        var existing = group.PsaCompanyLinks.FirstOrDefault(link => link.Psa == psa);
+        if (existing?.CompanyId == company?.Id)
         {
             return;
         }
 
-        group.HaloClientId = haloClientId;
-        AuditLog.Record(context, actor, AuditActions.GroupHaloClientChanged, AuditTarget.For(group), $"Changed the Halo client for group {group.Name}", changes);
+        var changes = new AuditChanges().Field(psa.CompanyLabel(), existing?.CompanyName, company?.Name);
+        if (PsaCompanyLinks.Apply(group.PsaCompanyLinks, existing, psa, company) is { } removed)
+        {
+            context.PsaCompanyLinks.Remove(removed);
+        }
+
+        AuditLog.Record(context, actor, AuditActions.GroupPsaCompanyChanged, AuditTarget.For(group), $"Changed the {psa.CompanyLabel()} for group {group.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

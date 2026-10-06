@@ -12,7 +12,7 @@
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IHaloPsaClient HaloPsaClient
+@inject PsaDirectory PsaDirectory
 @inject ILogger<ManageGroups> Logger
 
 <PageTitle>dotMARC - Manage Groups</PageTitle>
@@ -27,29 +27,45 @@
     filtering on the dashboard and don't affect who can see what.
 </MudText>
 
-@if (_haloLoadFailed)
+@foreach (var failed in _psaLists.Where(list => list.FailureReason is not null))
 {
     <MudAlert Severity="Severity.Warning" Class="mb-4">
-        Halo clients couldn't be loaded, so Halo suggestions and the Halo Client picker are unavailable.
-        Check the HaloPSA settings under Alerts, or the server logs, then reload.
+        @failed.FailureReason Its column shows the saved companies but can't be changed until it loads. Check the
+        @failed.Psa.DisplayName() settings under PSA settings, or the server logs, then reload.
     </MudAlert>
 }
 
-@if (_clientsWithoutGroup.Count > 0)
+@if (_loadedLists.Count > 0 && _withoutGroupPsa is { } withoutGroupPsa && (_companiesWithoutGroup.Count > 0 || _loadedLists.Count > 1))
 {
     <AuthorizeView Policy="GroupsAdd" Context="addAuthState">
         <MudPaper Class="pa-4 mb-4" Elevation="1">
-            <div class="d-flex align-center mb-1">
-                <MudText Typo="Typo.h6">Halo clients without a group</MudText>
+            <div class="d-flex align-center mb-1" style="gap: 1rem;">
+                <MudText Typo="Typo.h6">Companies without a group</MudText>
+                @if (_loadedLists.Count > 1)
+                {
+                    <MudSelect T="PsaKind" Value="withoutGroupPsa" ValueChanged="@(psa => { _withoutGroupPsa = psa; RefreshCompaniesWithoutGroup(); })"
+                               Dense="true" Margin="Margin.Dense" Style="max-width: 14rem;">
+                        @foreach (var list in _loadedLists)
+                        {
+                            <MudSelectItem T="PsaKind" Value="list.Psa">@list.Psa.DisplayName()</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
                 <MudSpacer />
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="_creatingFromHalo"
-                           OnClick="CreateAllFromHaloAsync">Create all (@_clientsWithoutGroup.Count)</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="@(_creatingFromPsa || _companiesWithoutGroup.Count == 0)"
+                           OnClick="CreateAllFromCompaniesAsync">Create all (@_companiesWithoutGroup.Count)</MudButton>
             </div>
             <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
-                These clients exist in Halo but not in dotMARC. Creating a group links it to its Halo client, so
-                tickets for its domains go to that client once you add the domains to it.
+                These companies exist in @withoutGroupPsa.DisplayName() but not in dotMARC. Creating a group links it to its
+                company, so tickets for its domains go to that company once you add the domains to it.
             </MudText>
-            <MudTable Items="_clientsWithoutGroup" T="HaloClient" Dense="true" Hover="true" CustomHeader="true" Filter="ClientWithoutGroupMatchesFilters">
+            @if (_companiesWithoutGroup.Count == 0)
+            {
+                <MudText Typo="Typo.body2">Every @withoutGroupPsa.DisplayName() company already has a group.</MudText>
+            }
+            else
+            {
+            <MudTable Items="_companiesWithoutGroup" T="PsaCompany" Dense="true" Hover="true" CustomHeader="true" Filter="CompanyWithoutGroupMatchesFilters">
                 <ToolBarContent>
                     <MudSpacer />
                     <MudButton Variant="@(_showClientFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
@@ -57,7 +73,7 @@
                 </ToolBarContent>
                 <HeaderContent>
                     <tr>
-                        <MudTh><MudTableSortLabel SortBy="new Func<HaloClient, object>(c => c.Name)">Halo client</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<PsaCompany, object>(company => company.Name)">@withoutGroupPsa.CompanyLabel()</MudTableSortLabel></MudTh>
                         <MudTh></MudTh>
                     </tr>
                     @if (_showClientFilters)
@@ -71,11 +87,12 @@
                 <RowTemplate>
                     <MudTd>@context.Name</MudTd>
                     <MudTd Style="text-align: right;">
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="_creatingFromHalo"
-                                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => CreateFromHaloAsync(context))">Create group</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="_creatingFromPsa"
+                                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => CreateFromCompanyAsync(withoutGroupPsa, context))">Create group</MudButton>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
+            }
         </MudPaper>
     </AuthorizeView>
 }
@@ -107,9 +124,12 @@
                 <tr>
                     <MudTh><MudTableSortLabel SortBy="new Func<GroupRow, object>(g => g.Name)">Name</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<GroupRow, object>(g => g.DomainCount)">Domains</MudTableSortLabel></MudTh>
-                    @if (_haloConfigured)
+                    @foreach (var list in _psaLists)
                     {
-                        <MudTh>Halo Client</MudTh>
+                        <MudTh>@list.Psa.CompanyLabel()</MudTh>
+                    }
+                    @if (_psaLists.Count > 0)
+                    {
                         <MudTh>Ticket rules</MudTh>
                     }
                     <MudTh></MudTh>
@@ -119,14 +139,17 @@
                 <tr>
                     <MudTh><MudTextField T="string" @bind-Value="_groupNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
                     <MudTh><MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
-                    @if (_haloConfigured)
+                    @foreach (var list in _psaLists)
                     {
                         <MudTh>
-                            <MudSelect T="bool?" Value="_groupHasHaloClientFilter" ValueChanged="@(v => _groupHasHaloClientFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            <MudSelect T="bool?" Value="@_hasCompanyFilters.GetValueOrDefault(list.Psa)" ValueChanged="@(linked => _hasCompanyFilters[list.Psa] = linked)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
                                 <MudSelectItem T="bool?" Value="true">Linked</MudSelectItem>
                                 <MudSelectItem T="bool?" Value="false">Not linked</MudSelectItem>
                             </MudSelect>
                         </MudTh>
+                    }
+                    @if (_psaLists.Count > 0)
+                    {
                         <MudTh>
                             <MudSelect T="bool?" Value="_groupHasTicketOverridesFilter" ValueChanged="@(v => _groupHasTicketOverridesFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
                                 <MudSelectItem T="bool?" Value="true">Has overrides</MudSelectItem>
@@ -150,23 +173,27 @@
                     </AuthorizeView>
                 </MudTd>
                 <MudTd>@context.DomainCount</MudTd>
-                @if (_haloConfigured)
+                @foreach (var list in _psaLists)
                 {
+                    var current = context.Links.FirstOrDefault(link => link.Psa == list.Psa);
                     <MudTd>
-                        <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true" />
-                        @if (!context.HaloClientId.HasValue)
+                        <PsaCompanyPicker Psa="list.Psa" Companies="list.Companies" Current="current" CompanyChanged="@(company => SetPsaCompanyAsync(context, list.Psa, company))" />
+                        @if (current is null && list.Companies is not null)
                         {
-                            @foreach (var suggestion in PsaCompanySuggestions.SuggestCompaniesForGroup(PsaKind.HaloPsa, context.Name, _haloClients.Select(AsCompany)).Take(3))
+                            @foreach (var suggestion in PsaCompanySuggestions.SuggestCompaniesForGroup(list.Psa, context.Name, list.Companies).Take(3))
                             {
                                 <MudText Typo="Typo.caption">
                                     Suggested match: @suggestion.Name.
-                                    <MudLink OnClick="@(() => SetHaloClientIdAsync(context, int.Parse(suggestion.Id, System.Globalization.CultureInfo.InvariantCulture)))">Use it</MudLink>
+                                    <MudLink OnClick="@(() => SetPsaCompanyAsync(context, list.Psa, suggestion))">Use it</MudLink>
                                 </MudText>
                             }
                         }
                     </MudTd>
+                }
+                @if (_psaLists.Count > 0)
+                {
                     <MudTd>
-                        @if (context.HaloClientId.HasValue)
+                        @if (context.Links.Count > 0)
                         {
                             <div class="d-flex align-center" style="gap: 0.5rem;">
                                 <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenTicketRulesAsync(context))">
@@ -180,7 +207,7 @@
                         }
                         else
                         {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Set a Halo client first</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Link a PSA company first</MudText>
                         }
                     </MudTd>
                 }
@@ -300,13 +327,12 @@
 @code {
     private List<GroupRow>? _groups;
     private List<TagRow>? _tags;
-    private List<HaloClient> _haloClients = [];
-    private List<SelectOption<int?>> _haloClientOptions = [];
-    private List<HaloClient> _clientsWithoutGroup = [];
-    private bool _haloLoadFailed;
-    private bool _creatingFromHalo;
+    private List<PsaCompanyList> _psaLists = [];
+    private List<PsaCompanyList> _loadedLists = [];
+    private PsaKind? _withoutGroupPsa;
+    private List<PsaCompany> _companiesWithoutGroup = [];
+    private bool _creatingFromPsa;
     private Dictionary<int, int> _ticketRuleOverrideCounts = [];
-    private bool _haloConfigured;
     private string _newGroupName = "";
     private string? _addGroupError;
     private string _newTagName = "";
@@ -318,7 +344,7 @@
 
     private string? _groupNameFilter;
     private int? _groupMinDomainsFilter;
-    private bool? _groupHasHaloClientFilter;
+    private readonly Dictionary<PsaKind, bool?> _hasCompanyFilters = [];
     private bool? _groupHasTicketOverridesFilter;
     private bool _showGroupFilters;
 
@@ -327,8 +353,8 @@
     private int? _tagMinDomainsFilter;
     private bool _showTagFilters;
 
-    private bool ClientWithoutGroupMatchesFilters(HaloClient client) =>
-        string.IsNullOrWhiteSpace(_clientNameFilter) || client.Name.Contains(_clientNameFilter, StringComparison.OrdinalIgnoreCase);
+    private bool CompanyWithoutGroupMatchesFilters(PsaCompany company) =>
+        string.IsNullOrWhiteSpace(_clientNameFilter) || company.Name.Contains(_clientNameFilter, StringComparison.OrdinalIgnoreCase);
 
     private bool GroupMatchesFilters(GroupRow row)
     {
@@ -340,9 +366,12 @@
         {
             return false;
         }
-        if (_groupHasHaloClientFilter is { } hasHaloClient && row.HaloClientId.HasValue != hasHaloClient)
+        foreach (var (psa, filter) in _hasCompanyFilters)
         {
-            return false;
+            if (filter is { } linked && row.Links.Any(link => link.Psa == psa) != linked)
+            {
+                return false;
+            }
         }
         if (_groupHasTicketOverridesFilter is { } hasOverrides && _ticketRuleOverrideCounts.ContainsKey(row.Id) != hasOverrides)
         {
@@ -376,7 +405,7 @@
         _groups = await db.Groups
             .AsNoTracking()
             .OrderBy(g => g.Name)
-            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.HaloClientId))
+            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.PsaCompanyLinks.ToList()))
             .ToListAsync();
         _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
         _tags = await db.Tags
@@ -385,84 +414,108 @@
             .Select(t => new TagRow(t.Id, t.Name, t.Color, t.Domains.Count))
             .ToListAsync();
 
-        await using var haloSettingsDb = await DbFactory.CreateDbContextAsync();
-        var haloSettings = await HaloPsaSettingsService.GetAsync(haloSettingsDb);
-        _haloConfigured = haloSettings.Enabled && haloSettings.ClientSecretConfigured;
-        _haloLoadFailed = false;
-        _haloClients = [];
-        if (_haloConfigured)
+        await using var psaDb = await DbFactory.CreateDbContextAsync();
+        _psaLists = (await PsaDirectory.LoadAsync(psaDb)).ToList();
+        _loadedLists = _psaLists.Where(list => list.Companies is not null).ToList();
+        if (_withoutGroupPsa is null || _loadedLists.All(list => list.Psa != _withoutGroupPsa))
         {
-            try
-            {
-                _haloClients = (await HaloPsaClient.ListClientsAsync(haloSettings)).ToList();
-            }
-            catch (Exception ex)
-            {
-                _haloLoadFailed = true;
-                Logger.LogWarning(ex, "Manage groups could not load the Halo client list");
-            }
+            _withoutGroupPsa = _loadedLists.FirstOrDefault()?.Psa;
         }
 
-        _haloClientOptions = _haloClients.Select(haloClient => new SelectOption<int?>(haloClient.Id, haloClient.Name)).ToList();
-        var withoutGroupIds = PsaCompanySuggestions
-            .CompaniesWithoutGroup(PsaKind.HaloPsa, _haloClients.Select(AsCompany), _groups.Select(group => new GroupSummary(group.Name, group.HaloClientId?.ToString(System.Globalization.CultureInfo.InvariantCulture))))
-            .Select(company => company.Id)
-            .ToList();
-        _clientsWithoutGroup = withoutGroupIds.Select(id => _haloClients.First(client => client.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) == id)).ToList();
+        RefreshCompaniesWithoutGroup();
     }
 
-    private static PsaCompany AsCompany(HaloClient client) => new(client.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), client.Name);
-
-    private async Task CreateFromHaloAsync(HaloClient client)
+    private void RefreshCompaniesWithoutGroup()
     {
-        _creatingFromHalo = true;
+        var list = _loadedLists.FirstOrDefault(candidate => candidate.Psa == _withoutGroupPsa);
+        _companiesWithoutGroup = list?.Companies is { } companies && _groups is not null
+            ? PsaCompanySuggestions.CompaniesWithoutGroup(list.Psa, companies,
+                _groups.Select(group => new GroupSummary(group.Name, group.Links.FirstOrDefault(link => link.Psa == list.Psa)?.CompanyId))).ToList()
+            : [];
+    }
+
+    private async Task CreateFromCompanyAsync(PsaKind psa, PsaCompany company)
+    {
+        _creatingFromPsa = true;
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), client.Name, CancellationToken.None, client.Id);
+            var result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), company.Name, CancellationToken.None, (psa, company));
             if (result == GroupManagementService.AddGroupResult.Added)
             {
-                Snackbar.Add($"Created group {client.Name}.", Severity.Success);
+                Snackbar.Add($"Created group {company.Name}.", Severity.Success);
+                OfferMatchingLinks(psa, company);
             }
             else
             {
-                Snackbar.Add($"A group named {client.Name} already exists.", Severity.Warning);
+                Snackbar.Add($"A group named {company.Name} already exists.", Severity.Warning);
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Creating a group from Halo client {ClientName} failed", client.Name);
-            Snackbar.Add($"Failed to create {client.Name}. Try again.", Severity.Error);
+            Logger.LogError(ex, "Creating a group from {Psa} company {CompanyName} failed", psa.DisplayName(), company.Name);
+            Snackbar.Add($"Failed to create {company.Name}. Try again.", Severity.Error);
         }
         finally
         {
-            _creatingFromHalo = false;
+            _creatingFromPsa = false;
         }
 
         await LoadAsync();
     }
 
-    private async Task CreateAllFromHaloAsync()
+    /// <summary>When a company with the same name exists in another PSA, offers to link the new group to it there too.</summary>
+    private void OfferMatchingLinks(PsaKind createdFrom, PsaCompany company)
     {
-        var clients = _clientsWithoutGroup.ToList();
+        var key = PsaCompanySuggestions.LooseKey(company.Name);
+        foreach (var other in _loadedLists.Where(list => list.Psa != createdFrom))
+        {
+            if (other.Companies!.FirstOrDefault(candidate => PsaCompanySuggestions.LooseKey(candidate.Name) == key) is not { } match)
+            {
+                continue;
+            }
+
+            Snackbar.Add($"{other.Psa.DisplayName()} has a company called {match.Name}.", Severity.Info, options =>
+            {
+                options.Action = $"Link it";
+                options.OnClick = async _ =>
+                {
+                    var created = _groups?.FirstOrDefault(group => string.Equals(group.Name, company.Name, StringComparison.OrdinalIgnoreCase));
+                    if (created is not null)
+                    {
+                        await SetPsaCompanyAsync(created, other.Psa, match);
+                    }
+                };
+            });
+        }
+    }
+
+    private async Task CreateAllFromCompaniesAsync()
+    {
+        if (_withoutGroupPsa is not { } psa)
+        {
+            return;
+        }
+
+        var companies = _companiesWithoutGroup.ToList();
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Create groups from Halo",
-            $"Create {clients.Count} group{(clients.Count == 1 ? "" : "s")}, one for each Halo client listed, each linked to its client?",
+            $"Create groups from {psa.DisplayName()}",
+            $"Create {companies.Count} group{(companies.Count == 1 ? "" : "s")}, one for each {psa.DisplayName()} company listed, each linked to its company?",
             yesText: "Create", cancelText: "Cancel");
         if (confirmed != true)
         {
             return;
         }
 
-        _creatingFromHalo = true;
+        _creatingFromPsa = true;
         var created = 0;
         var skipped = 0;
         try
         {
-            foreach (var client in clients)
+            foreach (var company in companies)
             {
                 await using var db = await DbFactory.CreateDbContextAsync();
-                var result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), client.Name, CancellationToken.None, client.Id);
+                var result = await GroupManagementService.AddGroupAsync(db, await AuditActorAccessor.GetAsync(), company.Name, CancellationToken.None, (psa, company));
                 if (result == GroupManagementService.AddGroupResult.Added)
                 {
                     created++;
@@ -479,12 +532,12 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Creating groups from Halo clients failed after {Created} were created", created);
+            Logger.LogError(ex, "Creating groups from {Psa} companies failed after {Created} were created", psa.DisplayName(), created);
             Snackbar.Add($"Created {created} before something went wrong. Try again for the rest.", Severity.Error);
         }
         finally
         {
-            _creatingFromHalo = false;
+            _creatingFromPsa = false;
         }
 
         await LoadAsync();
@@ -656,16 +709,16 @@
         }
     }
 
-    private async Task SetHaloClientIdAsync(GroupRow row, int? haloClientId)
+    private async Task SetPsaCompanyAsync(GroupRow row, PsaKind psa, PsaCompany? company)
     {
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            await GroupManagementService.SetHaloClientIdAsync(db, await AuditActorAccessor.GetAsync(), row.Id, haloClientId, CancellationToken.None);
+            await GroupManagementService.SetPsaCompanyAsync(db, await AuditActorAccessor.GetAsync(), row.Id, psa, company, CancellationToken.None);
         }
         catch (Exception)
         {
-            Snackbar.Add($"Failed to update {row.Name}'s Halo client. Try again.", Severity.Error);
+            Snackbar.Add($"Failed to update {row.Name}'s {psa.CompanyLabel()}. Try again.", Severity.Error);
         }
         await LoadAsync();
     }
@@ -693,6 +746,6 @@
         }
     }
 
-    private sealed record GroupRow(int Id, string Name, int DomainCount, int? HaloClientId);
+    private sealed record GroupRow(int Id, string Name, int DomainCount, List<PsaCompanyLink> Links);
     private sealed record TagRow(int Id, string Name, Color Color, int DomainCount);
 }

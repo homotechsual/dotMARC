@@ -1,5 +1,6 @@
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -274,17 +275,50 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SetHaloClientIdAsync_UpdatesTheDomainsOverride()
+    public async Task SetPsaCompanyAsync_LinksAndRelinksInOnePsa_AndAuditsEachChange()
     {
         await using var context = CreateContext();
         var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
         context.Domains.Add(domain);
         await context.SaveChangesAsync();
 
-        await DomainManagementService.SetHaloClientIdAsync(context, TestActors.Admin, domain.Id, 7);
+        await DomainManagementService.SetPsaCompanyAsync(context, TestActors.Admin, domain.Id, PsaKind.ConnectWise, new PsaCompany("250", "Contoso Ltd"));
+        await DomainManagementService.SetPsaCompanyAsync(context, TestActors.Admin, domain.Id, PsaKind.ConnectWise, new PsaCompany("251", "Contoso Group"));
+        await DomainManagementService.SetPsaCompanyAsync(context, TestActors.Admin, domain.Id, PsaKind.HaloPsa, new PsaCompany("7", "Contoso"));
 
         await using var verify = CreateContext();
-        Assert.Equal(7, (await verify.Domains.SingleAsync(d => d.Id == domain.Id)).HaloClientId);
+        var links = (await verify.PsaCompanyLinks.Where(link => link.DomainId == domain.Id).ToListAsync()).OrderBy(link => link.Psa).ToList();
+        Assert.Equal([(PsaKind.HaloPsa, "7", "Contoso"), (PsaKind.ConnectWise, "251", "Contoso Group")], links.Select(link => (link.Psa, link.CompanyId, link.CompanyName)));
+        var entries = await verify.AuditEntries.Where(entry => entry.Action == AuditActions.DomainPsaCompanyChanged).ToListAsync();
+        Assert.Equal(3, entries.Count);
+    }
+
+    [Fact]
+    public async Task SetPsaCompanyAsync_WithNoCompany_RemovesThatPsasLinkOnly()
+    {
+        await using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }, new PsaCompanyLink { Psa = PsaKind.ConnectWise, CompanyId = "250", CompanyName = "Contoso Ltd" }] };
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+
+        await DomainManagementService.SetPsaCompanyAsync(context, TestActors.Admin, domain.Id, PsaKind.HaloPsa, null);
+
+        await using var verify = CreateContext();
+        Assert.Equal(PsaKind.ConnectWise, (await verify.PsaCompanyLinks.SingleAsync()).Psa);
+    }
+
+    [Fact]
+    public async Task SetPsaCompanyAsync_TheSameCompanyAgain_ChangesAndAuditsNothing()
+    {
+        await using var context = CreateContext();
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }] };
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+
+        await DomainManagementService.SetPsaCompanyAsync(context, TestActors.Admin, domain.Id, PsaKind.HaloPsa, new PsaCompany("7", "Contoso"));
+
+        await using var verify = CreateContext();
+        Assert.Empty(await verify.AuditEntries.ToListAsync());
     }
 
     [Fact]
