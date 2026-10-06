@@ -124,9 +124,13 @@ changing MX records. **MX hosts** should list every hostname mail for this domai
 delivered to, one per line. A receiving server rejects the connection if the live MX record
 points somewhere not on this list.
 
-MX hosts are fetched automatically from DNS the first time you enable MTA-STS for a domain, and
-prefilled into the field. Review the result and edit it if needed (then hit **Save**) before it
-takes effect, since what's live in DNS right now might not match what you actually want published.
+MX hosts are fetched automatically from DNS when you enable MTA-STS for a domain, and whenever the
+field is empty, they're filled in from DNS for you to review. **Look up from DNS** fetches them again at any time.
+Nothing changes until you select **Save**, since what's live in DNS right now might not match what you actually want
+published.
+
+MTA-STS can't be on with no MX hosts: the policy would list no mail servers, and senders that check it could refuse
+to deliver. If a domain is ever in that state, its MTA-STS tab says so and fills in the hosts from DNS, ready to save.
 
 ## Status
 

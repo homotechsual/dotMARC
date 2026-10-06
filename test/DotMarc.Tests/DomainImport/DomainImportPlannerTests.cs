@@ -201,6 +201,29 @@ public sealed class DomainImportPlannerTests
     }
 
     [Fact]
+    public void MtaSts_AlreadyOnWithNoMxHosts_GetsThemFromDns()
+    {
+        var snapshot = Snapshot([Existing("broken.com", mtaStsEnabled: true)],
+            lookedUpMx: new Dictionary<string, IReadOnlyList<string>> { ["broken.com"] = ["mail.broken.com"] });
+
+        var plan = Plan("domain,mta-sts mode\nbroken.com,testing", snapshot);
+
+        Assert.Equal(["mail.broken.com"], Row(plan, "broken.com").Target!.MtaSts!.MxHosts);
+    }
+
+    [Fact]
+    public void MtaSts_AlreadyOnWithNoMxHostsAndNoneInDns_IsLeftAlone_RatherThanSavedEmpty()
+    {
+        var snapshot = Snapshot([Existing("broken.com", mtaStsEnabled: true)],
+            lookedUpMx: new Dictionary<string, IReadOnlyList<string>> { ["broken.com"] = [] });
+
+        var plan = Plan("domain,mta-sts mode\nbroken.com,enforce", snapshot);
+
+        Assert.Null(Row(plan, "broken.com").Target?.MtaSts);
+        Assert.Contains(Row(plan, "broken.com").Notes, note => note.Contains("no MX hosts"));
+    }
+
+    [Fact]
     public void TurningMonitoringAndMtaStsOff_OnAnExistingDomain_AreRemovals()
     {
         var plan = Plan("domain,monitored,mta-sts mode\nold.com,no,off",

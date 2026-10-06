@@ -111,6 +111,12 @@ public static class DomainManagementService
         int maxAgeSeconds,
         CancellationToken cancellationToken = default)
     {
+        // The served policy lists exactly these hosts; with none, senders that honour MTA-STS have nowhere they may deliver.
+        if (enabled && mxHosts.Count == 0)
+        {
+            throw new ArgumentException("MTA-STS can't be on without MX hosts. Look them up from DNS or add them first.", nameof(mxHosts));
+        }
+
         var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()
             .Field("Hosting enabled", domain.MtaStsEnabled, enabled)

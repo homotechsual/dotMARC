@@ -156,6 +156,34 @@ public sealed class DomainManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SetMtaStsConfigAsync_RefusesToTurnOnWithNoMxHosts_BecauseThePolicyWouldListNoMailServers()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => DomainManagementService.SetMtaStsConfigAsync(
+            context, TestActors.Admin, domainId, enabled: true, MtaStsMode.Testing, [], 604_800, CancellationToken.None));
+
+        using var verify = CreateContext();
+        Assert.False(verify.Domains.Single().MtaStsEnabled);
+    }
+
+    [Fact]
+    public async Task SetMtaStsConfigAsync_LetsHostingBeOffWithNoMxHosts()
+    {
+        using var context = CreateContext();
+        await DomainManagementService.AddDomainAsync(context, TestActors.Admin, "contoso.com", CancellationToken.None);
+        var domainId = context.Domains.Single().Id;
+
+        await DomainManagementService.SetMtaStsConfigAsync(
+            context, TestActors.Admin, domainId, enabled: false, MtaStsMode.Testing, [], 86_400, CancellationToken.None);
+
+        using var verify = CreateContext();
+        Assert.Equal(86_400, verify.Domains.Single().MtaStsMaxAgeSeconds);
+    }
+
+    [Fact]
     public async Task SetMtaStsConfigAsync_LeavesStatusAlone_WhenAlreadyEnabled()
     {
         using var context = CreateContext();

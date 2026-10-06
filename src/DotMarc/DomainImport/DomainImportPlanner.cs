@@ -411,9 +411,11 @@ public static class DomainImportPlanner
             var mxHosts = row.MtaStsMxHosts ?? (currentMxHosts.Count > 0 ? currentMxHosts : lookedUp);
             var maxAge = row.MtaStsMaxAgeSeconds ?? currentMaxAge;
 
-            if (enabled && !currentEnabled && mxHosts.Count == 0)
+            if (enabled && mxHosts.Count == 0)
             {
-                _notes.Add("MTA-STS wasn't turned on: no MX hosts were given, and none were found in DNS.");
+                _notes.Add(currentEnabled
+                    ? "MTA-STS was left as it is: it has no MX hosts, none were given, and none were found in DNS."
+                    : "MTA-STS wasn't turned on: no MX hosts were given, and none were found in DNS.");
                 return null;
             }
 

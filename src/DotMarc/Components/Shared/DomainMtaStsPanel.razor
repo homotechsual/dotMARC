@@ -97,8 +97,17 @@
                 }
             }
 
+            @if (Domain.MtaStsEnabled && Domain.MtaStsMxHosts.Count == 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3">
+                    MTA-STS is on, but it has no MX hosts, so the policy dotMARC serves lists no mail servers and senders that
+                    check it may refuse to deliver.
+                    @(_mxHostsFromDns ? "The MX hosts below were looked up from DNS. Check them and select Save." : "Add the domain's MX hosts below and select Save.")
+                </MudAlert>
+            }
+
             <MudExpansionPanels Class="mt-3">
-                <MudExpansionPanel Text="Advanced">
+                <MudExpansionPanel Text="Advanced" @bind-Expanded="_advancedExpanded">
                     <MudSwitch T="bool" @bind-Value="_enabled" Label="Enabled" Color="Color.Primary" Class="mb-2" />
                     <MudSelect T="MtaStsMode" @bind-Value="_mode" Label="Mode">
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Testing">Testing</MudSelectItem>
@@ -106,8 +115,13 @@
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.None">None</MudSelectItem>
                     </MudSelect>
                     <MudNumericField T="int" @bind-Value="_maxAgeSeconds" Label="Max age (seconds)" Min="0" Class="mt-2" />
-                    <MudTextField @bind-Value="_mxHostsText" Label="MX hosts" Lines="3" HelperText="One per line, e.g. mail.example.com" Class="mt-2" />
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2" OnClick="SaveAdvancedAsync">Save</MudButton>
+                    <MudTextField @bind-Value="_mxHostsText" Label="MX hosts" Lines="3" Class="mt-2"
+                                  HelperText="@(_mxHostsFromDns ? "Filled in from the domain's MX records in DNS. Select Save to use them." : "One per line, e.g. mail.example.com")" />
+                    <div class="d-flex mt-2" style="gap:0.5rem">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAdvancedAsync">Save</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Dns" Disabled="_isLookingUpMx"
+                                   OnClick="LookUpMxHostsAsync">Look up from DNS</MudButton>
+                    </div>
                 </MudExpansionPanel>
             </MudExpansionPanels>
         </div>
@@ -127,6 +141,9 @@
     private bool _isRechecking;
     private int _syncedDomainId;
     private string? _domainVerificationId;
+    private bool _mxHostsFromDns;
+    private bool _isLookingUpMx;
+    private bool _advancedExpanded;
 
     protected override void OnParametersSet()
     {
@@ -146,6 +163,47 @@
         if (RendererInfo.IsInteractive && string.Equals(MtaStsOptions.Value.Provisioner, "Azure", StringComparison.OrdinalIgnoreCase))
         {
             _domainVerificationId = await MtaStsHostProvisioner.GetDomainVerificationIdAsync(CancellationToken.None);
+        }
+
+        // An empty MX list is filled in from DNS (unsaved), so it's ready to save rather than typed from memory. A domain
+        // that's already on with no hosts is serving a policy that lists no mail servers, so Advanced opens to show it.
+        if (RendererInfo.IsInteractive && Domain.MtaStsMxHosts.Count == 0)
+        {
+            await FillMxHostsFromDnsAsync(quiet: true);
+            _advancedExpanded = Domain.MtaStsEnabled;
+        }
+    }
+
+    private Task LookUpMxHostsAsync() => FillMxHostsFromDnsAsync(quiet: false);
+
+    /// <summary>Puts the domain's MX records in the MX hosts field without saving them. Quiet means no message when
+    /// nothing is found or the lookup fails, for the automatic fill on load.</summary>
+    private async Task FillMxHostsFromDnsAsync(bool quiet)
+    {
+        _isLookingUpMx = true;
+        try
+        {
+            var mxHosts = await MxHostsLookup.LookupAsync(Domain.Name, CancellationToken.None);
+            if (mxHosts.Count > 0)
+            {
+                _mxHostsText = string.Join('\n', mxHosts);
+                _mxHostsFromDns = true;
+            }
+            else if (!quiet)
+            {
+                Snackbar.Add($"No MX records found for {Domain.Name}.", Severity.Warning);
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            if (!quiet)
+            {
+                Snackbar.Add($"Couldn't look up {Domain.Name}'s MX records. Try again.", Severity.Error);
+            }
+        }
+        finally
+        {
+            _isLookingUpMx = false;
         }
     }
 
@@ -207,7 +265,12 @@
             Domain.MtaStsMode = _mode;
             Domain.MtaStsMaxAgeSeconds = _maxAgeSeconds;
             Domain.MtaStsMxHosts = mxHosts;
+            _mxHostsFromDns = false;
             Snackbar.Add($"MTA-STS configuration saved for {Domain.Name}.", Severity.Success);
+        }
+        catch (ArgumentException refusal)
+        {
+            Snackbar.Add(refusal.Message.Split(" (Parameter")[0], Severity.Error);
         }
         catch (Exception)
         {
