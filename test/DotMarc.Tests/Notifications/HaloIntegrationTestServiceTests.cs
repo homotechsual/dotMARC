@@ -170,7 +170,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         var domain = new Domain { Name = "contoso.io", IsMonitored = true, FirstSeenUtc = DateTimeOffset.UtcNow };
         if (mappedHaloClientId is { } haloClientId)
         {
-            domain.Groups.Add(new Group { Name = "Contoso", HaloClientId = haloClientId });
+            domain.Groups.Add(new Group { Name = "Contoso", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = haloClientId.ToString(System.Globalization.CultureInfo.InvariantCulture), CompanyName = "Contoso" }] });
         }
 
         context.Domains.Add(domain);

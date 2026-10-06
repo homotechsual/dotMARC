@@ -74,7 +74,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
     {
         await EnableHaloAsync();
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
         context.Groups.Add(group);
         var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
         context.Domains.Add(domain);
@@ -98,7 +98,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
     {
         await EnableHaloAsync();
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
         context.Groups.Add(group);
         var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
         context.Domains.Add(domain);
@@ -150,7 +150,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
     public async Task CreateTicketAsync_DoesNothing_WhenHaloIsDisabled()
     {
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
         context.Groups.Add(group);
         var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
         context.Domains.Add(domain);
@@ -216,7 +216,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
 
     private async Task<(Group Group, Domain Domain, AlertEvent Alert)> SeedMappedDomainAsync(DotMarcDbContext context, string alertType = "MissedReport")
     {
-        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
         context.Groups.Add(group);
         var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [group] };
         context.Domains.Add(domain);
@@ -293,7 +293,7 @@ public sealed class PsaTicketServiceTests : IAsyncLifetime
         await EnableHaloAsync();
         await using var context = CreateContext();
         var (group, domain, alert) = await SeedMappedDomainAsync(context);
-        domain.HaloClientId = 99;
+        domain.PsaCompanyLinks.Add(new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "99", CompanyName = "Own client" });
         await context.SaveChangesAsync();
         await AlertTicketRuleService.SetGlobalAsync(context, TestActors.Admin, AlertTypes.MissedReport, true);
         await AlertTicketRuleService.SetForGroupAsync(context, TestActors.Admin, group.Id, AlertTypes.MissedReport, false);

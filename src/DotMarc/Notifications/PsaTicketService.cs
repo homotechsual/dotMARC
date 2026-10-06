@@ -1,5 +1,6 @@
 // src/DotMarc/Notifications/PsaTicketService.cs
 using DotMarc.Data;
+using DotMarc.Psa;
 using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.Notifications;
@@ -19,8 +20,7 @@ public sealed class PsaTicketService : IPsaTicketService
             return;
         }
 
-        var domain = await context.Domains
-            .Include(d => d.Groups)
+        var domain = await PsaCompanyResolver.IncludeLinks(context.Domains)
             .AsNoTracking()
             .SingleOrDefaultAsync(d => d.Name == alert.DomainName, cancellationToken)
             .ConfigureAwait(false);
@@ -29,7 +29,7 @@ public sealed class PsaTicketService : IPsaTicketService
             return;
         }
 
-        var haloClientId = HaloClientResolver.Resolve(domain);
+        var haloClientId = int.TryParse(PsaCompanyResolver.Resolve(domain, PsaKind.HaloPsa)?.CompanyId, out var resolvedClientId) ? resolvedClientId : (int?)null;
         if (haloClientId is null)
         {
             return;
@@ -37,13 +37,13 @@ public sealed class PsaTicketService : IPsaTicketService
 
         // Only this alert type's rules matter, and of the group rules only the deciding group's (the one whose
         // Halo client the ticket would go to), so read just those plus the global ones.
-        var decidingGroupId = HaloClientResolver.ResolveGroup(domain)?.Id;
+        var decidingGroupId = PsaCompanyResolver.ResolveGroup(domain, PsaKind.HaloPsa)?.Id;
         var rules = await context.AlertTicketRules
             .AsNoTracking()
             .Where(rule => rule.AlertType == alert.AlertType && (rule.GroupId == null || rule.GroupId == decidingGroupId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (!AlertTicketPolicy.ShouldCreateTicket(alert.AlertType, domain, rules))
+        if (!AlertTicketPolicy.ShouldCreateTicket(alert.AlertType, domain, PsaKind.HaloPsa, rules))
         {
             return;
         }

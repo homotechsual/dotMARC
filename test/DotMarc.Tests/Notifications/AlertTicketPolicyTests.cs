@@ -1,16 +1,20 @@
 // test/DotMarc.Tests/Notifications/AlertTicketPolicyTests.cs
 using DotMarc.Data;
 using DotMarc.Notifications;
+using DotMarc.Psa;
 using Xunit;
 
 namespace DotMarc.Tests.Notifications;
 
 public sealed class AlertTicketPolicyTests
 {
-    private static Group MakeGroup(int id, int? haloClientId) => new() { Id = id, Name = $"Group {id}", HaloClientId = haloClientId };
+    private static List<PsaCompanyLink> HaloLink(int? haloClientId) =>
+        haloClientId is { } id ? [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = id.ToString(), CompanyName = $"Client {id}" }] : [];
+
+    private static Group MakeGroup(int id, int? haloClientId) => new() { Id = id, Name = $"Group {id}", PsaCompanyLinks = HaloLink(haloClientId) };
 
     private static Domain DomainIn(int? clientOverride = null, params Group[] groups) =>
-        new() { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, HaloClientId = clientOverride, Groups = [.. groups] };
+        new() { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, PsaCompanyLinks = HaloLink(clientOverride), Groups = [.. groups] };
 
     private static AlertTicketRule GlobalRule(string alertType, bool createTicket) =>
         new() { AlertType = alertType, GroupId = null, CreateTicket = createTicket };
@@ -25,12 +29,12 @@ public sealed class AlertTicketPolicyTests
 
         foreach (var alertType in AlertTypes.All)
         {
-            Assert.Equal(alertType.CreatesTicketByDefault, AlertTicketPolicy.ShouldCreateTicket(alertType.Key, domain, []));
+            Assert.Equal(alertType.CreatesTicketByDefault, AlertTicketPolicy.ShouldCreateTicket(alertType.Key, domain, PsaKind.HaloPsa, []));
         }
 
         // Only nameserver changes, a heads-up rather than a fault, default to no ticket.
-        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.NameserversChanged, domain, []));
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.SpfRecordBroken, domain, []));
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.NameserversChanged, domain, PsaKind.HaloPsa, []));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.SpfRecordBroken, domain, PsaKind.HaloPsa, []));
     }
 
     [Theory]
@@ -40,7 +44,7 @@ public sealed class AlertTicketPolicyTests
     {
         var domain = DomainIn(null, MakeGroup(1, 7));
 
-        var result = AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, [GlobalRule(AlertTypes.MissedReport, globalCreates)]);
+        var result = AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, [GlobalRule(AlertTypes.MissedReport, globalCreates)]);
 
         Assert.Equal(globalCreates, result);
     }
@@ -51,7 +55,7 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(null, MakeGroup(1, 7));
         AlertTicketRule[] rules = [GlobalRule(AlertTypes.MissedReport, true), GroupRule(1, AlertTypes.MissedReport, false)];
 
-        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -60,7 +64,7 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(null, MakeGroup(1, 7));
         AlertTicketRule[] rules = [GlobalRule(AlertTypes.MissedReport, false), GroupRule(1, AlertTypes.MissedReport, true)];
 
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -69,8 +73,8 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(null, MakeGroup(1, 7));
         AlertTicketRule[] rules = [GroupRule(1, AlertTypes.MissedReport, false)];
 
-        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.TlsrptFailure, domain, rules));
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.TlsrptFailure, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -79,7 +83,7 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(clientOverride: 99, MakeGroup(1, 7));
         AlertTicketRule[] rules = [GlobalRule(AlertTypes.MissedReport, true), GroupRule(1, AlertTypes.MissedReport, false)];
 
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -89,7 +93,7 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(null, MakeGroup(1, null), MakeGroup(2, 8));
         AlertTicketRule[] rules = [GroupRule(1, AlertTypes.MissedReport, false), GroupRule(2, AlertTypes.MissedReport, true), GlobalRule(AlertTypes.MissedReport, false)];
 
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -99,7 +103,7 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(null, MakeGroup(3, 9), MakeGroup(2, 8));
         AlertTicketRule[] rules = [GroupRule(2, AlertTypes.MissedReport, false), GroupRule(3, AlertTypes.MissedReport, true)];
 
-        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -107,7 +111,7 @@ public sealed class AlertTicketPolicyTests
     {
         var domain = DomainIn();
 
-        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, [GlobalRule(AlertTypes.MissedReport, false)]));
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, [GlobalRule(AlertTypes.MissedReport, false)]));
     }
 
     [Fact]
@@ -116,7 +120,7 @@ public sealed class AlertTicketPolicyTests
         var domain = DomainIn(null, MakeGroup(1, 7));
         AlertTicketRule[] rules = [GlobalRule("RetiredAlertType", false), GroupRule(1, "RetiredAlertType", false)];
 
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, rules));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
     }
 
     [Fact]
@@ -124,8 +128,8 @@ public sealed class AlertTicketPolicyTests
     {
         var domain = DomainIn(null, MakeGroup(1, 7));
 
-        Assert.True(AlertTicketPolicy.ShouldCreateTicket("BrandNewType", domain, []));
-        Assert.False(AlertTicketPolicy.ShouldCreateTicket("BrandNewType", domain, [GlobalRule("BrandNewType", false)]));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket("BrandNewType", domain, PsaKind.HaloPsa, []));
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket("BrandNewType", domain, PsaKind.HaloPsa, [GlobalRule("BrandNewType", false)]));
     }
 
     [Fact]
@@ -134,8 +138,20 @@ public sealed class AlertTicketPolicyTests
         var withGroups = DomainIn(null, MakeGroup(5, 9), MakeGroup(2, 8), MakeGroup(1, null));
         var withOverride = DomainIn(clientOverride: 99, MakeGroup(2, 8));
 
-        Assert.Equal(2, HaloClientResolver.ResolveGroup(withGroups)!.Id);
-        Assert.Null(HaloClientResolver.ResolveGroup(withOverride));
-        Assert.Null(HaloClientResolver.ResolveGroup(DomainIn(null, MakeGroup(1, null))));
+        Assert.Equal(2, PsaCompanyResolver.ResolveGroup(withGroups, PsaKind.HaloPsa)!.Id);
+        Assert.Null(PsaCompanyResolver.ResolveGroup(withOverride, PsaKind.HaloPsa));
+        Assert.Null(PsaCompanyResolver.ResolveGroup(DomainIn(null, MakeGroup(1, null)), PsaKind.HaloPsa));
+    }
+
+    [Fact]
+    public void AGroupRule_OnlyAppliesToThePsaThatGroupDecides()
+    {
+        var haloGroup = new Group { Id = 1, Name = "Halo group", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "A" }] };
+        var connectWiseGroup = new Group { Id = 2, Name = "CW group", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.ConnectWise, CompanyId = "250", CompanyName = "B" }] };
+        var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, Groups = [haloGroup, connectWiseGroup] };
+        AlertTicketRule[] rules = [GroupRule(1, AlertTypes.MissedReport, false)];
+
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.ConnectWise, rules));
     }
 }

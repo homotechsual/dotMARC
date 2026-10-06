@@ -1,5 +1,6 @@
 @page "/groups"
 @attribute [Authorize(Policy = "GroupsOrTagsWrite")]
+@using DotMarc.Psa
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
@@ -155,11 +156,11 @@
                         <SearchableSelect TValue="int?" Options="_haloClientOptions" Value="context.HaloClientId" ValueChanged="@(id => SetHaloClientIdAsync(context, id))" Clearable="true" />
                         @if (!context.HaloClientId.HasValue)
                         {
-                            @foreach (var suggestion in HaloGroupSuggestions.SuggestClientsForGroup(context.Name, _haloClients).Take(3))
+                            @foreach (var suggestion in PsaCompanySuggestions.SuggestCompaniesForGroup(PsaKind.HaloPsa, context.Name, _haloClients.Select(AsCompany)).Take(3))
                             {
                                 <MudText Typo="Typo.caption">
                                     Suggested match: @suggestion.Name.
-                                    <MudLink OnClick="@(() => SetHaloClientIdAsync(context, suggestion.Id))">Use it</MudLink>
+                                    <MudLink OnClick="@(() => SetHaloClientIdAsync(context, int.Parse(suggestion.Id, System.Globalization.CultureInfo.InvariantCulture)))">Use it</MudLink>
                                 </MudText>
                             }
                         }
@@ -403,10 +404,14 @@
         }
 
         _haloClientOptions = _haloClients.Select(haloClient => new SelectOption<int?>(haloClient.Id, haloClient.Name)).ToList();
-        _clientsWithoutGroup = HaloGroupSuggestions
-            .ClientsWithoutGroup(_haloClients, _groups.Select(group => new GroupSummary(group.Name, group.HaloClientId)))
+        var withoutGroupIds = PsaCompanySuggestions
+            .CompaniesWithoutGroup(PsaKind.HaloPsa, _haloClients.Select(AsCompany), _groups.Select(group => new GroupSummary(group.Name, group.HaloClientId?.ToString(System.Globalization.CultureInfo.InvariantCulture))))
+            .Select(company => company.Id)
             .ToList();
+        _clientsWithoutGroup = withoutGroupIds.Select(id => _haloClients.First(client => client.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) == id)).ToList();
     }
+
+    private static PsaCompany AsCompany(HaloClient client) => new(client.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), client.Name);
 
     private async Task CreateFromHaloAsync(HaloClient client)
     {

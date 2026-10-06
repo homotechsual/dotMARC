@@ -1,18 +1,18 @@
-using DotMarc.Notifications;
+using DotMarc.Psa;
 using Xunit;
 
-namespace DotMarc.Tests.Notifications;
+namespace DotMarc.Tests.Psa;
 
-public sealed class HaloGroupSuggestionsTests
+public sealed class PsaCompanySuggestionsTests
 {
-    private static readonly HaloClient Compute = new(37, "Compute (Bridgend) Limited");
-    private static readonly HaloClient Mcgarvey = new(14, "McGarvey Immigration & Asylum Practitioners");
-    private static readonly HaloClient CherylHarvey = new(144, "Cheryl Harvey");
-    private static readonly HaloClient LindaHarvey = new(145, "Linda Harvey");
-    private static readonly HaloClient TechPulse = new(99, "TechPulse Consulting LLC");
-    private static readonly HaloClient Unknown = new(1, "Unknown");
+    private static readonly PsaCompany Compute = new("37", "Compute (Bridgend) Limited");
+    private static readonly PsaCompany Mcgarvey = new("14", "McGarvey Immigration & Asylum Practitioners");
+    private static readonly PsaCompany CherylHarvey = new("144", "Cheryl Harvey");
+    private static readonly PsaCompany LindaHarvey = new("145", "Linda Harvey");
+    private static readonly PsaCompany TechPulse = new("99", "TechPulse Consulting LLC");
+    private static readonly PsaCompany Unknown = new("1", "Unknown");
 
-    private static readonly HaloClient[] AllClients = [Compute, Mcgarvey, CherylHarvey, LindaHarvey, TechPulse, Unknown];
+    private static readonly PsaCompany[] AllClients = [Compute, Mcgarvey, CherylHarvey, LindaHarvey, TechPulse, Unknown];
 
     [Theory]
     [InlineData("Compute Bridgend", "Compute (Bridgend) Limited")]
@@ -22,7 +22,7 @@ public sealed class HaloGroupSuggestionsTests
     [InlineData("McGarvey Immigration and Asylum Practitioners", "McGarvey Immigration & Asylum Practitioners")]
     public void NamesMatch_IgnoresCasePunctuationAndCompanySuffixes(string groupName, string clientName)
     {
-        Assert.True(HaloGroupSuggestions.NamesMatch(groupName, clientName));
+        Assert.True(PsaCompanySuggestions.NamesMatch(groupName, clientName));
     }
 
     [Theory]
@@ -32,13 +32,13 @@ public sealed class HaloGroupSuggestionsTests
     [InlineData("Limited", "Compute (Bridgend) Limited")]
     public void NamesMatch_DoesNotTreatASharedWordInTheMiddleOrEndAsAMatch(string groupName, string clientName)
     {
-        Assert.False(HaloGroupSuggestions.NamesMatch(groupName, clientName));
+        Assert.False(PsaCompanySuggestions.NamesMatch(groupName, clientName));
     }
 
     [Fact]
     public void ClientsWithoutGroup_OffersEveryClientWhenThereAreNoGroups()
     {
-        var suggestions = HaloGroupSuggestions.ClientsWithoutGroup(AllClients, []);
+        var suggestions = PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, AllClients, []);
 
         Assert.Equal(["Cheryl Harvey", "Compute (Bridgend) Limited", "Linda Harvey", "McGarvey Immigration & Asylum Practitioners", "TechPulse Consulting LLC"],
             suggestions.Select(client => client.Name));
@@ -47,9 +47,9 @@ public sealed class HaloGroupSuggestionsTests
     [Fact]
     public void ClientsWithoutGroup_LeavesOutHalosBuiltInUnknownClient()
     {
-        var suggestions = HaloGroupSuggestions.ClientsWithoutGroup(AllClients, []);
+        var suggestions = PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, AllClients, []);
 
-        Assert.DoesNotContain(suggestions, client => client.Id == HaloGroupSuggestions.UnknownClientId);
+        Assert.DoesNotContain(suggestions, client => client.Id == PsaCompanySuggestions.HaloUnknownClientId);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class HaloGroupSuggestionsTests
     {
         var groups = new[] { new GroupSummary("Bridgend office", Compute.Id) };
 
-        var suggestions = HaloGroupSuggestions.ClientsWithoutGroup(AllClients, groups);
+        var suggestions = PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, AllClients, groups);
 
         Assert.DoesNotContain(suggestions, client => client.Id == Compute.Id);
     }
@@ -67,7 +67,7 @@ public sealed class HaloGroupSuggestionsTests
     {
         var groups = new[] { new GroupSummary("Compute Bridgend", null), new GroupSummary("McGarvey", null) };
 
-        var suggestions = HaloGroupSuggestions.ClientsWithoutGroup(AllClients, groups);
+        var suggestions = PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, AllClients, groups);
 
         Assert.DoesNotContain(suggestions, client => client.Id == Compute.Id || client.Id == Mcgarvey.Id);
         Assert.Contains(suggestions, client => client.Id == TechPulse.Id);
@@ -78,7 +78,7 @@ public sealed class HaloGroupSuggestionsTests
     {
         var groups = new[] { new GroupSummary("Harvey", null) };
 
-        var suggestions = HaloGroupSuggestions.ClientsWithoutGroup(AllClients, groups);
+        var suggestions = PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, AllClients, groups);
 
         Assert.Contains(suggestions, client => client.Id == CherylHarvey.Id);
         Assert.Contains(suggestions, client => client.Id == LindaHarvey.Id);
@@ -89,23 +89,23 @@ public sealed class HaloGroupSuggestionsTests
     {
         var groups = AllClients.Select(client => new GroupSummary(client.Name, client.Id));
 
-        Assert.Empty(HaloGroupSuggestions.ClientsWithoutGroup(AllClients, groups));
+        Assert.Empty(PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, AllClients, groups));
     }
 
     [Fact]
     public void SuggestClientsForGroup_PutsTheExactMatchFirstThenClientsThatStartWithTheName()
     {
-        var clients = new[] { new HaloClient(50, "Acme Holdings"), new HaloClient(51, "Acme") };
+        var clients = new[] { new PsaCompany("50", "Acme Holdings"), new PsaCompany("51", "Acme") };
 
-        var suggestions = HaloGroupSuggestions.SuggestClientsForGroup("Acme", clients);
+        var suggestions = PsaCompanySuggestions.SuggestCompaniesForGroup(PsaKind.HaloPsa, "Acme", clients);
 
-        Assert.Equal([51, 50], suggestions.Select(client => client.Id));
+        Assert.Equal(["51", "50"], suggestions.Select(client => client.Id));
     }
 
     [Fact]
     public void SuggestClientsForGroup_FindsAClientDespiteLimitedAndBrackets()
     {
-        var suggestions = HaloGroupSuggestions.SuggestClientsForGroup("Compute Bridgend", AllClients);
+        var suggestions = PsaCompanySuggestions.SuggestCompaniesForGroup(PsaKind.HaloPsa, "Compute Bridgend", AllClients);
 
         Assert.Equal([Compute.Id], suggestions.Select(client => client.Id));
     }
@@ -113,13 +113,22 @@ public sealed class HaloGroupSuggestionsTests
     [Fact]
     public void SuggestClientsForGroup_NeverSuggestsTheUnknownClient()
     {
-        Assert.Empty(HaloGroupSuggestions.SuggestClientsForGroup("Unknown", AllClients));
+        Assert.Empty(PsaCompanySuggestions.SuggestCompaniesForGroup(PsaKind.HaloPsa, "Unknown", AllClients));
     }
 
     [Fact]
     public void LooseKey_IgnoresCasePunctuationAndCompanySuffixes()
     {
-        Assert.Equal("compute bridgend", HaloGroupSuggestions.LooseKey("Compute (Bridgend) Limited"));
-        Assert.Equal(HaloGroupSuggestions.LooseKey("Contoso Ltd."), HaloGroupSuggestions.LooseKey("contoso"));
+        Assert.Equal("compute bridgend", PsaCompanySuggestions.LooseKey("Compute (Bridgend) Limited"));
+        Assert.Equal(PsaCompanySuggestions.LooseKey("Contoso Ltd."), PsaCompanySuggestions.LooseKey("contoso"));
+    }
+
+    [Fact]
+    public void HalosUnknownClient_IsOnlySkippedForHalo()
+    {
+        var companies = new[] { new PsaCompany("1", "Unknown"), new PsaCompany("2", "Fabrikam") };
+
+        Assert.Equal(["Fabrikam"], PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.HaloPsa, companies, []).Select(company => company.Name));
+        Assert.Equal(["Fabrikam", "Unknown"], PsaCompanySuggestions.CompaniesWithoutGroup(PsaKind.ConnectWise, companies, []).Select(company => company.Name));
     }
 }

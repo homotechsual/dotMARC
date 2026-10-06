@@ -93,8 +93,8 @@ public sealed class HaloIntegrationTestService(
         int? mappedClientId = null;
         if (alert is not null)
         {
-            var domain = await db.Domains.Include(d => d.Groups).AsNoTracking().SingleOrDefaultAsync(d => d.Name == alert.DomainName, cancellationToken).ConfigureAwait(false);
-            mappedClientId = domain is null ? null : HaloClientResolver.Resolve(domain);
+            var domain = await DotMarc.Psa.PsaCompanyResolver.IncludeLinks(db.Domains).AsNoTracking().SingleOrDefaultAsync(d => d.Name == alert.DomainName, cancellationToken).ConfigureAwait(false);
+            mappedClientId = int.TryParse(domain is null ? null : DotMarc.Psa.PsaCompanyResolver.Resolve(domain, DotMarc.Psa.PsaKind.HaloPsa)?.CompanyId, out var resolvedClientId) ? resolvedClientId : null;
         }
 
         var clientId = chosenHaloClientId ?? mappedClientId;

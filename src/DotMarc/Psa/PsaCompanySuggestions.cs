@@ -1,29 +1,29 @@
 using System.Text;
 
-namespace DotMarc.Notifications;
+namespace DotMarc.Psa;
 
-/// <summary>Works out which Halo clients a dotMARC group could be linked to, and which Halo clients have no group yet.
-/// Names are compared loosely, because a Halo client is usually the full legal name ("Compute (Bridgend) Limited")
+/// <summary>Works out which PSA companies a dotMARC group could be linked to, and which companies have no group yet.
+/// Names are compared loosely, because a PSA company is usually the full legal name ("Compute (Bridgend) Limited")
 /// while a group is whatever the MSP typed ("Compute Bridgend").</summary>
-public static class HaloGroupSuggestions
+public static class PsaCompanySuggestions
 {
     /// <summary>Halo's built-in "Unknown" client, which tickets fall back to. It is not a customer to make a group for.</summary>
-    public const int UnknownClientId = 1;
+    public const string HaloUnknownClientId = "1";
 
     private static readonly HashSet<string> CompanySuffixes = new(StringComparer.Ordinal)
     {
         "limited", "ltd", "llc", "llp", "inc", "incorporated", "plc", "cyf", "cic", "corp", "corporation", "co", "company"
     };
 
-    /// <summary>The Halo clients that no group covers yet: not already linked to a group, and with no group whose name
+    /// <summary>The companies in one PSA that no group covers yet: not already linked to a group, and with no group whose name
     /// matches. These are the ones to offer to create a group for.</summary>
-    public static IReadOnlyList<HaloClient> ClientsWithoutGroup(IEnumerable<HaloClient> clients, IEnumerable<GroupSummary> groups)
+    public static IReadOnlyList<PsaCompany> CompaniesWithoutGroup(PsaKind psa, IEnumerable<PsaCompany> clients, IEnumerable<GroupSummary> groups)
     {
         var groupList = groups.ToList();
-        var linkedClientIds = groupList.Where(group => group.HaloClientId.HasValue).Select(group => group.HaloClientId!.Value).ToHashSet();
+        var linkedClientIds = groupList.Where(group => group.CompanyId is not null).Select(group => group.CompanyId!).ToHashSet();
 
         return clients
-            .Where(client => client.Id != UnknownClientId
+            .Where(client => !IsHaloUnknown(psa, client)
                 && !string.IsNullOrWhiteSpace(client.Name)
                 && !linkedClientIds.Contains(client.Id)
                 && !groupList.Any(group => NamesMatch(group.Name, client.Name)))
@@ -31,9 +31,9 @@ public static class HaloGroupSuggestions
             .ToList();
     }
 
-    /// <summary>The Halo clients a group of this name probably refers to, best match first: an exact match once
+    /// <summary>The companies a group of this name probably refers to, best match first: an exact match once
     /// punctuation and suffixes like "Limited" are ignored, then clients whose name starts with the group's name.</summary>
-    public static IReadOnlyList<HaloClient> SuggestClientsForGroup(string groupName, IEnumerable<HaloClient> clients)
+    public static IReadOnlyList<PsaCompany> SuggestCompaniesForGroup(PsaKind psa, string groupName, IEnumerable<PsaCompany> clients)
     {
         var groupTokens = Tokenise(groupName);
         if (groupTokens.Count == 0)
@@ -42,7 +42,7 @@ public static class HaloGroupSuggestions
         }
 
         var candidates = clients
-            .Where(client => client.Id != UnknownClientId)
+            .Where(client => !IsHaloUnknown(psa, client))
             .Select(client => (Client: client, Tokens: Tokenise(client.Name)))
             .Where(candidate => candidate.Tokens.Count > 0)
             .ToList();
@@ -54,6 +54,8 @@ public static class HaloGroupSuggestions
 
         return exact.Concat(prefix).Select(candidate => candidate.Client).ToList();
     }
+
+    private static bool IsHaloUnknown(PsaKind psa, PsaCompany company) => psa == PsaKind.HaloPsa && company.Id == HaloUnknownClientId;
 
     public static bool NamesMatch(string groupName, string clientName)
     {
@@ -115,4 +117,4 @@ public static class HaloGroupSuggestions
 }
 
 /// <summary>What the matching needs to know about a group.</summary>
-public sealed record GroupSummary(string Name, int? HaloClientId);
+public sealed record GroupSummary(string Name, string? CompanyId);

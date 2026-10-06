@@ -471,7 +471,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         var haloSettings = await context.HaloPsaSettings.SingleAsync();
         haloSettings.Enabled = true;
         haloSettings.AccountName = "contoso";
-        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
         context.Groups.Add(group);
         context.Domains.Add(new Domain
         {
