@@ -12,6 +12,9 @@ internal sealed class FakePsaProvider(PsaKind kind) : IPsaProvider
     public List<string> Missing { get; } = [];
     public Exception? FailWith { get; set; }
 
+    /// <summary>Tickets whose reads and closes throw, as when one ticket has been moved somewhere the API user can't see.</summary>
+    public HashSet<string> FailingTickets { get; } = [];
+
     /// <summary>When true, closing records the call but the ticket still reads as open.</summary>
     public bool IgnoreCloses { get; set; }
     public int NextTicketNumber { get; set; } = 1000;
@@ -40,13 +43,13 @@ internal sealed class FakePsaProvider(PsaKind kind) : IPsaProvider
 
     public Task<PsaTicketState> GetTicketStateAsync(DotMarcDbContext context, string ticketId, CancellationToken cancellationToken = default)
     {
-        ThrowIfFailing();
+        ThrowIfFailing(ticketId);
         return Task.FromResult(States.TryGetValue(ticketId, out var state) ? state : PsaTicketState.Missing);
     }
 
     public Task CloseTicketAsync(DotMarcDbContext context, string ticketId, string note, CancellationToken cancellationToken = default)
     {
-        ThrowIfFailing();
+        ThrowIfFailing(ticketId);
         Closed.Add(ticketId);
         if (!IgnoreCloses)
         {
@@ -59,11 +62,16 @@ internal sealed class FakePsaProvider(PsaKind kind) : IPsaProvider
     public Task<string?> GetTicketUrlTemplateAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) =>
         Task.FromResult<string?>($"https://{Kind}.example/ticket/{{0}}");
 
-    private void ThrowIfFailing()
+    private void ThrowIfFailing(string? ticketId = null)
     {
         if (FailWith is not null)
         {
             throw FailWith;
+        }
+
+        if (ticketId is not null && FailingTickets.Contains(ticketId))
+        {
+            throw new HttpRequestException($"Ticket {ticketId} can't be reached.");
         }
     }
 }

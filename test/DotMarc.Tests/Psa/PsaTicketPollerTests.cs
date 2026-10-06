@@ -123,6 +123,60 @@ public sealed class PsaTicketPollerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AResolvedAlertsTicketThatIsAlreadyClosedOrGone_IsMarkedClosedWithoutClosingAgain()
+    {
+        // A close that failed is retried, but if a tech closed or deleted the ticket in the meantime there is nothing
+        // to retry: closing a deleted ticket fails for ever, and closing a closed one adds another note each time.
+        await SeedTicketAsync(PsaKind.ConnectWise, "250", alertResolved: true);
+        await SeedTicketAsync(PsaKind.ConnectWise, "251", alertResolved: true);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise) { States = { ["250"] = PsaTicketState.Closed } };
+
+        await CreatePoller(connectWise).PollOnceAsync(CancellationToken.None);
+
+        Assert.Empty(connectWise.Closed);
+        await using var verify = CreateContext();
+        Assert.All(await verify.AlertTickets.ToListAsync(), ticket => Assert.False(ticket.IsOpen));
+    }
+
+    [Fact]
+    public async Task OneTicketThatCantBeRead_DoesntStopTheOthersInTheSamePsa()
+    {
+        await SeedTicketAsync(PsaKind.ConnectWise, "250", alertResolved: false);
+        var readableAlertId = await SeedTicketAsync(PsaKind.ConnectWise, "251", alertResolved: false);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise) { FailingTickets = { "250" }, States = { ["251"] = PsaTicketState.Closed } };
+        var poller = CreatePoller(connectWise);
+
+        await poller.PollOnceAsync(CancellationToken.None);
+
+        await using (var verify = CreateContext())
+        {
+            Assert.True((await verify.AlertEvents.SingleAsync(alert => alert.Id == readableAlertId)).IsResolved);
+        }
+
+        // Some of its tickets worked, so the PSA isn't down and isn't backed off: the next cycle asks again.
+        connectWise.FailingTickets.Clear();
+        connectWise.States["250"] = PsaTicketState.Closed;
+        await poller.PollOnceAsync(CancellationToken.None);
+
+        await using var verifyAfter = CreateContext();
+        Assert.All(await verifyAfter.AlertEvents.ToListAsync(), alert => Assert.True(alert.IsResolved));
+    }
+
+    [Fact]
+    public async Task AResolvedAlertsTicketThatStillCantBeClosed_DoesntStopTheOthersInTheSamePsa()
+    {
+        await SeedTicketAsync(PsaKind.ConnectWise, "250", alertResolved: true);
+        var readableAlertId = await SeedTicketAsync(PsaKind.ConnectWise, "251", alertResolved: false);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise) { FailingTickets = { "250" }, States = { ["251"] = PsaTicketState.Closed } };
+
+        await CreatePoller(connectWise).PollOnceAsync(CancellationToken.None);
+
+        await using var verify = CreateContext();
+        Assert.True((await verify.AlertEvents.SingleAsync(alert => alert.Id == readableAlertId)).IsResolved);
+        Assert.True((await verify.AlertTickets.SingleAsync(ticket => ticket.TicketId == "250")).IsOpen);
+    }
+
+    [Fact]
     public async Task OnePsaFailing_DoesntStopTheOthers()
     {
         await SeedTicketAsync(PsaKind.HaloPsa, "100", alertResolved: false);

@@ -87,10 +87,7 @@ public sealed class PsaIntegrationTestService(
         if (psa == PsaKind.HaloPsa)
         {
             haloSettings = await HaloPsaSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(haloSettings.WebhookSecret))
-            {
-                missing.Add("webhook secret");
-            }
+            missing.AddRange(HaloPsaProvider.MissingForIntegrationTest(haloSettings));
         }
 
         if (missing.Count > 0)

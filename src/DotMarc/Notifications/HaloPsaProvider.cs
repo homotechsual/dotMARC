@@ -16,8 +16,10 @@ public sealed class HaloPsaProvider(IHaloPsaClient haloClient) : IPsaProvider
         return new PsaReadiness(settings.Enabled, MissingSettings(settings));
     }
 
-    /// <summary>What ticketing needs. The webhook secret isn't here: tickets still close back through the poller without
-    /// it. The integration test checks it separately.</summary>
+    /// <summary>What ticketing needs: the connection. The ticket type and priority are left to Halo's own defaults when
+    /// blank, as they always have been, so an install that never chose them keeps raising tickets. The closed status and
+    /// webhook secret aren't needed to raise tickets; the integration test checks them (see
+    /// <see cref="MissingForIntegrationTest"/>).</summary>
     public static IReadOnlyList<string> MissingSettings(HaloPsaSettings settings)
     {
         var missing = new List<string>();
@@ -25,9 +27,16 @@ public sealed class HaloPsaProvider(IHaloPsaClient haloClient) : IPsaProvider
         if (string.IsNullOrWhiteSpace(settings.ResourceServerUrl)) missing.Add("resource server URL");
         if (string.IsNullOrWhiteSpace(settings.ClientId)) missing.Add("client ID");
         if (!settings.ClientSecretConfigured) missing.Add("client secret");
-        if (settings.TicketTypeId is null) missing.Add("ticket type");
-        if (settings.DefaultPriorityId is null) missing.Add("default priority");
+        return missing;
+    }
+
+    /// <summary>What the integration test needs beyond ticketing: a closed status to close with and recognise, and a
+    /// webhook secret, since the test waits for Halo's webhook.</summary>
+    public static IReadOnlyList<string> MissingForIntegrationTest(HaloPsaSettings settings)
+    {
+        var missing = new List<string>();
         if (settings.ClosedStatusId is null) missing.Add("closed status");
+        if (string.IsNullOrWhiteSpace(settings.WebhookSecret)) missing.Add("webhook secret");
         return missing;
     }
 

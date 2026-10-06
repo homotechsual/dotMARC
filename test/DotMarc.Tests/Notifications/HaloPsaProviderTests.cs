@@ -67,7 +67,25 @@ public sealed class HaloPsaProviderTests : IAsyncLifetime
         var readiness = await new HaloPsaProvider(new NoOpHaloPsaClient()).GetReadinessAsync(context);
 
         Assert.False(readiness.IsReady);
-        Assert.Equal(["resource server URL", "client ID", "client secret", "ticket type", "default priority", "closed status"], readiness.Missing);
+        Assert.Equal(["resource server URL", "client ID", "client secret"], readiness.Missing);
+    }
+
+    [Fact]
+    public async Task Readiness_DoesntNeedTheTicketDefaults_SoAnUpgradedInstallKeepsRaisingTickets()
+    {
+        // Before 0.9.0 HaloPSA raised tickets once it was switched on and connected, leaving the ticket type, priority
+        // and closed status to Halo's own defaults when they were blank. An upgrade must not quietly stop that.
+        await SaveSettingsAsync(settings =>
+        {
+            settings.Enabled = true;
+            settings.AuthServerUrl = "https://contoso.halopsa.com/auth";
+            settings.ResourceServerUrl = "https://contoso.halopsa.com/api";
+            settings.ClientId = "client";
+            settings.ClientSecretConfigured = true;
+        });
+        await using var context = CreateContext();
+
+        Assert.True((await new HaloPsaProvider(new NoOpHaloPsaClient()).GetReadinessAsync(context)).IsReady);
     }
 
     [Fact]
