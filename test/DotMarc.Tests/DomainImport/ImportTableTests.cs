@@ -30,6 +30,29 @@ public sealed class ImportTableTests
     }
 
     [Fact]
+    public void WithoutAHeader_TheOriginalColumnsKeepTheirPlaces_AndPsaColumnsComeLast()
+    {
+        // Headerless input is read in ImportColumn order, so new columns are appended: a paste that worked before a PSA
+        // column existed still lands in the same columns.
+        var row = Table("contoso.com,Client A,primary,Contoso,no,s1,testing,mail.contoso.com,86400,Contoso Ltd").Rows.Single();
+
+        Assert.Equal("Contoso", row.PsaCompanies[PsaKind.HaloPsa]);
+        Assert.False(row.Monitored);
+        Assert.Equal(86400, row.MtaStsMaxAgeSeconds);
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.ConnectWise]);
+    }
+
+    [Theory]
+    [InlineData("connectwise company")]
+    [InlineData("ConnectWise")]
+    public void TheConnectWiseCompanyColumn_IsReadByEitherHeaderName(string header)
+    {
+        var row = Table($"domain,{header}\ncontoso.io,Contoso Ltd").Rows.Single();
+
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.ConnectWise]);
+    }
+
+    [Fact]
     public void WithoutAHeader_AColumnThatIsBlankOnEveryRow_IsNotPresent()
     {
         // A trailing comma, or a spreadsheet whose used range is wider than its data, must not make Match mode read the

@@ -11,6 +11,7 @@ public static class PsaImportColumns
     public static IReadOnlyList<PsaImportColumn> All { get; } =
     [
         new(PsaKind.HaloPsa, ImportColumn.HaloClient, ImportNameKind.HaloClient),
+        new(PsaKind.ConnectWise, ImportColumn.ConnectWiseCompany, ImportNameKind.ConnectWiseCompany),
     ];
 
     public static PsaImportColumn? ForNameKind(ImportNameKind kind) => All.FirstOrDefault(column => column.NameKind == kind);

@@ -81,7 +81,8 @@
     private static string AuditAction(PsaKind psa) => psa switch
     {
         PsaKind.HaloPsa => AuditActions.HaloIntegrationTested,
-        _ => AuditActions.HaloIntegrationTested
+        PsaKind.ConnectWise => AuditActions.ConnectWiseIntegrationTested,
+        _ => throw new ArgumentOutOfRangeException(nameof(psa), psa, "No audit action for this PSA's integration test.")
     };
 
     private async Task RunAsync()

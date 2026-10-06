@@ -1,7 +1,8 @@
 using DotMarc.Psa;
 namespace DotMarc.DomainImport;
 
-public enum ImportColumn { Domain, Groups, Tags, HaloClient, Monitored, DkimSelectors, MtaStsMode, MtaStsMxHosts, MtaStsMaxAge }
+// Headerless input is read in this order, so new columns go at the end.
+public enum ImportColumn { Domain, Groups, Tags, HaloClient, Monitored, DkimSelectors, MtaStsMode, MtaStsMxHosts, MtaStsMaxAge, ConnectWiseCompany }
 
 public enum MtaStsImportMode { Off, None, Testing, Enforce }
 
@@ -48,6 +49,7 @@ public sealed record ImportTable(IReadOnlySet<ImportColumn> Columns, IReadOnlyLi
         ["groups"] = ImportColumn.Groups, ["group"] = ImportColumn.Groups,
         ["tags"] = ImportColumn.Tags, ["tag"] = ImportColumn.Tags,
         ["haloclient"] = ImportColumn.HaloClient, ["halo"] = ImportColumn.HaloClient,
+        ["connectwisecompany"] = ImportColumn.ConnectWiseCompany, ["connectwise"] = ImportColumn.ConnectWiseCompany,
         ["monitored"] = ImportColumn.Monitored,
         ["dkimselectors"] = ImportColumn.DkimSelectors, ["dkim"] = ImportColumn.DkimSelectors,
         ["mtastsmode"] = ImportColumn.MtaStsMode, ["mtasts"] = ImportColumn.MtaStsMode,

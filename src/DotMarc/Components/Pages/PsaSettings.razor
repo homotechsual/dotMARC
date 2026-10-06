@@ -20,11 +20,15 @@
     <MudTabPanel Text="HaloPSA" Icon="@TabIcon(_haloEnabled)">
         <div class="pt-4"><HaloPsaSettingsTab EnabledChanged="@(enabled => _haloEnabled = enabled)" /></div>
     </MudTabPanel>
+    <MudTabPanel Text="ConnectWise" Icon="@TabIcon(_connectWiseEnabled)">
+        <div class="pt-4"><ConnectWiseSettingsTab EnabledChanged="@(enabled => _connectWiseEnabled = enabled)" /></div>
+    </MudTabPanel>
 </MudTabs>
 
 @code {
     private int _activeTab;
     private bool _haloEnabled;
+    private bool _connectWiseEnabled;
 
     /// <summary>A tick on the tab of each PSA that is switched on.</summary>
     private static string? TabIcon(bool enabled) => enabled ? Icons.Material.Filled.CheckCircle : null;

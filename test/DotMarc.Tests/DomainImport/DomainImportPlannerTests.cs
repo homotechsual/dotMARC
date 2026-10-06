@@ -180,6 +180,31 @@ public sealed class DomainImportPlannerTests
     }
 
     [Fact]
+    public void EachPsaColumn_IsMatchedAgainstItsOwnPsasCompanies()
+    {
+        var halo = Halo(new PsaCompany("7", "Contoso"));
+        var connectWise = new PsaCompanyList(PsaKind.ConnectWise, [new PsaCompany("250", "Contoso Ltd")], null);
+
+        var plan = Plan("domain,halo client,connectwise company\ncontoso.io,Contoso,Contoso Ltd", Snapshot(psaCompanies: [halo, connectWise]));
+
+        var target = plan.Rows.Single().Target!;
+        Assert.Equal("7", target.PsaCompanies[PsaKind.HaloPsa].Id);
+        Assert.Equal("250", target.PsaCompanies[PsaKind.ConnectWise].Id);
+        Assert.Empty(plan.UnknownNames);
+    }
+
+    [Fact]
+    public void AConnectWiseCompanyNotInConnectWise_IsAnUnknownConnectWiseName()
+    {
+        var connectWise = new PsaCompanyList(PsaKind.ConnectWise, [new PsaCompany("250", "Contoso Ltd")], null);
+
+        var plan = Plan("domain,connectwise company\ncontoso.io,Fabrikam", Snapshot(psaCompanies: [connectWise]));
+
+        var unknown = plan.UnknownNames.Single();
+        Assert.Equal((ImportNameKind.ConnectWiseCompany, "Fabrikam", false), (unknown.Kind, unknown.Name, unknown.CanCreate));
+    }
+
+    [Fact]
     public void APsaThatFailedToLoad_HasItsColumnIgnored_WithItsReason()
     {
         var failed = new PsaCompanyList(PsaKind.HaloPsa, null, "HaloPSA companies couldn't be loaded: refused");
