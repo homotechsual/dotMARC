@@ -48,7 +48,6 @@ public sealed class Domain
     public MtaStsMode MtaStsMode { get; set; }
     public int MtaStsMaxAgeSeconds { get; set; } = 604_800;
     public List<string> MtaStsMxHosts { get; set; } = [];
-    public int? HaloClientId { get; set; } // override; null means "use the Group's mapping"
 
     public DetectedDnsProvider DnsProvider { get; set; }
     public string? DnsZone { get; set; }

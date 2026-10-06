@@ -63,6 +63,31 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
     }
 
     [Fact]
+    public async Task RollingBack_PutsHalosLinksAndTicketsBackOnTheOldColumns()
+    {
+        var (connectionString, cleanup) = await fixture.CreateDatabaseAsync();
+        await using (cleanup)
+        {
+            await using var context = CreateContext(connectionString);
+            await context.Database.MigrateAsync();
+            var group = new Group { Name = "Client A", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }, new PsaCompanyLink { Psa = PsaKind.ConnectWise, CompanyId = "250", CompanyName = "Contoso Ltd" }] };
+            var alert = new AlertEvent
+            {
+                DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m",
+                Tickets = [new AlertTicket { Psa = PsaKind.HaloPsa, TicketId = "100", IsOpen = true }],
+            };
+            context.AddRange(group, alert);
+            await context.SaveChangesAsync();
+
+            await context.GetService<IMigrator>().MigrateAsync("20261006145346_AddPsaCompanyLinksAndAlertTickets");
+
+            var haloClientId = await context.Database.SqlQueryRaw<int?>("SELECT \"HaloClientId\" AS \"Value\" FROM \"Groups\" WHERE \"Id\" = {0}", group.Id).SingleAsync();
+            var ticketId = await context.Database.SqlQueryRaw<string>("SELECT \"ExternalTicketId\" AS \"Value\" FROM \"AlertEvents\" WHERE \"Id\" = {0}", alert.Id).SingleAsync();
+            Assert.Equal((7, "100"), (haloClientId, ticketId));
+        }
+    }
+
+    [Fact]
     public async Task ALinkMustBelongToExactlyOneGroupOrDomain()
     {
         var (connectionString, cleanup) = await fixture.CreateDatabaseAsync();

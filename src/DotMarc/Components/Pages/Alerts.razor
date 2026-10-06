@@ -3,12 +3,15 @@
 @using DotMarc.Data
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
+@using DotMarc.Psa
+@using System.Globalization
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject AuditActorAccessor AuditActorAccessor
 @inject IPsaTicketService PsaTicketService
+@inject IEnumerable<IPsaProvider> PsaProviders
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -42,6 +45,7 @@ else
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
                 <MudTh>Message</MudTh>
+                <MudTh>Tickets</MudTh>
                 <MudTh></MudTh>
             </tr>
             @if (_showFilters)
@@ -73,6 +77,7 @@ else
                 </MudTh>
                 <MudTh><MudTextField T="string" @bind-Value="_messageFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
                 <MudTh></MudTh>
+                <MudTh></MudTh>
             </tr>
             }
         </HeaderContent>
@@ -83,6 +88,23 @@ else
             <MudTd>@FormatCreated(context)</MudTd>
             <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
             <MudTd>@context.Message</MudTd>
+            <MudTd DataLabel="Tickets">
+                @foreach (var ticket in context.Tickets.OrderBy(ticket => ticket.Psa))
+                {
+                    var label = $"{ticket.Psa.DisplayName()} #{ticket.TicketId}";
+                    var state = ticket.IsOpen ? "Open" : "Closed";
+                    @* A filled chip is a ticket still open in the PSA, an outlined one a closed ticket. *@
+                    @if (_ticketUrlTemplates.GetValueOrDefault(ticket.Psa) is { } template)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="@(ticket.IsOpen ? Variant.Filled : Variant.Outlined)" title="@state"
+                                 Href="@string.Format(CultureInfo.InvariantCulture, template, Uri.EscapeDataString(ticket.TicketId))" Target="_blank">@label</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="@(ticket.IsOpen ? Variant.Filled : Variant.Outlined)" title="@state">@label</MudChip>
+                    }
+                }
+            </MudTd>
             <MudTd>
                 @if (!context.IsResolved && AlertAcknowledgement.IsAcknowledgeable(context.AlertType))
                 {
@@ -97,6 +119,7 @@ else
 
 @code {
     private List<AlertEvent>? _alerts;
+    private Dictionary<PsaKind, string?> _ticketUrlTemplates = [];
 
     private string? _domainFilter;
     private string? _typeFilter;
@@ -144,9 +167,26 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _alerts = await db.AlertEvents
             .AsNoTracking()
+            .Include(e => e.Tickets)
             .OrderByDescending(e => e.CreatedUtc)
             .Take(100)
             .ToListAsync();
+
+        // A link that can't be built (the PSA's web address isn't known) just leaves its chips unlinked.
+        var templates = new Dictionary<PsaKind, string?>();
+        foreach (var provider in PsaProviders)
+        {
+            try
+            {
+                templates[provider.Kind] = await provider.GetTicketUrlTemplateAsync(db);
+            }
+            catch (Exception)
+            {
+                templates[provider.Kind] = null;
+            }
+        }
+
+        _ticketUrlTemplates = templates;
     }
 
     private async Task AcknowledgeAsync(AlertEvent alert)

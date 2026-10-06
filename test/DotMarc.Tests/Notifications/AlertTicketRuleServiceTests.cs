@@ -38,7 +38,7 @@ public sealed class AlertTicketRuleServiceTests : IAsyncLifetime
     private async Task<int> AddGroupAsync(string name)
     {
         await using var context = CreateContext();
-        var group = new Group { Name = name, HaloClientId = 7 };
+        var group = new Group { Name = name, PsaCompanyLinks = [PsaTestSupport.HaloLink("7")] };
         context.Groups.Add(group);
         await context.SaveChangesAsync();
         return group.Id;
