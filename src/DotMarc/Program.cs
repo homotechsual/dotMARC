@@ -172,16 +172,20 @@ builder.Services.AddSingleton<HaloWebhookActivity>();
 builder.Services.AddTransient<DotMarc.Psa.PsaIntegrationTestService>();
 builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
 builder.Services.AddHttpClient<DotMarc.Psa.ConnectWise.IConnectWiseClient, DotMarc.Psa.ConnectWise.ConnectWiseClient>();
+builder.Services.AddSingleton<DotMarc.Psa.Autotask.AutotaskZoneCache>();
+builder.Services.AddHttpClient<DotMarc.Psa.Autotask.IAutotaskClient, DotMarc.Psa.Autotask.AutotaskClient>();
 // The demo instance gets a pretend PSA so visitors can see tickets raised and closed; a real install talks to the real ones.
 if (demoOptions.Enabled)
 {
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.HaloPsa, services.GetRequiredService<TimeProvider>()));
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.ConnectWise, services.GetRequiredService<TimeProvider>()));
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.Autotask, services.GetRequiredService<TimeProvider>()));
 }
 else
 {
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, HaloPsaProvider>();
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.ConnectWise.ConnectWiseProvider>();
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.Autotask.AutotaskProvider>();
 }
 builder.Services.AddScoped<DotMarc.Psa.PsaDirectory>();
 

@@ -42,6 +42,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
     public DbSet<DotMarc.Psa.ConnectWise.ConnectWiseSettings> ConnectWiseSettings => Set<DotMarc.Psa.ConnectWise.ConnectWiseSettings>();
+    public DbSet<DotMarc.Psa.Autotask.AutotaskSettings> AutotaskSettings => Set<DotMarc.Psa.Autotask.AutotaskSettings>();
     public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
     public DbSet<CloudflareDnsSettings> CloudflareDnsSettings => Set<CloudflareDnsSettings>();
     public DbSet<AzureDnsSettings> AzureDnsSettings => Set<AzureDnsSettings>();
@@ -405,6 +406,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         });
         modelBuilder.Entity<HaloPsaSettings>().HasData(new HaloPsaSettings { Id = 1 });
         modelBuilder.Entity<DotMarc.Psa.ConnectWise.ConnectWiseSettings>().HasData(new DotMarc.Psa.ConnectWise.ConnectWiseSettings { Id = 1 });
+        modelBuilder.Entity<DotMarc.Psa.Autotask.AutotaskSettings>().HasData(new DotMarc.Psa.Autotask.AutotaskSettings { Id = 1 });
         modelBuilder.Entity<CloudflareDnsSettings>().HasData(new CloudflareDnsSettings { Id = 1 });
         modelBuilder.Entity<AzureDnsSettings>().HasData(new AzureDnsSettings { Id = 1 });
         modelBuilder.Entity<GoogleCloudDnsSettings>().HasData(new GoogleCloudDnsSettings { Id = 1 });

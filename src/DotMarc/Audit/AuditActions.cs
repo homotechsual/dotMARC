@@ -38,6 +38,7 @@ public static class AuditActions
     public const string NotificationSettingsSaved = "settings.notifications.saved";
     public const string HaloSettingsSaved = "settings.halo.saved";
     public const string ConnectWiseSettingsSaved = "settings.connectwise.saved";
+    public const string AutotaskSettingsSaved = "settings.autotask.saved";
     public const string CloudflareDnsSettingsSaved = "settings.cloudflare_dns.saved";
     public const string AzureDnsSettingsSaved = "settings.azure_dns.saved";
     public const string GoogleCloudDnsSettingsSaved = "settings.google_cloud_dns.saved";
@@ -47,6 +48,8 @@ public static class AuditActions
     public const string DnsPushFailed = "dns.push_failed";
     public const string HaloIntegrationTested = "halo.integration_tested";
     public const string ConnectWiseIntegrationTested = "connectwise.integration_tested";
+    public const string AutotaskIntegrationTested = "autotask.integration_tested";
+    public const string AutotaskZoneCleared = "autotask.zone_cleared";
     public const string HaloSignInCleared = "halo.sign_in_cleared";
     public const string AuditExported = "audit.exported";
     public const string SignInSucceeded = "signin.succeeded";
@@ -91,6 +94,7 @@ public static class AuditActions
         (NotificationSettingsSaved, "Notification settings saved"),
         (HaloSettingsSaved, "HaloPSA settings saved"),
         (ConnectWiseSettingsSaved, "ConnectWise settings saved"),
+        (AutotaskSettingsSaved, "Autotask settings saved"),
         (CloudflareDnsSettingsSaved, "Cloudflare DNS settings saved"),
         (AzureDnsSettingsSaved, "Azure DNS settings saved"),
         (GoogleCloudDnsSettingsSaved, "Google Cloud DNS settings saved"),
@@ -100,6 +104,8 @@ public static class AuditActions
         (DnsPushFailed, "DNS push failed partway"),
         (HaloIntegrationTested, "HaloPSA integration tested"),
         (ConnectWiseIntegrationTested, "ConnectWise integration tested"),
+        (AutotaskIntegrationTested, "Autotask integration tested"),
+        (AutotaskZoneCleared, "Autotask zone cleared"),
         (HaloSignInCleared, "HaloPSA sign-in cleared"),
         (AuditExported, "Audit log exported"),
         (SignInSucceeded, "Signed in"),
