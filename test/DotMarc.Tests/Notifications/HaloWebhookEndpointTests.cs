@@ -63,7 +63,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
             context.AlertEvents.Add(new AlertEvent
             {
                 DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "t", Message = "m",
-                ExternalTicketProvider = "HaloPSA", ExternalTicketId = "4242"
+                Tickets = [new DotMarc.Psa.AlertTicket { Psa = DotMarc.Psa.PsaKind.HaloPsa, TicketId = "4242", IsOpen = true }]
             });
             await context.SaveChangesAsync();
         }
@@ -94,8 +94,20 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         // Demo mode's own baseline dataset seeds three unrelated AlertEvents alongside this
         // test's; filter to the one this test is actually about rather than assuming it's the
         // table's only row.
-        var alert = await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242");
+        var alert = await context.AlertEvents.SingleAsync(a => a.Tickets.Any(ticket => ticket.TicketId == "4242"));
         Assert.True(alert.IsResolved);
+    }
+
+    [Fact]
+    public async Task AClosedStatus_MarksTheHaloTicketClosed_AndAuditsTheResolution()
+    {
+        using var client = _factory!.CreateClient();
+
+        await client.PostAsJsonAsync("/integrations/halopsa/webhook/the-webhook-secret", new { ticket_id = 4242, status_id = 9 });
+
+        await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
+        Assert.False((await context.AlertTickets.SingleAsync(ticket => ticket.TicketId == "4242")).IsOpen);
+        Assert.Contains(await context.AuditEntries.ToListAsync(), entry => entry.Action == DotMarc.Audit.AuditActions.AlertResolvedByTicket && entry.Summary.Contains("HaloPSA"));
     }
 
     [Fact]
@@ -113,7 +125,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
             context.AlertEvents.Add(new AlertEvent
             {
                 DomainName = "policy.example", AlertType = AlertTypes.DmarcPolicyWeakened, Severity = "Warning", Title = "t", Message = "m",
-                ExternalTicketProvider = "HaloPSA", ExternalTicketId = "5151"
+                Tickets = [new DotMarc.Psa.AlertTicket { Psa = DotMarc.Psa.PsaKind.HaloPsa, TicketId = "5151", IsOpen = true }]
             });
             await context.SaveChangesAsync();
         }
@@ -122,7 +134,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         await client.PostAsJsonAsync("/integrations/halopsa/webhook/the-webhook-secret", new { ticket_id = 5151, status_id = 9 });
 
         await using var verify = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
-        Assert.True((await verify.AlertEvents.SingleAsync(alert => alert.ExternalTicketId == "5151")).IsResolved);
+        Assert.True((await verify.AlertEvents.SingleAsync(alert => alert.Tickets.Any(ticket => ticket.TicketId == "5151"))).IsResolved);
         var domainId = (await verify.Domains.SingleAsync(candidate => candidate.Name == "policy.example")).Id;
         Assert.Equal("p=none; sp=none; pct=100", (await verify.DomainAlertStates.SingleAsync(state => state.DomainId == domainId)).Baseline);
     }
@@ -351,7 +363,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
-        Assert.False((await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242")).IsResolved);
+        Assert.False((await context.AlertEvents.SingleAsync(a => a.Tickets.Any(ticket => ticket.TicketId == "4242"))).IsResolved);
     }
 
     [Fact]
@@ -363,7 +375,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
-        Assert.False((await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242")).IsResolved);
+        Assert.False((await context.AlertEvents.SingleAsync(a => a.Tickets.Any(ticket => ticket.TicketId == "4242"))).IsResolved);
     }
 
     [Fact]
@@ -379,6 +391,6 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         // also not crash the app; nothing throws past the handler.
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await using var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
-        Assert.False((await context.AlertEvents.SingleAsync(a => a.ExternalTicketId == "4242")).IsResolved);
+        Assert.False((await context.AlertEvents.SingleAsync(a => a.Tickets.Any(ticket => ticket.TicketId == "4242"))).IsResolved);
     }
 }

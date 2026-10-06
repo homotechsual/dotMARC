@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -177,6 +178,8 @@ builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, HaloPsaProvider>();
 // polled reports.
 builder.Services.AddHostedService<PinnedDomainHealthMonitor>();
 builder.Services.AddHostedService<DotMarc.Audit.AuditRetentionService>();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<DotMarc.Psa.PsaTicketPoller>();
 
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts.MtaStsDnsVerifier>(client =>
 {
@@ -735,7 +738,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
 // 400 a malformed body regardless of whether the secret is even right. The secret check has to
 // happen first, and body parsing happens only after it passes, inside the handler.
 app.MapPost("/integrations/halopsa/webhook/{secret}", async (
-    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, IHaloPsaClient haloClient, ILogger<Program> logger) =>
+    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, IHaloPsaClient haloClient, IPsaTicketService ticketService, ILogger<Program> logger) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var settings = await context.HaloPsaSettings.SingleAsync();
@@ -794,20 +797,12 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
         return Results.Ok();
     }
 
-    var ticketId = payload.TicketId.ToString();
-    var alert = await context.AlertEvents.FirstOrDefaultAsync(e =>
-        e.ExternalTicketProvider == "HaloPSA" && e.ExternalTicketId == ticketId && !e.IsResolved);
+    // Resolves the alert (accepting a policy or nameserver change, as Acknowledge does) and closes its other PSA tickets.
+    var resolvedAnAlert = await DotMarc.Psa.PsaTicketClosure.ResolveFromTicketAsync(
+        context, ticketService, DotMarc.Psa.PsaKind.HaloPsa, payload.TicketId.ToString(System.Globalization.CultureInfo.InvariantCulture), request.HttpContext.RequestAborted);
+    await context.SaveChangesAsync();
 
-    if (alert is not null)
-    {
-        alert.IsResolved = true;
-        alert.ResolvedUtc = DateTimeOffset.UtcNow;
-        // Closing a policy or nameserver alert's ticket accepts the change, the same as Acknowledge.
-        await DnsHealthBaselines.AcceptCurrentAsync(context, alert, request.HttpContext.RequestAborted);
-        await context.SaveChangesAsync();
-    }
-
-    webhookActivity.Record(HaloWebhookDelivery.ClosedStatus, payload.TicketId, payload.StatusId, resolvedAnAlert: alert is not null);
+    webhookActivity.Record(HaloWebhookDelivery.ClosedStatus, payload.TicketId, payload.StatusId, resolvedAnAlert: resolvedAnAlert);
     return Results.Ok();
 }).AllowAnonymous();
 

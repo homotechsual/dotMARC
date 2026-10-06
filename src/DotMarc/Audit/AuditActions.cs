@@ -32,6 +32,7 @@ public static class AuditActions
     public const string TicketRuleGlobalChanged = "ticket_rule.global_changed";
     public const string TicketRuleGroupChanged = "ticket_rule.group_changed";
     public const string AlertAcknowledged = "alert.acknowledged";
+    public const string AlertResolvedByTicket = "alert.resolved_by_ticket";
     public const string NotificationSettingsSaved = "settings.notifications.saved";
     public const string HaloSettingsSaved = "settings.halo.saved";
     public const string CloudflareDnsSettingsSaved = "settings.cloudflare_dns.saved";
@@ -80,6 +81,7 @@ public static class AuditActions
         (TicketRuleGlobalChanged, "Ticket rule changed"),
         (TicketRuleGroupChanged, "Group ticket rule changed"),
         (AlertAcknowledged, "Alert acknowledged"),
+        (AlertResolvedByTicket, "Alert resolved by a closed PSA ticket"),
         (NotificationSettingsSaved, "Notification settings saved"),
         (HaloSettingsSaved, "HaloPSA settings saved"),
         (CloudflareDnsSettingsSaved, "Cloudflare DNS settings saved"),
