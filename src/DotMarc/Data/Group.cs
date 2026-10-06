@@ -10,4 +10,5 @@ public sealed class Group
     public required string Name { get; set; }
     public int? HaloClientId { get; set; }
     public List<Domain> Domains { get; set; } = [];
+    public List<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks { get; set; } = [];
 }

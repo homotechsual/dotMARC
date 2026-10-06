@@ -34,6 +34,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
+    public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
+    public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
     public DbSet<DomainDkimRecord> DomainDkimRecords => Set<DomainDkimRecord>();
     public DbSet<DnsRecordSettings> DnsRecordSettings => Set<DnsRecordSettings>();
@@ -305,6 +307,30 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("IX_AlertTicketRules_AlertType_Global")
                 .HasFilter("\"GroupId\" IS NULL");
+        });
+
+        modelBuilder.Entity<DotMarc.Psa.PsaCompanyLink>(entity =>
+        {
+            entity.Property(link => link.Psa).HasConversion<string>().HasMaxLength(20);
+            entity.Property(link => link.CompanyId).HasMaxLength(64);
+            entity.Property(link => link.CompanyName).HasMaxLength(256);
+            entity.HasOne<Group>().WithMany(group => group.PsaCompanyLinks).HasForeignKey(link => link.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Domain>().WithMany(domain => domain.PsaCompanyLinks).HasForeignKey(link => link.DomainId).OnDelete(DeleteBehavior.Cascade);
+
+            // Nulls are distinct in a PostgreSQL unique index, so these allow any number of domain links per PSA in the
+            // first and group links in the second, while keeping one link per PSA per owner.
+            entity.HasIndex(link => new { link.Psa, link.GroupId }).IsUnique();
+            entity.HasIndex(link => new { link.Psa, link.DomainId }).IsUnique();
+            entity.ToTable(table => table.HasCheckConstraint("CK_PsaCompanyLinks_OneOwner", "(\"GroupId\" IS NULL) <> (\"DomainId\" IS NULL)"));
+        });
+
+        modelBuilder.Entity<DotMarc.Psa.AlertTicket>(entity =>
+        {
+            entity.Property(ticket => ticket.Psa).HasConversion<string>().HasMaxLength(20);
+            entity.Property(ticket => ticket.TicketId).HasMaxLength(64);
+            entity.HasOne<AlertEvent>().WithMany(alert => alert.Tickets).HasForeignKey(ticket => ticket.AlertEventId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(ticket => new { ticket.AlertEventId, ticket.Psa }).IsUnique();
+            entity.HasIndex(ticket => new { ticket.Psa, ticket.TicketId });
         });
 
         modelBuilder.Entity<DomainAlertState>(entity =>

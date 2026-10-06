@@ -13,4 +13,5 @@ public sealed class AlertEvent
     public bool IsResolved { get; set; }
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ResolvedUtc { get; set; }
+    public List<DotMarc.Psa.AlertTicket> Tickets { get; set; } = [];
 }
