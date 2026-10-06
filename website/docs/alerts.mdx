@@ -89,7 +89,7 @@ still failing, so a brief DNS hiccup doesn't page anyone. The same applies to po
 Upgrading to a version with DNS health alerts doesn't raise a flood of alerts: on its first run dotMARC notes which
 checks pass and the current policy and nameservers, and only alerts on changes from there.
 
-Nameservers changed alerts don't open a HaloPSA ticket by default. Change that with the ticket rules, like any other
+Nameservers changed alerts don't open a PSA ticket by default. Change that with the ticket rules, like any other
 alert type.
 
 ### Closing policy and nameserver alerts
@@ -98,7 +98,7 @@ A weaker DMARC policy or new nameservers may be deliberate, so these alerts comp
 these closes the alert and accepts the current policy or nameservers as the new normal:
 
 * **Acknowledge** on the Alerts page (needs `AlertsManage`). It's recorded in the [audit log](./audit-log.mdx).
-* **Closing its HaloPSA ticket.**
+* **Closing its PSA ticket** in HaloPSA, ConnectWise or Autotask.
 * **Closing automatically** after the number of days in **Close policy and nameserver alerts after (days)**, if set.
 
 ## Delivery channels

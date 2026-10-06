@@ -68,11 +68,11 @@
   {
     "title": "Add a public API",
     "version": "v0.8.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
-      "Every integration in dotMARC today is outbound: it calls Cloudflare, Azure DNS, Google Cloud DNS, HaloPSA, Teams and webhooks. Nothing outside can call in.",
-      "Proposal: a documented, authenticated REST API covering domains, groups, tags, alerts and report summaries, using API keys whose permissions follow the existing role model (so a key can be read-only or scoped to specific Groups), with an OpenAPI description.",
-      "Why it matters: it enables scripted bulk operations, custom client reporting and integrations with tools dotMARC does not support natively, without needing a built-in integration for each one."
+      "A documented REST API under /api/v1 covers domains, domain health, report summaries, groups, tags and alerts, and can add and import domains, set a domain's groups, tags and monitoring, and acknowledge alerts.",
+      "API keys follow the existing role model: each key has a role and, optionally, is limited to certain Groups, and expires on a date you choose. Every change made through the API is in the audit log.",
+      "The OpenAPI description is published with the docs, with interactive API reference pages."
     ]
   },
   {
@@ -97,30 +97,30 @@
   {
     "title": "Add ConnectWise PSA support",
     "version": "v0.9.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
-      "dotMARC can open and close HaloPSA tickets from alerts, and resolve an alert when a tech closes the ticket. HaloPSA is the only PSA supported today.",
-      "Proposal: the same two-way sync for ConnectWise Manage. Create a ticket when an alert fires, close it when the alert resolves, resolve the alert when the ticket is closed, with per-Group company mapping.",
-      "Vote for this if ConnectWise is your PSA."
+      "dotMARC now raises a ConnectWise PSA (Manage) ticket when an alert fires, closes it when the alert resolves, and resolves the alert when a tech closes the ticket. dotMARC checks its open tickets every few minutes, so there's nothing to set up in the PSA for closes to come back.",
+      "Each Group links to a company, with suggested matches by name and one-click Groups for companies that don't have one yet. A Domain can override its Groups, and the domain import has a column for it.",
+      "HaloPSA, ConnectWise and Autotask can all be used at once: each gets its own ticket for an alert, and one being down never stops the others. Each has an integration test that runs the whole ticket lifecycle against your live PSA."
     ]
   },
   {
     "title": "Add Autotask PSA support",
     "version": "v0.9.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
-      "dotMARC can open and close HaloPSA tickets from alerts, and resolve an alert when a tech closes the ticket. HaloPSA is the only PSA supported today.",
-      "Proposal: the same two-way sync for Datto Autotask. Create a ticket when an alert fires, close it when the alert resolves, resolve the alert when the ticket is closed, with per-Group company mapping.",
-      "Vote for this if Autotask is your PSA."
+      "dotMARC now raises a Datto Autotask ticket when an alert fires, closes it when the alert resolves, and resolves the alert when a tech closes the ticket. dotMARC checks its open tickets every few minutes, so there's nothing to set up in the PSA for closes to come back.",
+      "Each Group links to a company, with suggested matches by name and one-click Groups for companies that don't have one yet. A Domain can override its Groups, and the domain import has a column for it.",
+      "HaloPSA, ConnectWise and Autotask can all be used at once: each gets its own ticket for an alert, and one being down never stops the others. Each has an integration test that runs the whole ticket lifecycle against your live PSA."
     ]
   },
   {
     "title": "Add Slack alert delivery",
     "version": "v0.9.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
-      "Alerts are delivered to Microsoft Teams and/or a generic webhook today.",
-      "Proposal: a native Slack delivery option using an incoming webhook URL, formatted like the Teams card with the domain, alert type and message, alongside the existing options."
+      "Alerts can now go to Slack through an incoming webhook, formatted with the domain, alert type and message.",
+      "Teams, Slack and the generic webhook each have their own switch, so alerts can go to any combination of them, and each has a Send test button. One channel failing doesn't stop the others."
     ]
   },
   {

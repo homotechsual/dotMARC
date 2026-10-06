@@ -1,216 +1,81 @@
 ---
 sidebar_position: 10
-description: Sync dotMARC alerts to HaloPSA tickets, opened and closed automatically in both directions.
+description: Raise PSA tickets from dotMARC alerts in HaloPSA, ConnectWise and Autotask, closed automatically in both directions.
 ---
 
-# PSA integration (HaloPSA)
+# PSA integration
 
-dotMARC can open a HaloPSA ticket when an alert fires, close it automatically when the alert
-resolves, and resolve the alert back when a tech closes the ticket directly in Halo. See
-[Alerts](./alerts.mdx) for how alerting itself works - this page covers wiring it to HaloPSA
-specifically.
+dotMARC can open a ticket in your PSA when an alert fires, close it when the alert resolves, and resolve the alert when
+a tech closes the ticket in the PSA. See [Alerts](./alerts.mdx) for how alerting itself works.
 
-## Set up the Halo API application
+It works with three PSAs, each set up on its own page:
 
-In HaloPSA, go to **Configuration → Integrations → HaloPSA API** and create an application
-with these scopes: `edit:tickets`, `read:tickets`, `read:customers`. Note its
-account name, auth server URL, resource server URL, client ID, and client secret.
+- [HaloPSA](./psa/halopsa.mdx)
+- [ConnectWise](./psa/connectwise.mdx)
+- [Autotask](./psa/autotask.mdx)
 
-## Permissions for the API agent
+Each has a tab under **Manage > PSA settings**. You can turn on more than one, for example while you move from one PSA
+to another: each PSA gets its own ticket for an alert, and each is opened and closed independently, so one PSA being
+down never stops another from getting its ticket.
 
-The three scopes above are all dotMARC asks for, and Halo has no scopes for agents or teams. What dotMARC
-can actually do is decided by the **agent the API application signs in as** (its "Agent to log in as") and that agent's role. Give it a
-dedicated agent and role, not an administrator.
+## Link Groups to companies
 
-This configuration is known to work, with the whole lifecycle passing in the
-[integration test](#test-the-whole-integration):
+Tickets need to land against the right customer: a client in HaloPSA, a company in ConnectWise or Autotask. On
+**Manage > Groups**, each Group has a column for each PSA that's turned on and set up. Set it once per Group (usually
+once per client), and every domain in the Group routes there.
 
-| Halo role setting | Value |
-| --- | --- |
-| Tickets Access Level | Read and Modify |
-| Customers Access Level | Read Only |
-| Users Access Level | Read Only |
-| Can add new Tickets | Yes |
-| Can view Unassigned Tickets | Yes |
-| Can view Tickets that are assigned to other Agents | Yes |
-| Can edit Tickets which are not assigned to them | Yes |
-| Can always update Ticket Statuses and re-assign Tickets outside of actions | Yes |
-| Can Re-assign Tickets | Yes |
-| Can assign to Agents in Teams the Agent is not a member of | Yes |
+- If a Group's name matches a company's, a suggested match appears. Review it and click **Use it**; it's never
+  applied for you. Names are compared loosely: case, punctuation and endings such as Limited, Ltd or LLC are ignored,
+  so a Group called "McGarvey" is offered the client "McGarvey Immigration & Asylum Practitioners".
+- **Companies without a group** lists a PSA's companies that no Group is linked to or named after, with a picker to
+  switch between PSAs. **Create group** makes a Group with the company's name, already linked, and **Create all**
+  does the same for every company listed, after asking you to confirm. HaloPSA's built-in "Unknown" client is left
+  out. Add the domains to the new Groups afterwards, from **Manage > Domains** or with an
+  [import](./import-domains.mdx).
+- A domain that needs to route differently from its Group can be overridden on **Manage > Domains**, which has an
+  override column for each PSA.
+- A domain in several Groups uses, for each PSA, the oldest of its Groups that's linked in that PSA. So a domain can
+  take its Halo client from one Group and its ConnectWise company from another.
 
-Everything else can stay off, including Can edit closed Tickets, Can change a Ticket's Ticket Type, Can Delete
-Tickets and Can Edit Advanced Ticket Details.
+A domain with no company in a PSA simply doesn't get a ticket there. That isn't an error.
 
-Each row is needed for something dotMARC does: creating tickets, reading them back, and changing their
-status whoever they are assigned to. When a permission is missing, the error names the call that failed:
-
-| What you see | What it usually means |
-| --- | --- |
-| `403 Forbidden` for `GET Client`, and no Halo clients to choose from | The role's **Customers Access Level** is below Read Only. |
-| `401 Unauthorized` or "Record not found" for `GET Tickets/...` or `POST Tickets` after a ticket was created | The agent can create a ticket but can't see it. A ticket dotMARC creates is unassigned unless you choose an agent, so the role needs to view unassigned tickets and tickets assigned to other agents. |
-| "Please assign this Ticket these before closing it" | The ticket has nobody assigned. See [Who tickets are assigned to](#who-tickets-are-assigned-to). |
-| The agent list is empty, or the message says Halo returned no agents | The role can't see agents. The list is optional: leave **Don't assign**, or widen the role. |
-
-Halo may put a role's permissions into the access token it issues, and dotMARC reuses a token for about
-an hour. After changing the role, use **Clear cached sign-in** on Alert settings before testing again.
-
-## Configure dotMARC
-
-From **Alert settings**, in the **PSA integration (HaloPSA)** section: enable it, fill in the
-account name/URLs/client ID, and paste in the client secret (it's write-only - once saved, you
-won't see it again, only whether one is configured). Under **Ticket defaults**, click **Load options
-from Halo** to fill the dropdowns, then pick the ticket type new tickets should use, the default
-priority, and which Halo status counts as "closed" for resolving the alert back. The names you pick are
-saved with the settings, so they still show by name when you come back before loading the lists again.
-
-Under **Webhook**, click **Generate new secret**, click **Save PSA settings**, then copy the shown webhook URL
-into HaloPSA's own outbound webhook configuration, triggered on ticket status change. Save first -
-the secret only takes effect once it's persisted, so a URL copied before saving 404s until you do.
-This is what lets a ticket closed directly in Halo resolve the dotMARC alert.
-
-### What the webhook needs to send
-
-Halo lets you choose the webhook's payload: a small object, the full object, the event alone, or a
-custom one. dotMARC accepts any of them, as long as the payload identifies the ticket:
-
-* It looks for the ticket's id and status in the usual places: at the top level, or inside an `object`,
-  `ticket` or `data` wrapper, under names such as `ticket_id`, `object_id`, `id` and `status_id`.
-* If the payload names the ticket but not its status (the event alone), dotMARC asks Halo for the
-  ticket's current status. That needs the API agent to be able to read the ticket. If it can't, the call
-  is recorded as "status not in the body and Halo wouldn't say", with Halo's reason.
-* If dotMARC can't find a ticket in the payload at all, the call is recorded under **Recent calls to the
-  webhook** with the names of the fields Halo sent (never their values). Use that to pick a payload that
-  includes the ticket's id, or a custom payload with the ticket's id and status.
-
-Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vault) depends on your
-deployment, see [Deploy to Azure](./deploy-to-azure.mdx#optional-key-vault-backed-secret-storage) if
-you're running on Azure and want it in Key Vault.
-
-dotMARC keeps Halo's sign-in (an access token) in memory for about an hour. Halo can bake the API agent's
-permissions into that token when it issues it, so after changing the agent's role or permissions in Halo,
-use **Clear cached sign-in** (under the client secret) to make the next call sign in again. Saving the
-PSA settings clears it too, and so does restarting the app.
-
-If loading the options fails, the message shown quotes what HaloPSA answered (an OAuth error such as
-`invalid_scope`, an HTTP status, or the start of a response that wasn't in the expected shape). The
-full detail, including the exception, is under **Manage → Server logs** (see
-[Server logs](./server-logs.mdx)).
-
-## Who tickets are assigned to
-
-Halo will not close a ticket that nobody is assigned to, and answers with "Please assign this Ticket
-these before closing it." A ticket created through the API is unassigned unless something assigns it,
-so this matters: without an assignee, dotMARC can open tickets but can't close them when an alert
-resolves.
-
-**Assign new tickets to** decides who that is:
-
-* **Don't assign (Halo decides)** is the default. dotMARC sends no agent, so Halo's own routing assigns
-  the ticket: round robin, an assignment rule, or the ticket type's default agent. Use this when your
-  Halo already assigns new tickets, and check with [the test](#test-the-whole-integration) that a
-  ticket really does end up assigned.
-* **A named agent** assigns every ticket dotMARC creates to that agent. The list shows enabled agents
-  and is loaded with the other options. Halo has no API scope for agents, so whether the list loads
-  depends on the role of the agent the API application signs in as. If Halo refuses, the other lists
-  still load and the message quotes Halo's answer.
-
-The assignment is made when the ticket is created and is never changed by dotMARC afterwards, so a
-technician who takes a ticket over keeps it. When dotMARC closes a ticket it reads the ticket's own
-type and client from Halo and sends them back with the new status, which Halo requires for an update.
-
-## Test the whole integration
-
-Under the PSA settings on **Alert settings**, **Test the integration** runs the whole ticket lifecycle
-against your live Halo tenant, so you can watch it work instead of waiting for a real alert. It uses the
-**saved** settings, exactly as real alerts do, and reports each step as it goes:
-
-1. **Check settings.** Everything the integration needs must be saved. A warning here just means ticket
-   sync is still switched off.
-2. **Pick an alert and Halo client.** It takes the most recent alert, and the Halo client that alert's
-   domain is mapped to through its Group. If the domain has no client mapped, or there are no alerts yet,
-   it asks you to choose a Halo client to test with.
-3. **Create a ticket.** A ticket titled `[dotMARC test] ...` is created with your ticket type, default
-   priority and, if you chose one, agent. If Halo objects, the message quotes what it said.
-4. **Close the ticket.** It's closed using your closed status. If Halo says the ticket needs assigning
-   first, the message points you at **Assign new tickets to**.
-5. **Wait for Halo's webhook.** Halo should call the webhook URL when the ticket's status changes. The
-   test waits up to 30 seconds and tells you exactly what arrived: a call with the closed status, a
-   different status, a body dotMARC couldn't read, a call with the wrong secret, or nothing at all.
-
-When all five pass, Halo's side of the integration works end to end. A few things to know:
-
-* It leaves one closed ticket in Halo, titled `[dotMARC test] ...`. Delete it if you like.
-* The test ticket isn't linked to a real alert, so nothing on the Alerts page changes and no real ticket
-  is touched. Resolving an alert when its ticket closes uses the same webhook, and is covered by
-  dotMARC's automated tests.
-* Below the test, **Recent calls to the webhook** lists the last few calls Halo has made since the app
-  last started. A call with the wrong secret is listed as such, which is the usual reason a webhook
-  seems to do nothing (see [Server logs](./server-logs.mdx) for the matching log entry).
+If a PSA's companies can't be loaded, the page says which PSA and why, and that PSA's column shows the saved companies
+without letting you change them until it loads again. The other PSAs carry on as normal.
 
 ## Choose which alerts create tickets
 
-By default every alert type opens a ticket. To change that, open **Alert settings**. Once ticket sync is
-enabled, a **Which alerts create tickets** panel lists each alert type with a switch. Turning a type off stops
-it opening tickets. The alert is still recorded, and any Teams or webhook notification still goes out.
+By default every alert type opens a ticket, apart from nameserver changes. To change that, open
+**Manage > Alert settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every
+PSA. Turning a type off stops it opening tickets. The alert is still recorded, and any Teams, Slack or webhook
+notification still goes out.
 
-A group can override this for its own client. On **Manage groups**, a group that has a Halo client set has a
-**Ticket rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create
-tickets* or *Never create tickets*. A group with overrides shows a badge such as "2 overrides".
+A Group can override this for its own domains. On **Manage > Groups**, a Group linked to a company has a **Ticket
+rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create tickets* or *Never
+create tickets*. A Group with overrides shows a badge such as "2 overrides".
 
-Two details worth knowing:
+- For each PSA, the rules of the Group whose company the ticket goes to apply. Other Groups' rules are ignored for that
+  PSA.
+- A domain with its own company set on **Manage > Domains** follows Alert settings for that PSA.
 
-* If a domain belongs to several groups, the rules of the group its ticket goes to apply: the one with the
-  lowest id among the domain's groups that have a Halo client. Other groups' rules are ignored.
-* A domain with its own Halo client set on **Manage domains** isn't covered by a group's rules, so it follows
-  the settings on Alert settings.
-
-Changing a rule affects alerts raised from then on. It doesn't create tickets for alerts that are already open,
-and it doesn't stop an existing ticket from closing when its alert resolves.
-
-## Route tickets to the right client
-
-Tickets need to land against the right Halo client (company). From **Manage groups**, each Group
-gets a **Halo Client** picker - set once per Group (typically once per MSP client), every domain
-in that Group routes there. If a Group's name matches a Halo client's name, a suggested match
-appears; review and click **Use it** rather than it being applied automatically. Names are compared
-loosely: case, punctuation and endings such as Limited, Ltd or LLC are ignored, and a Group called
-"McGarvey" is suggested the client "McGarvey Immigration & Asylum Practitioners". A domain that
-needs to route differently than its Group can be overridden individually from **Manage domains**.
-
-### Create Groups from your Halo clients
-
-When Halo is connected, **Manage groups** also lists the **Halo clients without a group**: clients
-that exist in Halo but that no Group is linked to or named after. **Create group** makes a Group
-with that client's name and links it to the client in one step, and **Create all** does the same
-for every client listed, after asking you to confirm. Halo's built-in "Unknown" client is left out.
-Only the Groups are created. Add the domains to them afterwards, from **Manage domains** or in bulk
-with an [import](./import-domains.mdx). If Halo
-can't be reached, Manage groups says so instead of quietly showing no suggestions.
-
-A domain with no mapping (no Group, or a Group with none set) simply doesn't get a ticket, same as
-leaving the generic webhook URL blank, it isn't an error.
+Changing a rule affects alerts raised from then on. It doesn't create tickets for alerts that are already open, and it
+doesn't stop an existing ticket from closing when its alert resolves.
 
 ## What syncs, and what doesn't
 
-- Alert fires → ticket created (unless its alert type is turned off, see above), using the alert's title/message as the ticket's summary/details,
-  filed under the configured ticket type and default priority.
-- Alert resolves in dotMARC (the report comes back, or a later TLSRPT report has no failures) →
-  ticket closed in Halo automatically.
-- Ticket closed in Halo → alert resolved in dotMARC automatically, via the webhook above.
-- Nothing else syncs: no comments, and no changes made directly in Halo (priority, reassignment,
-  notes) flow back to dotMARC - only a status change to the configured "closed" status is read.
-  If the underlying condition is still active after a ticket's closed early in
-  Halo, the very next monitor cycle (not the cooldown window) re-opens the alert, since the
-  cooldown only gates re-creation while an alert is still unresolved - once resolved, the next
-  cycle sees no unresolved alert and creates a fresh one immediately. A new ticket for that fresh
-  alert is opened too, unless another ticket for the same domain and alert type is already open, in
-  which case ticket creation is skipped for that occurrence (dotMARC's own alert history still gets
-  the new row either way) - this is expected, not a sync bug.
+- **Alert fires:** a ticket is created in each PSA the domain is linked in (unless its alert type is turned off), using
+  the alert's title and message, with the ticket settings you chose for that PSA.
+- **Alert resolves in dotMARC:** each of its open tickets is closed. If a PSA can't be reached, dotMARC keeps trying
+  at each regular check until it succeeds.
+- **Ticket closed in the PSA:** the alert resolves in dotMARC. dotMARC checks its open tickets every few minutes
+  (every 5 by default, set with the `Psa:PollIntervalMinutes` setting), and HaloPSA can also tell dotMARC straight
+  away through its webhook. A policy or nameserver alert closed this way accepts the change, the same as
+  acknowledging it.
+- **Ticket deleted in the PSA:** dotMARC stops checking it and leaves the alert open.
+- **Nothing else syncs:** no comments, priority changes, reassignments or notes flow back to dotMARC.
 
-Two other things worth knowing:
+If the underlying problem is still there after a ticket is closed early, the next monitor cycle raises the alert again,
+with a new ticket. While an alert stays open past its cooldown, dotMARC records it again but doesn't open a second
+ticket in a PSA where the earlier one is still open.
 
-- The **Halo Client** column on Manage Groups/Manage Domains only appears once HaloPSA is both
-  enabled *and* has a saved client secret - enabling it alone isn't enough to see the column.
-- Ticket priority syncs from dotMARC to Halo once, on ticket creation (the configured default
-  priority). It does not sync afterwards in either direction: a priority change made later, in
-  dotMARC or in Halo, doesn't propagate to the other side.
+The **Alerts** page shows each alert's tickets: a filled chip is open, an outlined chip is closed, and where dotMARC
+knows the PSA's web address the chip links to the ticket.

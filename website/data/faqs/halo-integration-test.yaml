@@ -1,18 +1,19 @@
-question: How do I check the HaloPSA integration actually works?
+question: How do I check my PSA integration actually works?
 answer: |
-  Use **Test the integration** on the Alert settings page, under the PSA settings. It creates a clearly
-  marked test ticket from your most recent alert's details, closes it using your closed status, and then
-  waits for Halo to call the webhook back, showing each step as it goes. If a step fails, the message
-  says what Halo answered or what to check, for example a wrong webhook secret or a status that doesn't
-  match your closed status.
+  Use **Test the integration** on your PSA's tab under **Manage > PSA settings**. It creates a clearly marked test
+  ticket from your most recent alert's details, reads it back, closes it using your closed status, and reads it back
+  again to check dotMARC sees the close. For HaloPSA it then waits for Halo to call the webhook back. It shows each
+  step as it goes, and if a step fails the message says what the PSA answered or what to check, for example a wrong
+  webhook secret or a status that doesn't match your closed status.
 
-  It uses the settings you have **saved**, so save first. It leaves one closed `[dotMARC test]` ticket in
-  Halo and doesn't touch any real alert.
+  It uses the settings you have **saved**, so save first. It leaves one closed `[dotMARC test]` ticket in the PSA and
+  doesn't touch any real alert.
 
-  If the close step says Halo needs the ticket assigned first, set **Assign new tickets to** (or make
+  For HaloPSA, if the close step says Halo needs the ticket assigned first, set **Assign new tickets to** (or make
   Halo assign new tickets itself). Halo won't close a ticket nobody is assigned to.
 
-  See [PSA integration: Test the whole integration](/docs/psa-integration#test-the-whole-integration)
+  See [HaloPSA: Test the whole integration](/docs/psa/halopsa#test-the-whole-integration),
+  [ConnectWise](/docs/psa/connectwise#6-test-the-integration) or [Autotask](/docs/psa/autotask#7-test-the-integration)
   for the full walkthrough.
 category: Alerts & PSA integration
 order: 5

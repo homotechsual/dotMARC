@@ -1,12 +1,12 @@
-question: Can I stop certain alerts, or certain clients, from creating HaloPSA tickets?
+question: Can I stop certain alerts, or certain clients, from creating PSA tickets?
 answer: |
-  Yes. On **Alert settings**, the **Which alerts create tickets** panel has a switch for each alert type. Turn a
-  type off and it stops opening tickets. The alert is still recorded and any Teams or webhook notification
-  still goes out.
+  Yes. On **Alert settings**, the **Which alerts create tickets** panel has a switch for each alert type, and applies
+  to every PSA. Turn a type off and it stops opening tickets. The alert is still recorded and any Teams, Slack or
+  webhook notification still goes out.
 
   For one client, open **Manage groups** and use **Ticket rules** on that client's group. Each alert type can
-  follow the default, always create tickets, or never create them. The button appears once the group has a
-  Halo client set.
+  follow the default, always create tickets, or never create them. The button appears once the group is linked to
+  a company in one of your PSAs.
 
   See [PSA integration: Choose which alerts create tickets](/docs/psa-integration#choose-which-alerts-create-tickets)
   for the details, including how domains in several groups are handled.

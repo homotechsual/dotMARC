@@ -25,6 +25,8 @@ Only the domain is required, so a list of domains, one per line, is a complete i
 | mta-sts mode | `off`, `none`, `testing` or `enforce`. |
 | mta-sts mx hosts | MX hosts, separated by `;`. |
 | mta-sts max age | Seconds, from 1 to 31,557,600. |
+| connectwise company | The ConnectWise company's name. Used only when ConnectWise is connected. |
+| autotask company | The Autotask company's name. Used only when Autotask is connected. |
 
 Cells copied from a spreadsheet and pasted straight in work too: they arrive separated by tabs rather than commas.
 
@@ -51,14 +53,14 @@ Everything that will be removed is shown in red on the preview.
 
 ## Names that don't exist yet
 
-If a group, tag or Halo client in the import doesn't exist, the preview lists it. For each one, choose to create it,
+If a group, tag or PSA company in the import doesn't exist, the preview lists it. For each one, choose to create it,
 map it to an existing one, or leave it out. A name that's the same as an existing one apart from punctuation or an
-ending like "Ltd" is mapped to it for you; close spellings are suggested, to catch typos, but you choose them. Halo clients can't be
-created from dotMARC. A name that only differs in capital letters is treated as the existing one.
+ending like "Ltd" is mapped to it for you; close spellings are suggested, to catch typos, but you choose them. PSA companies can't be
+created from dotMARC: each company column is matched against that PSA's own list. A name that only differs in capital letters is treated as the existing one.
 
 ## Permissions
 
-Importing needs the `DomainsAdd` permission. Groups, tags, Halo client, monitoring and DKIM selectors also need
+Importing needs the `DomainsAdd` permission. Groups, tags, PSA companies, monitoring and DKIM selectors also need
 `DomainsEdit`, and the MTA-STS columns need `MtaStsManage`. Creating groups or tags needs `GroupsAdd` or `TagsAdd`.
 Without a permission, that column is ignored and the preview says so. See [Permissions and access](./permissions-and-access.mdx).
 

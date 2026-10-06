@@ -1,0 +1,150 @@
+---
+title: HaloPSA
+sidebar_position: 1
+description: Raise and close HaloPSA tickets from dotMARC alerts, and resolve alerts when a tech closes the ticket.
+---
+
+# HaloPSA
+
+dotMARC can open a HaloPSA ticket when an alert fires, close it automatically when the alert resolves, and resolve the
+alert when a tech closes the ticket in Halo. It can do this alongside ConnectWise and Autotask: see
+[PSA integration](../psa-integration.mdx) for linking Groups to Halo clients, choosing which alerts create tickets, and
+how several PSAs work together.
+
+## Set up the Halo API application
+
+In HaloPSA, go to **Configuration > Integrations > HaloPSA API** and create an application
+with these scopes: `edit:tickets`, `read:tickets`, `read:customers`. Note its
+account name, auth server URL, resource server URL, client ID, and client secret.
+
+## Permissions for the API agent
+
+The three scopes above are all dotMARC asks for, and Halo has no scopes for agents or teams. What dotMARC
+can actually do is decided by the **agent the API application signs in as** (its "Agent to log in as") and that agent's role. Give it a
+dedicated agent and role, not an administrator.
+
+This configuration is known to work, with the whole lifecycle passing in the
+[integration test](#test-the-whole-integration):
+
+| Halo role setting | Value |
+| --- | --- |
+| Tickets Access Level | Read and Modify |
+| Customers Access Level | Read Only |
+| Users Access Level | Read Only |
+| Can add new Tickets | Yes |
+| Can view Unassigned Tickets | Yes |
+| Can view Tickets that are assigned to other Agents | Yes |
+| Can edit Tickets which are not assigned to them | Yes |
+| Can always update Ticket Statuses and re-assign Tickets outside of actions | Yes |
+| Can Re-assign Tickets | Yes |
+| Can assign to Agents in Teams the Agent is not a member of | Yes |
+
+Everything else can stay off, including Can edit closed Tickets, Can change a Ticket's Ticket Type, Can Delete
+Tickets and Can Edit Advanced Ticket Details.
+
+Each row is needed for something dotMARC does: creating tickets, reading them back, and changing their
+status whoever they are assigned to. When a permission is missing, the error names the call that failed:
+
+| What you see | What it usually means |
+| --- | --- |
+| `403 Forbidden` for `GET Client`, and no Halo clients to choose from | The role's **Customers Access Level** is below Read Only. |
+| `401 Unauthorized` or "Record not found" for `GET Tickets/...` or `POST Tickets` after a ticket was created | The agent can create a ticket but can't see it. A ticket dotMARC creates is unassigned unless you choose an agent, so the role needs to view unassigned tickets and tickets assigned to other agents. |
+| "Please assign this Ticket these before closing it" | The ticket has nobody assigned. See [Who tickets are assigned to](#who-tickets-are-assigned-to). |
+| The agent list is empty, or the message says Halo returned no agents | The role can't see agents. The list is optional: leave **Don't assign**, or widen the role. |
+
+Halo may put a role's permissions into the access token it issues, and dotMARC reuses a token for about
+an hour. After changing the role, use **Clear cached sign-in** on the HaloPSA tab before testing again.
+
+## Configure dotMARC
+
+Open **Manage > PSA settings** and choose the **HaloPSA** tab: enable it, fill in the
+account name/URLs/client ID, and paste in the client secret (it's write-only: once saved, you
+won't see it again, only whether one is configured). Under **Ticket defaults**, click **Load options
+from Halo** to fill the dropdowns, then pick the ticket type new tickets should use, the default
+priority, and which Halo status counts as "closed" for resolving the alert back. The names you pick are
+saved with the settings, so they still show by name when you come back before loading the lists again.
+
+Under **Webhook**, click **Generate new secret**, click **Save HaloPSA settings**, then copy the shown webhook URL
+into HaloPSA's own outbound webhook configuration, triggered on ticket status change. Save first:
+the secret only takes effect once it's persisted, so a URL copied before saving 404s until you do.
+This is what lets a ticket closed directly in Halo resolve the dotMARC alert straight away. dotMARC also checks its
+open Halo tickets every few minutes, so a webhook that goes missing only delays the resolution.
+
+### What the webhook needs to send
+
+Halo lets you choose the webhook's payload: a small object, the full object, the event alone, or a
+custom one. dotMARC accepts any of them, as long as the payload identifies the ticket:
+
+* It looks for the ticket's id and status in the usual places: at the top level, or inside an `object`,
+  `ticket` or `data` wrapper, under names such as `ticket_id`, `object_id`, `id` and `status_id`.
+* If the payload names the ticket but not its status (the event alone), dotMARC asks Halo for the
+  ticket's current status. That needs the API agent to be able to read the ticket. If it can't, the call
+  is recorded as "status not in the body and Halo wouldn't say", with Halo's reason.
+* If dotMARC can't find a ticket in the payload at all, the call is recorded under **Recent calls to the
+  webhook** with the names of the fields Halo sent (never their values). Use that to pick a payload that
+  includes the ticket's id, or a custom payload with the ticket's id and status.
+
+Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vault) depends on your
+deployment, see [Deploy to Azure](../deploy-to-azure.mdx#optional-key-vault-backed-secret-storage) if
+you're running on Azure and want it in Key Vault.
+
+dotMARC keeps Halo's sign-in (an access token) in memory for about an hour. Halo can bake the API agent's
+permissions into that token when it issues it, so after changing the agent's role or permissions in Halo,
+use **Clear cached sign-in** (beside the client secret) to make the next call sign in again. Saving the
+HaloPSA settings clears it too, and so does restarting the app.
+
+If loading the options fails, the message shown quotes what HaloPSA answered (an OAuth error such as
+`invalid_scope`, an HTTP status, or the start of a response that wasn't in the expected shape). The
+full detail, including the exception, is under **Manage > Server logs** (see
+[Server logs](../server-logs.mdx)).
+
+## Who tickets are assigned to
+
+Halo will not close a ticket that nobody is assigned to, and answers with "Please assign this Ticket
+these before closing it." A ticket created through the API is unassigned unless something assigns it,
+so this matters: without an assignee, dotMARC can open tickets but can't close them when an alert
+resolves.
+
+**Assign new tickets to** decides who that is:
+
+* **Don't assign (Halo decides)** is the default. dotMARC sends no agent, so Halo's own routing assigns
+  the ticket: round robin, an assignment rule, or the ticket type's default agent. Use this when your
+  Halo already assigns new tickets, and check with [the test](#test-the-whole-integration) that a
+  ticket really does end up assigned.
+* **A named agent** assigns every ticket dotMARC creates to that agent. The list shows enabled agents
+  and is loaded with the other options. Halo has no API scope for agents, so whether the list loads
+  depends on the role of the agent the API application signs in as. If Halo refuses, the other lists
+  still load and the message quotes Halo's answer.
+
+The assignment is made when the ticket is created and is never changed by dotMARC afterwards, so a
+technician who takes a ticket over keeps it. When dotMARC closes a ticket it reads the ticket's own
+type and client from Halo and sends them back with the new status, which Halo requires for an update.
+
+## Test the whole integration
+
+**Test the integration** on the HaloPSA tab runs the whole ticket lifecycle against your live Halo tenant, so you can
+watch it work instead of waiting for a real alert. It uses the **saved** settings, exactly as real alerts do, and
+reports each step as it goes:
+
+1. **Check settings.** Everything the integration needs must be saved, including the webhook secret. A warning here
+   just means HaloPSA tickets are still switched off.
+2. **Pick an alert and company.** It takes the most recent alert, and the Halo client that alert's domain is linked
+   to. If the domain has no client, or there are no alerts yet, it asks you to choose a Halo client to test with.
+3. **Create a ticket.** A ticket titled `[dotMARC test] ...` is created with your ticket type, default priority and,
+   if you chose one, agent. If Halo objects, the message quotes what it said.
+4. **Read the new ticket.** dotMARC reads the ticket back and expects it to be open.
+5. **Close the ticket.** It's closed using your closed status. If Halo says the ticket needs assigning first, the
+   message points you at **Assign new tickets to**.
+6. **Read the closed ticket.** dotMARC reads it back again and expects your closed status. This is how dotMARC's
+   regular check notices a ticket a tech closed.
+7. **Wait for Halo's webhook.** Halo should call the webhook URL when the ticket's status changes. The test waits up
+   to 30 seconds and tells you exactly what arrived: a call with the closed status, a different status, a body
+   dotMARC couldn't read, a call with the wrong secret, or nothing at all.
+
+When all seven pass, Halo's side of the integration works end to end. A few things to know:
+
+* It leaves one closed ticket in Halo, titled `[dotMARC test] ...`. Delete it if you like.
+* The test ticket isn't linked to a real alert, so nothing on the Alerts page changes and no real ticket is touched.
+* Below the test, **Recent calls to the webhook** lists the last few calls Halo has made since the app last started.
+  A call with the wrong secret is listed as such, which is the usual reason a webhook seems to do nothing (see
+  [Server logs](../server-logs.mdx) for the matching log entry).
