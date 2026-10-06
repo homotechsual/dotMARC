@@ -33,45 +33,61 @@ else
     <MudPaper Class="pa-4">
         <MudGrid>
             <MudItem xs="12">
-                <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
+                <FieldWithHelp Topic="Enable notifications" Inline="true" Help="Turns alerting on or off. While it's off, dotMARC raises no alerts, so nothing is sent to Teams or your webhook and no Halo tickets are opened.">
+<MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudSelect T="string" Label="Delivery mode" Variant="Variant.Outlined" @bind-Value="_settings.DeliveryMode">
+                <FieldWithHelp Topic="Delivery mode" Help="Where alerts are sent: a Microsoft Teams channel, your own webhook, or both. HaloPSA tickets are separate, set up further down.">
+<MudSelect T="string" Label="Delivery mode" Variant="Variant.Outlined" @bind-Value="_settings.DeliveryMode">
                     <MudSelectItem Value="@("Teams")">Teams only</MudSelectItem>
                     <MudSelectItem Value="@("Generic")">Generic webhook only</MudSelectItem>
                     <MudSelectItem Value="@("Both")">Teams + generic webhook</MudSelectItem>
                 </MudSelect>
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudTextField Label="Teams webhook URL" @bind-Value="_settings.TeamsWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Teams webhook URL" Help="The webhook URL of the Teams channel alerts should post to. Used when the delivery mode includes Teams.">
+<MudTextField Label="Teams webhook URL" @bind-Value="_settings.TeamsWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudTextField Label="Generic webhook URL" @bind-Value="_settings.GenericWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Generic webhook URL" Help="dotMARC POSTs each alert here as JSON, with domainName, alertType, title, message, severity and createdUtc. Used when the delivery mode includes the generic webhook.">
+<MudTextField Label="Generic webhook URL" @bind-Value="_settings.GenericWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudNumericField Label="Missing report threshold (days)" @bind-Value="_settings.MissingReportThresholdDays" Min="1" Max="90" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Missing report threshold" Help="How many days a monitored domain can go without a DMARC aggregate report before a 'Missing DMARC report' alert. Most receivers report daily, so 2 allows for one late day.">
+<MudNumericField Label="Missing report threshold (days)" @bind-Value="_settings.MissingReportThresholdDays" Min="1" Max="90" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudNumericField Label="Cooldown (minutes)" @bind-Value="_settings.CooldownMinutes" Min="1" Max="10080" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Cooldown" Help="While an alert is open, dotMARC won't raise it again for this long. After that, if the problem is still there, it's raised again, with a new notification and ticket.">
+<MudNumericField Label="Cooldown (minutes)" @bind-Value="_settings.CooldownMinutes" Min="1" Max="10080" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudNumericField Label="Monitor interval (seconds)" @bind-Value="_settings.MonitorIntervalSeconds" Min="30" Max="86400" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Monitor interval" Help="How often dotMARC checks monitored domains for missing reports, suspicious rejects and DNS health problems, and closes alerts that have cleared.">
+<MudNumericField Label="Monitor interval (seconds)" @bind-Value="_settings.MonitorIntervalSeconds" Min="30" Max="86400" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudNumericField Label="Suspicious reject minimum volume" @bind-Value="_settings.SuspiciousRejectMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined"
-                                  HelperText="Don't alert below this many rejected/quarantined messages in a domain's 30-day window." />
+                <FieldWithHelp Topic="Suspicious reject minimum volume" Help="A 'Suspicious reject activity' alert needs at least this many rejected or quarantined messages in the domain's last 30 days, so a handful of stray messages don't alert.">
+<MudNumericField Label="Suspicious reject minimum volume" @bind-Value="_settings.SuspiciousRejectMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <MudNumericField Label="Suspicious reject non-benign %" @bind-Value="_settings.SuspiciousRejectNonBenignPercent" Min="1" Max="100" Variant="Variant.Outlined"
-                                  HelperText="Alert when at least this % of rejects/quarantines have no benign override reason (forwarder/mailing list/sampling)." />
+                <FieldWithHelp Topic="Suspicious reject non-benign %" Help="Alerts when at least this share of a domain's rejected or quarantined mail has no benign reason given by the receiver (such as a forwarder, mailing list or sampling), which suggests spoofing or a misconfigured sender.">
+<MudNumericField Label="Suspicious reject non-benign %" @bind-Value="_settings.SuspiciousRejectNonBenignPercent" Min="1" Max="100" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
 
             <MudItem xs="12">
@@ -85,24 +101,31 @@ else
             @foreach (var modeSetting in DnsHealthModeSettings)
             {
                 <MudItem xs="12" sm="6" md="4">
+                    <FieldWithHelp Topic="@modeSetting.Label" Help="@($"{modeSetting.Help} When it breaks: only once the check has passed at least once. Whenever it fails: every failure. Off: never.")">
                     <MudSelect T="DnsHealthAlertMode" Label="@modeSetting.Label" Variant="Variant.Outlined"
                                Value="modeSetting.Get(_settings)" ValueChanged="@(mode => modeSetting.Set(_settings!, mode))">
                         <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.WhenItBreaks">When it breaks</MudSelectItem>
                         <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.WheneverItFails">Whenever it fails</MudSelectItem>
                         <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.Off">Off</MudSelectItem>
                     </MudSelect>
+                    </FieldWithHelp>
                 </MudItem>
             }
 
             <MudItem xs="12" md="4">
-                <MudSwitch @bind-Value="_settings.DmarcPolicyWeakenedEnabled" Color="Color.Primary" Label="Alert when a DMARC policy weakens" />
+                <FieldWithHelp Topic="DMARC policy weakens" Inline="true" Help="Alerts when a domain's DMARC policy, subdomain policy or percentage goes down, such as reject to quarantine. If the change was deliberate, acknowledge the alert and the new policy becomes the baseline.">
+<MudSwitch @bind-Value="_settings.DmarcPolicyWeakenedEnabled" Color="Color.Primary" Label="Alert when a DMARC policy weakens" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudSwitch @bind-Value="_settings.NameserversChangedEnabled" Color="Color.Primary" Label="Alert when nameservers change" />
+                <FieldWithHelp Topic="Nameservers change" Inline="true" Help="Alerts when a domain's nameservers change, often the first sign of a DNS migration that could drop its records. It doesn't open a Halo ticket unless you turn that on.">
+<MudSwitch @bind-Value="_settings.NameserversChangedEnabled" Color="Color.Primary" Label="Alert when nameservers change" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudNumericField Label="Close policy and nameserver alerts after (days)" @bind-Value="_settings.AcknowledgeableAutoCloseDays" Min="0" Max="365" Variant="Variant.Outlined"
-                                 HelperText="0 keeps them open until someone acknowledges them or closes their ticket." />
+                <FieldWithHelp Topic="Close policy and nameserver alerts after" Help="Policy and nameserver alerts can describe deliberate changes, so they stay open until someone acknowledges them or closes their ticket. Set a number of days to close them automatically, as if acknowledged. 0 keeps them open.">
+<MudNumericField Label="Close policy and nameserver alerts after (days)" @bind-Value="_settings.AcknowledgeableAutoCloseDays" Min="0" Max="365" Variant="Variant.Outlined" HelperText="0 keeps them open." />
+</FieldWithHelp>
             </MudItem>
         </MudGrid>
 
@@ -115,26 +138,38 @@ else
     <MudPaper Class="pa-4 mt-4">
         <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
             <MudText Typo="Typo.h5">PSA integration (HaloPSA)</MudText>
-            <MudSwitch @bind-Value="_haloSettings.Enabled" Color="Color.Primary" Label="Enable HaloPSA ticket sync" />
+            <FieldWithHelp Topic="HaloPSA ticket sync" Inline="true" Help="Opens a Halo ticket for each alert (as set under 'Which alerts create tickets') and closes it when the alert resolves. A ticket closed in Halo resolves its alert, through the webhook below.">
+<MudSwitch @bind-Value="_haloSettings.Enabled" Color="Color.Primary" Label="Enable HaloPSA ticket sync" />
+</FieldWithHelp>
         </div>
 
         <MudText Typo="Typo.subtitle1" Class="mt-2 mb-2">Connection</MudText>
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Account name" @bind-Value="_haloSettings.AccountName" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Account name" Help="Your Halo account name, kept for reference. dotMARC connects using the URLs below.">
+<MudTextField Label="Account name" @bind-Value="_haloSettings.AccountName" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client ID" @bind-Value="_haloSettings.ClientId" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Halo client ID" Help="From the API application created in Halo under Configuration, Integrations, HaloPSA API, with the scopes edit:tickets, read:tickets and read:customers.">
+<MudTextField Label="Client ID" @bind-Value="_haloSettings.ClientId" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Auth server URL" @bind-Value="_haloSettings.AuthServerUrl" Placeholder="https://<account>.halopsa.com/auth" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Auth server URL" Help="Shown on the Halo API application. Usually https://your-account.halopsa.com/auth.">
+<MudTextField Label="Auth server URL" @bind-Value="_haloSettings.AuthServerUrl" Placeholder="https://<account>.halopsa.com/auth" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Resource server URL" @bind-Value="_haloSettings.ResourceServerUrl" Placeholder="https://<account>.halopsa.com/api" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Resource server URL" Help="Shown on the Halo API application. Usually https://your-account.halopsa.com/api.">
+<MudTextField Label="Resource server URL" @bind-Value="_haloSettings.ResourceServerUrl" Placeholder="https://<account>.halopsa.com/api" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Halo client secret" Help="The Halo API application's secret. It's stored encrypted and can't be read back, so leave this blank to keep the saved one.">
+<MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6" Class="d-flex align-start">
                 <MudTooltip Text="dotMARC keeps Halo's sign-in for about an hour. If you've just changed the API agent's role or permissions in Halo, clear it so the next call signs in again and picks the change up.">
@@ -152,33 +187,40 @@ else
         </MudText>
         <MudGrid>
             <MudItem xs="12" md="4">
-                <MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
+                <FieldWithHelp Topic="Ticket type" Help="The Halo ticket type alert tickets are created with. Load options from Halo to choose one.">
+<MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
                     @foreach (var ticketType in HaloOptionNames.WithSaved(_haloTicketTypes.Select(option => (option.Id, option.Name)), _haloSettings.TicketTypeId, _haloSettings.TicketTypeName))
                     {
                         <MudSelectItem T="int?" Value="@((int?)ticketType.Id)">@ticketType.Name</MudSelectItem>
                     }
                 </MudSelect>
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudSelect T="int?" Label="Default priority" @bind-Value="_haloSettings.DefaultPriorityId" Variant="Variant.Outlined">
+                <FieldWithHelp Topic="Default priority" Help="The priority alert tickets are created with.">
+<MudSelect T="int?" Label="Default priority" @bind-Value="_haloSettings.DefaultPriorityId" Variant="Variant.Outlined">
                     @foreach (var priority in HaloOptionNames.WithSaved(_haloPriorities.Select(option => (option.Id, option.Name)), _haloSettings.DefaultPriorityId, _haloSettings.DefaultPriorityName))
                     {
                         <MudSelectItem T="int?" Value="@((int?)priority.Id)">@priority.Name</MudSelectItem>
                     }
                 </MudSelect>
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudSelect T="int?" Label="Closed status" @bind-Value="_haloSettings.ClosedStatusId" Variant="Variant.Outlined">
+                <FieldWithHelp Topic="Closed status" Help="The Halo status that means a ticket is closed. dotMARC moves a ticket to it when its alert resolves, and a ticket moved to it in Halo resolves the alert.">
+<MudSelect T="int?" Label="Closed status" @bind-Value="_haloSettings.ClosedStatusId" Variant="Variant.Outlined">
                     @foreach (var status in HaloOptionNames.WithSaved(_haloStatuses.Select(option => (option.Id, option.Name)), _haloSettings.ClosedStatusId, _haloSettings.ClosedStatusName))
                     {
                         <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
                     }
                 </MudSelect>
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <SearchableSelect TValue="int" Label="Assign new tickets to" Options="AgentOptions" Value="AssignedAgentSelection" ValueChanged="@(agentId => AssignedAgentSelection = agentId)"
-                                  Variant="Variant.Outlined"
-                                  HelperText="Halo won't close a ticket nobody is assigned to. Pick an agent, or don't assign if Halo assigns tickets itself (round robin, a rule or the ticket type's default)." />
+                <FieldWithHelp Topic="Assign new tickets to" Help="Halo won't close a ticket nobody is assigned to. Pick an agent, or choose Don't assign if Halo assigns tickets itself (round robin, a rule or the ticket type's default).">
+<SearchableSelect TValue="int" Label="Assign new tickets to" Options="AgentOptions" Value="AssignedAgentSelection" ValueChanged="@(agentId => AssignedAgentSelection = agentId)"
+                                  Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
         </MudGrid>
 
@@ -303,17 +345,17 @@ else
 }
 
 @code {
-    private sealed record DnsHealthModeSetting(string Label, Func<NotificationSettings, DnsHealthAlertMode> Get, Action<NotificationSettings, DnsHealthAlertMode> Set);
+    private sealed record DnsHealthModeSetting(string Label, string Help, Func<NotificationSettings, DnsHealthAlertMode> Get, Action<NotificationSettings, DnsHealthAlertMode> Set);
 
     private static readonly DnsHealthModeSetting[] DnsHealthModeSettings =
     [
-        new("DMARC record", settings => settings.DmarcAlertMode, (settings, mode) => settings.DmarcAlertMode = mode),
-        new("DMARC authorization record", settings => settings.DmarcAuthorizationAlertMode, (settings, mode) => settings.DmarcAuthorizationAlertMode = mode),
-        new("TLS-RPT record", settings => settings.TlsrptAlertMode, (settings, mode) => settings.TlsrptAlertMode = mode),
-        new("SPF record", settings => settings.SpfAlertMode, (settings, mode) => settings.SpfAlertMode = mode),
-        new("MX", settings => settings.MxAlertMode, (settings, mode) => settings.MxAlertMode = mode),
-        new("DKIM", settings => settings.DkimAlertMode, (settings, mode) => settings.DkimAlertMode = mode),
-        new("MTA-STS", settings => settings.MtaStsAlertMode, (settings, mode) => settings.MtaStsAlertMode = mode),
+        new("DMARC record", "Alerts when the domain's DMARC record (_dmarc TXT) is missing or can't be read.", settings => settings.DmarcAlertMode, (settings, mode) => settings.DmarcAlertMode = mode),
+        new("DMARC authorization record", "Alerts when the record that lets receivers send this domain's reports to dotMARC's mailbox (on another domain) is missing. Without it, receivers drop the reports.", settings => settings.DmarcAuthorizationAlertMode, (settings, mode) => settings.DmarcAuthorizationAlertMode = mode),
+        new("TLS-RPT record", "Alerts when the domain's TLS reporting record (_smtp._tls TXT) is missing or invalid.", settings => settings.TlsrptAlertMode, (settings, mode) => settings.TlsrptAlertMode = mode),
+        new("SPF record", "Alerts when the domain's SPF record is missing, duplicated or broken.", settings => settings.SpfAlertMode, (settings, mode) => settings.SpfAlertMode = mode),
+        new("MX", "Alerts when the domain has no MX record, or its mail server's name doesn't resolve.", settings => settings.MxAlertMode, (settings, mode) => settings.MxAlertMode = mode),
+        new("DKIM", "Alerts when a DKIM selector set for the domain is missing or broken. Domains with no selectors set aren't checked.", settings => settings.DkimAlertMode, (settings, mode) => settings.DkimAlertMode = mode),
+        new("MTA-STS", "Alerts when dotMARC stops being able to serve the domain's MTA-STS policy. Only for domains with MTA-STS hosting on.", settings => settings.MtaStsAlertMode, (settings, mode) => settings.MtaStsAlertMode = mode),
     ];
 
     private NotificationSettings? _settings;

@@ -1,0 +1,34 @@
+@* A form field with a small help icon beside it. The help shows on hover, on keyboard focus and on tap, so it works
+   on touch screens too, and the icon is labelled for screen readers. For explanations that would otherwise sit as
+   helper text under every field; helper text stays for things that change, such as whether a secret is saved. *@
+<div class="d-flex align-start" style="gap:2px">
+    @* A field box fills the row with the icon at its end; a switch keeps its width so the icon follows its label. *@
+    <div style="@(Inline ? "flex:0 1 auto" : "flex:1 1 auto"); min-width:0">
+        @ChildContent
+    </div>
+    <div style="@(Inline ? "padding-top:2px" : "padding-top:11px")">
+        @* Hover for a mouse; focus covers the keyboard and a tap on a touch screen. Not on click as well: a click after
+           hovering would toggle it shut again. *@
+        <MudTooltip Arrow="true" Placement="Placement.Top" ShowOnHover="true" ShowOnFocus="true">
+            <ChildContent>
+                <MudIconButton Icon="@Icons.Material.Outlined.HelpOutline" Size="Size.Small" Class="mud-text-secondary"
+                               aria-label="@($"Help: {Topic}")" />
+            </ChildContent>
+            <TooltipContent>
+                <div style="max-width:320px; white-space:normal; text-align:left">@Help</div>
+            </TooltipContent>
+        </MudTooltip>
+    </div>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>What the field is, for the icon's screen-reader label ("Help: Cooldown").</summary>
+    [Parameter, EditorRequired] public string Topic { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Help { get; set; } = "";
+
+    /// <summary>For switches and other fields without an outlined box, so the icon lines up with their text.</summary>
+    [Parameter] public bool Inline { get; set; }
+}

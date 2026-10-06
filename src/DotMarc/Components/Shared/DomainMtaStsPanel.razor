@@ -108,13 +108,19 @@
 
             <MudExpansionPanels Class="mt-3">
                 <MudExpansionPanel Text="Advanced" @bind-Expanded="_advancedExpanded">
-                    <MudSwitch T="bool" @bind-Value="_enabled" Label="Enabled" Color="Color.Primary" Class="mb-2" />
-                    <MudSelect T="MtaStsMode" @bind-Value="_mode" Label="Mode">
+                    <FieldWithHelp Topic="MTA-STS hosting" Inline="true" Help="Whether dotMARC hosts this domain's MTA-STS policy. Saving it off stops serving the policy and removes the mta-sts hostname from the host.">
+<MudSwitch T="bool" @bind-Value="_enabled" Label="Enabled" Color="Color.Primary" Class="mb-2" />
+</FieldWithHelp>
+                    <FieldWithHelp Topic="MTA-STS mode" Help="Testing: receivers report TLS problems (through TLS-RPT) but still deliver. Enforce: receivers refuse to deliver over a connection that fails the policy. None: tells receivers to stop applying a policy they cached earlier.">
+<MudSelect T="MtaStsMode" @bind-Value="_mode" Label="Mode">
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Testing">Testing</MudSelectItem>
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.Enforce">Enforce</MudSelectItem>
                         <MudSelectItem T="MtaStsMode" Value="MtaStsMode.None">None</MudSelectItem>
                     </MudSelect>
-                    <MudNumericField T="int" @bind-Value="_maxAgeSeconds" Label="Max age (seconds)" Min="0" Class="mt-2" />
+</FieldWithHelp>
+                    <FieldWithHelp Topic="Max age" Help="How long receivers may cache the policy, in seconds. 604800 is 7 days. Lower it for a while before changing MX records.">
+<MudNumericField T="int" @bind-Value="_maxAgeSeconds" Label="Max age (seconds)" Min="0" Class="mt-2" />
+</FieldWithHelp>
                     <MudTextField @bind-Value="_mxHostsText" Label="MX hosts" Lines="3" Class="mt-2"
                                   HelperText="@(_mxHostsFromDns ? "Filled in from the domain's MX records in DNS. Select Save to use them." : "One per line, e.g. mail.example.com")" />
                     <div class="d-flex mt-2" style="gap:0.5rem">

@@ -18,16 +18,22 @@
     {
         <MudGrid>
             <MudItem xs="12" sm="4">
-                <MudNumericField T="int?" @bind-Value="_settings.ChangeRetentionDays" Label="Changes" Placeholder="Keep forever" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Changes retention" Help="How many days to keep entries for changes made in dotMARC, from 1 to 3650. Leave it blank to keep them forever. Older entries are deleted once a day.">
+<MudNumericField T="int?" @bind-Value="_settings.ChangeRetentionDays" Label="Changes" Placeholder="Keep forever" Variant="Variant.Outlined"
                                  Min="AuditSettings.MinimumRetentionDays" Max="AuditSettings.MaximumRetentionDays" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" sm="4">
-                <MudNumericField T="int?" @bind-Value="_settings.SignInRetentionDays" Label="Sign-ins" Placeholder="Keep forever" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Sign-ins retention" Help="How many days to keep entries for sign-ins, from 1 to 3650. Leave it blank to keep them forever. Older entries are deleted once a day.">
+<MudNumericField T="int?" @bind-Value="_settings.SignInRetentionDays" Label="Sign-ins" Placeholder="Keep forever" Variant="Variant.Outlined"
                                  Min="AuditSettings.MinimumRetentionDays" Max="AuditSettings.MaximumRetentionDays" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" sm="4">
-                <MudNumericField T="int?" @bind-Value="_settings.PageViewRetentionDays" Label="Page views" Placeholder="Keep forever" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Page views retention" Help="How many days to keep entries for page views, from 1 to 3650. Leave it blank to keep them forever. Older entries are deleted once a day.">
+<MudNumericField T="int?" @bind-Value="_settings.PageViewRetentionDays" Label="Page views" Placeholder="Keep forever" Variant="Variant.Outlined"
                                  Min="AuditSettings.MinimumRetentionDays" Max="AuditSettings.MaximumRetentionDays" />
+</FieldWithHelp>
             </MudItem>
         </MudGrid>
         <div class="d-flex justify-end mt-3">

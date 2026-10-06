@@ -10,6 +10,7 @@
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISecretStore SecretStoreAccessor
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 <PageTitle>dotMARC - DNS Push Settings</PageTitle>
 <div class="d-flex align-center mb-4">
@@ -23,11 +24,15 @@
         <MudText Typo="Typo.h5" Class="mb-4">Cloudflare</MudText>
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client ID" @bind-Value="_cloudflareSettings.ClientId" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Cloudflare client ID" Help="@($"From the OAuth client registered in Cloudflare, with this redirect URL: {CallbackUrl("cloudflare")}")">
+<MudTextField Label="Client ID" @bind-Value="_cloudflareSettings.ClientId" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client secret" @bind-Value="_newCloudflareClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Cloudflare client secret" Help="The OAuth client's secret. It's stored encrypted and can't be read back, so leave this blank to keep the saved one.">
+<MudTextField Label="Client secret" @bind-Value="_newCloudflareClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_cloudflareSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
+</FieldWithHelp>
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveCloudflareAsync">Save Cloudflare settings</MudButton>
@@ -40,11 +45,15 @@
         <MudText Typo="Typo.h5" Class="mb-4">Azure DNS</MudText>
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client ID" @bind-Value="_azureDnsSettings.ClientId" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Azure DNS client ID" Help="@($"The Application (client) ID of the Entra app registration, with this Web redirect URI: {CallbackUrl("azure-dns")}")">
+<MudTextField Label="Client ID" @bind-Value="_azureDnsSettings.ClientId" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client secret" @bind-Value="_newAzureDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Azure DNS client secret" Help="The OAuth client's secret. It's stored encrypted and can't be read back, so leave this blank to keep the saved one.">
+<MudTextField Label="Client secret" @bind-Value="_newAzureDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_azureDnsSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
+</FieldWithHelp>
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAzureDnsAsync">Save Azure DNS settings</MudButton>
@@ -57,11 +66,15 @@
         <MudText Typo="Typo.h5" Class="mb-4">Google Cloud DNS</MudText>
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client ID" @bind-Value="_googleCloudDnsSettings.ClientId" Variant="Variant.Outlined" />
+                <FieldWithHelp Topic="Google Cloud DNS client ID" Help="@($"The OAuth client ID (Web application) created in Google Cloud, with this redirect URI: {CallbackUrl("google-cloud-dns")}")">
+<MudTextField Label="Client ID" @bind-Value="_googleCloudDnsSettings.ClientId" Variant="Variant.Outlined" />
+</FieldWithHelp>
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField Label="Client secret" @bind-Value="_newGoogleCloudDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                <FieldWithHelp Topic="Google Cloud DNS client secret" Help="The OAuth client's secret. It's stored encrypted and can't be read back, so leave this blank to keep the saved one.">
+<MudTextField Label="Client secret" @bind-Value="_newGoogleCloudDnsClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
                               HelperText="@(_googleCloudDnsSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
+</FieldWithHelp>
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveGoogleCloudDnsAsync">Save Google Cloud DNS settings</MudButton>
@@ -72,16 +85,22 @@
 {
     <MudPaper Class="pa-4 mt-4">
         <MudText Typo="Typo.h5" Class="mb-4">DNS records</MudText>
-        <MudSelect T="SpfAllQualifier" Label="Ending for new SPF records" @bind-Value="_dnsRecordSettings.SpfAllQualifier" Variant="Variant.Outlined" Style="max-width:320px"
-                   HelperText="Used when dotMARC creates an SPF record, or merges several that have no ending.">
+        <div style="max-width:360px">
+        <FieldWithHelp Topic="Ending for new SPF records" Help="How an SPF record treats senders it doesn't list. ~all (softfail) asks receivers to accept but mark that mail; -all (fail) asks them to reject it. Used when dotMARC creates an SPF record, or merges several that have no ending. Existing endings are kept.">
+        <MudSelect T="SpfAllQualifier" Label="Ending for new SPF records" @bind-Value="_dnsRecordSettings.SpfAllQualifier" Variant="Variant.Outlined">
             <MudSelectItem T="SpfAllQualifier" Value="SpfAllQualifier.SoftFail">~all (softfail)</MudSelectItem>
             <MudSelectItem T="SpfAllQualifier" Value="SpfAllQualifier.Fail">-all (fail)</MudSelectItem>
         </MudSelect>
+        </FieldWithHelp>
+        </div>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveDnsRecordSettingsAsync">Save</MudButton>
     </MudPaper>
 }
 
 @code {
+    /// <summary>This site's callback for a provider's OAuth redirect, as its app registration needs it.</summary>
+    private string CallbackUrl(string provider) => $"{Navigation.BaseUri.TrimEnd('/')}/dns-push/{provider}/callback";
+
     private CloudflareDnsSettings? _cloudflareSettings;
     private AzureDnsSettings? _azureDnsSettings;
     private GoogleCloudDnsSettings? _googleCloudDnsSettings;
