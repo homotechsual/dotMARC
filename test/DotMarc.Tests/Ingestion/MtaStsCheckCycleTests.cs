@@ -162,6 +162,29 @@ public sealed class MtaStsCheckCycleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RunMtaStsCheckCycleAsync_WaitsForTheCertificate_WhileAzureIsStillIssuingIt()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain
+        {
+            Name = "contoso.io",
+            FirstSeenUtc = DateTimeOffset.UtcNow,
+            MtaStsEnabled = true,
+            MtaStsStatus = MtaStsStatus.PendingCertificate
+        });
+        await context.SaveChangesAsync();
+
+        var provisioner = new FakeMtaStsHostProvisioner { ExceptionOnEnsure = new MtaStsCertificatePendingException("mta-sts.contoso.io") };
+        var service = CreateService(context);
+        await service.RunMtaStsCheckCycleAsync(context, new FakeMtaStsDnsVerifier(), new FakeMtaStsServingVerifier(), provisioner, HostingHostname, CancellationToken.None);
+
+        var domain = context.Domains.Single();
+        Assert.Equal(MtaStsStatus.PendingCertificate, domain.MtaStsStatus);
+        Assert.Contains("still issuing the certificate for mta-sts.contoso.io", domain.MtaStsCheckDetail);
+        Assert.DoesNotContain("Provisioning failed", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
     public async Task RunMtaStsCheckCycleAsync_SkipsAnActiveDomainCheckedRecently_ButRechecksAPendingOneAtTheSameAge()
     {
         using var context = CreateContext();

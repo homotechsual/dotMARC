@@ -82,7 +82,15 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
             .First(d => string.Equals(d.Name, hostname, StringComparison.OrdinalIgnoreCase));
         binding.CertificateId = certificateId;
         binding.BindingType = ContainerAppCustomDomainBindingType.SniEnabled;
-        await containerApp.UpdateAsync(WaitUntil.Completed, containerApp.Data, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await containerApp.UpdateAsync(WaitUntil.Completed, containerApp.Data, cancellationToken).ConfigureAwait(false);
+        }
+        catch (RequestFailedException ex) when (string.Equals(ex.ErrorCode, "CertificateProvisioningError", StringComparison.Ordinal))
+        {
+            // The certificate looked ready a moment ago but Azure still won't bind it; same wait, same retry.
+            throw new MtaStsCertificatePendingException(hostname, ex);
+        }
     }
 
     public async Task TeardownAsync(string domainName, CancellationToken cancellationToken)
@@ -140,7 +148,7 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
         var existing = await TryGetCertificateAsync(certificates, certificateName, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
-            return existing.Id;
+            return ReadyOrThrow(existing.Data, existing.Id, hostname);
         }
 
         var certificateData = new ContainerAppManagedCertificateData(environment.Value.Data.Location)
@@ -153,7 +161,26 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
         };
 
         var created = await certificates.CreateOrUpdateAsync(WaitUntil.Completed, certificateName, certificateData, cancellationToken).ConfigureAwait(false);
-        return created.Value.Id;
+        return ReadyOrThrow(created.Value.Data, created.Value.Id, hostname);
+    }
+
+    /// <summary>A managed certificate can only be bound once Azure has issued it. While it's still pending, say so (the
+    /// next check retries); if issuing failed, report Azure's reason.</summary>
+    private static ResourceIdentifier ReadyOrThrow(ContainerAppManagedCertificateData certificate, ResourceIdentifier id, string hostname)
+    {
+        var state = certificate.Properties?.ProvisioningState;
+        if (state == ContainerAppCertificateProvisioningState.Succeeded)
+        {
+            return id;
+        }
+
+        if (state == ContainerAppCertificateProvisioningState.Pending || state is null)
+        {
+            throw new MtaStsCertificatePendingException(hostname);
+        }
+
+        throw new InvalidOperationException(
+            $"Azure couldn't issue the certificate for {hostname} ({state}). {certificate.Properties?.Error ?? "Check that the CNAME points straight at the container app, with no proxy in between."}");
     }
 
     private static async Task<ContainerAppManagedCertificateResource?> TryGetCertificateAsync(

@@ -141,10 +141,10 @@ controls.
 | --- | --- |
 | Not configured | MTA-STS isn't enabled for this domain. |
 | Waiting for DNS | Enabled, but the `mta-sts.<domain>` CNAME hasn't resolved to this deployment yet. |
-| Waiting for certificate | DNS resolved; a TLS certificate is being issued. Usually resolves within a few minutes. |
+| Waiting for certificate | DNS resolved; a TLS certificate is being issued. Usually resolves within a few minutes. On Azure, the detail says so while Azure is still issuing it. |
 | Active | The policy is live and serving correctly. |
 | Failed | Something regressed after being Active, or provisioning failed. Check the detail message on the domain's MTA-STS tab. |
 
-A domain re-checks automatically on a schedule (faster while onboarding, slower once Active), so
-there's no manual "check now". Give it a few minutes after a DNS change before assuming something's
-wrong.
+A domain re-checks automatically on a schedule (faster while onboarding, slower once Active). The refresh button
+beside **Policy hosting status** checks it straight away. Give it a few minutes after a DNS change before assuming
+something's wrong.

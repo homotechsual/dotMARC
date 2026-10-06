@@ -1217,6 +1217,14 @@ public sealed class PollingService : BackgroundService
         {
             await hostProvisioner.EnsureProvisionedAsync(domain.Name, cancellationToken).ConfigureAwait(false);
         }
+        catch (MtaStsCertificatePendingException pending)
+        {
+            // Not a failure: the host is still issuing the certificate, and this check runs again soon.
+            domain.MtaStsStatus = MtaStsStatus.PendingCertificate;
+            domain.MtaStsCheckDetail = pending.Message;
+            domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
+            return;
+        }
         catch (Exception ex)
         {
             domain.MtaStsStatus = MtaStsStatus.Failed;
