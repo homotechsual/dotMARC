@@ -1,0 +1,50 @@
+---
+slug: v0-8-2
+date: 2026-10-06T09:40:38.809Z
+title: "dotMARC v0.8.2: MTA-STS MX hosts from DNS again, a calmer certificate wait, and help beside every setting"
+description: MTA-STS fills in a domain's MX hosts from DNS again and won't stay on without any, a certificate Azure is still issuing shows as Waiting for certificate instead of a failure, and the settings pages explain each field in place.
+authors: [mikey]
+tags: [release]
+---
+
+A small release after [`v0.8.1`](/releases-updates/v0-8-1), from turning on MTA-STS hosting for real domains.
+
+{/* truncate */}
+
+## MTA-STS MX hosts come from DNS again
+
+When the old Manage MTA-STS page became a tab on each domain, its button for looking up a domain's MX hosts didn't
+come with it. So a domain switched on from **Advanced** could end up with no MX hosts, which means the policy dotMARC
+served listed no mail servers at all, and senders that check MTA-STS could refuse to deliver.
+
+* **Filled in from DNS.** When the MX hosts field is empty, it's filled in from the domain's MX records as soon as the
+  MTA-STS tab opens, ready for you to check and save. **Look up from DNS** is back beside the field to fetch them again.
+* **Never on without MX hosts.** dotMARC refuses to save MTA-STS as on with no MX hosts, and a bulk import skips such
+  a row with a note instead.
+* **Easy to spot.** A domain that's already on with no MX hosts says so on its MTA-STS tab, with the hosts filled in
+  from DNS and the **Advanced** section opened.
+
+**Check your domains after upgrading:** open the MTA-STS tab of each domain with hosting on. Any that shows the
+warning needs its filled-in MX hosts saved.
+
+## Waiting for a certificate isn't a failure
+
+On Azure, a new domain's TLS certificate can take a few minutes to issue. dotMARC used to show that wait as
+**Failed** with Azure's raw error, even though it carried on and finished by itself. It now shows **Waiting for
+certificate**, with a note that Azure is still issuing it and dotMARC retries automatically. A certificate Azure
+can't issue still shows as **Failed**, with Azure's reason.
+
+## Help beside every setting
+
+The settings pages now have a small help icon beside each field, explaining what it does and what to put there:
+alert settings and the HaloPSA connection, DNS push (including the exact callback URL each provider needs), audit
+log retention, and MTA-STS. Hover over it, or tap or tab to it.
+
+## Upgrading
+
+There are no database migrations and no new settings. Redeploy, then check your MTA-STS domains as above.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.8.2) for everything that
+shipped between these two tags.
