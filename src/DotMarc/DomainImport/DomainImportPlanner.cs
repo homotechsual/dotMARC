@@ -1,6 +1,6 @@
 using DotMarc.Audit;
 using DotMarc.Data;
-using DotMarc.Notifications;
+using DotMarc.Psa;
 
 namespace DotMarc.DomainImport;
 
@@ -58,9 +58,12 @@ public static class DomainImportPlanner
                 }
             }
 
-            if (usable.HaloClient && primary.HaloClient is { } haloClientName)
+            foreach (var column in PsaImportColumns.All.Where(column => usable.PsaCompanies.Contains(column.Psa)))
             {
-                names.Consider(ImportNameKind.HaloClient, haloClientName, primary.LineNumber);
+                if (primary.PsaCompanies.TryGetValue(column.Psa, out var companyName))
+                {
+                    names.Consider(column.NameKind, companyName, primary.LineNumber);
+                }
             }
         }
 
@@ -86,17 +89,16 @@ public static class DomainImportPlanner
         return new ImportPlan(mode, plannedRows, names.UnknownNames(), names.ToCreate(ImportNameKind.Group), names.ToCreate(ImportNameKind.Tag), notices);
     }
 
-    /// <summary>Which columns this import can use, given the input, the person's permissions and whether Halo is
+    /// <summary>Which columns this import can use, given the input, the person's permissions and which PSAs are
     /// connected. Adds a notice for each column it has to ignore.</summary>
-    private sealed record UsableColumns(bool Groups, bool Tags, bool HaloClient, bool Monitored, bool DkimSelectors, bool MtaSts)
+    private sealed record UsableColumns(bool Groups, bool Tags, IReadOnlySet<PsaKind> PsaCompanies, bool Monitored, bool DkimSelectors, bool MtaSts)
     {
         public static UsableColumns For(IReadOnlySet<ImportColumn> columns, ImportSnapshot snapshot, ImportPermissions permissions, List<string> notices)
         {
-            var editColumns = new (ImportColumn Column, string Label)[]
-            {
-                (ImportColumn.Groups, "Groups"), (ImportColumn.Tags, "Tags"), (ImportColumn.HaloClient, "Halo client"),
-                (ImportColumn.Monitored, "Monitored"), (ImportColumn.DkimSelectors, "DKIM selectors"),
-            }.Where(column => columns.Contains(column.Column)).Select(column => column.Label).ToList();
+            var editColumns = new (ImportColumn Column, string Label)[] { (ImportColumn.Groups, "Groups"), (ImportColumn.Tags, "Tags") }
+                .Concat(PsaImportColumns.All.Select(column => (column.Column, column.Psa.CompanyLabel())))
+                .Concat([(ImportColumn.Monitored, "Monitored"), (ImportColumn.DkimSelectors, "DKIM selectors")])
+                .Where(column => columns.Contains(column.Item1)).Select(column => column.Item2).ToList();
 
             if (!permissions.CanEditDomains && editColumns.Count > 0)
             {
@@ -109,16 +111,27 @@ public static class DomainImportPlanner
                 notices.Add("The MTA-STS columns were ignored: you don't have permission to manage MTA-STS.");
             }
 
-            var haloColumnUsable = permissions.CanEditDomains && columns.Contains(ImportColumn.HaloClient);
-            if (haloColumnUsable && snapshot.HaloClients is null)
+            var usablePsas = new HashSet<PsaKind>();
+            foreach (var column in PsaImportColumns.All.Where(column => permissions.CanEditDomains && columns.Contains(column.Column)))
             {
-                notices.Add(snapshot.HaloUnavailableReason ?? "HaloPSA isn't connected, so the Halo client column was ignored.");
+                if (!snapshot.PsaCompanies.TryGetValue(column.Psa, out var list))
+                {
+                    notices.Add($"{column.Psa.DisplayName()} isn't connected, so the {column.Psa.CompanyLabel()} column was ignored.");
+                }
+                else if (list.Companies is null)
+                {
+                    notices.Add(list.FailureReason ?? $"{column.Psa.DisplayName()} companies couldn't be loaded, so the {column.Psa.CompanyLabel()} column was ignored.");
+                }
+                else
+                {
+                    usablePsas.Add(column.Psa);
+                }
             }
 
             return new UsableColumns(
                 permissions.CanEditDomains && columns.Contains(ImportColumn.Groups),
                 permissions.CanEditDomains && columns.Contains(ImportColumn.Tags),
-                haloColumnUsable && snapshot.HaloClients is not null,
+                usablePsas,
                 permissions.CanEditDomains && columns.Contains(ImportColumn.Monitored),
                 permissions.CanEditDomains && columns.Contains(ImportColumn.DkimSelectors),
                 permissions.CanManageMtaSts && hasMtaStsColumns);
@@ -137,7 +150,7 @@ public static class DomainImportPlanner
         public string Domain { get; } = domain;
         public NameListCell? Groups { get; private set; } = first.Groups;
         public NameListCell? Tags { get; private set; } = first.Tags;
-        public string? HaloClient { get; private set; } = first.HaloClient;
+        public Dictionary<PsaKind, string> PsaCompanies { get; } = new(first.PsaCompanies);
         public bool? Monitored { get; private set; } = first.Monitored;
         public IReadOnlyList<string>? DkimSelectors { get; private set; } = first.DkimSelectors;
         public MtaStsImportMode? MtaStsMode { get; private set; } = first.MtaStsMode;
@@ -149,7 +162,11 @@ public static class DomainImportPlanner
         {
             Groups = NameListCell.Combine(Groups, later.Groups);
             Tags = NameListCell.Combine(Tags, later.Tags);
-            HaloClient = later.HaloClient ?? HaloClient;
+            foreach (var (psa, companyName) in later.PsaCompanies)
+            {
+                PsaCompanies[psa] = companyName;
+            }
+
             Monitored = later.Monitored ?? Monitored;
             DkimSelectors = later.DkimSelectors ?? DkimSelectors;
             MtaStsMode = later.MtaStsMode ?? MtaStsMode;
@@ -159,7 +176,7 @@ public static class DomainImportPlanner
         }
     }
 
-    /// <summary>Tracks the unknown group, tag and Halo client names, and resolves any name to the one to use.</summary>
+    /// <summary>Tracks the unknown group, tag and PSA company names, and resolves any name to the one to use.</summary>
     private sealed class NameResolver(ImportSnapshot snapshot, ImportPermissions permissions, IReadOnlyDictionary<NameKey, NameResolution> chosen)
     {
         private readonly Dictionary<NameKey, (string Name, List<int> Lines)> _unknown = [];
@@ -168,7 +185,9 @@ public static class DomainImportPlanner
         {
             ImportNameKind.Group => snapshot.GroupNames,
             ImportNameKind.Tag => snapshot.TagNames,
-            _ => snapshot.HaloClients?.Select(client => client.Name).ToList() ?? []
+            _ => PsaImportColumns.ForNameKind(kind) is { } column && snapshot.PsaCompanies.TryGetValue(column.Psa, out var list)
+                ? list.Companies?.Select(company => company.Name).ToList() ?? []
+                : []
         };
 
         private bool CanCreate(ImportNameKind kind) => kind switch
@@ -269,12 +288,12 @@ public static class DomainImportPlanner
 
             var groups = usable.Groups ? PlanNames(ImportNameKind.Group, "Groups", "group", row.Groups, existing?.Groups, columns.Contains(ImportColumn.Groups)) : null;
             var tags = usable.Tags ? PlanNames(ImportNameKind.Tag, "Tags", "tag", row.Tags, existing?.Tags, columns.Contains(ImportColumn.Tags)) : null;
-            var (setHaloClient, haloClientId) = PlanHaloClient();
+            var psaCompanies = PlanPsaCompanies();
             var monitored = PlanMonitored();
             var dkimSelectors = PlanDkimSelectors();
             var mtaSts = PlanMtaSts();
 
-            var target = new DomainTarget(groups, tags, setHaloClient, haloClientId, monitored, dkimSelectors, mtaSts);
+            var target = new DomainTarget(groups, tags, psaCompanies, monitored, dkimSelectors, mtaSts);
             if (existing is not null && !_changes.Any)
             {
                 _notes.Add("Already monitored, and there's nothing to change.");
@@ -332,26 +351,37 @@ public static class DomainImportPlanner
             return change;
         }
 
-        private (bool SetHaloClient, int? HaloClientId) PlanHaloClient()
+        /// <summary>The company to set in each usable PSA whose column has a name. A name left out sets nothing.</summary>
+        private Dictionary<PsaKind, PsaCompany> PlanPsaCompanies()
         {
-            if (!usable.HaloClient || row.HaloClient is not { } requestedName)
+            var planned = new Dictionary<PsaKind, PsaCompany>();
+            foreach (var column in PsaImportColumns.All.Where(column => usable.PsaCompanies.Contains(column.Psa)))
             {
-                return (false, null);
+                if (!row.PsaCompanies.TryGetValue(column.Psa, out var requestedName))
+                {
+                    continue;
+                }
+
+                var label = column.Psa.CompanyLabel();
+                if (names.Resolve(column.NameKind, requestedName) is not { } resolvedName)
+                {
+                    _notes.Add($"{label} \"{requestedName}\" was left out.");
+                    continue;
+                }
+
+                var companies = snapshot.PsaCompanies[column.Psa].Companies!;
+                var company = companies.First(candidate => string.Equals(candidate.Name, resolvedName, StringComparison.OrdinalIgnoreCase));
+                _changes.Field(label, CurrentCompanyName(column.Psa, companies), company.Name);
+                planned[column.Psa] = company;
             }
 
-            if (names.Resolve(ImportNameKind.HaloClient, requestedName) is not { } resolvedName)
-            {
-                _notes.Add($"Halo client \"{requestedName}\" was left out.");
-                return (false, null);
-            }
-
-            var client = snapshot.HaloClients!.First(candidate => string.Equals(candidate.Name, resolvedName, StringComparison.OrdinalIgnoreCase));
-            _changes.Field("Halo client", ClientName(existing?.HaloClientId), client.Name);
-            return (true, client.Id);
+            return planned;
         }
 
-        private string? ClientName(int? clientId) =>
-            clientId is null ? null : snapshot.HaloClients?.FirstOrDefault(client => client.Id == clientId)?.Name ?? $"Halo client {clientId}";
+        private string? CurrentCompanyName(PsaKind psa, IReadOnlyList<PsaCompany> companies) =>
+            existing is not null && existing.PsaCompanyIds.TryGetValue(psa, out var companyId)
+                ? companies.FirstOrDefault(company => company.Id == companyId)?.Name ?? $"{psa.CompanyLabel()} {companyId}"
+                : null;
 
         private bool? PlanMonitored()
         {

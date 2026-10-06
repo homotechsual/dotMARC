@@ -1,3 +1,4 @@
+using DotMarc.Psa;
 using DotMarc.Data;
 using DotMarc.MtaSts;
 using DotMarc.Notifications;
@@ -11,7 +12,7 @@ public sealed record ExistingDomain(
     string Name,
     IReadOnlyList<string> Groups,
     IReadOnlyList<string> Tags,
-    int? HaloClientId,
+    IReadOnlyDictionary<PsaKind, string> PsaCompanyIds,
     bool IsMonitored,
     IReadOnlyList<string> DkimSelectors,
     bool MtaStsEnabled,
@@ -25,16 +26,15 @@ public sealed record ImportSnapshot(
     IReadOnlyDictionary<string, ExistingDomain> DomainsByName,
     IReadOnlyList<string> GroupNames,
     IReadOnlyList<string> TagNames,
-    IReadOnlyList<HaloClient>? HaloClients,
-    string? HaloUnavailableReason,
+    IReadOnlyDictionary<PsaKind, PsaCompanyList> PsaCompanies,
     IReadOnlyDictionary<string, IReadOnlyList<string>> LookedUpMxHosts);
 
 public static class ImportSnapshotLoader
 {
     private const int ParallelMxLookups = 8;
 
-    public static async Task<ImportSnapshot> LoadAsync(DotMarcDbContext context, ImportTable table, IReadOnlyList<HaloClient>? haloClients,
-        string? haloUnavailableReason, IMxHostsLookup mxHostsLookup, CancellationToken cancellationToken)
+    public static async Task<ImportSnapshot> LoadAsync(DotMarcDbContext context, ImportTable table, IReadOnlyList<PsaCompanyList> psaCompanies,
+        IMxHostsLookup mxHostsLookup, CancellationToken cancellationToken)
     {
         var validNames = table.Rows
             .Select(row => DomainNameValidator.TryNormalize(row.RawDomain, out var name) ? name : null)
@@ -51,6 +51,7 @@ public static class ImportSnapshotLoader
             .Where(domain => storedForms.Contains(domain.Name))
             .Include(domain => domain.Groups)
             .Include(domain => domain.Tags)
+            .Include(domain => domain.PsaCompanyLinks)
             .AsSplitQuery()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -66,7 +67,7 @@ public static class ImportSnapshotLoader
         var tagNames = await context.Tags.AsNoTracking().OrderBy(tag => tag.Name).Select(tag => tag.Name).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var lookedUp = await LookUpMxHostsAsync(table, domainsByName, mxHostsLookup, cancellationToken).ConfigureAwait(false);
-        return new ImportSnapshot(domainsByName, groupNames, tagNames, haloClients, haloUnavailableReason, lookedUp);
+        return new ImportSnapshot(domainsByName, groupNames, tagNames, psaCompanies.ToDictionary(list => list.Psa), lookedUp);
     }
 
     private static readonly System.Globalization.IdnMapping Idn = new();
@@ -75,7 +76,7 @@ public static class ImportSnapshotLoader
         new(domain.Id, domain.Name,
             domain.Groups.Select(group => group.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
             domain.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
-            domain.HaloClientId, domain.IsMonitored, domain.DkimSelectors, domain.MtaStsEnabled, domain.MtaStsMode,
+            domain.PsaCompanyLinks.ToDictionary(link => link.Psa, link => link.CompanyId), domain.IsMonitored, domain.DkimSelectors, domain.MtaStsEnabled, domain.MtaStsMode,
             domain.MtaStsMxHosts, domain.MtaStsMaxAgeSeconds);
 
     /// <summary>The Unicode form of an xn-- name, or null if it has none.</summary>

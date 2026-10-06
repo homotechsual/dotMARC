@@ -1,3 +1,4 @@
+using DotMarc.Psa;
 using DotMarc.Audit;
 using DotMarc.Data;
 
@@ -15,7 +16,7 @@ public sealed record NameKey(ImportNameKind Kind, string LoweredName);
 
 public sealed record NameResolution(NameChoice Choice, string? MapTo = null);
 
-/// <summary>A group, tag or Halo client name in the input that doesn't exist, with the choice in effect for it.</summary>
+/// <summary>A group, tag or PSA company name in the input that doesn't exist, with the choice in effect for it.</summary>
 public sealed record UnknownName(ImportNameKind Kind, string Name, IReadOnlyList<int> LineNumbers, IReadOnlyList<string> Suggestions, bool CanCreate, NameResolution Resolution)
 {
     public NameKey Key => new(Kind, Name.ToLowerInvariant());
@@ -45,8 +46,7 @@ public sealed record MtaStsTarget(bool Enabled, MtaStsMode Mode, IReadOnlyList<s
 public sealed record DomainTarget(
     NameSetChange? Groups,
     NameSetChange? Tags,
-    bool SetHaloClient,
-    int? HaloClientId,
+    IReadOnlyDictionary<PsaKind, PsaCompany> PsaCompanies,
     bool? Monitored,
     IReadOnlyList<string>? DkimSelectors,
     MtaStsTarget? MtaSts);

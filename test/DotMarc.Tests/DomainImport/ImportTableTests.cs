@@ -1,4 +1,5 @@
 using DotMarc.DomainImport;
+using DotMarc.Psa;
 using Xunit;
 
 namespace DotMarc.Tests.DomainImport;
@@ -24,7 +25,7 @@ public sealed class ImportTableTests
 
         Assert.Equal(["Client A"], row.Groups!.Names);
         Assert.Equal(["primary"], row.Tags!.Names);
-        Assert.Equal("Contoso Ltd", row.HaloClient);
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.HaloPsa]);
         Assert.False(row.Monitored);
     }
 
