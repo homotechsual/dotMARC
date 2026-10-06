@@ -169,7 +169,7 @@ else
 
 builder.Services.AddSingleton<HaloPsaTokenCache>();
 builder.Services.AddSingleton<HaloWebhookActivity>();
-builder.Services.AddTransient<HaloIntegrationTestService>();
+builder.Services.AddTransient<DotMarc.Psa.PsaIntegrationTestService>();
 builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
 builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, HaloPsaProvider>();
 builder.Services.AddScoped<DotMarc.Psa.PsaDirectory>();

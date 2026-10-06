@@ -1,0 +1,371 @@
+@using DotMarc.Data
+@using DotMarc.Components.Shared
+@using DotMarc.Notifications
+@using DotMarc.Psa
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuditRecorder AuditRecorder
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+@inject ILogger<HaloPsaSettingsTab> Logger
+@inject IHaloPsaClient HaloPsaClient
+@inject HaloPsaTokenCache HaloTokenCache
+@inject HaloWebhookActivity WebhookActivity
+@inject ISecretStore SecretStoreAccessor
+@inject NavigationManager NavigationManager
+
+@if (_haloSettings is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudPaper Class="pa-4">
+        <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
+            <MudText Typo="Typo.h5">HaloPSA</MudText>
+            <FieldWithHelp Topic="HaloPSA ticket sync" Inline="true" Help="Opens a Halo ticket for each alert (as set under 'Which alerts create tickets') and closes it when the alert resolves. A ticket closed in Halo resolves its alert, through the webhook below.">
+<MudSwitch @bind-Value="_haloSettings.Enabled" Color="Color.Primary" Label="Enable HaloPSA ticket sync" />
+</FieldWithHelp>
+        </div>
+
+        <MudText Typo="Typo.subtitle1" Class="mt-2 mb-2">Connection</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Account name" Help="Your Halo account name, kept for reference. dotMARC connects using the URLs below.">
+<MudTextField Label="Account name" @bind-Value="_haloSettings.AccountName" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Halo client ID" Help="From the API application created in Halo under Configuration, Integrations, HaloPSA API, with the scopes edit:tickets, read:tickets and read:customers.">
+<MudTextField Label="Client ID" @bind-Value="_haloSettings.ClientId" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Auth server URL" Help="Shown on the Halo API application. Usually https://your-account.halopsa.com/auth.">
+<MudTextField Label="Auth server URL" @bind-Value="_haloSettings.AuthServerUrl" Placeholder="https://<account>.halopsa.com/auth" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Resource server URL" Help="Shown on the Halo API application. Usually https://your-account.halopsa.com/api.">
+<MudTextField Label="Resource server URL" @bind-Value="_haloSettings.ResourceServerUrl" Placeholder="https://<account>.halopsa.com/api" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Halo client secret" Help="The Halo API application's secret. It's stored encrypted and can't be read back, so leave this blank to keep the saved one.">
+<MudTextField Label="Client secret" @bind-Value="_newHaloClientSecret" InputType="InputType.Password" Variant="Variant.Outlined"
+                              HelperText="@(_haloSettings.ClientSecretConfigured ? "A secret is already configured - leave blank to keep it." : "No secret configured yet.")" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-start">
+                <MudTooltip Text="dotMARC keeps Halo's sign-in for about an hour. If you've just changed the API agent's role or permissions in Halo, clear it so the next call signs in again and picks the change up.">
+                    <MudButton Variant="Variant.Outlined" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ClearHaloSignInAsync">Clear cached sign-in</MudButton>
+                </MudTooltip>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex align-center justify-space-between flex-wrap mt-6 mb-1" style="gap: 0.5rem;">
+            <MudText Typo="Typo.subtitle1">Ticket defaults</MudText>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CloudDownload" OnClick="LoadHaloOptionsAsync">Load options from Halo</MudButton>
+        </div>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+            Loads the ticket types, priorities, statuses and agents to choose from. Save your client secret first.
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Ticket type" Help="The Halo ticket type alert tickets are created with. Load options from Halo to choose one.">
+<MudSelect T="int?" Label="Ticket type" @bind-Value="_haloSettings.TicketTypeId" Variant="Variant.Outlined">
+                    @foreach (var ticketType in HaloOptionNames.WithSaved(_haloTicketTypes.Select(option => (option.Id, option.Name)), _haloSettings.TicketTypeId, _haloSettings.TicketTypeName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)ticketType.Id)">@ticketType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Default priority" Help="The priority alert tickets are created with.">
+<MudSelect T="int?" Label="Default priority" @bind-Value="_haloSettings.DefaultPriorityId" Variant="Variant.Outlined">
+                    @foreach (var priority in HaloOptionNames.WithSaved(_haloPriorities.Select(option => (option.Id, option.Name)), _haloSettings.DefaultPriorityId, _haloSettings.DefaultPriorityName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)priority.Id)">@priority.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Closed status" Help="The Halo status that means a ticket is closed. dotMARC moves a ticket to it when its alert resolves, and a ticket moved to it in Halo resolves the alert.">
+<MudSelect T="int?" Label="Closed status" @bind-Value="_haloSettings.ClosedStatusId" Variant="Variant.Outlined">
+                    @foreach (var status in HaloOptionNames.WithSaved(_haloStatuses.Select(option => (option.Id, option.Name)), _haloSettings.ClosedStatusId, _haloSettings.ClosedStatusName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Assign new tickets to" Help="Halo won't close a ticket nobody is assigned to. Pick an agent, or choose Don't assign if Halo assigns tickets itself (round robin, a rule or the ticket type's default).">
+<SearchableSelect TValue="int" Label="Assign new tickets to" Options="AgentOptions" Value="AssignedAgentSelection" ValueChanged="@(agentId => AssignedAgentSelection = agentId)"
+                                  Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.subtitle1" Class="mt-6 mb-2">Webhook</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="9">
+                <div @onclick="CopyWebhookUrlAsync" @onkeydown="OnWebhookUrlKeyDown" style="cursor: copy;" title="Click to copy">
+                    <MudTextField Label="Webhook URL" ReadOnly="true" Value="@WebhookUrl" Variant="Variant.Outlined"
+                                  Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                                  HelperText="Click to copy. Point HaloPSA's outbound webhook (on ticket status change) at this URL." />
+                </div>
+            </MudItem>
+            <MudItem xs="12" md="3" Class="d-flex align-start">
+                <MudButton Variant="Variant.Outlined" Class="button-beside-input" StartIcon="@Icons.Material.Filled.VpnKey" OnClick="GenerateWebhookSecretAsync">Generate new secret</MudButton>
+            </MudItem>
+            @if (_webhookSecretJustGenerated)
+            {
+                <MudItem xs="12" Class="pt-0">
+                    <MudText Typo="Typo.caption" Color="Color.Warning">Not saved yet - click Save HaloPSA settings before copying this URL.</MudText>
+                </MudItem>
+            }
+        </MudGrid>
+
+        <div class="d-flex justify-end mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveHaloSettingsAsync">Save HaloPSA settings</MudButton>
+        </div>
+    </MudPaper>
+
+    <PsaIntegrationTestPanel Psa="PsaKind.HaloPsa">
+        <MudText Typo="Typo.body2" Class="mb-3">
+            For HaloPSA it also waits for Halo to call the webhook above, which resolves real alerts straight away.
+        </MudText>
+    </PsaIntegrationTestPanel>
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.subtitle2">Recent calls to the webhook</MudText>
+        @{
+            var recentWebhookCalls = WebhookActivity.Recent(5);
+        }
+        @if (recentWebhookCalls.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">None since the app last started.</MudText>
+        }
+        else
+        {
+            @foreach (var call in recentWebhookCalls)
+            {
+                <MudText Typo="Typo.body2">@call.ReceivedUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC: @DescribeWebhookCall(call)</MudText>
+            }
+        }
+    </MudPaper>
+}
+
+@code {
+    /// <summary>Raised with whether HaloPSA is switched on in the saved settings, after loading and after saving.</summary>
+    [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _haloSettings = await HaloPsaSettingsService.GetAsync(db);
+        await EnabledChanged.InvokeAsync(_haloSettings.Enabled);
+    }
+
+    private HaloPsaSettings? _haloSettings;
+    private string? _newHaloClientSecret;
+    private List<HaloTicketType> _haloTicketTypes = [];
+    private List<HaloTicketStatus> _haloStatuses = [];
+    private List<HaloPriority> _haloPriorities = [];
+    private List<HaloAgent> _haloAgents = [];
+
+    // MudSelect can't offer a null item, so "don't assign" is 0 here and null on the saved settings.
+    private const int DontAssignAgent = 0;
+
+    private int AssignedAgentSelection
+    {
+        get => _haloSettings?.AssignedAgentId ?? DontAssignAgent;
+        set
+        {
+            if (_haloSettings is not null)
+            {
+                _haloSettings.AssignedAgentId = value == DontAssignAgent ? null : value;
+            }
+        }
+    }
+    private bool _webhookSecretJustGenerated;
+
+    // "Don't assign" comes first so it's always one click away, however many agents there are.
+    private List<SelectOption<int>> AgentOptions =>
+        [
+            new(DontAssignAgent, "Don't assign (Halo decides)"),
+            .. HaloOptionNames.WithSaved(_haloAgents.Select(option => (option.Id, option.Name)), _haloSettings?.AssignedAgentId, _haloSettings?.AssignedAgentName)
+                .Select(agent => new SelectOption<int>(agent.Id, agent.Name))
+        ];
+
+
+    private string WebhookUrl => _haloSettings?.WebhookSecret is { Length: > 0 } secret
+        ? $"{NavigationManager.BaseUri.TrimEnd('/')}/integrations/halopsa/webhook/{secret}"
+        : "Generate a webhook secret first.";
+
+    private async Task LoadHaloOptionsAsync()
+    {
+        if (_haloSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _haloTicketTypes = (await HaloPsaClient.ListTicketTypesAsync(_haloSettings)).ToList();
+            _haloStatuses = (await HaloPsaClient.ListStatusesAsync(_haloSettings)).ToList();
+            _haloPriorities = (await HaloPsaClient.ListPrioritiesAsync(_haloSettings)).ToList();
+            await LoadHaloAgentsAsync();
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
+        {
+            // HttpRequestException covers HaloPSA answering with an error (the message carries its
+            // OAuth error or status code) and genuine network failures (the connection error).
+            // InvalidDataException is a response that wasn't the shape dotMARC expects, and its
+            // message quotes the start of what Halo sent.
+            Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
+            ShowHaloError($"Couldn't load options from HaloPSA. {exception.Message}");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
+            ShowHaloError($"{exception.Message} Save your client secret first, then try again.");
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA ticket options failed");
+            ShowHaloError("Couldn't load options from HaloPSA. Check the account details and client secret are saved, then try again. See Manage > Server logs for the details.");
+        }
+    }
+
+    private async Task ClearHaloSignInAsync()
+    {
+        var dropped = await HaloTokenCache.ClearAsync();
+        await AuditRecorder.RecordAsync(AuditLog.Create(await AuditActorAccessor.GetAsync(), AuditEntryKind.Change,
+            AuditActions.HaloSignInCleared, AuditTarget.Settings("HaloPSA"), "Cleared the cached HaloPSA sign-in"));
+        Snackbar.Add(dropped == 0
+            ? "There was no cached Halo sign-in. The next call signs in fresh anyway."
+            : "Cleared the cached Halo sign-in. The next call signs in again and picks up any change to the API agent's permissions.", Severity.Success);
+    }
+
+    // Halo only lets an API agent whose role can see agents list them. That mustn't undo the lists that
+    // did load, so it reports its own problem and leaves "don't assign" and any saved agent in place.
+    private async Task LoadHaloAgentsAsync()
+    {
+        try
+        {
+            _haloAgents = (await HaloPsaClient.ListAgentsAsync(_haloSettings!)).ToList();
+            if (_haloAgents.Count == 0)
+            {
+                Snackbar.Add("Loaded ticket types, priorities and statuses from Halo.", Severity.Success);
+                ShowHaloError("Halo returned no agents to choose from, so the agent list is empty. Halo only lists the agents the API agent's role is allowed to see. Leave \"Don't assign\" if Halo assigns tickets itself, or give the API agent's role permission to view agents.");
+            }
+            else
+            {
+                Snackbar.Add("Loaded ticket types, priorities, statuses and agents from Halo.", Severity.Success);
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
+        {
+            Logger.LogWarning(exception, "Loading HaloPSA agents failed");
+            Snackbar.Add("Loaded ticket types, priorities and statuses from Halo.", Severity.Success);
+            ShowHaloError($"Couldn't load the Halo agents to assign tickets to, so that list is empty. The API agent's role in Halo may not be allowed to view agents. {exception.Message}");
+        }
+    }
+
+    // Stays on screen until dismissed: these messages can be long, and a few seconds isn't enough
+    // to read (or copy) them.
+    private void ShowHaloError(string message) =>
+        Snackbar.Add(message, Severity.Error, config => config.RequireInteraction = true);
+
+    private static string DescribeWebhookCall(HaloWebhookReceipt call) => call.Delivery switch
+    {
+        HaloWebhookDelivery.ClosedStatus => $"ticket #{call.TicketId} closed (status {call.StatusId}){(call.ResolvedAnAlert ? ", resolved an alert" : "")}",
+        HaloWebhookDelivery.OtherStatus => $"ticket #{call.TicketId}, status {call.StatusId} (not the closed status, ignored)",
+        HaloWebhookDelivery.Unreadable => $"the body wasn't understood. {call.Detail}",
+        HaloWebhookDelivery.StatusUnknown => $"ticket #{call.TicketId}, status not in the body and Halo wouldn't say: {call.Detail}",
+        HaloWebhookDelivery.WrongSecret => "wrong secret (answered 404)",
+        _ => "received"
+    };
+
+    private Task OnWebhookUrlKeyDown(KeyboardEventArgs args) =>
+        args.Key == "Enter" ? CopyWebhookUrlAsync() : Task.CompletedTask;
+
+    private async Task CopyWebhookUrlAsync()
+    {
+        if (_haloSettings?.WebhookSecret is not { Length: > 0 })
+        {
+            Snackbar.Add("Generate a webhook secret first.", Severity.Info);
+            return;
+        }
+
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", WebhookUrl);
+        }
+        catch (JSException)
+        {
+            // The clipboard API is only available in a secure context (HTTPS or localhost) and can
+            // be refused by the browser, so there has to be a manual way out.
+            Snackbar.Add("Couldn't copy automatically. Select the URL and copy it manually.", Severity.Warning);
+            return;
+        }
+
+        if (_webhookSecretJustGenerated)
+        {
+            // A URL copied before saving 404s until the secret is persisted (see the note beside
+            // the Generate button), so say so at the moment it matters.
+            Snackbar.Add("Copied, but this secret isn't saved yet. Click Save HaloPSA settings before using the URL in HaloPSA.", Severity.Warning);
+        }
+        else
+        {
+            Snackbar.Add("Webhook URL copied.", Severity.Success);
+        }
+    }
+
+    private Task GenerateWebhookSecretAsync()
+    {
+        if (_haloSettings is not null)
+        {
+            _haloSettings.WebhookSecret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+            _webhookSecretJustGenerated = true;
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveHaloSettingsAsync()
+    {
+        if (_haloSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Keep the names of the chosen options beside their ids, so the dropdowns show names before the lists load.
+            HaloOptionNames.Remember(_haloSettings, _haloTicketTypes, _haloPriorities, _haloStatuses, _haloAgents);
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await HaloPsaSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _haloSettings, string.IsNullOrWhiteSpace(_newHaloClientSecret) ? null : _newHaloClientSecret);
+
+            // Saving is when credentials or the API agent's permissions have usually just changed, so don't
+            // keep signing in with a token minted before that.
+            await HaloTokenCache.ClearAsync();
+            _newHaloClientSecret = null;
+            _webhookSecretJustGenerated = false;
+            Snackbar.Add("HaloPSA settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _haloSettings = await HaloPsaSettingsService.GetAsync(reloadDb);
+            await EnabledChanged.InvokeAsync(_haloSettings.Enabled);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Failed to save HaloPSA settings. Try again.", Severity.Error);
+        }
+    }
+}

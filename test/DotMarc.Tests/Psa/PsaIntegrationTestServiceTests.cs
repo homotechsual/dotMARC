@@ -1,75 +1,15 @@
 using DotMarc.Data;
 using DotMarc.Notifications;
+using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
-namespace DotMarc.Tests.Notifications;
-
-public class HaloWebhookActivityTests
-{
-    private static HaloWebhookActivity CreateActivity() => new(NullLogger<HaloWebhookActivity>.Instance);
-
-    [Fact]
-    public void Recent_ReturnsTheNewestFirst_AndKeepsOnlyTheLatestHundred()
-    {
-        var activity = CreateActivity();
-        for (var ticket = 1; ticket <= 150; ticket++)
-        {
-            activity.Record(HaloWebhookDelivery.ClosedStatus, ticket, 9);
-        }
-
-        var recent = activity.Recent(500);
-
-        Assert.Equal(100, recent.Count);
-        Assert.Equal(150, recent[0].TicketId);
-        Assert.Equal(51, recent[^1].TicketId);
-    }
-
-    [Fact]
-    public async Task WaitFor_ReturnsAReceiptThatArrivesWhileWaiting()
-    {
-        var activity = CreateActivity();
-        var since = DateTimeOffset.UtcNow;
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(150);
-            activity.Record(HaloWebhookDelivery.ClosedStatus, 42, 9);
-        });
-
-        var receipt = await activity.WaitForAsync(r => r.TicketId == 42, since, TimeSpan.FromSeconds(5), CancellationToken.None);
-
-        Assert.NotNull(receipt);
-        Assert.Equal(HaloWebhookDelivery.ClosedStatus, receipt.Delivery);
-    }
-
-    [Fact]
-    public async Task WaitFor_ReturnsNull_WhenNothingMatchesBeforeTheTimeout()
-    {
-        var activity = CreateActivity();
-        activity.Record(HaloWebhookDelivery.ClosedStatus, 7, 9);
-
-        var receipt = await activity.WaitForAsync(r => r.TicketId == 42, DateTimeOffset.MinValue, TimeSpan.FromMilliseconds(300), CancellationToken.None);
-
-        Assert.Null(receipt);
-    }
-
-    [Fact]
-    public async Task WaitFor_IgnoresReceiptsFromBeforeTheStartTime()
-    {
-        var activity = CreateActivity();
-        activity.Record(HaloWebhookDelivery.ClosedStatus, 42, 9);
-        await Task.Delay(30);
-
-        var receipt = await activity.WaitForAsync(r => r.TicketId == 42, DateTimeOffset.UtcNow, TimeSpan.FromMilliseconds(300), CancellationToken.None);
-
-        Assert.Null(receipt);
-    }
-}
+namespace DotMarc.Tests.Psa;
 
 [Collection("Postgres")]
-public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
+public sealed class PsaIntegrationTestServiceTests : IAsyncLifetime
 {
     private static readonly TimeSpan ShortTimeout = TimeSpan.FromMilliseconds(400);
 
@@ -79,7 +19,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
     private readonly HaloWebhookActivity _activity = new(NullLogger<HaloWebhookActivity>.Instance);
     private readonly FakeHalo _halo = new();
 
-    public HaloIntegrationTestServiceTests(PostgresContainerFixture fixture) => _fixture = fixture;
+    public PsaIntegrationTestServiceTests(PostgresContainerFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
@@ -99,8 +39,12 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
     private DotMarcDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
-    private HaloIntegrationTestService CreateService() =>
-        new(new FakeDbContextFactory(_connectionString), _halo, _activity, NullLogger<HaloIntegrationTestService>.Instance);
+    /// <summary>The real HaloPSA provider over a fake Halo client, plus any other providers a test adds.</summary>
+    private PsaIntegrationTestService CreateService(params IPsaProvider[] otherProviders) =>
+        new(new FakeDbContextFactory(_connectionString), [new HaloPsaProvider(_halo), .. otherProviders], _activity, NullLogger<PsaIntegrationTestService>.Instance);
+
+    private Task<PsaTestRun> RunHaloAsync(int? chosenClientId = null, IProgress<PsaTestStep>? progress = null) =>
+        CreateService().RunAsync(PsaKind.HaloPsa, chosenClientId?.ToString(System.Globalization.CultureInfo.InvariantCulture), progress, ShortTimeout, CancellationToken.None);
 
     private sealed class FakeHalo : IHaloPsaClient
     {
@@ -120,7 +64,12 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         public Task<IReadOnlyList<HaloTicketStatus>> ListStatusesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloTicketStatus>>([]);
         public Task<IReadOnlyList<HaloPriority>> ListPrioritiesAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloPriority>>([]);
         public Task<IReadOnlyList<HaloAgent>> ListAgentsAsync(HaloPsaSettings settings, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<HaloAgent>>([]);
-        public Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default) => Task.FromResult(9);
+        /// <summary>When true, closing is accepted but the ticket keeps its open status.</summary>
+        public bool IgnoresCloses { get; set; }
+        private bool _closed;
+
+        // 2 is an open status, 9 the closed status the settings use.
+        public Task<int> GetTicketStatusAsync(HaloPsaSettings settings, int ticketId, CancellationToken cancellationToken = default) => Task.FromResult(_closed ? 9 : 2);
 
         public Task<string> CreateTicketAsync(HaloPsaSettings settings, int haloClientId, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
         {
@@ -138,6 +87,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
                 return Task.FromException(CloseFailure);
             }
 
+            _closed = !IgnoresCloses;
             AfterClose?.Invoke();
             return Task.CompletedTask;
         }
@@ -192,11 +142,11 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         HaloCallsTheWebhookAfterClosing();
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.True(run.Succeeded);
-        Assert.Equal(HaloIntegrationTestService.StepNames, run.Steps.Select(s => s.Name));
-        Assert.All(run.Steps, step => Assert.Equal(HaloTestOutcome.Passed, step.Outcome));
+        Assert.Equal(PsaIntegrationTestService.StepNames(PsaKind.HaloPsa), run.Steps.Select(s => s.Name));
+        Assert.All(run.Steps, step => Assert.Equal(PsaTestOutcome.Passed, step.Outcome));
         Assert.Equal(["create", "close"], _halo.Calls);
         Assert.Equal(7, _halo.LastClientId);
         Assert.StartsWith("[dotMARC test] ", _halo.LastTitle);
@@ -208,11 +158,11 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
     {
         await SeedSettingsAsync(complete: false);
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
         var step = Assert.Single(run.Steps);
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains("closed status", step.Detail);
         Assert.Contains("client secret", step.Detail);
         Assert.Empty(_halo.Calls);
@@ -225,9 +175,9 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         HaloCallsTheWebhookAfterClosing();
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
-        Assert.Equal(HaloTestOutcome.Warning, run.Steps[0].Outcome);
+        Assert.Equal(PsaTestOutcome.Warning, run.Steps[0].Outcome);
         Assert.Contains("switched off", run.Steps[0].Detail);
         Assert.True(run.Succeeded);
     }
@@ -238,13 +188,13 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedSettingsAsync();
         await SeedAlertAsync(mappedHaloClientId: null);
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
-        Assert.True(run.NeedsClientChoice);
+        Assert.True(run.NeedsCompanyChoice);
         Assert.False(run.Succeeded);
         var step = run.Steps.Last();
-        Assert.Equal(HaloIntegrationTestService.AlertStep, step.Name);
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaIntegrationTestService.AlertStep, step.Name);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains("contoso.io", step.Detail);
         Assert.Empty(_halo.Calls);
     }
@@ -256,12 +206,12 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: null);
         HaloCallsTheWebhookAfterClosing();
 
-        var run = await CreateService().RunAsync(12, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync(12);
 
         Assert.True(run.Succeeded);
         Assert.Equal(12, _halo.LastClientId);
-        var alertStep = run.Steps.Single(s => s.Name == HaloIntegrationTestService.AlertStep);
-        Assert.Equal(HaloTestOutcome.Warning, alertStep.Outcome);
+        var alertStep = run.Steps.Single(s => s.Name == PsaIntegrationTestService.AlertStep);
+        Assert.Equal(PsaTestOutcome.Warning, alertStep.Outcome);
         Assert.Contains("no Halo client mapped", alertStep.Detail);
     }
 
@@ -270,13 +220,13 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
     {
         await SeedSettingsAsync();
 
-        var withoutClient = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
-        Assert.True(withoutClient.NeedsClientChoice);
+        var withoutClient = await RunHaloAsync();
+        Assert.True(withoutClient.NeedsCompanyChoice);
         Assert.Contains("no alerts yet", withoutClient.Steps.Last().Detail);
         Assert.Empty(_halo.Calls);
 
         HaloCallsTheWebhookAfterClosing();
-        var withClient = await CreateService().RunAsync(3, null, ShortTimeout, CancellationToken.None);
+        var withClient = await RunHaloAsync(3);
 
         Assert.True(withClient.Succeeded);
         Assert.Equal(3, _halo.LastClientId);
@@ -290,11 +240,11 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         _halo.CreateFailure = new HttpRequestException("HaloPSA returned 400 Bad Request for Post Tickets. Halo said: priority_id is not valid");
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
-        Assert.Equal(HaloIntegrationTestService.CreateStep, run.Steps.Last().Name);
-        Assert.Equal(HaloTestOutcome.Failed, run.Steps.Last().Outcome);
+        Assert.Equal(PsaIntegrationTestService.CreateStep, run.Steps.Last().Name);
+        Assert.Equal(PsaTestOutcome.Failed, run.Steps.Last().Outcome);
         Assert.Contains("priority_id is not valid", run.Steps.Last().Detail);
         Assert.Equal(["create"], _halo.Calls);
     }
@@ -306,12 +256,12 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         _halo.CloseFailure = new HttpRequestException("HaloPSA returned 400 Bad Request for Post Tickets/4242. Halo said: status_id is not valid");
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
         var step = run.Steps.Last();
-        Assert.Equal(HaloIntegrationTestService.CloseStep, step.Name);
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaIntegrationTestService.CloseStep, step.Name);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains("#4242", step.Detail);
         Assert.Contains("by hand", step.Detail);
         Assert.Contains("status_id is not valid", step.Detail);
@@ -324,10 +274,10 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         _halo.CloseFailure = new HttpRequestException("HaloPSA returned 400 Bad Request for POST Tickets. Halo said: \"Please assign this Ticket these before closing it.\"");
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         var step = run.Steps.Last();
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains("Please assign this Ticket", step.Detail);
         Assert.Contains("Assign new tickets to", step.Detail);
         Assert.Contains("by hand", step.Detail);
@@ -340,12 +290,12 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedSettingsAsync();
         await SeedAlertAsync(mappedHaloClientId: 7);
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
         var step = run.Steps.Last();
-        Assert.Equal(HaloIntegrationTestService.WebhookStep, step.Name);
-        Assert.Equal(HaloTestOutcome.Warning, step.Outcome);
+        Assert.Equal(PsaIntegrationTestService.WebhookStep, step.Name);
+        Assert.Equal(PsaTestOutcome.Warning, step.Outcome);
         Assert.Contains("No webhook call arrived", step.Detail);
         Assert.Contains("#4242", step.Detail);
     }
@@ -357,11 +307,11 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         HaloCallsTheWebhookAfterClosing(HaloWebhookDelivery.OtherStatus, statusId: 3);
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
         var step = run.Steps.Last();
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains("status 3", step.Detail);
         Assert.Contains("closed status is 9", step.Detail);
     }
@@ -375,11 +325,11 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         _halo.AfterClose = () => _activity.Record(delivery);
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
         var step = run.Steps.Last();
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains(expectedInDetail, step.Detail);
     }
 
@@ -390,7 +340,7 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         _halo.AfterClose = () => _activity.Record(HaloWebhookDelivery.Unreadable, detail: "Halo sent: id, event, webhook_id");
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.Contains("Halo sent: id, event, webhook_id", run.Steps.Last().Detail);
     }
@@ -402,10 +352,10 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedAlertAsync(mappedHaloClientId: 7);
         _halo.AfterClose = () => _activity.Record(HaloWebhookDelivery.StatusUnknown, 4242, detail: "HaloPSA returned 401 Unauthorized for GET Tickets/4242.");
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         var step = run.Steps.Last();
-        Assert.Equal(HaloTestOutcome.Failed, step.Outcome);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
         Assert.Contains("without saying its status", step.Detail);
         Assert.Contains("401 Unauthorized", step.Detail);
     }
@@ -418,10 +368,10 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         _activity.Record(HaloWebhookDelivery.ClosedStatus, 4242, 9);
         await Task.Delay(30);
 
-        var run = await CreateService().RunAsync(null, null, ShortTimeout, CancellationToken.None);
+        var run = await RunHaloAsync();
 
         Assert.False(run.Succeeded);
-        Assert.Equal(HaloTestOutcome.Warning, run.Steps.Last().Outcome);
+        Assert.Equal(PsaTestOutcome.Warning, run.Steps.Last().Outcome);
     }
 
     [Fact]
@@ -430,18 +380,102 @@ public sealed class HaloIntegrationTestServiceTests : IAsyncLifetime
         await SeedSettingsAsync();
         await SeedAlertAsync(mappedHaloClientId: 7);
         HaloCallsTheWebhookAfterClosing();
-        var reported = new List<(string Name, HaloTestOutcome Outcome)>();
+        var reported = new List<(string Name, PsaTestOutcome Outcome)>();
 
-        await CreateService().RunAsync(null, new SynchronousProgress(step => reported.Add((step.Name, step.Outcome))), ShortTimeout, CancellationToken.None);
+        await RunHaloAsync(progress: new SynchronousProgress(step => reported.Add((step.Name, step.Outcome))));
 
         // Each network step announces itself as Running before it settles.
-        Assert.Contains((HaloIntegrationTestService.CreateStep, HaloTestOutcome.Running), reported);
-        Assert.Contains((HaloIntegrationTestService.CreateStep, HaloTestOutcome.Passed), reported);
-        Assert.True(reported.IndexOf((HaloIntegrationTestService.CreateStep, HaloTestOutcome.Passed)) < reported.IndexOf((HaloIntegrationTestService.CloseStep, HaloTestOutcome.Running)));
+        Assert.Contains((PsaIntegrationTestService.CreateStep, PsaTestOutcome.Running), reported);
+        Assert.Contains((PsaIntegrationTestService.CreateStep, PsaTestOutcome.Passed), reported);
+        Assert.True(reported.IndexOf((PsaIntegrationTestService.CreateStep, PsaTestOutcome.Passed)) < reported.IndexOf((PsaIntegrationTestService.CloseStep, PsaTestOutcome.Running)));
     }
 
-    private sealed class SynchronousProgress(Action<HaloTestStep> onReport) : IProgress<HaloTestStep>
+    [Fact]
+    public async Task ConnectWise_PassesWhenTheTicketReadsOpenThenClosed_WithNoWebhookStep()
     {
-        public void Report(HaloTestStep value) => onReport(value);
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise);
+
+        var run = await CreateService(connectWise).RunAsync(PsaKind.ConnectWise, "250", null, null, CancellationToken.None);
+
+        Assert.True(run.Succeeded);
+        Assert.Equal(PsaIntegrationTestService.StepNames(PsaKind.ConnectWise), run.Steps.Select(step => step.Name));
+        Assert.DoesNotContain(run.Steps, step => step.Name == PsaIntegrationTestService.WebhookStep);
+        Assert.Equal("250", Assert.Single(connectWise.Created).CompanyId);
+    }
+
+    [Fact]
+    public async Task ATicketThatStillReadsOpenAfterClosing_FailsTheLastStep()
+    {
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise) { IgnoreCloses = true };
+
+        var run = await CreateService(connectWise).RunAsync(PsaKind.ConnectWise, "250", null, null, CancellationToken.None);
+
+        Assert.False(run.Succeeded);
+        var step = run.Steps.Last();
+        Assert.Equal((PsaIntegrationTestService.ClosedStep, PsaTestOutcome.Failed), (step.Name, step.Outcome));
+        Assert.Contains("still reads as open", step.Detail);
+    }
+
+    [Fact]
+    public async Task ANewTicketThatAlreadyReadsClosed_FailsTheOpenStep()
+    {
+        await SeedSettingsAsync();
+        await SeedAlertAsync(mappedHaloClientId: 7);
+        _halo.IgnoresCloses = false;
+        var connectWise = new FakePsaProvider(PsaKind.ConnectWise);
+        connectWise.States["1000"] = PsaTicketState.Closed;
+        connectWise.NextTicketNumber = 1000;
+
+        var run = await CreateService(new ClosedOnArrival(connectWise)).RunAsync(PsaKind.ConnectWise, "250", null, null, CancellationToken.None);
+
+        var step = run.Steps.Last();
+        Assert.Equal((PsaIntegrationTestService.OpenStep, PsaTestOutcome.Failed), (step.Name, step.Outcome));
+        Assert.Contains("closed status", step.Detail);
+    }
+
+    [Fact]
+    public async Task AnUnknownPsa_FailsTheSettingsStep()
+    {
+        var run = await CreateService().RunAsync(PsaKind.Autotask, "1", null, null, CancellationToken.None);
+
+        Assert.False(run.Succeeded);
+        Assert.Equal(PsaTestOutcome.Failed, Assert.Single(run.Steps).Outcome);
+    }
+
+    [Fact]
+    public async Task Halo_WithoutAWebhookSecret_FailsTheSettingsStep()
+    {
+        // The webhook secret isn't needed for ticketing, but the Halo test waits for the webhook, so it needs one.
+        await SeedSettingsAsync();
+        await using (var context = CreateContext())
+        {
+            var settings = await context.HaloPsaSettings.SingleAsync();
+            settings.WebhookSecret = null;
+            await context.SaveChangesAsync();
+        }
+
+        var run = await RunHaloAsync(7);
+
+        var step = Assert.Single(run.Steps);
+        Assert.Equal(PsaTestOutcome.Failed, step.Outcome);
+        Assert.Contains("webhook secret", step.Detail);
+    }
+
+    /// <summary>A provider whose new tickets already read as closed, as when the closed status is also the one new
+    /// tickets start in.</summary>
+    private sealed class ClosedOnArrival(FakePsaProvider inner) : IPsaProvider
+    {
+        public PsaKind Kind => inner.Kind;
+        public Task<PsaReadiness> GetReadinessAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) => inner.GetReadinessAsync(context, cancellationToken);
+        public Task<IReadOnlyList<PsaCompany>> ListCompaniesAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) => inner.ListCompaniesAsync(context, cancellationToken);
+        public Task<string> CreateTicketAsync(DotMarcDbContext context, PsaTicketRequest request, CancellationToken cancellationToken = default) => inner.CreateTicketAsync(context, request, cancellationToken);
+        public Task<PsaTicketState> GetTicketStateAsync(DotMarcDbContext context, string ticketId, CancellationToken cancellationToken = default) => Task.FromResult(PsaTicketState.Closed);
+        public Task CloseTicketAsync(DotMarcDbContext context, string ticketId, string note, CancellationToken cancellationToken = default) => inner.CloseTicketAsync(context, ticketId, note, cancellationToken);
+        public Task<string?> GetTicketUrlTemplateAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) => inner.GetTicketUrlTemplateAsync(context, cancellationToken);
+    }
+
+    private sealed class SynchronousProgress(Action<PsaTestStep> onReport) : IProgress<PsaTestStep>
+    {
+        public void Report(PsaTestStep value) => onReport(value);
     }
 }

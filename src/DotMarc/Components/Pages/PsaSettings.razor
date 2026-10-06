@@ -1,0 +1,31 @@
+@page "/psa/settings"
+@attribute [Authorize(Policy = "AlertsManage")]
+@using DotMarc.Components.Psa
+@using DotMarc.Components.Shared
+@using DotMarc.Psa
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>dotMARC - PSA Settings</PageTitle>
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">PSA settings</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" Class="ml-2" />
+</div>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+    Turn on any PSA dotMARC should raise tickets in. You can use more than one: each Group or Domain links to a company in
+    each, and an alert raises a ticket in every PSA its domain is linked in. Which alert types raise tickets is set under
+    <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+</MudText>
+
+<MudTabs @bind-ActivePanelIndex="_activeTab">
+    <MudTabPanel Text="HaloPSA" Icon="@TabIcon(_haloEnabled)">
+        <div class="pt-4"><HaloPsaSettingsTab EnabledChanged="@(enabled => _haloEnabled = enabled)" /></div>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private int _activeTab;
+    private bool _haloEnabled;
+
+    /// <summary>A tick on the tab of each PSA that is switched on.</summary>
+    private static string? TabIcon(bool enabled) => enabled ? Icons.Material.Filled.CheckCircle : null;
+}
