@@ -40,7 +40,7 @@ public sealed class DnsHealthAlertingTests : IAsyncLifetime
         await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
         {
             Enabled = enabled,
-            DeliveryMode = "Teams",
+            TeamsEnabled = true,
             TeamsWebhookUrl = "https://example.test/webhook",
             MissingReportThresholdDays = missingReportThresholdDays,
             CooldownMinutes = cooldownMinutes,

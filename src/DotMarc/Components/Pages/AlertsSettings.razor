@@ -17,6 +17,7 @@
 @inject HaloWebhookActivity WebhookActivity
 @inject ISecretStore SecretStoreAccessor
 @inject NavigationManager NavigationManager
+@inject IAlertWebhookClient AlertWebhookClient
 
 <PageTitle>dotMARC - Alert Settings</PageTitle>
 <div class="d-flex align-center mb-4">
@@ -33,32 +34,35 @@ else
     <MudPaper Class="pa-4">
         <MudGrid>
             <MudItem xs="12">
-                <FieldWithHelp Topic="Enable notifications" Inline="true" Help="Turns alerting on or off. While it's off, dotMARC raises no alerts, so nothing is sent to Teams or your webhook and no Halo tickets are opened.">
+                <FieldWithHelp Topic="Enable notifications" Inline="true" Help="Turns alerting on or off. While it's off, dotMARC raises no alerts, so nothing is sent to any channel and no Halo tickets are opened.">
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
 </FieldWithHelp>
             </MudItem>
 
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Delivery mode" Help="Where alerts are sent: a Microsoft Teams channel, your own webhook, or both. HaloPSA tickets are separate, set up further down.">
-<MudSelect T="string" Label="Delivery mode" Variant="Variant.Outlined" @bind-Value="_settings.DeliveryMode">
-                    <MudSelectItem Value="@("Teams")">Teams only</MudSelectItem>
-                    <MudSelectItem Value="@("Generic")">Generic webhook only</MudSelectItem>
-                    <MudSelectItem Value="@("Both")">Teams + generic webhook</MudSelectItem>
-                </MudSelect>
-</FieldWithHelp>
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle1">Where alerts go</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    Switch on each channel alerts should reach. HaloPSA tickets are separate, set up further down.
+                </MudText>
             </MudItem>
 
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Teams webhook URL" Help="The webhook URL of the Teams channel alerts should post to. Used when the delivery mode includes Teams.">
-<MudTextField Label="Teams webhook URL" @bind-Value="_settings.TeamsWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
-
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Generic webhook URL" Help="dotMARC POSTs each alert here as JSON, with domainName, alertType, title, message, severity and createdUtc. Used when the delivery mode includes the generic webhook.">
-<MudTextField Label="Generic webhook URL" @bind-Value="_settings.GenericWebhookUrl" InputType="InputType.Url" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
+            @foreach (var channelSetting in AlertChannelSettings)
+            {
+                <MudItem xs="12" sm="4" md="3" Class="d-flex align-center">
+                    <MudSwitch T="bool" Value="channelSetting.GetEnabled(_settings)" ValueChanged="@(enabled => channelSetting.SetEnabled(_settings!, enabled))"
+                               Color="Color.Primary" Label="@channelSetting.Name" />
+                </MudItem>
+                <MudItem xs="12" sm="8" md="7">
+                    <FieldWithHelp Topic="@($"{channelSetting.Name} webhook URL")" Help="@channelSetting.Help">
+                        <MudTextField T="string" Label="@($"{channelSetting.Name} webhook URL")" Value="channelSetting.GetUrl(_settings)"
+                                      ValueChanged="@(url => channelSetting.SetUrl(_settings!, url))" InputType="InputType.Url" Variant="Variant.Outlined" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Send" Disabled="@(_testingChannel is not null || string.IsNullOrWhiteSpace(channelSetting.GetUrl(_settings)))"
+                               OnClick="@(() => SendTestAlertAsync(channelSetting))">@(_testingChannel == channelSetting.Channel ? "Sending..." : "Send test")</MudButton>
+                </MudItem>
+            }
 
             <MudItem xs="12" md="6">
                 <FieldWithHelp Topic="Missing report threshold" Help="How many days a monitored domain can go without a DMARC aggregate report before a 'Missing DMARC report' alert. Most receivers report daily, so 2 allows for one late day.">
@@ -359,6 +363,46 @@ else
     ];
 
     private NotificationSettings? _settings;
+    private AlertChannel? _testingChannel;
+
+    private sealed record AlertChannelSetting(AlertChannel Channel, string Name, string Help,
+        Func<NotificationSettings, bool> GetEnabled, Action<NotificationSettings, bool> SetEnabled,
+        Func<NotificationSettings, string?> GetUrl, Action<NotificationSettings, string?> SetUrl);
+
+    private static readonly AlertChannelSetting[] AlertChannelSettings =
+    [
+        new(AlertChannel.Teams, "Teams", "The webhook URL of the Teams channel alerts should post to.",
+            settings => settings.TeamsEnabled, (settings, enabled) => settings.TeamsEnabled = enabled,
+            settings => settings.TeamsWebhookUrl, (settings, url) => settings.TeamsWebhookUrl = url),
+        new(AlertChannel.Slack, "Slack", "The incoming webhook URL from your Slack app (Incoming Webhooks), starting https://hooks.slack.com/services/. Alerts post to the channel you picked when you added the webhook.",
+            settings => settings.SlackEnabled, (settings, enabled) => settings.SlackEnabled = enabled,
+            settings => settings.SlackWebhookUrl, (settings, url) => settings.SlackWebhookUrl = url),
+        new(AlertChannel.GenericWebhook, "Generic", "dotMARC POSTs each alert here as JSON, with domainName, alertType, title, message, severity and createdUtc.",
+            settings => settings.GenericWebhookEnabled, (settings, enabled) => settings.GenericWebhookEnabled = enabled,
+            settings => settings.GenericWebhookUrl, (settings, url) => settings.GenericWebhookUrl = url),
+    ];
+
+    /// <summary>Sends a marked test alert to the URL as typed, saved or not, so a channel can be checked before saving.</summary>
+    private async Task SendTestAlertAsync(AlertChannelSetting channelSetting)
+    {
+        _testingChannel = channelSetting.Channel;
+        try
+        {
+            var problem = await AlertWebhookClient.SendTestAsync(channelSetting.Channel, channelSetting.GetUrl(_settings!));
+            if (problem is null)
+            {
+                Snackbar.Add($"Test alert sent to {channelSetting.Name}. Check that it arrived.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"The {channelSetting.Name} test didn't go through: {problem}", Severity.Error);
+            }
+        }
+        finally
+        {
+            _testingChannel = null;
+        }
+    }
     private HaloPsaSettings? _haloSettings;
     private string? _newHaloClientSecret;
     private List<HaloTicketType> _haloTicketTypes = [];

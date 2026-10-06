@@ -13,4 +13,7 @@ internal sealed class FakeAlertWebhookClient : IAlertWebhookClient
         Sent.Add((domainName, alertType));
         return Task.CompletedTask;
     }
+
+    public Task<string?> SendTestAsync(AlertChannel channel, string? webhookUrl, CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
 }

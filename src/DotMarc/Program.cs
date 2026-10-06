@@ -148,6 +148,7 @@ builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.G
 
 builder.Services.AddHttpClient<ITeamsWebhookClient, TeamsWebhookClient>();
 builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
+builder.Services.AddHttpClient<ISlackWebhookClient, SlackWebhookClient>();
 builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();
 
 // KeyVault:VaultUri is only set by infra/main.bicep when enableKeyVaultWrite is true (see

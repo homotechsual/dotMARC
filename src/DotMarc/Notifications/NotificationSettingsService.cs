@@ -17,6 +17,7 @@ public static class NotificationSettingsService
     public static async Task SaveAsync(DotMarcDbContext context, AuditActor actor, NotificationSettings updated, CancellationToken cancellationToken = default)
     {
         ValidateWebhookUrl(updated.TeamsWebhookUrl, "Teams webhook URL");
+        ValidateWebhookUrl(updated.SlackWebhookUrl, "Slack webhook URL");
         ValidateWebhookUrl(updated.GenericWebhookUrl, "Generic webhook URL");
         if (updated.AcknowledgeableAutoCloseDays is < 0 or > 365)
         {
@@ -27,9 +28,12 @@ public static class NotificationSettingsService
         var saved = await context.NotificationSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()
             .Field("Enabled", saved.Enabled, updated.Enabled)
-            .Field("Delivery mode", saved.DeliveryMode, updated.DeliveryMode)
+            .Field("Teams", saved.TeamsEnabled, updated.TeamsEnabled)
+            .Field("Slack", saved.SlackEnabled, updated.SlackEnabled)
+            .Field("Generic webhook", saved.GenericWebhookEnabled, updated.GenericWebhookEnabled)
             // Webhook URLs carry the token that lets anyone post to the channel, so they're recorded like secrets.
             .Secret("Teams webhook URL", saved.TeamsWebhookUrl != updated.TeamsWebhookUrl)
+            .Secret("Slack webhook URL", saved.SlackWebhookUrl != updated.SlackWebhookUrl)
             .Secret("Generic webhook URL", saved.GenericWebhookUrl != updated.GenericWebhookUrl)
             .Field("Missing report threshold (days)", saved.MissingReportThresholdDays, updated.MissingReportThresholdDays)
             .Field("Cooldown (minutes)", saved.CooldownMinutes, updated.CooldownMinutes)
@@ -54,8 +58,11 @@ public static class NotificationSettingsService
         var existing = await context.NotificationSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
 
         existing.Enabled = updated.Enabled;
-        existing.DeliveryMode = updated.DeliveryMode;
+        existing.TeamsEnabled = updated.TeamsEnabled;
         existing.TeamsWebhookUrl = updated.TeamsWebhookUrl;
+        existing.SlackEnabled = updated.SlackEnabled;
+        existing.SlackWebhookUrl = updated.SlackWebhookUrl;
+        existing.GenericWebhookEnabled = updated.GenericWebhookEnabled;
         existing.GenericWebhookUrl = updated.GenericWebhookUrl;
         existing.MissingReportThresholdDays = updated.MissingReportThresholdDays;
         existing.CooldownMinutes = updated.CooldownMinutes;
@@ -79,16 +86,9 @@ public static class NotificationSettingsService
 
     private static void ValidateWebhookUrl(string? value, string settingName)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (WebhookUrls.Problem(value, settingName) is { } problem)
         {
-            return;
-        }
-
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
-            uri.Scheme != Uri.UriSchemeHttps ||
-            !string.IsNullOrEmpty(uri.UserInfo))
-        {
-            throw new ArgumentException($"{settingName} must be an absolute HTTPS URL without embedded credentials.", nameof(value));
+            throw new ArgumentException(problem, nameof(value));
         }
     }
 }

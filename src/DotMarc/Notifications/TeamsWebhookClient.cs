@@ -4,7 +4,7 @@ namespace DotMarc.Notifications;
 
 public interface ITeamsWebhookClient
 {
-    Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
+    Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
 }
 
 public sealed class TeamsWebhookClient : ITeamsWebhookClient
@@ -13,15 +13,10 @@ public sealed class TeamsWebhookClient : ITeamsWebhookClient
 
     public TeamsWebhookClient(HttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
     {
-        if (!settings.Enabled || string.IsNullOrWhiteSpace(settings.TeamsWebhookUrl))
-        {
-            return;
-        }
-
         var payload = BuildPayload(domainName, alertType, title, message);
-        using var response = await _httpClient.PostAsJsonAsync(settings.TeamsWebhookUrl, payload, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.PostAsJsonAsync(webhookUrl, payload, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
