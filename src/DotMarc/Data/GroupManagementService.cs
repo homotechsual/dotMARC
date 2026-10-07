@@ -94,7 +94,7 @@ public static class GroupManagementService
         return AddGroupResult.Added;
     }
 
-    public enum RemoveGroupResult { Removed, InUseByApiKey }
+    public enum RemoveGroupResult { Removed, InUseByApiKey, LastGroupOfClientPortal }
 
     /// <summary>Permanently deletes a Group row. DotMarcDbContext.cs's implicit many-to-many
     /// skip navigation between Domain and Group means EF removes the join rows via the join
@@ -110,6 +110,15 @@ public static class GroupManagementService
         if (limitsAnApiKey)
         {
             return RemoveGroupResult.InUseByApiKey;
+        }
+
+        // A client portal grant left with no Groups would see every domain, so its last Group can't be removed.
+        var lastGroupOfAPortalGrant = await context.UserAccesses
+            .AnyAsync(access => access.IsClientPortal && access.ScopedGroups.Count == 1 && access.ScopedGroups.Any(scopedGroup => scopedGroup.Id == groupId), cancellationToken)
+            .ConfigureAwait(false);
+        if (lastGroupOfAPortalGrant)
+        {
+            return RemoveGroupResult.LastGroupOfClientPortal;
         }
 
         AuditLog.Record(context, actor, AuditActions.GroupRemoved, AuditTarget.For(group), $"Removed group {group.Name}");

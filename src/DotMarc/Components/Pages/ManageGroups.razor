@@ -617,6 +617,10 @@
                 {
                     Snackbar.Add($"Can't remove {row.Name}. An API key is limited to it. Revoke that key on the Access page first.", Severity.Error);
                 }
+                else if (removeResult == GroupManagementService.RemoveGroupResult.LastGroupOfClientPortal)
+                {
+                    Snackbar.Add($"Can't remove {row.Name}. It's the only Group a client portal user can see. Change their access on the Access page first.", Severity.Error);
+                }
 
                 await LoadAsync();
             }

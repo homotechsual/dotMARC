@@ -306,4 +306,33 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.False(await verify.Groups.AnyAsync(group => group.Id == groupId));
     }
+
+    [Fact]
+    public async Task RemoveGroupAsync_APortalGrantsLastGroup_IsRefused()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [] };
+        var group = new Group { Name = "Aurora Retail" };
+        context.UserAccesses.Add(new UserAccess { Email = "client@aurora.example", Role = viewerRole, ScopedGroups = [group], IsClientPortal = true });
+        await context.SaveChangesAsync();
+
+        var result = await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, group.Id);
+
+        Assert.Equal(GroupManagementService.RemoveGroupResult.LastGroupOfClientPortal, result);
+        await using var verify = CreateContext();
+        Assert.Single(verify.Groups);
+    }
+
+    [Fact]
+    public async Task RemoveGroupAsync_APortalGrantWithOtherGroups_IsAllowed()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [] };
+        var aurora = new Group { Name = "Aurora Retail" };
+        var auroraOnline = new Group { Name = "Aurora Online" };
+        context.UserAccesses.Add(new UserAccess { Email = "client@aurora.example", Role = viewerRole, ScopedGroups = [aurora, auroraOnline], IsClientPortal = true });
+        await context.SaveChangesAsync();
+
+        Assert.Equal(GroupManagementService.RemoveGroupResult.Removed, await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, aurora.Id));
+    }
 }
