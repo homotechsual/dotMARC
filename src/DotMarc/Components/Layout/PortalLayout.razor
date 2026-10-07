@@ -1,8 +1,11 @@
 @inherits LayoutComponentBase
 @using DotMarc.Portal
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @inject IJSRuntime Js
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject PortalBrandLoader BrandLoader
 
 @* The client portal's own layout: the brand, the client's name, dark mode and sign out. No menus, and nothing that
    reveals or links to dotMARC's internal pages. *@
@@ -14,8 +17,23 @@
 <MudLayout>
     <MudAppBar Elevation="1">
         <a href="/portal" class="d-flex align-center" style="color: inherit; text-decoration: none; gap: 0.75rem;">
-            @* The default logo carries the wordmark, so the product name isn't repeated beside it. *@
-            <img src="@Assets["logo.svg"]" alt="@ProductName" height="40" />
+            @if (_brand is null)
+            {
+                @* While the brand loads, show nothing rather than flash dotMARC's own logo at a client. *@
+            }
+            else if (PortalBranding.AppBarLogo(_brand, _isDarkMode) is { } logoId)
+            {
+                <img src="@($"/branding/logo/{logoId}")" alt="@_brand.ProductName" height="40" />
+            }
+            else
+            {
+                <MudText Typo="Typo.h6">@_brand.ProductName</MudText>
+            }
+            @if (_brand is not null && _brand.Heading != _brand.ProductName)
+            {
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-1" Style="border-color: currentColor; opacity: 0.4;" />
+                <MudText Typo="Typo.h6">@_brand.Heading</MudText>
+            }
         </a>
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
@@ -27,15 +45,45 @@
     </MudAppBar>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.Large" Class="my-4">
-            @Body
+            <CascadingValue Value="_brand">
+                @Body
+            </CascadingValue>
         </MudContainer>
+        @if (_brand is not null && HasSupportDetails(_brand))
+        {
+            <footer class="pa-4 mt-4 d-flex flex-wrap justify-center mud-text-secondary" style="gap: 1.5rem;">
+                @if (_brand.SupportEmail is { } email)
+                {
+                    <MudLink Href="@($"mailto:{email}")" Typo="Typo.body2">@email</MudLink>
+                }
+                @if (_brand.SupportUrl is { } url)
+                {
+                    <MudLink Href="@url" Target="_blank" rel="noopener noreferrer" Typo="Typo.body2">@url</MudLink>
+                }
+                @if (_brand.SupportPhone is { } phone)
+                {
+                    <MudText Typo="Typo.body2">@phone</MudText>
+                }
+                @if (_brand.FooterText is { } footerText)
+                {
+                    <MudText Typo="Typo.body2">@footerText</MudText>
+                }
+            </footer>
+        }
     </MudMainContent>
 </MudLayout>
 
 @code {
-    private const string ProductName = "dotMARC";
-    private readonly MudTheme _theme = PortalTheme.Default;
+    private MudTheme _theme = PortalTheme.Default;
+    private ResolvedBrand? _brand;
     private bool _isDarkMode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _brand = await BrandLoader.LoadAsync(PortalData.ScopedGroupIds(user));
+        _theme = PortalTheme.For(_brand);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -46,6 +94,9 @@
             StateHasChanged();
         }
     }
+
+    private static bool HasSupportDetails(ResolvedBrand brand) =>
+        brand.SupportEmail is not null || brand.SupportUrl is not null || brand.SupportPhone is not null || brand.FooterText is not null;
 
     private async Task ToggleDarkModeAsync()
     {

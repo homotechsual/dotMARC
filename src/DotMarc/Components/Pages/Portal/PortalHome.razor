@@ -8,7 +8,7 @@
 @inject PortalData PortalData
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<PageTitle>Your domains</PageTitle>
+<PageTitle>@PortalTitle.With("Your domains", Brand)</PageTitle>
 
 @if (_domains is null)
 {
@@ -31,6 +31,8 @@ else
 }
 
 @code {
+    [CascadingParameter] public ResolvedBrand? Brand { get; set; }
+
     private IReadOnlyList<PortalDomainSummary>? _domains;
 
     protected override async Task OnInitializedAsync()

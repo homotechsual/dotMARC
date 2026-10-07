@@ -58,4 +58,44 @@ public static class PortalTheme
             WarningContrastText = "rgba(0,0,0,0.87)",
         }
     };
+
+    private const string LightText = "#FCFCFC";
+    private const string DarkText = "#000000";
+
+    /// <summary>The default look in the brand's colours: primary and secondary in both palettes, and the light app bar in
+    /// the secondary colour as dotMARC's own is. Dark mode keeps its own app bar, so the page stays dark.</summary>
+    public static MudTheme For(ResolvedBrand brand)
+    {
+        var theme = Default;
+        var primary = new MudBlazor.Utilities.MudColor(brand.PrimaryColour);
+        var secondary = new MudBlazor.Utilities.MudColor(brand.SecondaryColour);
+
+        theme.PaletteLight.Primary = primary;
+        theme.PaletteLight.PrimaryLighten = primary.ColorLighten(0.2).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteLight.PrimaryDarken = primary.ColorDarken(0.1).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteLight.PrimaryContrastText = ReadableTextOn(brand.PrimaryColour);
+        theme.PaletteLight.Secondary = secondary;
+        theme.PaletteLight.SecondaryLighten = secondary.ColorLighten(0.1).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteLight.SecondaryDarken = secondary.ColorDarken(0.1).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteLight.SecondaryContrastText = ReadableTextOn(brand.SecondaryColour);
+        theme.PaletteLight.Info = secondary;
+        theme.PaletteLight.InfoContrastText = ReadableTextOn(brand.SecondaryColour);
+        theme.PaletteLight.AppbarBackground = secondary;
+        theme.PaletteLight.AppbarText = ReadableTextOn(brand.SecondaryColour);
+
+        theme.PaletteDark.Primary = primary;
+        theme.PaletteDark.PrimaryLighten = primary.ColorLighten(0.2).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteDark.PrimaryDarken = primary.ColorDarken(0.1).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteDark.PrimaryContrastText = ReadableTextOn(brand.PrimaryColour);
+        theme.PaletteDark.Secondary = secondary;
+        theme.PaletteDark.SecondaryContrastText = ReadableTextOn(brand.SecondaryColour);
+        return theme;
+    }
+
+    /// <summary>Whether the colour is dark enough that light text reads better on it.</summary>
+    public static bool IsDark(string colour) => ReadableTextOn(colour) == LightText;
+
+    /// <summary>Near-white or black, whichever reads better on the colour.</summary>
+    public static string ReadableTextOn(string colour) =>
+        BrandColours.ContrastRatio(colour, LightText) >= BrandColours.ContrastRatio(colour, DarkText) ? LightText : DarkText;
 }

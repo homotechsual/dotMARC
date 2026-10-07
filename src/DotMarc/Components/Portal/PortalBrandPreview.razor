@@ -1,0 +1,54 @@
+@using DotMarc.Portal
+
+@* How the portal will look in a brand, light and dark side by side. Each side sets MudBlazor's palette variables on its
+   own container instead of nesting a theme provider, which would restyle the whole page. *@
+<div class="d-flex flex-wrap" style="gap: 1rem;">
+    @foreach (var dark in new[] { false, true })
+    {
+        <div style="@ContainerStyle(dark)" class="flex-grow-1">
+            <div class="d-flex align-center px-4" style="@AppBarStyle(dark)">
+                @if (PortalBranding.AppBarLogo(Brand, dark) is { } logoId)
+                {
+                    <img src="@($"/branding/logo/{logoId}")" alt="@Brand.ProductName" height="32" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.h6">@Brand.ProductName</MudText>
+                }
+                @if (Brand.Heading != Brand.ProductName)
+                {
+                    <span class="mx-3" style="opacity: 0.4;">|</span>
+                    <MudText Typo="Typo.h6">@Brand.Heading</MudText>
+                }
+            </div>
+            <div class="pa-4">
+                <MudText Typo="Typo.caption" Class="d-block mb-2">@(dark ? "Dark mode" : "Light mode")</MudText>
+                <PortalDomainCard Summary="SampleDomain" LinkPrefix="#" />
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ResolvedBrand Brand { get; set; } = null!;
+
+    private static readonly PortalDomainSummary SampleDomain = new(
+        "example.com", new PortalDomainStatus(PortalHealth.Protected, []), 0.98,
+        [0.97, 0.98, 0.99, 0.96, 0.98, 0.99, 0.98, 0.97, 0.99, 0.98, 0.98, 0.99, 0.97, 0.98], []);
+
+    private string ContainerStyle(bool dark)
+    {
+        var colours = dark
+            ? "--mud-palette-surface: #1e2a3a; --mud-palette-background: #111827; --mud-palette-text-primary: #e8eaf0; --mud-palette-text-secondary: #adb5c7; --mud-palette-lines-default: rgba(255,255,255,0.08); background: #111827;"
+            : "--mud-palette-surface: #ffffff; --mud-palette-background: #f5f5f5; --mud-palette-text-primary: rgba(66,66,66,1); --mud-palette-text-secondary: #616161; background: #f5f5f5;";
+        return $"{colours} --mud-palette-primary: {Brand.PrimaryColour}; --mud-palette-secondary: {Brand.SecondaryColour}; " +
+               "color: var(--mud-palette-text-primary); border-radius: 8px; overflow: hidden; min-width: 280px; border: 1px solid rgba(127,127,127,0.3);";
+    }
+
+    private string AppBarStyle(bool dark)
+    {
+        var background = dark ? "#0f1724" : Brand.SecondaryColour;
+        var text = dark ? "#fcfcfc" : PortalTheme.ReadableTextOn(Brand.SecondaryColour);
+        return $"background: {background}; color: {text}; height: 56px;";
+    }
+}

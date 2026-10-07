@@ -410,6 +410,7 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, DotMarc.Portal.ClientPortalGate>();
 builder.Services.AddScoped<DotMarc.Portal.PortalData>();
+builder.Services.AddScoped<DotMarc.Portal.PortalBrandLoader>();
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
