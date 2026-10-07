@@ -55,7 +55,17 @@ public sealed class PortalBrandLoader(IDbContextFactory<DotMarcDbContext> dbFact
             .OrderBy(group => group.Name)
             .Select(group => new ScopedGroupBrand(group.Name, context.GroupBrandings.FirstOrDefault(branding => branding.GroupId == group.Id)))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        return PortalBranding.Resolve(msp, groups);
+        var brand = PortalBranding.Resolve(msp, groups);
+
+        // A logo id with no image behind it would show as a broken image; leave it out so the product name shows.
+        var logoIds = new[] { brand.LogoImageId, brand.DarkLogoImageId }.OfType<Guid>().ToList();
+        var stored = await context.BrandingImages.Where(image => logoIds.Contains(image.Id)).Select(image => image.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return brand with
+        {
+            LogoImageId = stored.Contains(brand.LogoImageId ?? Guid.Empty) ? brand.LogoImageId : null,
+            DarkLogoImageId = stored.Contains(brand.DarkLogoImageId ?? Guid.Empty) ? brand.DarkLogoImageId : null,
+        };
     }
 
     /// <summary>A Group's name, for the staff preview, or null when there's no such Group.</summary>

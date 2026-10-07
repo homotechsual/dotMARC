@@ -18,6 +18,7 @@ public static class BrandingSettingsService
     {
         Normalise(updated);
         Validate(updated);
+        await BrandingImageCleanup.EnsureStoredAsync(context, [updated.LogoImageId, updated.DarkLogoImageId], cancellationToken).ConfigureAwait(false);
 
         var saved = await context.BrandingSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()

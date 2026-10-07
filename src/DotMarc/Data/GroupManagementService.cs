@@ -187,6 +187,8 @@ public static class GroupManagementService
         if (primaryColour is not null && !BrandColours.IsValid(primaryColour)) throw new ArgumentException("Primary colour must be a hex colour such as #1A73E8.", nameof(input));
         if (secondaryColour is not null && !BrandColours.IsValid(secondaryColour)) throw new ArgumentException("Secondary colour must be a hex colour such as #1A73E8.", nameof(input));
 
+        await BrandingImageCleanup.EnsureStoredAsync(context, [input.LogoImageId, input.DarkLogoImageId], cancellationToken).ConfigureAwait(false);
+
         var group = await context.Groups.SingleAsync(candidate => candidate.Id == groupId, cancellationToken).ConfigureAwait(false);
         var existing = await context.GroupBrandings.SingleOrDefaultAsync(branding => branding.GroupId == groupId, cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()

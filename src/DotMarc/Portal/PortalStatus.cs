@@ -71,7 +71,17 @@ public static class PortalStatus
                 : string.Create(CultureInfo.InvariantCulture, $"All {statuses.Count} domains are protected.");
         }
 
+        if (statuses.Count == 1)
+        {
+            return attentionCount == 1 ? "Your domain needs attention." : "Your domain isn't fully protected yet.";
+        }
+
         var sentence = string.Create(CultureInfo.InvariantCulture, $"{protectedCount} of {statuses.Count} domains are fully protected.");
-        return attentionCount == 0 ? sentence : string.Create(CultureInfo.InvariantCulture, $"{sentence} {attentionCount} needs attention.");
+        return attentionCount switch
+        {
+            0 => sentence,
+            1 => $"{sentence} 1 needs attention.",
+            _ => string.Create(CultureInfo.InvariantCulture, $"{sentence} {attentionCount} need attention."),
+        };
     }
 }

@@ -14,6 +14,7 @@ public static partial class BrandingImages
     public const int MaximumBytes = 512 * 1024;
     public const string WrongTypeOrSize = "Logos must be PNG, JPEG or SVG, up to 512 KB.";
     public const string UnsafeSvg = "This SVG contains scripts or external links, so it can't be used.";
+    public const string ExpiredUpload = "That logo upload has expired. Upload it again, then save.";
 
     public static BrandingImageCheck Validate(byte[] bytes)
     {

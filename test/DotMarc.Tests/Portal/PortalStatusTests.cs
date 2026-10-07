@@ -99,6 +99,9 @@ public sealed class PortalStatusTests
     [InlineData(new[] { PortalHealth.Protected }, "Your domain is protected.")]
     [InlineData(new[] { PortalHealth.Protected, PortalHealth.Protected, PortalHealth.NeedsAttention }, "2 of 3 domains are fully protected. 1 needs attention.")]
     [InlineData(new[] { PortalHealth.MonitoringOnly, PortalHealth.NeedsAttention }, "0 of 2 domains are fully protected. 1 needs attention.")]
+    [InlineData(new[] { PortalHealth.Protected, PortalHealth.NeedsAttention, PortalHealth.NeedsAttention }, "1 of 3 domains are fully protected. 2 need attention.")]
+    [InlineData(new[] { PortalHealth.MonitoringOnly }, "Your domain isn't fully protected yet.")]
+    [InlineData(new[] { PortalHealth.NeedsAttention }, "Your domain needs attention.")]
     public void TheVerdict_SumsUpTheDomains(PortalHealth[] healths, string expected)
     {
         Assert.Equal(expected, PortalStatus.Verdict(healths.Select(health => new PortalDomainStatus(health, [])).ToList()));

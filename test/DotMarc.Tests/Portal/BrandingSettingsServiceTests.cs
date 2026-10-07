@@ -108,6 +108,48 @@ public sealed class BrandingSettingsServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ALogoThatNoLongerExists_IsLeftOutOfThePortalBrand_SoTheProductNameShows()
+    {
+        await using (var context = CreateContext())
+        {
+            var settings = await context.BrandingSettings.SingleAsync();
+            settings.LogoImageId = Guid.NewGuid();
+            settings.DarkLogoImageId = Guid.NewGuid();
+            await context.SaveChangesAsync();
+        }
+
+        var brand = await new PortalBrandLoader(new FakeDbContextFactory(_connectionString)).LoadAsync([]);
+
+        Assert.Equal(((Guid?)null, (Guid?)null), (brand.LogoImageId, brand.DarkLogoImageId));
+    }
+
+    [Fact]
+    public async Task Save_RefusesALogoThatNoLongerExists()
+    {
+        await using var context = CreateContext();
+        var settings = await BrandingSettingsService.GetAsync(context);
+        settings.LogoImageId = Guid.NewGuid();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings));
+
+        Assert.StartsWith(BrandingImages.ExpiredUpload, exception.Message);
+    }
+
+    [Fact]
+    public async Task GroupBranding_RefusesALogoThatNoLongerExists()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput(null, null, Guid.NewGuid(), null, null)));
+
+        Assert.StartsWith(BrandingImages.ExpiredUpload, exception.Message);
+    }
+
+    [Fact]
     public async Task UploadingSomethingThatIsntALogo_SaysWhy_AndStoresNothing()
     {
         await using var context = CreateContext();

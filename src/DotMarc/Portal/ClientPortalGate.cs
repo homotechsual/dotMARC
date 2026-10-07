@@ -25,7 +25,19 @@ public sealed class ClientPortalGate : IAuthorizationHandler
             return Task.CompletedTask;
         }
 
-        if (!isPortalPolicy && !IsPortalPlumbing(context.Resource))
+        if (!isPortalPolicy && IsPortalPlumbing(context.Resource))
+        {
+            // The fallback policy behind these also wants a permission claim, which a portal grant's role may not have
+            // (a role made just for clients needs none). The portal needs the circuit and sign out regardless.
+            foreach (var requirement in context.PendingRequirements.ToList())
+            {
+                context.Succeed(requirement);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        if (!isPortalPolicy)
         {
             context.Fail(new AuthorizationFailureReason(this, "Client portal users can only use the portal."));
             return Task.CompletedTask;
