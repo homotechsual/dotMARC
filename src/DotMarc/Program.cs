@@ -334,6 +334,7 @@ if (demoOptions.Enabled)
         {
             options.LoginPath = "/demo";
             options.AccessDeniedPath = "/AccessDenied";
+            options.Events.OnRedirectToAccessDenied = DotMarc.Portal.ClientPortalRedirects.OnRedirectToAccessDenied;
         });
 }
 else
@@ -347,7 +348,12 @@ else
     // them an explanation instead of a raw 404/403.
     builder.Services.Configure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
         Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
-        options => options.AccessDeniedPath = "/AccessDenied");
+        options =>
+        {
+            options.AccessDeniedPath = "/AccessDenied";
+            // Client portal users are sent back to the portal rather than to the access denied page.
+            options.Events.OnRedirectToAccessDenied = DotMarc.Portal.ClientPortalRedirects.OnRedirectToAccessDenied;
+        });
 
     // Records each Entra sign-in once, as it completes, rather than in the claims transformation, which runs on
     // every request. Chains onto whatever handler Microsoft.Identity.Web has already set.
@@ -398,7 +404,11 @@ builder.Services.AddAuthorization(options =>
         nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
 
     ApiPolicies.Add(options);
+
+    // The client portal's own policy. ClientPortalGate fails every other policy for portal users.
+    options.AddPolicy("ClientPortal", policy => policy.RequireAuthenticatedUser().AddRequirements(new DotMarc.Portal.ClientPortalRequirement()));
 });
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, DotMarc.Portal.ClientPortalGate>();
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
@@ -489,6 +499,10 @@ if (demoOptions.Enabled)
             case "viewer":
                 email = DotMarc.Demo.DemoDataSeeder.ViewerEmail;
                 displayName = $"Demo Viewer ({DotMarc.Demo.DemoDataSeeder.ViewerScopedGroupName})";
+                break;
+            case "client":
+                email = DotMarc.Demo.DemoDataSeeder.ClientEmail;
+                displayName = $"Demo Client ({DotMarc.Demo.DemoDataSeeder.ViewerScopedGroupName})";
                 break;
             default:
                 return Results.BadRequest($"Unknown demo persona '{persona}'.");

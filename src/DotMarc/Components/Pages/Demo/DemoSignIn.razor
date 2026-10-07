@@ -24,11 +24,19 @@
             </form>
         </MudPaper>
 
-        <MudPaper Class="pa-4" Elevation="1">
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
             <MudText Typo="Typo.h6">Demo Viewer</MudText>
             <MudText Typo="Typo.body2" Class="mb-2">Scoped to Aurora Retail only - shows what a limited, client-scoped viewer sees.</MudText>
             <form method="post" action="/demo/sign-in/viewer">
                 <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Secondary">Continue as Demo Viewer</MudButton>
+            </form>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.h6">Demo Client</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">A client contact for Aurora Retail, who sees the branded client portal instead of dotMARC.</MudText>
+            <form method="post" action="/demo/sign-in/client">
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Primary">Continue as Demo Client</MudButton>
             </form>
         </MudPaper>
     </MudContainer>

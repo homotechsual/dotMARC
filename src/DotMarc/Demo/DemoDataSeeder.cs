@@ -14,6 +14,7 @@ public static class DemoDataSeeder
     public const string AdminEmail = "demo-admin@nova-msp.example";
     public const string ViewerEmail = "demo-viewer@nova-msp.example";
     public const string ViewerScopedGroupName = "Aurora Retail";
+    public const string ClientEmail = "demo-client@aurora-retail.example";
 
     public static async Task ResetAsync(DotMarcDbContext context, DemoDataset dataset, CancellationToken cancellationToken = default)
     {
@@ -279,7 +280,8 @@ public static class DemoDataSeeder
 
         context.UserAccesses.AddRange(
             new UserAccess { Email = AdminEmail, Role = adminRole },
-            new UserAccess { Email = ViewerEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]] });
+            new UserAccess { Email = ViewerEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]] },
+            new UserAccess { Email = ClientEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]], IsClientPortal = true });
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
