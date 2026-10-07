@@ -86,7 +86,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         using var verify = CreateContext();
         Assert.Equal(25, await verify.Domains.CountAsync());
         Assert.Equal(2, await verify.Roles.CountAsync());
-        Assert.Equal(2, await verify.UserAccesses.CountAsync());
+        Assert.Equal(3, await verify.UserAccesses.CountAsync()); // Demo Admin, Demo Viewer and Demo Client
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
 
         using var verify = CreateContext();
         Assert.Equal(25, await verify.Domains.CountAsync());
-        Assert.Equal(2, await verify.UserAccesses.CountAsync());
+        Assert.Equal(3, await verify.UserAccesses.CountAsync()); // Demo Admin, Demo Viewer and Demo Client
     }
 
     [Fact]
