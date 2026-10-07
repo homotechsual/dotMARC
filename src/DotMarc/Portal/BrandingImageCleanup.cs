@@ -12,6 +12,10 @@ public static class BrandingImageCleanup
     {
         var settings = await context.BrandingSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
         var inUse = new HashSet<Guid>(new[] { settings.LogoImageId, settings.DarkLogoImageId }.OfType<Guid>());
+        foreach (var groupBranding in await context.GroupBrandings.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false))
+        {
+            inUse.UnionWith(new[] { groupBranding.LogoImageId, groupBranding.DarkLogoImageId }.OfType<Guid>());
+        }
 
         var released = justReleased.Where(id => !inUse.Contains(id)).ToList();
         var recentCutoff = DateTimeOffset.UtcNow.AddHours(-1);

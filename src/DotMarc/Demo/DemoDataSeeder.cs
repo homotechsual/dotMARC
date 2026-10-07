@@ -50,7 +50,7 @@ public static class DemoDataSeeder
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
                 "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates", "DomainDkimRecords",
-                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages"
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);
@@ -282,6 +282,23 @@ public static class DemoDataSeeder
             new UserAccess { Email = AdminEmail, Role = adminRole },
             new UserAccess { Email = ViewerEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]] },
             new UserAccess { Email = ClientEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]], IsClientPortal = true });
+
+        // The brand is a singleton row the truncate above leaves alone, so reset it here: the fictional MSP's brand,
+        // with Aurora Retail's own name and colour layered over it for the Demo Client.
+        var brand = await context.BrandingSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        brand.ProductName = "Nova MSP";
+        brand.PrimaryColour = "#0B5FFF";
+        brand.SecondaryColour = "#FF6B00";
+        brand.LogoImageId = null;
+        brand.DarkLogoImageId = null;
+        brand.SupportEmail = "help@nova-msp.example";
+        brand.SupportUrl = "https://nova-msp.example/support";
+        brand.SupportPhone = null;
+        brand.FooterText = null;
+        context.GroupBrandings.Add(new DotMarc.Portal.GroupBranding
+        {
+            GroupId = groupsByName[ViewerScopedGroupName].Id, DisplayName = "Aurora Retail Ltd", PrimaryColour = "#7A1FA2",
+        });
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }

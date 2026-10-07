@@ -1,5 +1,6 @@
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.Portal;
 using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
@@ -334,5 +335,58 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
         await context.SaveChangesAsync();
 
         Assert.Equal(GroupManagementService.RemoveGroupResult.Removed, await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, aurora.Id));
+    }
+
+    [Fact]
+    public async Task SetBrandingAsync_SavesAndAudits_AndClearingEveryFieldRemovesTheRow()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput("Aurora Retail Ltd", null, null, "#7A1FA2", null));
+        await using (var verify = CreateContext())
+        {
+            var saved = await GroupManagementService.GetBrandingAsync(verify, group.Id);
+            Assert.Equal(("Aurora Retail Ltd", "#7A1FA2"), (saved!.DisplayName, saved.PrimaryColour));
+            Assert.Equal(AuditActions.GroupBrandingChanged, (await verify.AuditEntries.SingleAsync()).Action);
+        }
+
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput(null, null, null, null, null));
+
+        await using var verifyCleared = CreateContext();
+        Assert.Null(await GroupManagementService.GetBrandingAsync(verifyCleared, group.Id));
+    }
+
+    [Fact]
+    public async Task SetBrandingAsync_RefusesAnInvalidColour()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput(null, null, null, "purple", null)));
+
+        Assert.StartsWith("Primary colour must be a hex colour such as #1A73E8.", exception.Message);
+    }
+
+    [Fact]
+    public async Task DeletingAGroup_DeletesItsBranding_AndItsLogo()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+        var logo = await BrandingSettingsService.UploadImageAsync(context, TestActors.Admin, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4]);
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput("Aurora Retail Ltd", logo.ImageId, null, null, null));
+
+        await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, group.Id);
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.GroupBrandings);
+        Assert.Empty(verify.BrandingImages);
     }
 }

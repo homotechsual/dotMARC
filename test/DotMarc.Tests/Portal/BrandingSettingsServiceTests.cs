@@ -87,6 +87,27 @@ public sealed class BrandingSettingsServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AGroupsLogo_SurvivesAnMspSaveThatReleasesAnotherLogo()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+        var groupLogo = await BrandingSettingsService.UploadImageAsync(context, TestActors.Admin, PngBytes());
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput(null, groupLogo.ImageId, null, null, null));
+        var mspLogo = await BrandingSettingsService.UploadImageAsync(context, TestActors.Admin, PngBytes());
+        var settings = await BrandingSettingsService.GetAsync(context);
+        settings.LogoImageId = mspLogo.ImageId;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+
+        settings.LogoImageId = null;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+
+        await using var verify = CreateContext();
+        Assert.Equal(groupLogo.ImageId, (await verify.BrandingImages.SingleAsync()).Id);
+    }
+
+    [Fact]
     public async Task UploadingSomethingThatIsntALogo_SaysWhy_AndStoresNothing()
     {
         await using var context = CreateContext();

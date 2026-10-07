@@ -106,6 +106,17 @@ public sealed class ClientPortalAccessTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ThePortal_IsHeadedWithTheClientsBrandedName_AndTitledWithTheProduct()
+    {
+        using var client = await SignInAsync("client");
+
+        var html = await client.GetStringAsync("/portal");
+
+        Assert.Contains("Aurora Retail Ltd", html);
+        Assert.Contains("Your domains - Nova MSP", html);
+    }
+
+    [Fact]
     public async Task AnotherGroupsDomainPage_IsNotFound()
     {
         using var client = await SignInAsync("client");

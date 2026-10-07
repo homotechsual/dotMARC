@@ -52,6 +52,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<DotMarc.Portal.BrandingSettings> BrandingSettings => Set<DotMarc.Portal.BrandingSettings>();
     public DbSet<DotMarc.Portal.BrandingImage> BrandingImages => Set<DotMarc.Portal.BrandingImage>();
+    public DbSet<DotMarc.Portal.GroupBranding> GroupBrandings => Set<DotMarc.Portal.GroupBranding>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -436,6 +437,14 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(image => image.Id).ValueGeneratedNever();
             entity.Property(image => image.ContentType).HasMaxLength(40);
             entity.Property(image => image.Sha256).HasMaxLength(64);
+        });
+        modelBuilder.Entity<DotMarc.Portal.GroupBranding>(entity =>
+        {
+            entity.HasKey(branding => branding.GroupId);
+            entity.HasOne<Group>().WithOne().HasForeignKey<DotMarc.Portal.GroupBranding>(branding => branding.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(branding => branding.DisplayName).HasMaxLength(100);
+            entity.Property(branding => branding.PrimaryColour).HasMaxLength(7);
+            entity.Property(branding => branding.SecondaryColour).HasMaxLength(7);
         });
     }
 }
