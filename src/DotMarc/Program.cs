@@ -409,6 +409,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("ClientPortal", policy => policy.RequireAuthenticatedUser().AddRequirements(new DotMarc.Portal.ClientPortalRequirement()));
 });
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, DotMarc.Portal.ClientPortalGate>();
+builder.Services.AddScoped<DotMarc.Portal.PortalData>();
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 

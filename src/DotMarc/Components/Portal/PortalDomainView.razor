@@ -1,0 +1,157 @@
+@using DotMarc.Data
+@using DotMarc.Portal
+@using DotMarc.Reporting
+@using System.Globalization
+
+@* The client-facing page for one domain: what its policy means, its health, who sends as it, and its alerts. Read only:
+   no fix, push, recheck or configure buttons. Shared by the portal and staff previews. *@
+<MudButton Href="@BackHref" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back to your domains</MudButton>
+
+@if (!Loaded)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (Detail is null)
+{
+    <MudAlert Severity="Severity.Info">We couldn't find that domain. It may have been removed, or it isn't one of yours.</MudAlert>
+}
+else
+{
+    var domain = Detail.Domain;
+    <div class="d-flex align-center flex-wrap mb-1" style="gap: 0.75rem;">
+        <MudText Typo="Typo.h4">@domain.Name</MudText>
+        <PortalHealthChip Health="Detail.Summary.Status.Health" />
+    </div>
+    @foreach (var reason in Detail.Summary.Status.Reasons)
+    {
+        <MudText Typo="Typo.body1">@reason</MudText>
+    }
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-1">Policy</MudText>
+        <MudText Typo="Typo.body1">@PolicySentence(domain)</MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">Health</MudText>
+        <MudSimpleTable Dense="true" Elevation="0">
+            <tbody>
+                @foreach (var check in HealthRows(domain))
+                {
+                    <tr>
+                        <td style="width: 12rem;">@check.Name</td>
+                        <td><MudChip T="string" Size="Size.Small" Color="check.Colour" Variant="Variant.Outlined">@check.Label</MudChip></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-1">Who sends as this domain</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">The busiest senders reported in the last 30 days.</MudText>
+        @if (Detail.TopSources.Count == 0)
+        {
+            <MudText Typo="Typo.body2">No mail has been reported in the last 30 days.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Elevation="0">
+                <thead>
+                    <tr><th>Sender</th><th>Messages</th><th>SPF</th><th>DKIM</th><th>What receivers did</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var source in Detail.TopSources)
+                    {
+                        <tr>
+                            <td>@source.SourceIp</td>
+                            <td>@source.Volume.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td>@source.SpfResult</td>
+                            <td>@source.DkimResult</td>
+                            <td>@DispositionText(source.Disposition)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mt-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">Alerts</MudText>
+        @if (Detail.RecentAlerts.Count == 0)
+        {
+            <MudText Typo="Typo.body2">No alerts in the last 30 days.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Elevation="0">
+                <tbody>
+                    @foreach (var alert in Detail.RecentAlerts)
+                    {
+                        <tr>
+                            <td>@alert.Title</td>
+                            <td>Raised @alert.CreatedUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</td>
+                            <td>@(alert.IsResolved ? $"Resolved {alert.ResolvedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}" : "Open")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public PortalDomainDetail? Detail { get; set; }
+    [Parameter] public bool Loaded { get; set; }
+    [Parameter] public string BackHref { get; set; } = "/portal";
+
+    private sealed record HealthRow(string Name, string Label, Color Colour);
+
+    private static IEnumerable<HealthRow> HealthRows(Domain domain)
+    {
+        yield return new("DMARC", DmarcStatusPresentation.GetLabel(domain.DmarcCheckStatus), DmarcStatusPresentation.GetColor(domain.DmarcCheckStatus));
+        yield return new("DMARC reporting", DmarcAuthorizationStatusPresentation.GetLabel(domain.DmarcAuthorizationCheckStatus), DmarcAuthorizationStatusPresentation.GetColor(domain.DmarcAuthorizationCheckStatus));
+        yield return new("SPF", SpfStatusPresentation.GetLabel(domain.SpfCheckStatus), SpfStatusPresentation.GetColor(domain.SpfCheckStatus));
+        yield return new("MX", MxStatusPresentation.GetLabel(domain.MxCheckStatus), MxStatusPresentation.GetColor(domain.MxCheckStatus));
+        yield return new("DKIM", DkimStatusPresentation.GetLabel(domain.DkimCheckStatus), DkimStatusPresentation.GetColor(domain.DkimCheckStatus));
+        yield return new("TLS reporting", TlsrptStatusPresentation.GetLabel(domain.TlsrptCheckStatus), TlsrptStatusPresentation.GetColor(domain.TlsrptCheckStatus));
+        if (domain.MtaStsStatus != MtaStsStatus.NotConfigured)
+        {
+            yield return new("MTA-STS", MtaStsStatusPresentation.GetLabel(domain.MtaStsStatus), MtaStsStatusPresentation.GetColor(domain.MtaStsStatus));
+        }
+    }
+
+    private static string PolicySentence(Domain domain)
+    {
+        if (domain.DmarcPolicy is not { } policy)
+        {
+            return "No DMARC policy was found, so receivers decide for themselves what to do with mail that fails.";
+        }
+
+        var main = policy switch
+        {
+            DmarcPolicyLevel.Reject => "Mail that fails DMARC is rejected",
+            DmarcPolicyLevel.Quarantine => "Mail that fails DMARC is sent to spam",
+            _ => "Mail that fails DMARC is only reported, not blocked",
+        };
+        var percent = policy != DmarcPolicyLevel.None && domain.DmarcPercent is { } share && share < 100
+            ? string.Create(CultureInfo.InvariantCulture, $" ({share}% of it)")
+            : "";
+        var subdomains = domain.DmarcSubdomainPolicy is { } subdomainPolicy && subdomainPolicy != policy
+            ? subdomainPolicy switch
+            {
+                DmarcPolicyLevel.Reject => " Subdomains: rejected.",
+                DmarcPolicyLevel.Quarantine => " Subdomains: sent to spam.",
+                _ => " Subdomains: only reported.",
+            }
+            : "";
+        return $"{main}{percent}.{subdomains}";
+    }
+
+    private static string DispositionText(DispositionResult disposition) => disposition switch
+    {
+        DispositionResult.Reject => "Rejected",
+        DispositionResult.Quarantine => "Sent to spam",
+        _ => "Delivered",
+    };
+}

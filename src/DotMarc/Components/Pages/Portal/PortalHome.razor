@@ -1,6 +1,41 @@
 @page "/portal"
+@layout DotMarc.Components.Layout.PortalLayout
 @attribute [Authorize(Policy = "ClientPortal")]
+@using DotMarc.Components.Portal
+@using DotMarc.Portal
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject PortalData PortalData
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Your domains</PageTitle>
-<MudText Typo="Typo.h4">Your domains</MudText>
+
+@if (_domains is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-1">Your domains</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mb-4">@PortalStatus.Verdict(_domains.Select(domain => domain.Status).ToList())</MudText>
+    @if (_domains.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">There are no domains to show yet. If you expected some, contact your provider.</MudAlert>
+    }
+    <MudGrid>
+        @foreach (var domain in _domains)
+        {
+            <MudItem xs="12" md="6"><PortalDomainCard Summary="domain" /></MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private IReadOnlyList<PortalDomainSummary>? _domains;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _domains = await PortalData.ListDomainsAsync(PortalData.ScopedGroupIds(user));
+    }
+}

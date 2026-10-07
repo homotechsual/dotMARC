@@ -1,0 +1,23 @@
+@using DotMarc.Portal
+
+<MudChip T="string" Size="Size.Small" Color="@Colour" Variant="Variant.Filled">@Label</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public PortalHealth Health { get; set; }
+
+    private Color Colour => Health switch
+    {
+        PortalHealth.Protected => Color.Success,
+        PortalHealth.MonitoringOnly => Color.Info,
+        PortalHealth.NeedsAttention => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private string Label => Health switch
+    {
+        PortalHealth.Protected => "Protected",
+        PortalHealth.MonitoringOnly => "Monitoring only",
+        PortalHealth.NeedsAttention => "Needs attention",
+        _ => "No reports yet",
+    };
+}

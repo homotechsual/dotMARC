@@ -1,0 +1,27 @@
+@page "/portal/domains/{DomainName}"
+@layout DotMarc.Components.Layout.PortalLayout
+@attribute [Authorize(Policy = "ClientPortal")]
+@using DotMarc.Components.Portal
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject PortalData PortalData
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>@DomainName</PageTitle>
+
+<PortalDomainView Detail="_detail" Loaded="_loaded" BackHref="/portal" />
+
+@code {
+    [Parameter] public string DomainName { get; set; } = "";
+
+    private PortalDomainDetail? _detail;
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _detail = await PortalData.GetDomainAsync(PortalData.ScopedGroupIds(user), DomainName);
+        _loaded = true;
+    }
+}

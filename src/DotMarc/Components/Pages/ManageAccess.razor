@@ -68,6 +68,11 @@
                         <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.IsBound)">Status</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.RoleName)">Role</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel SortBy="new Func<GrantRow, object>(g => g.ScopedGroupsDisplay)">Groups</MudTableSortLabel></MudTh>
+                        <MudTh>
+                            <FieldWithHelp Topic="Client portal" Inline="true" Help="This person sees a simplified, branded view of their Groups' domains instead of dotMARC. Use it for client contacts. Only for roles limited to Groups, and the grant must have at least one Group.">
+                                Client portal
+                            </FieldWithHelp>
+                        </MudTh>
                         <MudTh></MudTh>
                     </tr>
                     @if (_showGrantFilters)
@@ -90,6 +95,7 @@
                         </MudTh>
                         <MudTh><MudTextField T="string" @bind-Value="_grantGroupsFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
                         <MudTh></MudTh>
+                        <MudTh></MudTh>
                     </tr>
                     }
                 </HeaderContent>
@@ -98,6 +104,17 @@
                     <MudTd>@(context.IsBound ? "Active" : "Pending first sign-in")</MudTd>
                     <MudTd>@context.RoleName</MudTd>
                     <MudTd>@context.ScopedGroupsDisplay</MudTd>
+                    <MudTd>
+                        @if (context.RoleIsScopable)
+                        {
+                            <MudSwitch T="bool" Value="context.IsClientPortal" ValueChanged="@(isClientPortal => SetClientPortalAsync(context, isClientPortal))"
+                                       Color="Color.Primary" UserAttributes="@(new Dictionary<string, object> { ["aria-label"] = $"Client portal for {context.Email}" })" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Not available</MudText>
+                        }
+                    </MudTd>
                     <MudTd>
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RevokeAccessAsync(context))" />
                     </MudTd>
@@ -293,7 +310,7 @@
         _grants = await db.UserAccesses
             .AsNoTracking()
             .OrderBy(u => u.Email)
-            .Select(u => new GrantRow(u.Id, u.Email, u.EntraObjectId != null, u.Role.Name, u.ScopedGroups.Select(g => g.Name).ToList()))
+            .Select(u => new GrantRow(u.Id, u.Email, u.EntraObjectId != null, u.Role.Name, u.ScopedGroups.Select(g => g.Name).ToList(), u.Role.IsScopable, u.IsClientPortal))
             .ToListAsync();
 
         if (_newGrantRoleId == 0 && _roles.Count > 0)
@@ -416,6 +433,29 @@
         }
     }
 
+    private async Task SetClientPortalAsync(GrantRow row, bool isClientPortal)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var result = await UserAccessManagementService.SetClientPortalAsync(db, await AuditActorAccessor.GetAsync(), row.Id, isClientPortal, CancellationToken.None);
+            if (result == UserAccessManagementService.SetClientPortalResult.NeedsScopedGroups)
+            {
+                Snackbar.Add("A client portal grant must be limited to the client's Groups.", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(isClientPortal ? $"{row.Email} now sees the client portal." : $"{row.Email} now sees dotMARC.", Severity.Success);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Failed to change the client portal for {row.Email}. Try again.", Severity.Error);
+        }
+
+        await LoadAsync();
+    }
+
     private async Task RevokeAccessAsync(GrantRow row)
     {
         try
@@ -437,7 +477,7 @@
 
     private sealed record RoleRow(int Id, string Name, bool IsLocked, bool IsScopable, List<Permission> Permissions);
 
-    private sealed record GrantRow(int Id, string Email, bool IsBound, string RoleName, List<string> ScopedGroupNames)
+    private sealed record GrantRow(int Id, string Email, bool IsBound, string RoleName, List<string> ScopedGroupNames, bool RoleIsScopable, bool IsClientPortal)
     {
         public string ScopedGroupsDisplay => ScopedGroupNames.Count == 0 ? "All" : string.Join(", ", ScopedGroupNames);
     }

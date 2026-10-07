@@ -25,7 +25,7 @@ public sealed class ClientPortalGate : IAuthorizationHandler
             return Task.CompletedTask;
         }
 
-        if (!isPortalPolicy)
+        if (!isPortalPolicy && !IsPortalPlumbing(context.Resource))
         {
             context.Fail(new AuthorizationFailureReason(this, "Client portal users can only use the portal."));
             return Task.CompletedTask;
@@ -38,6 +38,12 @@ public sealed class ClientPortalGate : IAuthorizationHandler
 
         return Task.CompletedTask;
     }
+
+    // Blazor's own circuit endpoints and sign out sit behind the fallback and default policies, but the portal needs
+    // them: without the circuit nothing on a portal page is interactive, and a portal user must be able to sign out.
+    private static bool IsPortalPlumbing(object? resource) =>
+        resource is HttpContext httpContext
+        && (httpContext.Request.Path.StartsWithSegments("/_blazor") || httpContext.Request.Path.StartsWithSegments("/signout"));
 }
 
 /// <summary>Where a denied request goes: a portal user to the portal, anyone else denied the portal to the dashboard,

@@ -95,6 +95,64 @@ public sealed class ClientPortalAccessTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ThePortal_ListsTheClientsDomains_AndNotOthers()
+    {
+        using var client = await SignInAsync("client");
+
+        var html = await client.GetStringAsync("/portal");
+
+        Assert.Contains("aurora-retail.example", html);
+        Assert.DoesNotContain("brightline-legal.example", html);
+    }
+
+    [Fact]
+    public async Task AnotherGroupsDomainPage_IsNotFound()
+    {
+        using var client = await SignInAsync("client");
+
+        var html = await client.GetStringAsync("/portal/domains/brightline-legal.example");
+
+        Assert.Contains("find that domain", html); // the apostrophe in "couldn't" is HTML-encoded
+        Assert.DoesNotContain("Who sends as this domain", html);
+    }
+
+    [Fact]
+    public async Task TheClientsOwnDomainPage_ShowsItsSections()
+    {
+        using var client = await SignInAsync("client");
+
+        var html = await client.GetStringAsync("/portal/domains/aurora-retail.example");
+
+        Assert.Contains("Who sends as this domain", html);
+        Assert.Contains("Policy", html);
+    }
+
+    [Fact]
+    public async Task APortalUser_CanReachBlazorsOwnEndpoints()
+    {
+        using var client = await SignInAsync("client");
+
+        var response = await client.GetAsync("/_blazor/initializers");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task APortalUser_CanSignOut()
+    {
+        using var client = await SignInAsync("client");
+        var html = await client.GetStringAsync("/portal");
+        var tokenMatch = System.Text.RegularExpressions.Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
+        Assert.True(tokenMatch.Success, "The portal's sign out form has no antiforgery token");
+
+        var response = await client.PostAsync("/signout", new FormUrlEncodedContent(
+            new Dictionary<string, string> { ["__RequestVerificationToken"] = tokenMatch.Groups[1].Value }));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/", response.Headers.Location!.OriginalString.Replace("http://localhost", ""));
+    }
+
+    [Fact]
     public async Task Staff_StillReachTheDashboard()
     {
         using var client = await SignInAsync("viewer");
