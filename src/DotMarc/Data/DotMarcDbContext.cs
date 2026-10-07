@@ -50,6 +50,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<AuditSettings> AuditSettings => Set<AuditSettings>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+    public DbSet<DotMarc.Portal.BrandingSettings> BrandingSettings => Set<DotMarc.Portal.BrandingSettings>();
+    public DbSet<DotMarc.Portal.BrandingImage> BrandingImages => Set<DotMarc.Portal.BrandingImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -411,5 +413,29 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<AzureDnsSettings>().HasData(new AzureDnsSettings { Id = 1 });
         modelBuilder.Entity<GoogleCloudDnsSettings>().HasData(new GoogleCloudDnsSettings { Id = 1 });
         modelBuilder.Entity<DnsRecordSettings>().HasData(new DnsRecordSettings { Id = 1 });
+
+        modelBuilder.Entity<DotMarc.Portal.BrandingSettings>(entity =>
+        {
+            entity.Property(settings => settings.ProductName).HasMaxLength(60);
+            entity.Property(settings => settings.PrimaryColour).HasMaxLength(7);
+            entity.Property(settings => settings.SecondaryColour).HasMaxLength(7);
+            entity.Property(settings => settings.SupportEmail).HasMaxLength(254);
+            entity.Property(settings => settings.SupportUrl).HasMaxLength(500);
+            entity.Property(settings => settings.SupportPhone).HasMaxLength(40);
+            entity.Property(settings => settings.FooterText).HasMaxLength(200);
+            entity.HasData(new DotMarc.Portal.BrandingSettings
+            {
+                Id = 1,
+                ProductName = "dotMARC",
+                PrimaryColour = DotMarc.Portal.BrandingSettings.DefaultPrimaryColour,
+                SecondaryColour = DotMarc.Portal.BrandingSettings.DefaultSecondaryColour,
+            });
+        });
+        modelBuilder.Entity<DotMarc.Portal.BrandingImage>(entity =>
+        {
+            entity.Property(image => image.Id).ValueGeneratedNever();
+            entity.Property(image => image.ContentType).HasMaxLength(40);
+            entity.Property(image => image.Sha256).HasMaxLength(64);
+        });
     }
 }

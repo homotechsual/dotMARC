@@ -837,6 +837,30 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
     return Results.Ok();
 }).AllowAnonymous();
 
+// Logos are shown to clients, on sign-in pages and in emails, so they're served without sign-in. Each upload gets a new
+// unguessable id, so the response can be cached for good.
+app.MapGet("/branding/logo/{id:guid}", async (Guid id, HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var image = await context.BrandingImages.AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == id);
+    if (image is null)
+    {
+        return Results.NotFound();
+    }
+
+    var headers = httpContext.Response.Headers;
+    headers.CacheControl = "public, max-age=31536000, immutable";
+    headers.ETag = $"\"{image.Sha256}\"";
+    headers.XContentTypeOptions = "nosniff";
+    if (image.ContentType == "image/svg+xml")
+    {
+        // Opened directly, an SVG is a document; this keeps it from running or fetching anything even so.
+        headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'";
+    }
+
+    return Results.File(image.Bytes, image.ContentType);
+}).AllowAnonymous();
+
 app.MapDotMarcApi();
 app.MapDotMarcOpenApi();
 

@@ -40,6 +40,7 @@ public static class AuditActions
     public const string HaloSettingsSaved = "settings.halo.saved";
     public const string ConnectWiseSettingsSaved = "settings.connectwise.saved";
     public const string AutotaskSettingsSaved = "settings.autotask.saved";
+    public const string BrandingSettingsSaved = "settings.branding.saved";
     public const string CloudflareDnsSettingsSaved = "settings.cloudflare_dns.saved";
     public const string AzureDnsSettingsSaved = "settings.azure_dns.saved";
     public const string GoogleCloudDnsSettingsSaved = "settings.google_cloud_dns.saved";
@@ -97,6 +98,7 @@ public static class AuditActions
         (HaloSettingsSaved, "HaloPSA settings saved"),
         (ConnectWiseSettingsSaved, "ConnectWise settings saved"),
         (AutotaskSettingsSaved, "Autotask settings saved"),
+        (BrandingSettingsSaved, "Branding saved"),
         (CloudflareDnsSettingsSaved, "Cloudflare DNS settings saved"),
         (AzureDnsSettingsSaved, "Azure DNS settings saved"),
         (GoogleCloudDnsSettingsSaved, "Google Cloud DNS settings saved"),
