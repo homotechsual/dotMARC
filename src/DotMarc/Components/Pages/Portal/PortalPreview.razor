@@ -1,0 +1,49 @@
+@page "/portal/preview/{GroupId:int}"
+@page "/portal/preview/{GroupId:int}/domains/{DomainName}"
+@layout DotMarc.Components.Layout.PortalLayout
+@attribute [Authorize(Policy = "GroupsOrTagsWrite")]
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject PortalBrandLoader BrandLoader
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@* Staff see a Group's portal as its clients do: the same pages, scoped to that one Group. The layout reads the Group
+   from the URL to brand the page and show the preview banner. *@
+@if (!_loaded)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_scope is null)
+{
+    <MudAlert Severity="Severity.Info">That Group doesn't exist, or you can't preview it.</MudAlert>
+}
+else
+{
+    <CascadingValue Value="_scope">
+        @if (DomainName is null)
+        {
+            <PortalHome />
+        }
+        else
+        {
+            <PortalDomain DomainName="@DomainName" />
+        }
+    </CascadingValue>
+}
+
+@code {
+    [Parameter] public int GroupId { get; set; }
+    [Parameter] public string? DomainName { get; set; }
+
+    private PortalScope? _scope;
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var groupName = PortalScope.CanPreview(user, GroupId) ? await BrandLoader.LoadGroupNameAsync(GroupId) : null;
+        _scope = groupName is null ? null : PortalScope.Preview(GroupId, groupName);
+        _loaded = true;
+    }
+}

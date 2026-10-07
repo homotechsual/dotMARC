@@ -57,4 +57,12 @@ public sealed class PortalBrandLoader(IDbContextFactory<DotMarcDbContext> dbFact
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         return PortalBranding.Resolve(msp, groups);
     }
+
+    /// <summary>A Group's name, for the staff preview, or null when there's no such Group.</summary>
+    public async Task<string?> LoadGroupNameAsync(int groupId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await context.Groups.AsNoTracking().Where(group => group.Id == groupId).Select(group => group.Name)
+            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
 }

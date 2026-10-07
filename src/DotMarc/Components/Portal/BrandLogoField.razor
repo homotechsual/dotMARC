@@ -1,0 +1,100 @@
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+@* A logo upload: thumbnail, Upload or Replace, and Remove. An upload is stored straight away but only used once the
+   form it belongs to is saved. *@
+<FieldWithHelp Topic="@Label" Help="@Help">
+    <div>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">@Label</MudText>
+        <div class="d-flex align-center flex-wrap" style="gap: 0.75rem;">
+            @if (ImageId is { } id)
+            {
+                <div class="pa-2" style="@($"background: {(IsDark ? "#0f1724" : "#ffffff")}; border: 1px solid rgba(127,127,127,0.3); border-radius: 4px;")">
+                    <img src="@($"/branding/logo/{id}")" alt="@Label" height="40" />
+                </div>
+            }
+            <MudFileUpload T="IBrowserFile" FilesChanged="UploadAsync" Accept="image/png,image/jpeg,image/svg+xml">
+                <CustomContent>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile" Disabled="_busy" OnClick="@context.OpenFilePickerAsync">
+                        @(ImageId is null ? "Upload" : "Replace")
+                    </MudButton>
+                </CustomContent>
+                @* The thumbnail shows what's chosen, so no file name chip. *@
+                <SelectedTemplate></SelectedTemplate>
+            </MudFileUpload>
+            @if (ImageId is not null)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="@(() => ImageIdChanged.InvokeAsync(null))">Remove</MudButton>
+            }
+        </div>
+        @if (ImageId is null && FallbackHint is not null)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@FallbackHint</MudText>
+        }
+    </div>
+</FieldWithHelp>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Help { get; set; } = "";
+    [Parameter] public Guid? ImageId { get; set; }
+    [Parameter] public EventCallback<Guid?> ImageIdChanged { get; set; }
+
+    /// <summary>Shows the thumbnail on a dark background, for a logo made for dark backgrounds.</summary>
+    [Parameter] public bool IsDark { get; set; }
+
+    /// <summary>Said under the field when no logo is set, such as what's used instead.</summary>
+    [Parameter] public string? FallbackHint { get; set; }
+
+    private bool _busy;
+
+    private async Task UploadAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        if (file.Size > BrandingImages.MaximumBytes)
+        {
+            Snackbar.Add(BrandingImages.WrongTypeOrSize, Severity.Error);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            using var buffer = new MemoryStream();
+            await using (var stream = file.OpenReadStream(BrandingImages.MaximumBytes))
+            {
+                await stream.CopyToAsync(buffer);
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var upload = await BrandingSettingsService.UploadImageAsync(db, await AuditActorAccessor.GetAsync(), buffer.ToArray());
+            if (upload.ImageId is { } imageId)
+            {
+                await ImageIdChanged.InvokeAsync(imageId);
+                Snackbar.Add("Logo uploaded. Save to use it.", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add(upload.Problem!, Severity.Error);
+            }
+        }
+        catch (IOException)
+        {
+            Snackbar.Add(BrandingImages.WrongTypeOrSize, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

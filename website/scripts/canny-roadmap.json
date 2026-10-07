@@ -88,10 +88,10 @@
   {
     "title": "Add a branded client portal view",
     "version": "v0.9.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
-      "Group-scoped Viewer access already lets a client sign in and see only their own domains, but it still looks like your internal dashboard.",
-      "Proposal: per-Group branding (logo, colours and display name) and a simplified client-facing layout that leads with a plain-language summary, so the read-only client view is something you can present as part of your service."
+      "A Client portal switch on a Group-scoped access grant gives that person a simplified, read-only portal at the same dotMARC address instead of the dashboard: a plain-language status for each domain with its pass rate and trend, and a page per domain covering its policy, health checks, top senders and alerts.",
+      "Manage > Branding sets your product name, colours, light and dark logos and support details for the portal, with a contrast warning and a live preview. Each Group can override the display name, logos and colours, and staff can preview any Group's portal as its clients see it."
     ]
   },
   {

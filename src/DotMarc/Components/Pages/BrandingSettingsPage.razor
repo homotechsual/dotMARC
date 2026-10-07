@@ -5,9 +5,7 @@
 @using DotMarc.Data
 @using DotMarc.Portal
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.EntityFrameworkCore
-@using MudBlazor.Utilities
 @inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
@@ -15,9 +13,10 @@
 <PageTitle>dotMARC - Branding</PageTitle>
 <div class="d-flex align-center mb-1">
     <MudText Typo="Typo.h4">Branding</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/client-portal" Text="The client portal and branding" Class="ml-2" />
 </div>
 <MudText Typo="Typo.body1" Class="mb-4">
-    How the client portal looks to your clients. A Group can override the logo, colours and name from the Groups page.
+    How the client portal looks to your clients. A Group can override the logo, colours and name from Manage groups.
 </MudText>
 
 @if (_settings is not null)
@@ -33,43 +32,21 @@
             <MudItem xs="12" md="6"></MudItem>
 
             <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Primary colour" Help="Used for links, buttons and highlights in the portal.">
-                    <MudColorPicker Label="Primary colour" Value="@ColourOrDefault(_settings.PrimaryColour, BrandingSettings.DefaultPrimaryColour)"
-                                    ValueChanged="@((MudColor colour) => _settings.PrimaryColour = Hex(colour))"
-                                    ShowAlpha="false" ColorPickerMode="ColorPickerMode.HEX" Editable="true" Variant="Variant.Outlined" />
-                </FieldWithHelp>
-                @if (IsHardToRead(_settings.PrimaryColour))
-                {
-                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@HardToReadMessage</MudAlert>
-                }
+                <BrandColourField Label="Primary colour" Help="Used for links, buttons and highlights in the portal."
+                                  Value="@_settings.PrimaryColour" ValueChanged="@(colour => _settings.PrimaryColour = colour ?? "")"
+                                  FallbackColour="@BrandingSettings.DefaultPrimaryColour" />
             </MudItem>
             <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Secondary colour" Help="Used for the portal's app bar in light mode.">
-                    <MudColorPicker Label="Secondary colour" Value="@ColourOrDefault(_settings.SecondaryColour, BrandingSettings.DefaultSecondaryColour)"
-                                    ValueChanged="@((MudColor colour) => _settings.SecondaryColour = Hex(colour))"
-                                    ShowAlpha="false" ColorPickerMode="ColorPickerMode.HEX" Editable="true" Variant="Variant.Outlined" />
-                </FieldWithHelp>
-                @if (IsHardToRead(_settings.SecondaryColour))
-                {
-                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@HardToReadMessage</MudAlert>
-                }
+                <BrandColourField Label="Secondary colour" Help="Used for the portal's app bar in light mode."
+                                  Value="@_settings.SecondaryColour" ValueChanged="@(colour => _settings.SecondaryColour = colour ?? "")"
+                                  FallbackColour="@BrandingSettings.DefaultSecondaryColour" />
             </MudItem>
 
             <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Logo" Help="For light backgrounds: shown in the portal's app bar when the secondary colour is light. PNG, JPEG or SVG, up to 512 KB. A wide logo about 40 pixels tall works best.">
-                    <div>
-                        <MudText Typo="Typo.subtitle2" Class="mb-1">Logo</MudText>
-                        @LogoControls(_settings.LogoImageId, isDark: false)
-                    </div>
-                </FieldWithHelp>
+                <BrandLogoField Label="Logo" Help="@LogoHelp" @bind-ImageId="_settings.LogoImageId" />
             </MudItem>
             <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Dark logo" Help="For dark backgrounds: shown in dark mode, and in light mode when the secondary colour is dark. Leave it empty to use the main logo there too.">
-                    <div>
-                        <MudText Typo="Typo.subtitle2" Class="mb-1">Dark logo</MudText>
-                        @LogoControls(_settings.DarkLogoImageId, isDark: true)
-                    </div>
-                </FieldWithHelp>
+                <BrandLogoField Label="Dark logo" Help="@DarkLogoHelp" @bind-ImageId="_settings.DarkLogoImageId" IsDark="true" />
             </MudItem>
 
             <MudItem xs="12" md="6">
@@ -104,7 +81,9 @@
 }
 
 @code {
-    private const string HardToReadMessage = "This colour is hard to read on white. Text in it may be too faint for some people.";
+    /// <summary>Shared with the Group branding dialog, so both explain the two logos the same way.</summary>
+    public const string LogoHelp = "For light backgrounds: shown in the portal's app bar when the secondary colour is light. PNG, JPEG or SVG, up to 512 KB. A wide logo about 40 pixels tall works best.";
+    public const string DarkLogoHelp = "For dark backgrounds: shown in dark mode, and in light mode when the secondary colour is dark. Leave it empty to use the main logo there too.";
 
     private BrandingSettings? _settings;
     private bool _busy;
@@ -114,31 +93,6 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await db.BrandingSettings.AsNoTracking().SingleAsync();
     }
-
-    private RenderFragment LogoControls(Guid? imageId, bool isDark) => __builder =>
-    {
-        <div class="d-flex align-center flex-wrap" style="gap: 0.75rem;">
-            @if (imageId is { } id)
-            {
-                <div class="pa-2" style="@($"background: {(isDark ? "#0f1724" : "#ffffff")}; border: 1px solid rgba(127,127,127,0.3); border-radius: 4px;")">
-                    <img src="@($"/branding/logo/{id}")" alt="@(isDark ? "Dark logo" : "Logo")" height="40" />
-                </div>
-            }
-            <MudFileUpload T="IBrowserFile" FilesChanged="@(file => UploadAsync(file, isDark))" Accept="image/png,image/jpeg,image/svg+xml">
-                <CustomContent>
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile" Disabled="_busy" OnClick="@context.OpenFilePickerAsync">
-                        @(imageId is null ? "Upload" : "Replace")
-                    </MudButton>
-                </CustomContent>
-                @* The thumbnail shows what's chosen, so no file name chip. *@
-                <SelectedTemplate></SelectedTemplate>
-            </MudFileUpload>
-            @if (imageId is not null)
-            {
-                <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="@(() => SetLogo(null, isDark))">Remove</MudButton>
-            }
-        </div>
-    };
 
     private ResolvedBrand PreviewBrand
     {
@@ -151,69 +105,6 @@
                 BrandColours.IsValid(settings.SecondaryColour) ? settings.SecondaryColour : BrandingSettings.DefaultSecondaryColour,
                 settings.LogoImageId, settings.DarkLogoImageId ?? settings.LogoImageId,
                 settings.SupportEmail, settings.SupportUrl, settings.SupportPhone, settings.FooterText);
-        }
-    }
-
-    private static MudColor ColourOrDefault(string colour, string fallback) => new(BrandColours.IsValid(colour) ? colour : fallback);
-
-    private static string Hex(MudColor colour) => colour.ToString(MudColorOutputFormats.Hex).ToUpperInvariant();
-
-    private static bool IsHardToRead(string colour) =>
-        BrandColours.IsValid(colour) && BrandColours.ContrastRatio(colour, "#FFFFFF") < BrandColours.MinimumTextContrast;
-
-    private void SetLogo(Guid? imageId, bool isDark)
-    {
-        if (isDark)
-        {
-            _settings!.DarkLogoImageId = imageId;
-        }
-        else
-        {
-            _settings!.LogoImageId = imageId;
-        }
-    }
-
-    private async Task UploadAsync(IBrowserFile? file, bool isDark)
-    {
-        if (file is null)
-        {
-            return;
-        }
-
-        if (file.Size > BrandingImages.MaximumBytes)
-        {
-            Snackbar.Add(BrandingImages.WrongTypeOrSize, Severity.Error);
-            return;
-        }
-
-        _busy = true;
-        try
-        {
-            using var buffer = new MemoryStream();
-            await using (var stream = file.OpenReadStream(BrandingImages.MaximumBytes))
-            {
-                await stream.CopyToAsync(buffer);
-            }
-
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var upload = await BrandingSettingsService.UploadImageAsync(db, await AuditActorAccessor.GetAsync(), buffer.ToArray());
-            if (upload.ImageId is { } imageId)
-            {
-                SetLogo(imageId, isDark);
-                Snackbar.Add("Logo uploaded. Save branding to use it.", Severity.Info);
-            }
-            else
-            {
-                Snackbar.Add(upload.Problem!, Severity.Error);
-            }
-        }
-        catch (IOException)
-        {
-            Snackbar.Add(BrandingImages.WrongTypeOrSize, Severity.Error);
-        }
-        finally
-        {
-            _busy = false;
         }
     }
 

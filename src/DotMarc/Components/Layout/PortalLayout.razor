@@ -1,14 +1,18 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @using DotMarc.Portal
+@using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @inject IJSRuntime Js
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PortalBrandLoader BrandLoader
+@inject NavigationManager Navigation
 
 @* The client portal's own layout: the brand, the client's name, dark mode and sign out. No menus, and nothing that
-   reveals or links to dotMARC's internal pages. *@
+   reveals or links to dotMARC's internal pages. Staff previewing a Group (/portal/preview/{id}) get that Group's brand and
+   a banner saying so; the preview page itself checks they may. *@
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -16,7 +20,7 @@
 
 <MudLayout>
     <MudAppBar Elevation="1">
-        <a href="/portal" class="d-flex align-center" style="color: inherit; text-decoration: none; gap: 0.75rem;">
+        <a href="@_homeHref" class="d-flex align-center" style="color: inherit; text-decoration: none; gap: 0.75rem;">
             @if (_brand is null)
             {
                 @* While the brand loads, show nothing rather than flash dotMARC's own logo at a client. *@
@@ -44,6 +48,13 @@
         </form>
     </MudAppBar>
     <MudMainContent>
+        @if (_previewOf is not null)
+        {
+            <MudAlert Severity="Severity.Info" Square="true" Dense="true">
+                Preview: this is what clients of @_previewOf see.
+                <MudLink Href="/groups" Class="ml-2">Back to Manage groups</MudLink>
+            </MudAlert>
+        }
         <MudContainer MaxWidth="MaxWidth.Large" Class="my-4">
             <CascadingValue Value="_brand">
                 @Body
@@ -77,13 +88,51 @@
     private MudTheme _theme = PortalTheme.Default;
     private ResolvedBrand? _brand;
     private bool _isDarkMode;
+    private string? _previewOf;
+    private string _homeHref = "/portal";
+    private int? _loadedPreviewGroupId;
+    private bool _loadedOnce;
 
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        _brand = await BrandLoader.LoadAsync(PortalData.ScopedGroupIds(user));
-        _theme = PortalTheme.For(_brand);
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadBrandAsync();
     }
+
+    // Moving between a preview's pages, or from one preview to another, keeps the layout, so the brand is reloaded only
+    // when the Group being previewed changes.
+    private async Task LoadBrandAsync()
+    {
+        var previewGroupId = PortalScope.PreviewGroupId(new Uri(Navigation.Uri).AbsolutePath);
+        if (_loadedOnce && previewGroupId == _loadedPreviewGroupId)
+        {
+            return;
+        }
+
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var scope = PortalScope.ForUser(user);
+        if (previewGroupId is { } groupId && !ClientPortalGate.IsPortalUser(user) && PortalScope.CanPreview(user, groupId)
+            && await BrandLoader.LoadGroupNameAsync(groupId) is { } groupName)
+        {
+            scope = PortalScope.Preview(groupId, groupName);
+        }
+
+        _brand = await BrandLoader.LoadAsync(scope.GroupIds);
+        _theme = PortalTheme.For(_brand);
+        _previewOf = scope.PreviewOf;
+        _homeHref = scope.HomeHref;
+        _loadedPreviewGroupId = previewGroupId;
+        _loadedOnce = true;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args) =>
+        _ = InvokeAsync(async () =>
+        {
+            await LoadBrandAsync();
+            StateHasChanged();
+        });
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

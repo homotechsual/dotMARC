@@ -132,6 +132,7 @@
                     {
                         <MudTh>Ticket rules</MudTh>
                     }
+                    <MudTh>Portal branding</MudTh>
                     <MudTh></MudTh>
                 </tr>
                 @if (_showGroupFilters)
@@ -157,6 +158,7 @@
                             </MudSelect>
                         </MudTh>
                     }
+                    <MudTh></MudTh>
                     <MudTh></MudTh>
                 </tr>
                 }
@@ -211,6 +213,17 @@
                         }
                     </MudTd>
                 }
+                <MudTd>
+                    <div class="d-flex align-center" style="gap: 0.5rem;">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Palette" OnClick="@(() => OpenBrandingAsync(context))">
+                            Branding
+                        </MudButton>
+                        @if (_brandedGroupIds.Contains(context.Id))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info">Branded</MudChip>
+                        }
+                    </div>
+                </MudTd>
                 <MudTd>
                     <AuthorizeView Policy="GroupsDelete" Context="authState">
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
@@ -333,6 +346,7 @@
     private List<PsaCompany> _companiesWithoutGroup = [];
     private bool _creatingFromPsa;
     private Dictionary<int, int> _ticketRuleOverrideCounts = [];
+    private HashSet<int> _brandedGroupIds = [];
     private string _newGroupName = "";
     private string? _addGroupError;
     private string _newTagName = "";
@@ -408,6 +422,7 @@
             .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.PsaCompanyLinks.ToList()))
             .ToListAsync();
         _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
+        _brandedGroupIds = (await db.GroupBrandings.Select(branding => branding.GroupId).ToListAsync()).ToHashSet();
         _tags = await db.Tags
             .AsNoTracking()
             .OrderBy(t => t.Name)
@@ -725,6 +740,29 @@
             Snackbar.Add($"Failed to update {row.Name}'s {psa.CompanyLabel()}. Try again.", Severity.Error);
         }
         await LoadAsync();
+    }
+
+    private async Task OpenBrandingAsync(GroupRow row)
+    {
+        var parameters = new DialogParameters<GroupBrandingDialog>
+        {
+            { dialog => dialog.GroupId, row.Id },
+            { dialog => dialog.GroupName, row.Name }
+        };
+        var dialogRef = await DialogService.ShowAsync<GroupBrandingDialog>("Portal branding", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        if (await dialogRef.Result is { Canceled: false })
+        {
+            // Refresh the Branded chips. A failure here must not escape the handler; the chips just stay as they were.
+            try
+            {
+                await using var db = await DbFactory.CreateDbContextAsync();
+                _brandedGroupIds = (await db.GroupBrandings.Select(branding => branding.GroupId).ToListAsync()).ToHashSet();
+            }
+            catch (Exception)
+            {
+                Snackbar.Add("Couldn't refresh the Branded chips. Reload the page to see the latest.", Severity.Warning);
+            }
+        }
     }
 
     private async Task OpenTicketRulesAsync(GroupRow row)

@@ -41,7 +41,11 @@
         var colours = dark
             ? "--mud-palette-surface: #1e2a3a; --mud-palette-background: #111827; --mud-palette-text-primary: #e8eaf0; --mud-palette-text-secondary: #adb5c7; --mud-palette-lines-default: rgba(255,255,255,0.08); background: #111827;"
             : "--mud-palette-surface: #ffffff; --mud-palette-background: #f5f5f5; --mud-palette-text-primary: rgba(66,66,66,1); --mud-palette-text-secondary: #616161; background: #f5f5f5;";
-        return $"{colours} --mud-palette-primary: {Brand.PrimaryColour}; --mud-palette-secondary: {Brand.SecondaryColour}; " +
+        // Dark mode may lighten the primary so it reads on the dark surface; show what the portal will actually use.
+        var primary = dark
+            ? PortalTheme.For(Brand).PaletteDark.Primary.ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex)
+            : Brand.PrimaryColour;
+        return $"{colours} --mud-palette-primary: {primary}; --mud-palette-secondary: {Brand.SecondaryColour}; " +
                "color: var(--mud-palette-text-primary); border-radius: 8px; overflow: hidden; min-width: 280px; border: 1px solid rgba(127,127,127,0.3);";
     }
 

@@ -59,6 +59,9 @@ public static class PortalTheme
         }
     };
 
+    /// <summary>Dark mode's card and page surface, which text in the primary colour sits on.</summary>
+    public const string DarkSurface = "#1E2A3A";
+
     private const string LightText = "#FCFCFC";
     private const string DarkText = "#000000";
 
@@ -83,13 +86,32 @@ public static class PortalTheme
         theme.PaletteLight.AppbarBackground = secondary;
         theme.PaletteLight.AppbarText = ReadableTextOn(brand.SecondaryColour);
 
-        theme.PaletteDark.Primary = primary;
-        theme.PaletteDark.PrimaryLighten = primary.ColorLighten(0.2).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
-        theme.PaletteDark.PrimaryDarken = primary.ColorDarken(0.1).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
-        theme.PaletteDark.PrimaryContrastText = ReadableTextOn(brand.PrimaryColour);
+        var darkPrimary = ReadableOnDarkSurface(primary);
+        var darkPrimaryHex = darkPrimary.ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteDark.Primary = darkPrimary;
+        theme.PaletteDark.PrimaryLighten = darkPrimary.ColorLighten(0.2).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteDark.PrimaryDarken = darkPrimary.ColorDarken(0.1).ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex);
+        theme.PaletteDark.PrimaryContrastText = ReadableTextOn(darkPrimaryHex);
         theme.PaletteDark.Secondary = secondary;
         theme.PaletteDark.SecondaryContrastText = ReadableTextOn(brand.SecondaryColour);
         return theme;
+    }
+
+    // Links and highlights in the primary colour sit on the dark surface in dark mode, as dotMARC's own lighter dark
+    // primary does. A brand primary too dark to read there is lightened in steps until it does; one that reads is kept.
+    private static MudBlazor.Utilities.MudColor ReadableOnDarkSurface(MudBlazor.Utilities.MudColor colour)
+    {
+        for (var step = 0; step < 20; step++)
+        {
+            if (BrandColours.ContrastRatio(colour.ToString(MudBlazor.Utilities.MudColorOutputFormats.Hex), DarkSurface) >= BrandColours.MinimumTextContrast)
+            {
+                break;
+            }
+
+            colour = colour.ColorLighten(0.05);
+        }
+
+        return colour;
     }
 
     /// <summary>Whether the colour is dark enough that light text reads better on it.</summary>

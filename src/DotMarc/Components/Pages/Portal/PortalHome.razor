@@ -25,7 +25,7 @@ else
     <MudGrid>
         @foreach (var domain in _domains)
         {
-            <MudItem xs="12" md="6"><PortalDomainCard Summary="domain" /></MudItem>
+            <MudItem xs="12" md="6"><PortalDomainCard Summary="domain" LinkPrefix="@_scope!.DomainLinkPrefix" /></MudItem>
         }
     </MudGrid>
 }
@@ -33,11 +33,15 @@ else
 @code {
     [CascadingParameter] public ResolvedBrand? Brand { get; set; }
 
+    /// <summary>Set by the staff preview; a portal user's own scope comes from their claims.</summary>
+    [CascadingParameter] public PortalScope? Scope { get; set; }
+
+    private PortalScope? _scope;
     private IReadOnlyList<PortalDomainSummary>? _domains;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        _domains = await PortalData.ListDomainsAsync(PortalData.ScopedGroupIds(user));
+        _scope = Scope ?? PortalScope.ForUser((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        _domains = await PortalData.ListDomainsAsync(_scope.GroupIds);
     }
 }
