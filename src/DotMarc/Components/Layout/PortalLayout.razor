@@ -9,6 +9,8 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PortalBrandLoader BrandLoader
 @inject NavigationManager Navigation
+@inject Microsoft.AspNetCore.Authorization.IAuthorizationService AuthorizationService
+@inject ILogger<PortalLayout> Logger
 
 @* The client portal's own layout: the brand, the client's name, dark mode and sign out. No menus, and nothing that
    reveals or links to dotMARC's internal pages. Staff previewing a Group (/portal/preview/{id}) get that Group's brand and
@@ -90,8 +92,9 @@
     private bool _isDarkMode;
     private string? _previewOf;
     private string _homeHref = "/portal";
-    private int? _loadedPreviewGroupId;
-    private bool _loadedOnce;
+    private int? _requestedPreviewGroupId;
+    private bool _requestedOnce;
+    private readonly LatestLoad _latestBrand = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -101,35 +104,54 @@
 
     // Moving between a preview's pages, or from one preview to another, keeps the layout, so the brand is reloaded only
     // when the Group being previewed changes.
+    // Quick navigation can overlap loads, so only the newest one's result is shown.
     private async Task LoadBrandAsync()
     {
         var previewGroupId = PortalScope.PreviewGroupId(new Uri(Navigation.Uri).AbsolutePath);
-        if (_loadedOnce && previewGroupId == _loadedPreviewGroupId)
+        if (_requestedOnce && previewGroupId == _requestedPreviewGroupId)
         {
             return;
         }
 
-        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        var scope = PortalScope.ForUser(user);
-        if (previewGroupId is { } groupId && !ClientPortalGate.IsPortalUser(user) && PortalScope.CanPreview(user, groupId)
-            && await BrandLoader.LoadGroupNameAsync(groupId) is { } groupName)
+        _requestedPreviewGroupId = previewGroupId;
+        _requestedOnce = true;
+        var (isLatest, (scope, brand)) = await _latestBrand.RunAsync(async () =>
         {
-            scope = PortalScope.Preview(groupId, groupName);
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var scope = PortalScope.ForUser(user);
+            if (previewGroupId is { } groupId && await PortalScope.MayPreviewAsync(AuthorizationService, user, groupId)
+                && await BrandLoader.LoadGroupNameAsync(groupId) is { } groupName)
+            {
+                scope = PortalScope.Preview(groupId, groupName);
+            }
+
+            return (scope, await BrandLoader.LoadAsync(scope.GroupIds));
+        });
+        if (!isLatest)
+        {
+            return;
         }
 
-        _brand = await BrandLoader.LoadAsync(scope.GroupIds);
-        _theme = PortalTheme.For(_brand);
+        _brand = brand;
+        _theme = PortalTheme.For(brand);
         _previewOf = scope.PreviewOf;
         _homeHref = scope.HomeHref;
-        _loadedPreviewGroupId = previewGroupId;
-        _loadedOnce = true;
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs args) =>
         _ = InvokeAsync(async () =>
         {
-            await LoadBrandAsync();
-            StateHasChanged();
+            try
+            {
+                await LoadBrandAsync();
+                StateHasChanged();
+            }
+            catch (Exception exception)
+            {
+                // Nothing awaits this handler, so an error would otherwise vanish; the page keeps the brand it has.
+                _requestedOnce = false;
+                Logger.LogWarning(exception, "Couldn't load the portal brand after navigating to {Uri}", args.Location);
+            }
         });
 
     public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace DotMarc.Portal;
 
@@ -15,6 +16,16 @@ public sealed record PortalScope(IReadOnlyCollection<int> GroupIds, string? Prev
 
     public static PortalScope Preview(int groupId, string groupName) =>
         new([groupId], groupName, PreviewPathPrefix + groupId.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>The permission policy the preview page requires (managing Groups).</summary>
+    public const string PreviewPolicyName = "GroupsOrTagsWrite";
+
+    /// <summary>Everything the preview page requires, for the layout, which brands the page before the page's own check
+    /// runs: staff (not a portal user) who can manage Groups and may see this Group.</summary>
+    public static async Task<bool> MayPreviewAsync(IAuthorizationService authorization, ClaimsPrincipal user, int groupId) =>
+        !ClientPortalGate.IsPortalUser(user)
+        && CanPreview(user, groupId)
+        && (await authorization.AuthorizeAsync(user, PreviewPolicyName).ConfigureAwait(false)).Succeeded;
 
     /// <summary>Staff limited to some Groups can preview only those; unscoped staff can preview any Group.</summary>
     public static bool CanPreview(ClaimsPrincipal user, int groupId)

@@ -1,7 +1,10 @@
+@using DotMarc.Components.Portal
 @using Microsoft.AspNetCore.Components.Authorization
 
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <PortalPageGuard PageType="routeData.PageType">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        </PortalPageGuard>
     </Found>
 </Router>

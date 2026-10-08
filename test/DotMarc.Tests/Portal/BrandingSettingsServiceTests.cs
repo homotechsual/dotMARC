@@ -149,6 +149,25 @@ public sealed class BrandingSettingsServiceTests : IAsyncLifetime
         Assert.StartsWith(BrandingImages.ExpiredUpload, exception.Message);
     }
 
+    [Theory]
+    [InlineData(10, true)] // may belong to a form still being filled in
+    [InlineData(120, false)] // abandoned
+    public async Task AnUnsavedUpload_IsKeptForAnHour_ThenRemovedByTheNextSave(int minutesOld, bool kept)
+    {
+        await using var context = CreateContext();
+        var upload = await BrandingSettingsService.UploadImageAsync(context, TestActors.Admin, PngBytes());
+        var uploadedUtc = DateTimeOffset.UtcNow.AddMinutes(-minutesOld);
+        await context.BrandingImages.Where(image => image.Id == upload.ImageId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(image => image.UploadedUtc, uploadedUtc));
+        var settings = await BrandingSettingsService.GetAsync(context);
+        settings.ProductName = "Nova MSP";
+
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+
+        await using var verify = CreateContext();
+        Assert.Equal(kept, await verify.BrandingImages.AnyAsync(image => image.Id == upload.ImageId));
+    }
+
     [Fact]
     public async Task UploadingSomethingThatIsntALogo_SaysWhy_AndStoresNothing()
     {

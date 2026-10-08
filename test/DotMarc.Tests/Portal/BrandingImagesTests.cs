@@ -54,6 +54,43 @@ public sealed class BrandingImagesTests
         Assert.Equal("This SVG contains scripts or external links, so it can't be used.", check.Problem);
     }
 
+    [Theory]
+    [InlineData("<html:iframe xmlns:html=\"http://www.w3.org/1999/xhtml\" src=\"https://evil.example\"/>")]
+    [InlineData("<object xmlns=\"http://www.w3.org/1999/xhtml\" data=\"https://evil.example/x.swf\"/>")]
+    [InlineData("<html:meta xmlns:html=\"http://www.w3.org/1999/xhtml\" http-equiv=\"refresh\" content=\"0;url=https://evil.example\"/>")]
+    [InlineData("<style>rect { fill: \\75 rl(https://evil.example/x.svg#a); }</style>")]
+    [InlineData("<style>@\\69mport 'https://evil.example/x.css';</style>")]
+    [InlineData("<rect style=\"fill: \\75 rl(https://evil.example/x.svg#a)\"/>")]
+    public void AnSvgSmugglingInHtmlOrEscapedCss_IsRefused(string inner)
+    {
+        Assert.Equal(BrandingImages.UnsafeSvg, BrandingImages.Validate(Svg(inner)).Problem);
+    }
+
+    [Fact]
+    public void AnSvgWithAStylesheetInstruction_IsRefused()
+    {
+        var withStylesheet = Encoding.UTF8.GetBytes("<?xml version=\"1.0\"?><?xml-stylesheet href=\"https://evil.example/x.css\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+
+        Assert.Equal(BrandingImages.UnsafeSvg, BrandingImages.Validate(withStylesheet).Problem);
+    }
+
+    [Fact]
+    public void AnInkscapeLogo_WithItsMetadata_IsAccepted()
+    {
+        var inkscape = Encoding.UTF8.GetBytes("""
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+                 xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" viewBox="0 0 10 10">
+              <sodipodi:namedview id="namedview1" inkscape:zoom="1"/>
+              <metadata><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/></cc:Work></rdf:RDF></metadata>
+              <g inkscape:label="Layer 1"><rect width="10" height="10" style="fill:#0b5fff;stroke:none"/></g>
+            </svg>
+            """);
+
+        Assert.Equal(("image/svg+xml", (string?)null), (BrandingImages.Validate(inkscape).ContentType, BrandingImages.Validate(inkscape).Problem));
+    }
+
     [Fact]
     public void AnSvgWithADoctype_IsRefused()
     {

@@ -406,7 +406,7 @@ builder.Services.AddAuthorization(options =>
     ApiPolicies.Add(options);
 
     // The client portal's own policy. ClientPortalGate fails every other policy for portal users.
-    options.AddPolicy("ClientPortal", policy => policy.RequireAuthenticatedUser().AddRequirements(new DotMarc.Portal.ClientPortalRequirement()));
+    options.AddPolicy(DotMarc.Portal.ClientPortalGate.PolicyName, policy => policy.RequireAuthenticatedUser().AddRequirements(new DotMarc.Portal.ClientPortalRequirement()));
 });
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, DotMarc.Portal.ClientPortalGate>();
 builder.Services.AddScoped<DotMarc.Portal.PortalData>();

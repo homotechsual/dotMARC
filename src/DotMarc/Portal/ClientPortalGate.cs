@@ -16,6 +16,17 @@ public sealed class ClientPortalGate : IAuthorizationHandler
     public static bool IsPortalUser(System.Security.Claims.ClaimsPrincipal user) =>
         user.HasClaim(UserAccessClaimsTransformation.ClientPortalClaimType, "true");
 
+    /// <summary>Whether a portal user may render a page inside their circuit: only the portal's own pages and pages anyone
+    /// can open. Inside a circuit, AuthorizeRouteView checks a page's own [Authorize] attributes but never the fallback
+    /// policy, so a page relying on the fallback alone would otherwise render for them.</summary>
+    public static bool AllowsPortalUserOn(Type pageType) =>
+        pageType.IsDefined(typeof(AllowAnonymousAttribute), inherit: true)
+        || pageType.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).OfType<AuthorizeAttribute>()
+            .Any(attribute => attribute.Policy == PolicyName);
+
+    /// <summary>The portal's own policy, registered in Program.cs.</summary>
+    public const string PolicyName = "ClientPortal";
+
     public Task HandleAsync(AuthorizationHandlerContext context)
     {
         var isPortalPolicy = context.Requirements.OfType<ClientPortalRequirement>().Any();

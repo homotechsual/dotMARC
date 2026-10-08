@@ -57,9 +57,17 @@ public static partial class BrandingImages
             return new BrandingImageCheck(null, WrongTypeOrSize);
         }
 
+        // An instruction such as xml-stylesheet can pull in outside content. (The XML declaration isn't one.)
+        if (document.DescendantNodes().OfType<XProcessingInstruction>().Any())
+        {
+            return new BrandingImageCheck(null, UnsafeSvg);
+        }
+
         foreach (var element in document.Root.DescendantsAndSelf())
         {
-            if (element.Name.LocalName is "script" or "foreignObject")
+            // HTML inside an SVG (iframe, object, meta refresh) is refused outright. Other namespaces stay allowed:
+            // design tools add their own metadata, such as Inkscape's sodipodi:namedview and RDF licence details.
+            if (element.Name.LocalName is "script" or "foreignObject" || element.Name.Namespace == XhtmlNamespace)
             {
                 return new BrandingImageCheck(null, UnsafeSvg);
             }
@@ -70,7 +78,7 @@ public static partial class BrandingImages
                 return new BrandingImageCheck(null, UnsafeSvg);
             }
 
-            if (element.Name.LocalName == "style" && FetchesSomething(element.Value))
+            if (element.Name.LocalName == "style" && (FetchesSomething(element.Value) || HasCssEscape(element.Value)))
             {
                 return new BrandingImageCheck(null, UnsafeSvg);
             }
@@ -81,7 +89,8 @@ public static partial class BrandingImages
                 var name = attribute.Name.LocalName;
                 if (name.StartsWith("on", StringComparison.OrdinalIgnoreCase)
                     || (name == "href" && !(attribute.Value.StartsWith('#') || attribute.Value.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)))
-                    || FetchesSomething(attribute.Value))
+                    || FetchesSomething(attribute.Value)
+                    || (name == "style" && HasCssEscape(attribute.Value)))
                 {
                     return new BrandingImageCheck(null, UnsafeSvg);
                 }
@@ -90,6 +99,11 @@ public static partial class BrandingImages
 
         return new BrandingImageCheck("image/svg+xml", null);
     }
+
+    private static readonly XNamespace XhtmlNamespace = "http://www.w3.org/1999/xhtml";
+
+    // CSS escapes (\75 rl for url, @\69mport for @import) would slip past the url and @import checks; a logo has no need of them.
+    private static bool HasCssEscape(string css) => css.Contains('\\');
 
     private static bool IsHrefName(string? attributeName) =>
         attributeName is not null && (attributeName == "href" || attributeName.EndsWith(":href", StringComparison.Ordinal));

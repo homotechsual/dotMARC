@@ -62,6 +62,28 @@ public sealed class ClientPortalGateTests
         Assert.True(context.HasFailed);
     }
 
+    [Theory]
+    [InlineData(typeof(DotMarc.Components.Pages.Portal.PortalHome), true)]
+    [InlineData(typeof(DotMarc.Components.Pages.Portal.PortalDomain), true)]
+    [InlineData(typeof(DotMarc.Components.Pages.Demo.DemoSignIn), true)] // anonymous, so switching demo persona still works
+    [InlineData(typeof(DotMarc.Components.Pages.Portal.PortalPreview), false)]
+    [InlineData(typeof(DotMarc.Components.Pages.Dashboard), false)]
+    [InlineData(typeof(DotMarc.Components.Pages.Home), false)] // relies on the fallback policy alone
+    public void APortalUser_MayOnlyRenderPortalAndAnonymousPages(Type pageType, bool allowed) =>
+        Assert.Equal(allowed, ClientPortalGate.AllowsPortalUserOn(pageType));
+
+    [Fact]
+    public void EveryRoutablePage_IsEitherAPortalPage_OrKeptFromPortalUsers()
+    {
+        var pages = typeof(Program).Assembly.GetTypes()
+            .Where(type => type.GetCustomAttributes(typeof(Microsoft.AspNetCore.Components.RouteAttribute), inherit: false).Length > 0)
+            .ToList();
+
+        var allowed = pages.Where(ClientPortalGate.AllowsPortalUserOn).Select(type => type.Name).OrderBy(name => name);
+
+        Assert.Equal(["AccessDenied", "DemoSignIn", "Error", "PortalDomain", "PortalHome"], allowed);
+    }
+
     [Fact]
     public async Task Staff_AreLeftToTheUsualHandlers()
     {
