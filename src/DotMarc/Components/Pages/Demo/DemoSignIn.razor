@@ -1,6 +1,7 @@
 @* src/DotMarc/Components/Pages/Demo/DemoSignIn.razor *@
 @page "/demo"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
 @using DotMarc.Demo
 @using Microsoft.Extensions.Options
 @inject IOptions<DemoOptions> DemoOptions
