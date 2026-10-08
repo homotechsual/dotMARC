@@ -53,6 +53,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DotMarc.Portal.BrandingSettings> BrandingSettings => Set<DotMarc.Portal.BrandingSettings>();
     public DbSet<DotMarc.Portal.BrandingImage> BrandingImages => Set<DotMarc.Portal.BrandingImage>();
     public DbSet<DotMarc.Portal.GroupBranding> GroupBrandings => Set<DotMarc.Portal.GroupBranding>();
+    public DbSet<DotMarc.Email.EmailSettings> EmailSettings => Set<DotMarc.Email.EmailSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -437,6 +438,16 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(image => image.Id).ValueGeneratedNever();
             entity.Property(image => image.ContentType).HasMaxLength(40);
             entity.Property(image => image.Sha256).HasMaxLength(64);
+        });
+        modelBuilder.Entity<DotMarc.Email.EmailSettings>(entity =>
+        {
+            entity.Property(settings => settings.Provider).HasConversion<string>().HasMaxLength(10);
+            entity.Property(settings => settings.SmtpSecurity).HasConversion<string>().HasMaxLength(15);
+            entity.Property(settings => settings.FromAddress).HasMaxLength(254);
+            entity.Property(settings => settings.FromName).HasMaxLength(100);
+            entity.Property(settings => settings.SmtpHost).HasMaxLength(253);
+            entity.Property(settings => settings.SmtpUsername).HasMaxLength(254);
+            entity.HasData(new DotMarc.Email.EmailSettings { Id = 1 });
         });
         modelBuilder.Entity<DotMarc.Portal.GroupBranding>(entity =>
         {

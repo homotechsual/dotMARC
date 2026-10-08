@@ -15,7 +15,7 @@ public sealed class AuditCoverageTests
         typeof(DomainManagementService), typeof(GroupManagementService), typeof(TagManagementService),
         typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(ApiKeyManagementService), typeof(AlertTicketRuleService),
         typeof(NotificationSettingsService), typeof(HaloPsaSettingsService), typeof(DotMarc.Psa.ConnectWise.ConnectWiseSettingsService), typeof(DotMarc.Psa.Autotask.AutotaskSettingsService), typeof(CloudflareDnsSettingsService),
-        typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService), typeof(AuditSettingsService), typeof(DotMarc.Portal.BrandingSettingsService),
+        typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService), typeof(AuditSettingsService), typeof(DotMarc.Portal.BrandingSettingsService), typeof(DotMarc.Email.EmailSettingsService),
     ];
 
     private static readonly string[] ReadMethodPrefixes = ["Get", "List", "Count", "Resolve"];

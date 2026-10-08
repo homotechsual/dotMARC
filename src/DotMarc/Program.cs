@@ -149,6 +149,8 @@ builder.Services.AddHttpClient<ITlsrptDnsChecker, TlsrptDnsChecker>(client =>
 builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.GetSection(DotMarc.MtaSts.MtaStsOptions.SectionName));
 
 builder.Services.AddHttpClient<ITeamsWebhookClient, TeamsWebhookClient>();
+builder.Services.AddHttpClient(DotMarc.Email.GraphEmailSender.HttpClientName, client => client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/"));
+builder.Services.AddSingleton<DotMarc.Email.IEmailSenderFactory, DotMarc.Email.EmailSenderFactory>();
 builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
 builder.Services.AddHttpClient<ISlackWebhookClient, SlackWebhookClient>();
 builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();

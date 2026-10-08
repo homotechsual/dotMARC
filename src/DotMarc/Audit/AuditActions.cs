@@ -41,6 +41,7 @@ public static class AuditActions
     public const string ConnectWiseSettingsSaved = "settings.connectwise.saved";
     public const string AutotaskSettingsSaved = "settings.autotask.saved";
     public const string BrandingSettingsSaved = "settings.branding.saved";
+    public const string EmailSettingsSaved = "settings.email.saved";
     public const string GroupBrandingChanged = "group.branding_changed";
     public const string CloudflareDnsSettingsSaved = "settings.cloudflare_dns.saved";
     public const string AzureDnsSettingsSaved = "settings.azure_dns.saved";
@@ -100,6 +101,7 @@ public static class AuditActions
         (ConnectWiseSettingsSaved, "ConnectWise settings saved"),
         (AutotaskSettingsSaved, "Autotask settings saved"),
         (BrandingSettingsSaved, "Branding saved"),
+        (EmailSettingsSaved, "Email settings saved"),
         (GroupBrandingChanged, "Group branding changed"),
         (CloudflareDnsSettingsSaved, "Cloudflare DNS settings saved"),
         (AzureDnsSettingsSaved, "Azure DNS settings saved"),
