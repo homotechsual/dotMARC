@@ -54,6 +54,9 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DotMarc.Portal.BrandingImage> BrandingImages => Set<DotMarc.Portal.BrandingImage>();
     public DbSet<DotMarc.Portal.GroupBranding> GroupBrandings => Set<DotMarc.Portal.GroupBranding>();
     public DbSet<DotMarc.Email.EmailSettings> EmailSettings => Set<DotMarc.Email.EmailSettings>();
+    public DbSet<DotMarc.Reporting.ClientReports.ReportSettings> ReportSettings => Set<DotMarc.Reporting.ClientReports.ReportSettings>();
+    public DbSet<DotMarc.Reporting.ClientReports.GroupReportSchedule> GroupReportSchedules => Set<DotMarc.Reporting.ClientReports.GroupReportSchedule>();
+    public DbSet<DotMarc.Reporting.ClientReports.ClientReportDelivery> ClientReportDeliveries => Set<DotMarc.Reporting.ClientReports.ClientReportDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -438,6 +441,28 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(image => image.Id).ValueGeneratedNever();
             entity.Property(image => image.ContentType).HasMaxLength(40);
             entity.Property(image => image.Sha256).HasMaxLength(64);
+        });
+        modelBuilder.Entity<DotMarc.Reporting.ClientReports.ReportSettings>(entity =>
+        {
+            entity.Property(settings => settings.TimeZoneId).HasMaxLength(64);
+            entity.HasData(new DotMarc.Reporting.ClientReports.ReportSettings { Id = 1 });
+        });
+        modelBuilder.Entity<DotMarc.Reporting.ClientReports.GroupReportSchedule>(entity =>
+        {
+            entity.HasKey(schedule => schedule.GroupId);
+            entity.HasOne<Group>().WithOne().HasForeignKey<DotMarc.Reporting.ClientReports.GroupReportSchedule>(schedule => schedule.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(schedule => schedule.Frequency).HasConversion<string>().HasMaxLength(10);
+        });
+        modelBuilder.Entity<DotMarc.Reporting.ClientReports.ClientReportDelivery>(entity =>
+        {
+            entity.HasOne<Group>().WithMany().HasForeignKey(delivery => delivery.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(delivery => delivery.Kind).HasConversion<string>().HasMaxLength(10);
+            entity.Property(delivery => delivery.Status).HasConversion<string>().HasMaxLength(10);
+            entity.Property(delivery => delivery.RequestedBy).HasMaxLength(254);
+            entity.Property(delivery => delivery.Error).HasMaxLength(1000);
+            entity.HasIndex(delivery => new { delivery.GroupId, delivery.PeriodStart, delivery.PeriodEnd })
+                .IsUnique()
+                .HasFilter("\"Kind\" = 'Scheduled'");
         });
         modelBuilder.Entity<DotMarc.Email.EmailSettings>(entity =>
         {

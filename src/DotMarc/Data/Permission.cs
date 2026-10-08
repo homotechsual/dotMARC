@@ -26,5 +26,6 @@ public enum Permission
     DnsPushManage,
     LogsView,
     AuditView,
-    AuditManage
+    AuditManage,
+    ReportsManage
 }

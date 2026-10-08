@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DotMarc.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DotMarc.Migrations
 {
     [DbContext(typeof(DotMarcDbContext))]
-    partial class DotMarcDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008235452_AddClientReports")]
+    partial class AddClientReports
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

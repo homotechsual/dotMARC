@@ -42,6 +42,9 @@ public static class AuditActions
     public const string AutotaskSettingsSaved = "settings.autotask.saved";
     public const string BrandingSettingsSaved = "settings.branding.saved";
     public const string EmailSettingsSaved = "settings.email.saved";
+    public const string ReportSettingsSaved = "settings.reports.saved";
+    public const string GroupReportScheduleChanged = "group.report_schedule_changed";
+    public const string ClientReportSent = "group.report_sent";
     public const string GroupBrandingChanged = "group.branding_changed";
     public const string CloudflareDnsSettingsSaved = "settings.cloudflare_dns.saved";
     public const string AzureDnsSettingsSaved = "settings.azure_dns.saved";
@@ -102,6 +105,9 @@ public static class AuditActions
         (AutotaskSettingsSaved, "Autotask settings saved"),
         (BrandingSettingsSaved, "Branding saved"),
         (EmailSettingsSaved, "Email settings saved"),
+        (ReportSettingsSaved, "Report settings saved"),
+        (GroupReportScheduleChanged, "Group report schedule changed"),
+        (ClientReportSent, "Client report sent"),
         (GroupBrandingChanged, "Group branding changed"),
         (CloudflareDnsSettingsSaved, "Cloudflare DNS settings saved"),
         (AzureDnsSettingsSaved, "Azure DNS settings saved"),
