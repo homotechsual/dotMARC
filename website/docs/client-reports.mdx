@@ -51,6 +51,12 @@ reports:
 
 3. Choose **Microsoft Graph** and set the **From address** to that mailbox. It's prefilled with the reports mailbox.
 
+Reports are normally well under 1 MB and go in a single request. Graph caps a request at 4 MB, so a report larger than
+about 3 MB (only likely with a very large logo) is sent differently: dotMARC creates it as a draft in the sending mailbox,
+uploads the PDF in pieces, then sends it. Creating the draft needs one more permission, `Mail.ReadWrite` (Application),
+in place of `Mail.Read`. Without it, smaller reports still send and a large one fails with a message saying the
+permission is missing. Reports are limited to 25 MB whichever way they're sent.
+
 ### SMTP
 
 SMTP works with any mail server or relay service (Microsoft 365, Google Workspace, SendGrid, Mailgun and so on). Enter
@@ -69,6 +75,8 @@ Also on **Email & reports**:
 - **Time zone:** weeks (Monday to Sunday), months and quarters start at midnight in this time zone. It defaults to UTC.
 - **Send hour:** scheduled reports go out at this hour on the first day after the period ends, for example 06:00 on
   1 April for March.
+- **Number format:** how numbers and percentages are written, for example 1,200 and 99.5% for the United Kingdom, or
+  1.200 and 99,5 % for Germany. The report's words and dates stay in English.
 
 Turning a schedule on doesn't send a backlog: the first report is the first period that ends after you turned it on.
 

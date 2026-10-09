@@ -16,7 +16,7 @@ public sealed class EmailLimitsTests
     [Theory]
     [InlineData(0, 0, "There's no one to send this to.")]
     [InlineData(26, 0, "A report can go to at most 25 recipients.")]
-    [InlineData(1, EmailLimits.MaximumAttachmentBytes + 1, "The attachment is over 3 MB, too large to send.")]
+    [InlineData(1, EmailLimits.MaximumAttachmentBytes + 1, "The attachment is over 25 MB, too large to send.")]
     public void AMessageOutsideTheLimits_IsRefused(int recipients, int attachmentBytes, string expected)
     {
         var exception = Assert.Throws<EmailSendException>(() => EmailLimits.Check(Message(recipients, attachmentBytes)));

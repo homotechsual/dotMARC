@@ -5,8 +5,9 @@ public static class EmailLimits
 {
     public const int MaximumRecipients = 25;
 
-    /// <summary>Graph's limit for an attachment sent inline with the message. A report is typically well under 1 MB.</summary>
-    public const int MaximumAttachmentBytes = 3 * 1024 * 1024;
+    /// <summary>A common ceiling for mail servers and mailboxes, so a report this big is refused clearly here rather than
+    /// bounced somewhere downstream. A report is typically well under 1 MB.</summary>
+    public const int MaximumAttachmentBytes = 25 * 1024 * 1024;
 
     public static void Check(EmailMessage message)
     {
@@ -22,7 +23,7 @@ public static class EmailLimits
 
         if (message.Attachments.Sum(attachment => (long)attachment.Bytes.Length) > MaximumAttachmentBytes)
         {
-            throw new EmailSendException("The attachment is over 3 MB, too large to send.");
+            throw new EmailSendException("The attachment is over 25 MB, too large to send.");
         }
     }
 }
