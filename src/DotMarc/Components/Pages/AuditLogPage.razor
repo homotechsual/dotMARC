@@ -157,7 +157,14 @@
         }
     }
 
-    private void ToggleExpanded(AuditEntry entry) => _expandedEntryId = _expandedEntryId == entry.Id ? null : entry.Id;
+    // MudTable hands over the clicked row as nullable; a click always has one, but there's nothing to expand without it.
+    private void ToggleExpanded(AuditEntry? entry)
+    {
+        if (entry is not null)
+        {
+            _expandedEntryId = _expandedEntryId == entry.Id ? null : entry.Id;
+        }
+    }
 
     private static DateTime? ToDateTime(DateOnly? date) => date?.ToDateTime(TimeOnly.MinValue);
 
