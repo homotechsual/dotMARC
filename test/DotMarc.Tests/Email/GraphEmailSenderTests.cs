@@ -155,6 +155,22 @@ public sealed class GraphEmailSenderTests
     }
 
     [Fact]
+    public async Task AnApplicationAccessPolicyRefusal_IsNamed_RatherThanBlamedOnMailSend()
+    {
+        var (sender, handler) = Create();
+        handler.StatusCode = HttpStatusCode.Forbidden;
+        handler.ResponseBody = """{"error":{"code":"ErrorAccessDenied","message":"Access to OData is disabled: [RAOP] : Blocked by tenant configured AppOnly AccessPolicy settings."}}""";
+
+        var exception = await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync(
+            new EmailMessage(["it@aurora-retail.example"], "Subject", "<p>Hi</p>", "Hi", []), CancellationToken.None));
+
+        Assert.Contains("application access policy", exception.Message);
+        Assert.Contains("Test-ApplicationAccessPolicy", exception.Message);
+        Assert.Contains("reports@nova-msp.example", exception.Message);
+        Assert.DoesNotContain("Mail.Send application permission", exception.Message);
+    }
+
+    [Fact]
     public async Task AGraphError_IsAnEmailSendException_CarryingGraphsMessage()
     {
         var (sender, handler) = Create();

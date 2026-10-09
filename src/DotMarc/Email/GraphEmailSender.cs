@@ -158,7 +158,7 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
         }
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, string forbiddenHint, CancellationToken cancellationToken)
+    private async Task EnsureSuccessAsync(HttpResponseMessage response, string forbiddenHint, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
         {
@@ -168,13 +168,20 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         response.Dispose();
         var graphMessage = TryReadGraphError(body) ?? response.ReasonPhrase ?? "no details";
-        var hint = response.StatusCode == System.Net.HttpStatusCode.Forbidden
-            ? forbiddenHint.Length > 0
-                ? forbiddenHint
-                : " Check the app registration has the Mail.Send application permission with admin consent, and that it may send as this mailbox."
-            : "";
+        var hint = response.StatusCode != System.Net.HttpStatusCode.Forbidden
+            ? ""
+            : IsAccessPolicyRefusal(graphMessage)
+                ? $" Exchange Online's application access policy is refusing this app access to {mailbox}. Check with Test-ApplicationAccessPolicy -Identity {mailbox} -AppId <dotMARC's app client id>: if it says Granted, Graph hasn't picked up the change yet, which can take an hour or more, so try again later; if Denied, add {mailbox} directly to the policy's scope group."
+                : forbiddenHint.Length > 0
+                    ? forbiddenHint
+                    : " Check the app registration has the Mail.Send application permission with admin consent, and that it may send as this mailbox.";
         throw new EmailSendException($"Microsoft Graph refused the message ({(int)response.StatusCode}): {graphMessage}{hint}");
     }
+
+    /// <summary>Exchange's application access policy refuses with a message naming it ("[RAOP] ... AccessPolicy"), which
+    /// says nothing about Graph permissions, so it gets its own advice.</summary>
+    private static bool IsAccessPolicyRefusal(string graphMessage) =>
+        graphMessage.Contains("AccessPolicy", StringComparison.OrdinalIgnoreCase) || graphMessage.Contains("[RAOP]", StringComparison.Ordinal);
 
     private static string? ReadString(string json, string property)
     {

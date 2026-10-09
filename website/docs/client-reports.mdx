@@ -49,6 +49,18 @@ reports:
    Add-DistributionGroupMember -Identity "dotMARC DMARC Reports Scope" -Member "reports@your-msp.example"
    ```
 
+   The mailbox must be a direct member of the group; membership through a nested group doesn't count. Check it with
+   dotMARC's app client ID:
+
+   ```powershell
+   Test-ApplicationAccessPolicy -Identity "reports@your-msp.example" -AppId <dotMARC's app client id>
+   ```
+
+   It should say **Granted**. Exchange can take an hour or more to apply a change to the policy or the group, so a send
+   may still be refused (with a message naming the application access policy) for a while after this says Granted.
+   Wait, then use **Send a test email** again. dotMARC fetches a fresh sign-in each time you save the email settings, so
+   a restart isn't needed.
+
 3. Choose **Microsoft Graph** and set the **From address** to that mailbox. It's prefilled with the reports mailbox.
 
 Reports are normally well under 1 MB and go in a single request. Graph caps a request at 4 MB, so a report larger than
