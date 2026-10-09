@@ -85,7 +85,7 @@ public static class TrendChart
         return positions;
     }
 
-    public static void Paint(XGraphics graphics, XRect area, IReadOnlyList<TrendSeries> series, IReadOnlyList<string> xLabels)
+    public static void Paint(XGraphics graphics, XRect area, IReadOnlyList<TrendSeries> series, IReadOnlyList<string> xLabels, CultureInfo culture)
     {
         var labelFont = new XFont(ReportFontResolver.FamilyName, 7);
         var legendFont = new XFont(ReportFontResolver.FamilyName, 8);
@@ -117,7 +117,7 @@ public static class TrendChart
         {
             var y = Y(value / 100);
             graphics.DrawLine(gridPen, plot.Left, y, plot.Right, y);
-            var label = string.Create(CultureInfo.InvariantCulture, $"{value:0}%");
+            var label = (value / 100).ToString("P0", culture);
             var width = graphics.MeasureString(label, labelFont).Width;
             graphics.DrawString(label, labelFont, new XSolidBrush(grey), plot.Left - width - 4, y + 2.5);
         }

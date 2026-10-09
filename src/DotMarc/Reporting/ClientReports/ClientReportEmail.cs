@@ -13,6 +13,7 @@ public static class ClientReportEmail
     public static EmailMessage Compose(ClientReport report, byte[] pdf, IReadOnlyList<string> to)
     {
         static string E(string value) => WebUtility.HtmlEncode(value);
+        var culture = report.Culture;
 
         var html = new StringBuilder();
         html.Append("<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222\">");
@@ -25,7 +26,7 @@ public static class ClientReportEmail
             html.Append("<table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr style=\"text-align:left\"><th>Domain</th><th>Messages</th><th>Pass rate</th><th>Change</th></tr>");
             foreach (var domain in report.Domains)
             {
-                html.Append($"<tr><td>{E(domain.Name)}</td><td>{domain.Messages.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}</td><td>{E(domain.PassRate?.ToString("P1", System.Globalization.CultureInfo.InvariantCulture) ?? "No mail")}</td><td>{E(domain.ChangeText)}</td></tr>");
+                html.Append($"<tr><td>{E(domain.Name)}</td><td>{E(domain.Messages.ToString("N0", culture))}</td><td>{E(domain.PassRate?.ToString("P1", culture) ?? "No mail")}</td><td>{E(domain.FormatChange(culture))}</td></tr>");
             }
 
             html.Append("</table>");
@@ -47,7 +48,7 @@ public static class ClientReportEmail
             .AppendLine();
         foreach (var domain in report.Domains)
         {
-            text.AppendLine($"{domain.Name}: {domain.Messages.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} messages, pass rate {domain.PassRate?.ToString("P1", System.Globalization.CultureInfo.InvariantCulture) ?? "no mail"} {domain.ChangeText}".TrimEnd());
+            text.AppendLine($"{domain.Name}: {domain.Messages.ToString("N0", culture)} messages, pass rate {domain.PassRate?.ToString("P1", culture) ?? "no mail"} {domain.FormatChange(culture)}".TrimEnd());
         }
 
         text.AppendLine().AppendLine("The full report is attached.");

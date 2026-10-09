@@ -64,6 +64,25 @@ public sealed class ClientReportBuilderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheReport_UsesTheSavedNumberFormat()
+    {
+        int groupId;
+        await using (var context = CreateContext())
+        {
+            var group = new Group { Name = "Aurora Retail" };
+            context.Groups.Add(group);
+            (await context.ReportSettings.SingleAsync()).NumberFormat = "de-DE";
+            await context.SaveChangesAsync();
+            groupId = group.Id;
+        }
+
+        var builder = new ClientReportBuilder(new FakeDbContextFactory(_connectionString), new PortalBrandLoader(new FakeDbContextFactory(_connectionString)), TimeProvider.System);
+        var report = await builder.BuildAsync(groupId, new ReportPeriod(new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 31), ReportPeriodKind.Month), TimeZoneInfo.Utc, CancellationToken.None);
+
+        Assert.Equal("de-DE", report!.NumberFormat);
+    }
+
+    [Fact]
     public async Task AGroupThatDoesntExist_HasNoReport()
     {
         var builder = new ClientReportBuilder(new FakeDbContextFactory(_connectionString), new PortalBrandLoader(new FakeDbContextFactory(_connectionString)), TimeProvider.System);

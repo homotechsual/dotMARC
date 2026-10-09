@@ -63,7 +63,7 @@ public static partial class ClientReportDocument
             var zone = ReportSettingsService.ResolveZone(report.TimeZoneId);
             foreach (var domain in report.Domains)
             {
-                AddDomain(section, domain, zone);
+                AddDomain(section, domain, zone, report.Culture);
             }
         }
 
@@ -112,17 +112,18 @@ public static partial class ClientReportDocument
 
     private static void AddSummary(Section section, ClientReport report)
     {
+        var culture = report.Culture;
         section.AddParagraph("Summary", StyleNames.Heading2);
         var table = NewTable(section, ("Domain", 6.0), ("Status", 3.2), ("Messages", 2.4), ("Pass rate", 2.2), ("Change", 2.2));
         foreach (var domain in report.Domains)
         {
-            AddRow(table, domain.Name, StatusText(domain.Status.Health), Count(domain.Messages), Percent(domain.PassRate), domain.ChangeText);
+            AddRow(table, domain.Name, StatusText(domain.Status.Health), Count(culture, domain.Messages), Percent(culture, domain.PassRate), domain.FormatChange(culture));
             table.Rows[^1].Cells[1].Format.Font.Color = StatusColour(domain.Status.Health);
         }
     }
 
     /// <summary>What a trend chart placeholder carries, for <see cref="PaintTrendCharts"/>.</summary>
-    private sealed record TrendChartData(IReadOnlyList<TrendSeries> Series, IReadOnlyList<string> XLabels);
+    private sealed record TrendChartData(IReadOnlyList<TrendSeries> Series, IReadOnlyList<string> XLabels, CultureInfo Culture);
 
     private static void AddTrend(Section section, ClientReport report)
     {
@@ -142,7 +143,7 @@ public static partial class ClientReportDocument
         placeholder.WrapFormat.Style = WrapStyle.TopBottom;
         placeholder.Tag = new TrendChartData(
             charted.Select((domain, index) => new TrendSeries(domain.Name, SeriesColours[index], domain.Trend)).ToList(),
-            xLabels);
+            xLabels, report.Culture);
 
         var others = report.Domains.Except(charted).Select(domain => domain.Name).ToList();
         if (others.Count > 0)
@@ -177,12 +178,12 @@ public static partial class ClientReportDocument
             {
                 var area = info.LayoutInfo.ContentArea;
                 var data = (TrendChartData)((TextFrame)info.DocumentObject).Tag!;
-                TrendChart.Paint(graphics, new XRect(area.X.Point, area.Y.Point, area.Width.Point, area.Height.Point), data.Series, data.XLabels);
+                TrendChart.Paint(graphics, new XRect(area.X.Point, area.Y.Point, area.Width.Point, area.Height.Point), data.Series, data.XLabels, data.Culture);
             }
         }
     }
 
-    private static void AddDomain(Section section, ClientReportDomain domain, TimeZoneInfo zone)
+    private static void AddDomain(Section section, ClientReportDomain domain, TimeZoneInfo zone, CultureInfo culture)
     {
         section.AddParagraph(domain.Name, StyleNames.Heading2);
         var status = section.AddParagraph(StatusText(domain.Status.Health));
@@ -215,7 +216,7 @@ public static partial class ClientReportDocument
             var senders = NewTable(section, ("Sender", 5.6), ("Messages", 2.4), ("Passed", 2.4), ("Failed", 2.4), ("Share", 3.2));
             foreach (var sender in domain.TopSenders)
             {
-                AddRow(senders, sender.Owner is null ? sender.Ip : $"{sender.Owner} ({sender.Ip})", Count(sender.Messages), Count(sender.Passing), Count(sender.Failing), Percent(sender.Share));
+                AddRow(senders, sender.Owner is null ? sender.Ip : $"{sender.Owner} ({sender.Ip})", Count(culture, sender.Messages), Count(culture, sender.Passing), Count(culture, sender.Failing), Percent(culture, sender.Share));
             }
         }
 
@@ -224,10 +225,10 @@ public static partial class ClientReportDocument
         section.AddParagraph("What receivers did").Format.Font.Bold = true;
         section.AddParagraph(total == 0
             ? "No mail was reported in this period."
-            : $"Delivered {Count(receivers.Delivered)} ({Percent((double)receivers.Delivered / total)}), sent to spam {Count(receivers.Quarantined)} ({Percent((double)receivers.Quarantined / total)}), rejected {Count(receivers.Rejected)} ({Percent((double)receivers.Rejected / total)}).");
+            : $"Delivered {Count(culture, receivers.Delivered)} ({Percent(culture, (double)receivers.Delivered / total)}), sent to spam {Count(culture, receivers.Quarantined)} ({Percent(culture, (double)receivers.Quarantined / total)}), rejected {Count(culture, receivers.Rejected)} ({Percent(culture, (double)receivers.Rejected / total)}).");
         if (receivers.FailingDelivered > 0)
         {
-            section.AddParagraph($"{Count(receivers.FailingDelivered)} messages failed DMARC but were delivered anyway, because the policy doesn't block them yet.");
+            section.AddParagraph($"{Count(culture, receivers.FailingDelivered)} messages failed DMARC but were delivered anyway, because the policy doesn't block them yet.");
         }
 
         if (domain.Alerts.Count > 0)
@@ -297,9 +298,9 @@ public static partial class ClientReportDocument
         _ => Colors.Gray,
     };
 
-    private static string Count(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
+    private static string Count(CultureInfo culture, long value) => value.ToString("N0", culture);
 
-    private static string Percent(double? value) => value is { } rate ? rate.ToString("P1", CultureInfo.InvariantCulture) : "No mail";
+    private static string Percent(CultureInfo culture, double? value) => value is { } rate ? rate.ToString("P1", culture) : "No mail";
 
     private static Color Hex(string hex) => new(
         byte.Parse(hex.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),

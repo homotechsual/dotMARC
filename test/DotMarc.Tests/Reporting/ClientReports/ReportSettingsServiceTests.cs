@@ -41,7 +41,7 @@ public sealed class ReportSettingsServiceTests : IAsyncLifetime
 
         var settings = await ReportSettingsService.GetAsync(context);
 
-        Assert.Equal(("UTC", 6), (settings.TimeZoneId, settings.SendHour));
+        Assert.Equal(("UTC", 6, "en-GB"), (settings.TimeZoneId, settings.SendHour, settings.NumberFormat));
     }
 
     [Fact]
@@ -51,13 +51,38 @@ public sealed class ReportSettingsServiceTests : IAsyncLifetime
         var updated = await ReportSettingsService.GetAsync(context);
         updated.TimeZoneId = "Europe/London";
         updated.SendHour = 7;
+        updated.NumberFormat = "de-DE";
 
         await ReportSettingsService.SaveAsync(context, TestActors.Admin, updated);
 
         await using var verify = CreateContext();
         var saved = await ReportSettingsService.GetAsync(verify);
-        Assert.Equal(("Europe/London", 7), (saved.TimeZoneId, saved.SendHour));
+        Assert.Equal(("Europe/London", 7, "de-DE"), (saved.TimeZoneId, saved.SendHour, saved.NumberFormat));
         Assert.Equal(AuditActions.ReportSettingsSaved, (await verify.AuditEntries.SingleAsync()).Action);
+    }
+
+    [Theory]
+    [InlineData("xx-QQ", "xx-QQ isn't a number format this server knows.")]
+    [InlineData("de", "de isn't a number format this server knows.")] // a language without a region has no settled separators
+    public async Task Save_RefusesAnUnknownNumberFormat(string numberFormat, string message)
+    {
+        await using var context = CreateContext();
+        var updated = await ReportSettingsService.GetAsync(context);
+        updated.NumberFormat = numberFormat;
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => ReportSettingsService.SaveAsync(context, TestActors.Admin, updated));
+
+        Assert.StartsWith(message, exception.Message);
+    }
+
+    [Fact]
+    public void TheNumberFormats_AreRegionsByName()
+    {
+        var formats = ReportSettingsService.ListNumberFormats();
+
+        Assert.Contains(formats, format => format.Name == "en-GB" && format.DisplayName.Contains("United Kingdom"));
+        Assert.Contains(formats, format => format.Name == "de-DE");
+        Assert.DoesNotContain(formats, format => format.Name == "de");
     }
 
     [Theory]

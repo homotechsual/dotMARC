@@ -7,7 +7,7 @@ namespace DotMarc.Reporting.ClientReports;
 public sealed record ClientReportInputs(
     ResolvedBrand Brand, byte[]? Logo, string GroupName, ReportPeriod Period, TimeZoneInfo Zone, IReadOnlyList<Domain> Domains,
     IReadOnlyList<Report> Reports, IReadOnlyList<AlertEvent> PeriodAlerts, IReadOnlyList<AlertEvent> OpenAlerts,
-    IReadOnlyDictionary<string, IpInfo> Owners, DateTimeOffset NowUtc);
+    IReadOnlyDictionary<string, IpInfo> Owners, DateTimeOffset NowUtc, string NumberFormat = ReportSettings.DefaultNumberFormat);
 
 /// <summary>Turns loaded rows into a report. Pure, so every figure can be tested without a database. A report belongs to
 /// the local day its date range begins, the same rule as the portal's trend, measured in the report time zone.</summary>
@@ -46,8 +46,10 @@ public static class ClientReportCalculator
         return new ClientReport(
             inputs.Brand, inputs.Logo, inputs.GroupName, inputs.Period, inputs.Zone.Id,
             domains.Count == 0 ? "There are no domains in this report." : PortalStatus.Verdict(domains.Select(domain => domain.Status).ToList()),
-            domains, ClientReportNextSteps.For(inputs.Domains.OrderBy(domain => domain.Name, StringComparer.OrdinalIgnoreCase).ToList(), domains),
-            inputs.NowUtc);
+            domains,
+            ClientReportNextSteps.For(inputs.Domains.OrderBy(domain => domain.Name, StringComparer.OrdinalIgnoreCase).ToList(), domains,
+                ReportSettingsService.ResolveNumberFormat(inputs.NumberFormat)),
+            inputs.NowUtc, inputs.NumberFormat);
     }
 
     /// <summary>An alert left open is raised again after each cooldown as a new row, so copies are folded into one line:

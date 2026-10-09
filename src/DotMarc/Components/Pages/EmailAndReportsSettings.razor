@@ -125,6 +125,12 @@
                     </MudSelect>
                 </FieldWithHelp>
             </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Number format" Help="How numbers and percentages are written in reports, such as 1,200 and 99.5% for the United Kingdom, or 1.200 and 99,5 % for Germany. The report's words and dates stay in English.">
+                    <MudAutocomplete T="string" Label="Number format" @bind-Value="_reports.NumberFormat" SearchFunc="SearchNumberFormats" ToStringFunc="NumberFormatName"
+                                     MaxItems="50" Variant="Variant.Outlined" HelperText="@NumberFormatExample" />
+                </FieldWithHelp>
+            </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" Disabled="_busy" OnClick="SaveReportsAsync">Save report settings</MudButton>
     </MudPaper>
@@ -138,11 +144,13 @@
     private bool _busy;
     private bool _isDemo;
     private IReadOnlyList<string> _zones = [];
+    private IReadOnlyList<ReportSettingsService.NumberFormatChoice> _numberFormats = [];
 
     protected override async Task OnInitializedAsync()
     {
         _isDemo = DemoOptions.Value.Enabled;
         _zones = ReportSettingsService.ListAvailableZones();
+        _numberFormats = ReportSettingsService.ListNumberFormats();
         await using var db = await DbFactory.CreateDbContextAsync();
         _email = await db.EmailSettings.AsNoTracking().SingleAsync();
         _reports = await db.ReportSettings.AsNoTracking().SingleAsync();
@@ -152,6 +160,23 @@
         Task.FromResult(string.IsNullOrWhiteSpace(text)
             ? _zones.AsEnumerable()
             : _zones.Where(zone => zone.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    private Task<IEnumerable<string>> SearchNumberFormats(string? text, CancellationToken cancellationToken) =>
+        Task.FromResult(_numberFormats
+            .Where(format => string.IsNullOrWhiteSpace(text) || format.DisplayName.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Select(format => format.Name));
+
+    private string NumberFormatName(string? name) =>
+        _numberFormats.FirstOrDefault(format => format.Name == name)?.DisplayName ?? name ?? "";
+
+    private string NumberFormatExample
+    {
+        get
+        {
+            var culture = ReportSettingsService.ResolveNumberFormat(_reports?.NumberFormat);
+            return $"For example {1200.ToString("N0", culture)} messages, {0.995.ToString("P1", culture)} passed.";
+        }
+    }
 
     private void ProviderChanged(EmailProvider provider)
     {

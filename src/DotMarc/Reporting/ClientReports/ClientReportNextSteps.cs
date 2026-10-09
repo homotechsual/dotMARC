@@ -10,7 +10,7 @@ public static class ClientReportNextSteps
     public const string NoDomains = "No domains are being reported on yet.";
     private const double FailingSenderShare = 0.05;
 
-    public static IReadOnlyList<string> For(IReadOnlyList<Domain> domains, IReadOnlyList<ClientReportDomain> reportDomains)
+    public static IReadOnlyList<string> For(IReadOnlyList<Domain> domains, IReadOnlyList<ClientReportDomain> reportDomains, CultureInfo? culture = null)
     {
         if (domains.Count == 0)
         {
@@ -44,7 +44,7 @@ public static class ClientReportNextSteps
 
             foreach (var sender in row.TopSenders.Where(sender => sender.Owner is not null && (double)sender.Failing / row.Messages > FailingSenderShare))
             {
-                steps.Add(string.Create(CultureInfo.InvariantCulture,
+                steps.Add(string.Create(culture ?? CultureInfo.InvariantCulture,
                     $"{sender.Owner} sent {sender.Failing:N0} messages as {domain.Name} that failed DMARC. If they send for you, add them to SPF or set up DKIM for them."));
             }
         }

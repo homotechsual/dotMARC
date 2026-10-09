@@ -52,7 +52,8 @@ public sealed class ClientReportBuilder(IDbContextFactory<DotMarcDbContext> dbFa
                 .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        var numberFormat = (await ReportSettingsService.GetAsync(context, cancellationToken).ConfigureAwait(false)).NumberFormat;
         return ClientReportCalculator.Build(new ClientReportInputs(
-            brand, logo, group.Name, period, zone, domains, reports, periodAlerts, openAlerts, owners, timeProvider.GetUtcNow()));
+            brand, logo, group.Name, period, zone, domains, reports, periodAlerts, openAlerts, owners, timeProvider.GetUtcNow(), numberFormat));
     }
 }

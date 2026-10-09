@@ -445,6 +445,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<DotMarc.Reporting.ClientReports.ReportSettings>(entity =>
         {
             entity.Property(settings => settings.TimeZoneId).HasMaxLength(64);
+            entity.Property(settings => settings.NumberFormat).HasMaxLength(20).HasDefaultValue(DotMarc.Reporting.ClientReports.ReportSettings.DefaultNumberFormat);
             entity.HasData(new DotMarc.Reporting.ClientReports.ReportSettings { Id = 1 });
         });
         modelBuilder.Entity<DotMarc.Reporting.ClientReports.GroupReportSchedule>(entity =>

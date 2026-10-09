@@ -5,7 +5,11 @@ namespace DotMarc.Reporting.ClientReports;
 
 public sealed record ClientReport(
     ResolvedBrand Brand, byte[]? Logo, string GroupName, ReportPeriod Period, string TimeZoneId, string Verdict,
-    IReadOnlyList<ClientReportDomain> Domains, IReadOnlyList<string> NextSteps, DateTimeOffset GeneratedUtc);
+    IReadOnlyList<ClientReportDomain> Domains, IReadOnlyList<string> NextSteps, DateTimeOffset GeneratedUtc,
+    string NumberFormat = ReportSettings.DefaultNumberFormat)
+{
+    public CultureInfo Culture => ReportSettingsService.ResolveNumberFormat(NumberFormat);
+}
 
 public sealed record ClientReportDomain(
     string Name, PortalDomainStatus Status, long Messages, double? PassRate, double? PreviousPassRate, IReadOnlyList<double?> Trend,
@@ -14,11 +18,13 @@ public sealed record ClientReportDomain(
 {
     /// <summary>The pass rate's change from the comparison period in percentage points, "new" when that period had no
     /// mail, or empty when this one had none.</summary>
-    public string ChangeText => PassRate is not { } rate
+    public string ChangeText => FormatChange(CultureInfo.InvariantCulture);
+
+    public string FormatChange(CultureInfo culture) => PassRate is not { } rate
         ? ""
         : PreviousPassRate is not { } previous
             ? "new"
-            : string.Create(CultureInfo.InvariantCulture, $"{(rate - previous) * 100:+0.0;-0.0;0.0} pts");
+            : string.Create(culture, $"{(rate - previous) * 100:+0.0;-0.0;0.0} pts");
 }
 
 public sealed record ClientReportSender(string Ip, string? Owner, long Messages, long Passing, long Failing, double Share);

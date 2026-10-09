@@ -89,6 +89,20 @@ public sealed class ClientReportDocumentTests
     }
 
     [Fact]
+    public void Numbers_FollowTheReportsNumberFormat()
+    {
+        var british = MigraDocText.Of(ClientReportDocument.Build(SampleReport() with { NumberFormat = "en-GB" }));
+        var german = MigraDocText.Of(ClientReportDocument.Build(SampleReport() with { NumberFormat = "de-DE" }));
+
+        Assert.Contains("1,200", british);
+        Assert.Contains("95.0%", british);
+        Assert.Contains("+5.0 pts", british);
+        Assert.Contains("1.200", german);
+        Assert.Contains("95,0 %", german);
+        Assert.Contains("+5,0 pts", german);
+    }
+
+    [Fact]
     public void TheFileName_IsSafe()
     {
         var report = SampleReport() with { Brand = SampleReport().Brand with { Heading = "Aurora/Retail: \"Ltd\"" } };

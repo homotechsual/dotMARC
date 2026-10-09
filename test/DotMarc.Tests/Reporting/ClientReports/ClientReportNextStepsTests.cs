@@ -88,6 +88,16 @@ public sealed class ClientReportNextStepsTests
     }
 
     [Fact]
+    public void ASendersCount_FollowsTheNumberFormat()
+    {
+        var senders = new[] { new ClientReportSender("198.51.100.7", "Mailchimp", 1234, 0, 1234, 0.6) };
+
+        var steps = ClientReportNextSteps.For([Healthy()], [Row("aurora-retail.example", 2000, senders)], new System.Globalization.CultureInfo("de-DE"));
+
+        Assert.Contains("Mailchimp sent 1.234 messages as aurora-retail.example that failed DMARC. If they send for you, add them to SPF or set up DKIM for them.", steps);
+    }
+
+    [Fact]
     public void ADomainWithNoReports_IsToldToCheckItsReportingAddress()
     {
         Assert.Equal(["No DMARC reports arrived for aurora-retail.example. Check its DMARC record's reporting address."],

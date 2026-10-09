@@ -22,16 +22,20 @@ public sealed class ClientReportEmailTests
     }
 
     [Fact]
-    public void Numbers_AreFormattedTheSameWhateverTheServersCulture()
+    public void Numbers_FollowTheReportsNumberFormat_NotTheServersCulture()
     {
         var previous = System.Globalization.CultureInfo.CurrentCulture;
-        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
         try
         {
-            var message = ClientReportEmail.Compose(ClientReportDocumentTests.SampleReport(), [0x25], ["it@aurora-retail.example"]);
+            var british = ClientReportEmail.Compose(ClientReportDocumentTests.SampleReport() with { NumberFormat = "en-GB" }, [0x25], ["it@aurora-retail.example"]);
+            var german = ClientReportEmail.Compose(ClientReportDocumentTests.SampleReport() with { NumberFormat = "de-DE" }, [0x25], ["it@aurora-retail.example"]);
 
-            Assert.Contains("1,200", message.HtmlBody);
-            Assert.Contains("1,200 messages", message.TextBody);
+            Assert.Contains("1,200", british.HtmlBody);
+            Assert.Contains("1,200 messages", british.TextBody);
+            Assert.Contains("1.200", german.HtmlBody);
+            Assert.Contains("95,0 %", german.HtmlBody);
+            Assert.Contains("1.200 messages", german.TextBody);
         }
         finally
         {
