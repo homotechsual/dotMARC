@@ -67,7 +67,7 @@ const sidebars: SidebarsConfig = {
         title: 'About the project',
         description: 'What dotMARC is for, and how to build it, change it and release it.',
       },
-      items: ['scope', 'local-development', 'releasing'],
+      items: ['scope', 'ai-use', 'local-development', 'releasing'],
     },
   ],
 };

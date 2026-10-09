@@ -1,0 +1,51 @@
+---
+sidebar_position: 5
+description: How AI tools are used to build dotMARC, which providers and models are involved, and how every change is reviewed by a human before it ships.
+---
+
+# AI use
+
+dotMARC is built with the help of AI tools. This page says where they're used, which ones, and what
+stands between AI-assisted work and a release.
+
+## Where AI helps
+
+* **UI and UX changes.** Laying out pages, tightening wording, making screens consistent with each
+  other, and checking how changes look in a browser.
+* **Planning.** Turning a feature request into a written design and a step-by-step implementation
+  plan before any code is written, so the shape of a change is agreed up front.
+* **Development.** Writing code and tests against those plans, tracking down bugs, and keeping the
+  documentation in step with the app.
+
+AI doesn't decide what dotMARC does. Features, scope and priorities are chosen by the maintainer,
+often from ideas on the public roadmap.
+
+## Providers and models
+
+| Provider | Tool | Used for |
+| --- | --- | --- |
+| Anthropic | [Claude Code](https://www.anthropic.com/claude-code), with Claude models (mainly Opus) | Planning and design, implementing planned changes, reviewing a whole branch before it's merged, and checking UI changes in a browser |
+| GitHub | [GitHub Copilot](https://github.com/features/copilot) in the editor | Inline suggestions and quick questions while writing code by hand |
+
+Model versions change as the providers release new ones; the table names the families in use rather
+than pinning exact versions.
+
+## Human review
+
+**Every change is reviewed by a human developer familiar with .NET before it's released.** AI output
+is treated like a contribution from anyone else: it's read, questioned, and changed or thrown away
+where it isn't right.
+
+Alongside that review:
+
+* **Tests.** Changes come with automated tests, and new behaviour is written test first where it
+  can be. The full test suite runs on every push and again in the release workflow, which won't
+  publish a release if any test fails.
+* **Browser checks.** UI changes are checked in a real browser before they're committed.
+* **Releases.** A release is only cut when the maintainer decides to, and the [release
+  process](./releasing.mdx) is the same whoever, or whatever, wrote the code.
+
+## Data
+
+dotMARC itself doesn't send your DMARC data, domains or settings to any AI service. AI tools are
+used to build the app, not inside it.
