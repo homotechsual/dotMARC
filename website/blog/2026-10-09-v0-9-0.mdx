@@ -1,0 +1,81 @@
+---
+slug: v0-9-0
+date: 2026-10-09T14:02:35.386Z
+title: "dotMARC v0.9.0: ConnectWise and Autotask, a branded client portal, scheduled client reports, and Slack"
+description: Alert tickets in ConnectWise and Autotask as well as HaloPSA, a branded read-only portal for your clients, branded PDF reports emailed on a schedule, and alerts in Slack.
+authors: [mikey]
+tags: [release]
+---
+
+The biggest release since [`v0.8.2`](/releases-updates/v0-8-2): dotMARC now works with the PSA you use, gives your
+clients a branded view of their own domains, and sends them a regular report.
+
+{/* truncate */}
+
+## ConnectWise and Autotask, alongside HaloPSA
+
+Alert tickets are no longer HaloPSA only. dotMARC raises and closes tickets in
+[ConnectWise PSA](/docs/psa/connectwise) and [Autotask](/docs/psa/autotask) too, and you can connect more than one PSA
+at once.
+
+* **Manage > PSA settings** has a tab for each PSA, with a **Test the integration** button that creates, checks and
+  closes a real ticket.
+* Each Group (and, where needed, each domain) links to a company in each PSA. Manage groups suggests matches by name,
+  and a domain import can set the company per PSA.
+* dotMARC checks its open tickets regularly, so closing a ticket in any PSA resolves its alert. HaloPSA's webhook
+  still works and stays the fastest route.
+* Each alert shows the tickets raised for it in each PSA.
+
+See [PSA integration](/docs/psa-integration) for how several PSAs work together.
+
+## A branded client portal
+
+Give a client contact a simple, read-only view of their own domains instead of your dashboard. Turn on **Client
+portal** for their access grant (it must be limited to their Groups), and when they sign in at your usual dotMARC
+address they see:
+
+* **Your domains:** each domain's status in plain words (Protected, Monitoring only, Needs attention, No reports yet),
+  its pass rate and trend, and open alerts.
+* **A page per domain:** what its policy does, its health checks, who sends as it, and its alerts.
+
+**Manage > Branding** sets your product name, colours, logos and support details, with a contrast warning and a live
+preview in light and dark. On **Manage groups**, a Group can override the name, logos and colours with the client's
+own, and **Preview as client** shows exactly what they'll see. Portal users can't reach anything else in dotMARC, or
+the API. See [Client portal](/docs/client-portal).
+
+## Scheduled client reports
+
+dotMARC can now send each client a branded PDF report weekly, monthly or quarterly, by email:
+
+* A cover with their status in one line, a summary of every domain with the change since last time, a pass rate
+  trend, each domain's policy, health, top senders and what receivers did, and a short list of what to do next.
+* Set up email on **Manage > Email & reports**, through Microsoft Graph or any SMTP server, along with the time zone,
+  send hour and number format reports use.
+* Each Group's **Reports** button on Manage groups sets its schedule and recipients, and can send or download a report
+  for any past period, such as a quarter for a business review.
+* A report that can't be sent is retried for a day, then raises a **Client report failed** alert.
+
+See [Client reports](/docs/client-reports).
+
+## Alerts in Slack
+
+Alerts can go to a Slack channel through an incoming webhook, alongside Teams and the generic webhook. Each channel on
+**Alert settings** now has its own switch and **Send test** button.
+
+## Upgrading
+
+Database migrations run automatically when the new version starts.
+
+* **HaloPSA moves to PSA settings.** Your HaloPSA connection, defaults and client links carry over to
+  **Manage > PSA settings**. Nothing to redo.
+* **Client reports through Microsoft Graph** need the `Mail.Send` application permission on dotMARC's app
+  registration. A report too big for one Graph request (over about 3 MB, so only with a very large logo) also needs
+  `Mail.ReadWrite` in place of `Mail.Read`. With SMTP, neither is needed. Reports stay off until you set up email.
+* **Autotask** needs an API tracking identifier from your own Autotask setup until dotMARC has its own.
+* **A new permission, ReportsManage,** covers email settings and client reports. The Admin role gets it automatically;
+  add it to any custom role that should manage reports.
+
+## Everything else
+
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.9.0) for everything that
+shipped between these two tags.
