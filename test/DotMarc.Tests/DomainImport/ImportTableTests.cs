@@ -1,4 +1,5 @@
 using DotMarc.DomainImport;
+using DotMarc.Psa;
 using Xunit;
 
 namespace DotMarc.Tests.DomainImport;
@@ -24,8 +25,50 @@ public sealed class ImportTableTests
 
         Assert.Equal(["Client A"], row.Groups!.Names);
         Assert.Equal(["primary"], row.Tags!.Names);
-        Assert.Equal("Contoso Ltd", row.HaloClient);
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.HaloPsa]);
         Assert.False(row.Monitored);
+    }
+
+    [Fact]
+    public void WithoutAHeader_TheOriginalColumnsKeepTheirPlaces_AndPsaColumnsComeLast()
+    {
+        // Headerless input is read in ImportColumn order, so new columns are appended: a paste that worked before a PSA
+        // column existed still lands in the same columns.
+        var row = Table("contoso.com,Client A,primary,Contoso,no,s1,testing,mail.contoso.com,86400,Contoso Ltd").Rows.Single();
+
+        Assert.Equal("Contoso", row.PsaCompanies[PsaKind.HaloPsa]);
+        Assert.False(row.Monitored);
+        Assert.Equal(86400, row.MtaStsMaxAgeSeconds);
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.ConnectWise]);
+    }
+
+    [Theory]
+    [InlineData("connectwise company")]
+    [InlineData("ConnectWise")]
+    public void TheConnectWiseCompanyColumn_IsReadByEitherHeaderName(string header)
+    {
+        var row = Table($"domain,{header}\ncontoso.io,Contoso Ltd").Rows.Single();
+
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.ConnectWise]);
+    }
+
+    [Fact]
+    public void WithoutAHeader_TheAutotaskColumnComesAfterConnectWise()
+    {
+        var row = Table("contoso.com,Client A,primary,Contoso,no,s1,testing,mail.contoso.com,86400,Contoso Ltd,Contoso Limited").Rows.Single();
+
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.ConnectWise]);
+        Assert.Equal("Contoso Limited", row.PsaCompanies[PsaKind.Autotask]);
+    }
+
+    [Theory]
+    [InlineData("autotask company")]
+    [InlineData("Autotask")]
+    public void TheAutotaskCompanyColumn_IsReadByEitherHeaderName(string header)
+    {
+        var row = Table($"domain,{header}\ncontoso.io,Contoso Ltd").Rows.Single();
+
+        Assert.Equal("Contoso Ltd", row.PsaCompanies[PsaKind.Autotask]);
     }
 
     [Fact]

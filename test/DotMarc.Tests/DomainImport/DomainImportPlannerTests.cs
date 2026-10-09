@@ -1,7 +1,7 @@
 using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.DomainImport;
-using DotMarc.Notifications;
+using DotMarc.Psa;
 using Xunit;
 
 namespace DotMarc.Tests.DomainImport;
@@ -12,14 +12,18 @@ public sealed class DomainImportPlannerTests
 
     private static ExistingDomain Existing(string name, IReadOnlyList<string>? groups = null, bool monitored = true,
         bool mtaStsEnabled = false, IReadOnlyList<string>? mxHosts = null) =>
-        new(Math.Abs(name.GetHashCode()) % 10_000 + 1, name, groups ?? [], [], null, monitored, [], mtaStsEnabled, MtaStsMode.Testing, mxHosts ?? [], 604_800);
+        new(Math.Abs(name.GetHashCode()) % 10_000 + 1, name, groups ?? [], [], new Dictionary<PsaKind, string>(), monitored, [], mtaStsEnabled, MtaStsMode.Testing, mxHosts ?? [], 604_800);
 
-    private static ImportSnapshot Snapshot(IReadOnlyList<ExistingDomain>? domains = null, IReadOnlyList<HaloClient>? haloClients = null,
+    /// <param name="psaCompanies">The PSAs that are ready, each with its companies (or null and a reason when its list
+    /// failed to load). A PSA left out isn't connected.</param>
+    private static ImportSnapshot Snapshot(IReadOnlyList<ExistingDomain>? domains = null, IReadOnlyList<PsaCompanyList>? psaCompanies = null,
         IReadOnlyDictionary<string, IReadOnlyList<string>>? lookedUpMx = null) =>
         new((domains ?? []).ToDictionary(domain => domain.Name),
             ["Client A", "Client B", "Contoso Limited"], ["primary", "europe"],
-            haloClients, haloClients is null ? "HaloPSA isn't connected." : null,
+            (psaCompanies ?? []).ToDictionary(list => list.Psa),
             lookedUpMx ?? new Dictionary<string, IReadOnlyList<string>>());
+
+    private static PsaCompanyList Halo(params PsaCompany[] clients) => new(PsaKind.HaloPsa, clients, null);
 
     private static ImportPlan Plan(string csv, ImportSnapshot? snapshot = null, ExistingDomainMode mode = ExistingDomainMode.Add,
         ImportPermissions? permissions = null, Dictionary<NameKey, NameResolution>? resolutions = null) =>
@@ -162,17 +166,64 @@ public sealed class DomainImportPlannerTests
     [Fact]
     public void HaloClients_CantBeCreated_AndTheColumnIsIgnoredWithoutHalo()
     {
-        var clients = new[] { new HaloClient(7, "Contoso Limited"), new HaloClient(8, "Fabrikam") };
+        var halo = Halo(new PsaCompany("7", "Contoso Limited"), new PsaCompany("8", "Fabrikam"));
 
-        var connected = Plan("domain,halo client\na.com,Contoso Ltd\nb.com,Nobody", Snapshot(haloClients: clients));
+        var connected = Plan("domain,halo client\na.com,Contoso Ltd\nb.com,Nobody", Snapshot(psaCompanies: [halo]));
         var notConnected = Plan("domain,halo client\na.com,Fabrikam");
 
-        Assert.Equal(7, connected.Rows[0].Target!.HaloClientId);
+        Assert.Equal(new PsaCompany("7", "Contoso Limited"), connected.Rows[0].Target!.PsaCompanies[PsaKind.HaloPsa]);
         var unknownClient = connected.UnknownNames.Single(name => name.Name == "Nobody");
         Assert.False(unknownClient.CanCreate);
         Assert.Equal(NameChoice.LeaveOut, unknownClient.Resolution.Choice);
-        Assert.Contains("HaloPSA isn't connected.", notConnected.Notices);
-        Assert.False(notConnected.Rows.Single().Target!.SetHaloClient);
+        Assert.Contains("HaloPSA isn't connected, so the Halo client column was ignored.", notConnected.Notices);
+        Assert.Empty(notConnected.Rows.Single().Target!.PsaCompanies);
+    }
+
+    [Fact]
+    public void EachPsaColumn_IsMatchedAgainstItsOwnPsasCompanies()
+    {
+        var halo = Halo(new PsaCompany("7", "Contoso"));
+        var connectWise = new PsaCompanyList(PsaKind.ConnectWise, [new PsaCompany("250", "Contoso Ltd")], null);
+
+        var plan = Plan("domain,halo client,connectwise company\ncontoso.io,Contoso,Contoso Ltd", Snapshot(psaCompanies: [halo, connectWise]));
+
+        var target = plan.Rows.Single().Target!;
+        Assert.Equal("7", target.PsaCompanies[PsaKind.HaloPsa].Id);
+        Assert.Equal("250", target.PsaCompanies[PsaKind.ConnectWise].Id);
+        Assert.Empty(plan.UnknownNames);
+    }
+
+    [Fact]
+    public void AConnectWiseCompanyNotInConnectWise_IsAnUnknownConnectWiseName()
+    {
+        var connectWise = new PsaCompanyList(PsaKind.ConnectWise, [new PsaCompany("250", "Contoso Ltd")], null);
+
+        var plan = Plan("domain,connectwise company\ncontoso.io,Fabrikam", Snapshot(psaCompanies: [connectWise]));
+
+        var unknown = plan.UnknownNames.Single();
+        Assert.Equal((ImportNameKind.ConnectWiseCompany, "Fabrikam", false), (unknown.Kind, unknown.Name, unknown.CanCreate));
+    }
+
+    [Fact]
+    public void APsaThatFailedToLoad_HasItsColumnIgnored_WithItsReason()
+    {
+        var failed = new PsaCompanyList(PsaKind.HaloPsa, null, "HaloPSA companies couldn't be loaded: refused");
+
+        var plan = Plan("domain,halo client\ncontoso.io,Contoso", Snapshot(psaCompanies: [failed]));
+
+        Assert.Contains("HaloPSA companies couldn't be loaded: refused", plan.Notices);
+        Assert.Empty(plan.Rows.Single().Target!.PsaCompanies);
+    }
+
+    [Fact]
+    public void AChangedCompany_IsShownWithItsOldAndNewNames()
+    {
+        var existing = Existing("contoso.io") with { PsaCompanyIds = new Dictionary<PsaKind, string> { [PsaKind.HaloPsa] = "8" } };
+        var halo = Halo(new PsaCompany("7", "Contoso Limited"), new PsaCompany("8", "Fabrikam"));
+
+        var plan = Plan("domain,halo client\ncontoso.io,Contoso Limited", Snapshot([existing], [halo]));
+
+        Assert.Contains(plan.Rows.Single().Changes, change => change == new AuditFieldChange("Halo client", "Fabrikam", "Contoso Limited"));
     }
 
     [Fact]

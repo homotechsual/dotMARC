@@ -1,0 +1,32 @@
+@page "/portal/domains/{DomainName}"
+@layout DotMarc.Components.Layout.PortalLayout
+@attribute [Authorize(Policy = "ClientPortal")]
+@using DotMarc.Components.Portal
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject PortalData PortalData
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>@PortalTitle.With(DomainName, Brand)</PageTitle>
+
+<PortalDomainView Detail="_detail" Loaded="_loaded" BackHref="@(_scope?.HomeHref ?? "/portal")" />
+
+@code {
+    [Parameter] public string DomainName { get; set; } = "";
+    [CascadingParameter] public ResolvedBrand? Brand { get; set; }
+
+    /// <summary>Set by the staff preview; a portal user's own scope comes from their claims.</summary>
+    [CascadingParameter] public PortalScope? Scope { get; set; }
+
+    private PortalScope? _scope;
+    private PortalDomainDetail? _detail;
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _scope = Scope ?? PortalScope.ForUser((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        _detail = await PortalData.GetDomainAsync(_scope.GroupIds, DomainName);
+        _loaded = true;
+    }
+}

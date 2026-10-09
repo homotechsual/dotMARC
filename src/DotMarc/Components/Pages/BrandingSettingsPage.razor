@@ -1,0 +1,129 @@
+@page "/branding/settings"
+@attribute [Authorize(Policy = "AccessManage")]
+@using DotMarc.Components.Portal
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - Branding</PageTitle>
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">Branding</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/client-portal" Text="The client portal and branding" Class="ml-2" />
+</div>
+<MudText Typo="Typo.body1" Class="mb-4">
+    How the client portal looks to your clients. A Group can override the logo, colours and name from Manage groups.
+</MudText>
+
+@if (_settings is not null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-4">Your brand</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Product name" Help="Your name for the portal, shown in the app bar when there's no logo, in page titles, and as the heading for a client with several Groups.">
+                    <MudTextField Label="Product name" @bind-Value="_settings.ProductName" MaxLength="60" Variant="Variant.Outlined" />
+                </FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6"></MudItem>
+
+            <MudItem xs="12" md="6">
+                <BrandColourField Label="Primary colour" Help="Used for links, buttons and highlights in the portal."
+                                  Value="@_settings.PrimaryColour" ValueChanged="@(colour => _settings.PrimaryColour = colour ?? "")"
+                                  FallbackColour="@BrandingSettings.DefaultPrimaryColour" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <BrandColourField Label="Secondary colour" Help="Used for the portal's app bar in light mode."
+                                  Value="@_settings.SecondaryColour" ValueChanged="@(colour => _settings.SecondaryColour = colour ?? "")"
+                                  FallbackColour="@BrandingSettings.DefaultSecondaryColour" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <BrandLogoField Label="Logo" Help="@LogoHelp" @bind-ImageId="_settings.LogoImageId" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <BrandLogoField Label="Dark logo" Help="@DarkLogoHelp" @bind-ImageId="_settings.DarkLogoImageId" IsDark="true" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Support email" Help="Shown at the foot of the portal so clients know who to contact.">
+                    <MudTextField Label="Support email" @bind-Value="_settings.SupportEmail" Variant="Variant.Outlined" InputType="InputType.Email" />
+                </FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Support URL" Help="Your support site, shown at the foot of the portal. It must start with https://.">
+                    <MudTextField Label="Support URL" @bind-Value="_settings.SupportUrl" Variant="Variant.Outlined" InputType="InputType.Url" />
+                </FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Support phone" Help="A support phone number, shown at the foot of the portal.">
+                    <MudTextField Label="Support phone" @bind-Value="_settings.SupportPhone" MaxLength="40" Variant="Variant.Outlined" InputType="InputType.Telephone" />
+                </FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Footer text" Help="A short line of plain text at the foot of the portal, such as your company name.">
+                    <MudTextField Label="Footer text" @bind-Value="_settings.FooterText" MaxLength="200" Variant="Variant.Outlined" />
+                </FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" Disabled="_busy" OnClick="SaveAsync">Save branding</MudButton>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-1">Preview</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">How a client with one Group sees the portal. Unsaved changes are shown.</MudText>
+        <PortalBrandPreview Brand="PreviewBrand" />
+    </MudPaper>
+}
+
+@code {
+    /// <summary>Shared with the Group branding dialog, so both explain the two logos the same way.</summary>
+    public const string LogoHelp = "For light backgrounds: shown in the portal's app bar when the secondary colour is light. PNG, JPEG or SVG, up to 512 KB. A wide logo about 40 pixels tall works best.";
+    public const string DarkLogoHelp = "For dark backgrounds: shown in dark mode, and in light mode when the secondary colour is dark. Leave it empty to use the main logo there too.";
+
+    private BrandingSettings? _settings;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _settings = await db.BrandingSettings.AsNoTracking().SingleAsync();
+    }
+
+    private ResolvedBrand PreviewBrand
+    {
+        get
+        {
+            var settings = _settings!;
+            return new ResolvedBrand(
+                string.IsNullOrWhiteSpace(settings.ProductName) ? "dotMARC" : settings.ProductName.Trim(), "Example client",
+                BrandColours.IsValid(settings.PrimaryColour) ? settings.PrimaryColour : BrandingSettings.DefaultPrimaryColour,
+                BrandColours.IsValid(settings.SecondaryColour) ? settings.SecondaryColour : BrandingSettings.DefaultSecondaryColour,
+                settings.LogoImageId, settings.DarkLogoImageId ?? settings.LogoImageId,
+                settings.SupportEmail, settings.SupportUrl, settings.SupportPhone, settings.FooterText);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await BrandingSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), _settings!);
+            Snackbar.Add("Branding saved.", Severity.Success);
+        }
+        catch (ArgumentException exception)
+        {
+            Snackbar.Add(exception.Message.Split(" (Parameter")[0], Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

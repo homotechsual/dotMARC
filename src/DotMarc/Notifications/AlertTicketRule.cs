@@ -1,6 +1,6 @@
 namespace DotMarc.Notifications;
 
-/// <summary>Whether an alert type creates a HaloPSA ticket. A row with no <see cref="GroupId"/> is the global
+/// <summary>Whether an alert type creates PSA tickets (in every PSA the domain maps to). A row with no <see cref="GroupId"/> is the global
 /// setting for the type; a row with one is that group's override. No row means "use the next level down":
 /// the group falls back to the global rule, which falls back to the registry default.</summary>
 public sealed class AlertTicketRule

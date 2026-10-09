@@ -1,0 +1,28 @@
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+@* Keeps a portal user inside the portal when they navigate within their circuit, where only the page's own [Authorize]
+   attributes are checked. A full reload sends the request through the gate, which redirects them to /portal. *@
+@if (_allowed)
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter, EditorRequired] public Type PageType { get; set; } = null!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _allowed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _allowed = !ClientPortalGate.IsPortalUser(user) || ClientPortalGate.AllowsPortalUserOn(PageType);
+        if (!_allowed)
+        {
+            Navigation.NavigateTo("/portal", forceLoad: true);
+        }
+    }
+}

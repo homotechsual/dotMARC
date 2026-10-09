@@ -37,7 +37,7 @@ public sealed class DomainImportServiceTests : IAsyncLifetime
     {
         var table = ImportTable.FromRows(CsvImportReader.Read(csv));
         await using var context = CreateContext();
-        var snapshot = await ImportSnapshotLoader.LoadAsync(context, table, null, "HaloPSA isn't connected.", new FakeMxHostsLookup(), CancellationToken.None);
+        var snapshot = await ImportSnapshotLoader.LoadAsync(context, table, [], new FakeMxHostsLookup(), CancellationToken.None);
         return DomainImportPlanner.Plan(table, snapshot, mode, ImportPermissions.All);
     }
 

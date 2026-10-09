@@ -40,7 +40,7 @@ public sealed class DnsHealthAlertingTests : IAsyncLifetime
         await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
         {
             Enabled = enabled,
-            DeliveryMode = "Teams",
+            TeamsEnabled = true,
             TeamsWebhookUrl = "https://example.test/webhook",
             MissingReportThresholdDays = missingReportThresholdDays,
             CooldownMinutes = cooldownMinutes,
@@ -142,7 +142,7 @@ public sealed class DnsHealthAlertingTests : IAsyncLifetime
     }
 
     private AlertingService CreateService(FakeAlertWebhookClient notifier) =>
-        new(new FakeDbContextFactory(_connectionString), notifier, new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
+        new(new FakeDbContextFactory(_connectionString), notifier, PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
 
     [Fact]
     public async Task FirstCycle_OnExistingDomains_RaisesNothing()

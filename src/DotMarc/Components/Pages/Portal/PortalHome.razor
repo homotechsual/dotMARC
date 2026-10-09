@@ -1,0 +1,47 @@
+@page "/portal"
+@layout DotMarc.Components.Layout.PortalLayout
+@attribute [Authorize(Policy = "ClientPortal")]
+@using DotMarc.Components.Portal
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject PortalData PortalData
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>@PortalTitle.With("Your domains", Brand)</PageTitle>
+
+@if (_domains is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-1">Your domains</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mb-4">@PortalStatus.Verdict(_domains.Select(domain => domain.Status).ToList())</MudText>
+    @if (_domains.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">There are no domains to show yet. If you expected some, contact your provider.</MudAlert>
+    }
+    <MudGrid>
+        @foreach (var domain in _domains)
+        {
+            <MudItem xs="12" md="6"><PortalDomainCard Summary="domain" LinkPrefix="@_scope!.DomainLinkPrefix" /></MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [CascadingParameter] public ResolvedBrand? Brand { get; set; }
+
+    /// <summary>Set by the staff preview; a portal user's own scope comes from their claims.</summary>
+    [CascadingParameter] public PortalScope? Scope { get; set; }
+
+    private PortalScope? _scope;
+    private IReadOnlyList<PortalDomainSummary>? _domains;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _scope = Scope ?? PortalScope.ForUser((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        _domains = await PortalData.ListDomainsAsync(_scope.GroupIds);
+    }
+}

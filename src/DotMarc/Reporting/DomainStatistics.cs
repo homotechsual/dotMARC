@@ -329,7 +329,7 @@ public static class DomainStatistics
             });
     }
 
-    private static bool IsPassing(ReportRecord record) =>
+    public static bool IsPassing(ReportRecord record) =>
         record.SpfResult == AuthResult.Pass || record.DkimResult == AuthResult.Pass;
 
     private static AuthResult CombineAuthResult(IEnumerable<AuthResult> results) =>

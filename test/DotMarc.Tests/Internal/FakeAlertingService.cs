@@ -25,4 +25,8 @@ internal sealed class FakeAlertingService : IAlertingService
         FlaggedReasonBreakdowns.Add(reasonBreakdown);
         return Task.CompletedTask;
     }
+
+    public Task RaiseClientReportFailedAsync(int groupId, string groupName, string periodLabel, string error, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task ResolveClientReportFailedAsync(int groupId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

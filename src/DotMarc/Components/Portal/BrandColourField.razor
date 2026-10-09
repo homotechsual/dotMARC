@@ -1,0 +1,36 @@
+@using DotMarc.Components.Shared
+@using DotMarc.Portal
+@using MudBlazor.Utilities
+
+@* A brand colour: a picker whose hex can be typed or pasted, and a warning when the colour is hard to read on white.
+   With a DefaultColour the field is optional: left blank, the default is used, and Clear returns to it. *@
+<FieldWithHelp Topic="@Label" Help="@Help">
+    <MudColorPicker Label="@Label" Value="@(new MudColor(EffectiveColour))" ValueChanged="@((MudColor colour) => ValueChanged.InvokeAsync(colour.ToString(MudColorOutputFormats.Hex).ToUpperInvariant()))"
+                    ShowAlpha="false" ColorPickerMode="ColorPickerMode.HEX" Editable="true" Variant="Variant.Outlined"
+                    HelperText="@(DefaultColour is not null && !HasOwnValue ? $"Using the MSP default ({DefaultColour})" : null)" />
+</FieldWithHelp>
+@if (DefaultColour is not null && HasOwnValue)
+{
+    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => ValueChanged.InvokeAsync(null))">Use the MSP default</MudButton>
+}
+@if (BrandColours.ContrastRatio(EffectiveColour, "#FFFFFF") < BrandColours.MinimumTextContrast)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">This colour is hard to read on white. Text in it may be too faint for some people.</MudAlert>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Help { get; set; } = "";
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>The colour used while the field is blank. Null for a required field.</summary>
+    [Parameter] public string? DefaultColour { get; set; }
+
+    /// <summary>Used when nothing valid is set and there's no default, so the picker always has a colour to show.</summary>
+    [Parameter] public string FallbackColour { get; set; } = BrandingSettings.DefaultPrimaryColour;
+
+    private bool HasOwnValue => BrandColours.IsValid(Value);
+
+    private string EffectiveColour => HasOwnValue ? Value! : DefaultColour ?? FallbackColour;
+}

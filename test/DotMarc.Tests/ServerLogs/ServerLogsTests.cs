@@ -149,6 +149,16 @@ public class LogRedactorTests
         Assert.Equal(expected, LogRedactor.Redact(input));
     }
 
+    [Theory]
+    [InlineData("Authorization: Basic Y29udG9zbytwdWJsaWM6cHJpdmF0ZQ==", "Authorization: Basic [redacted]")]
+    [InlineData("clientId: 0f0e-1234", "clientId: [redacted]")]
+    [InlineData("ApiIntegrationCode: ABCDEF", "ApiIntegrationCode: [redacted]")]
+    [InlineData("Secret: hunter2", "Secret: [redacted]")]
+    public void Redact_MasksPsaCredentials(string input, string expected)
+    {
+        Assert.Equal(expected, LogRedactor.Redact(input));
+    }
+
     [Fact]
     public void Redact_PassesEmptyTextThrough()
     {

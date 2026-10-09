@@ -16,4 +16,8 @@ public sealed class UserAccess
     public int RoleId { get; set; }
     public Role Role { get; set; } = null!;
     public List<Group> ScopedGroups { get; set; } = [];
+
+    /// <summary>Sees the client portal (a simplified, branded, read-only view of the scoped Groups' domains) instead
+    /// of the app. Only valid with at least one scoped Group: with none, scoping elsewhere means every domain.</summary>
+    public bool IsClientPortal { get; set; }
 }

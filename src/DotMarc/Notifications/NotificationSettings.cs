@@ -10,8 +10,12 @@ public sealed class NotificationSettings
 {
     public int Id { get; set; }
     public bool Enabled { get; set; } = true;
-    public string DeliveryMode { get; set; } = "Teams";
+    // Each channel has its own switch, so alerts can go to any combination of them.
+    public bool TeamsEnabled { get; set; } = true;
     public string? TeamsWebhookUrl { get; set; }
+    public bool SlackEnabled { get; set; }
+    public string? SlackWebhookUrl { get; set; }
+    public bool GenericWebhookEnabled { get; set; }
     public string? GenericWebhookUrl { get; set; }
     public int MissingReportThresholdDays { get; set; } = 2;
     public int CooldownMinutes { get; set; } = 180;

@@ -117,9 +117,9 @@ public static class DomainImportService
             await TagManagementService.SetDomainTagsAsync(context, actor, domainId, ids, cancellationToken).ConfigureAwait(false);
         }
 
-        if (target.SetHaloClient)
+        foreach (var (psa, company) in target.PsaCompanies)
         {
-            await DomainManagementService.SetHaloClientIdAsync(context, actor, domainId, target.HaloClientId, cancellationToken).ConfigureAwait(false);
+            await DomainManagementService.SetPsaCompanyAsync(context, actor, domainId, psa, company, cancellationToken).ConfigureAwait(false);
         }
 
         if (target.Monitored is { } monitored)

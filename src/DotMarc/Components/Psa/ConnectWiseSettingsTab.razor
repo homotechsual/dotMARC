@@ -1,0 +1,250 @@
+@using DotMarc.Data
+@using DotMarc.Components.Shared
+@using DotMarc.Notifications
+@using DotMarc.Psa
+@using DotMarc.Psa.ConnectWise
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject ILogger<ConnectWiseSettingsTab> Logger
+@inject IConnectWiseClient ConnectWiseClient
+@inject ISecretStore SecretStoreAccessor
+
+@if (_settings is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudPaper Class="pa-4">
+        <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
+            <MudText Typo="Typo.h5">ConnectWise</MudText>
+            <FieldWithHelp Topic="ConnectWise tickets" Inline="true" Help="Opens a ConnectWise ticket for each alert (as set under 'Which alerts create tickets' on Alert settings) and closes it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket closed in ConnectWise resolves its alert.">
+<MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable ConnectWise tickets" />
+</FieldWithHelp>
+        </div>
+
+        <MudText Typo="Typo.subtitle1" Class="mt-2 mb-2">Connection</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Site" Help="Your ConnectWise API host, such as api-eu.myconnectwise.net, api-na.myconnectwise.net or api-au.myconnectwise.net. Pasting the full URL is fine; only the host is kept.">
+<MudTextField Label="Site" @bind-Value="_settings.SiteUrl" Placeholder="api-eu.myconnectwise.net" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Company ID" Help="The company you sign in to ConnectWise with, as typed on the sign-in page.">
+<MudTextField Label="Company ID" @bind-Value="_settings.CompanyId" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Public key" Help="From the API member's API Keys tab in ConnectWise (System, Members, API Members).">
+<MudTextField Label="Public key" @bind-Value="_settings.PublicKey" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Private key" Help="Shown once, when the API key is created. dotMARC keeps it in its secret store and never shows it again, so leave this blank to keep the saved one.">
+<MudTextField Label="Private key" @bind-Value="_newPrivateKey" InputType="InputType.Password" Variant="Variant.Outlined"
+              HelperText="@(_settings.PrivateKeyConfigured ? "A private key is already saved - leave blank to keep it." : "No private key saved yet.")" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Client ID override" Help="@ClientIdHelp">
+<MudTextField Label="Client ID override" @bind-Value="_settings.ClientIdOverride" Variant="Variant.Outlined"
+              Required="@(ConnectWiseSettings.DefaultClientId.Length == 0)" Placeholder="@(ConnectWiseSettings.DefaultClientId.Length > 0 ? "dotMARC's own" : null)" />
+</FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex align-center justify-space-between flex-wrap mt-6 mb-1" style="gap: 0.5rem;">
+            <MudText Typo="Typo.subtitle1">Ticket defaults</MudText>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CloudDownload" Disabled="_loading" OnClick="LoadOptionsAsync">Load options from ConnectWise</MudButton>
+        </div>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+            Loads the boards and priorities to choose from, then each board's statuses and types. Save the connection first.
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Board" Help="The service board alert tickets go on.">
+<MudSelect T="int?" Label="Board" Value="_settings.BoardId" ValueChanged="OnBoardChangedAsync" Variant="Variant.Outlined">
+                    @foreach (var board in WithSaved(_boards, _settings.BoardId, _settings.BoardName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)board.Id)">@board.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="New ticket status" Help="The status alert tickets start in, from the board's statuses.">
+<MudSelect T="int?" Label="New ticket status" @bind-Value="_settings.StatusId" Variant="Variant.Outlined">
+                    @foreach (var status in WithSaved(_statuses, _settings.StatusId, _settings.StatusName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Type" Help="Optional: the board's ticket type for alert tickets.">
+<MudSelect T="int?" Label="Type" @bind-Value="_settings.TypeId" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var type in WithSaved(_types, _settings.TypeId, _settings.TypeName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)type.Id)">@type.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Priority" Help="The priority alert tickets are created with.">
+<MudSelect T="int?" Label="Priority" @bind-Value="_settings.PriorityId" Variant="Variant.Outlined">
+                    @foreach (var priority in WithSaved(_priorities, _settings.PriorityId, _settings.PriorityName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)priority.Id)">@priority.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Closed status" Help="The status dotMARC moves a ticket to when its alert resolves. A ticket a tech closes with any closed status resolves the alert.">
+<MudSelect T="int?" Label="Closed status" @bind-Value="_settings.ClosedStatusId" Variant="Variant.Outlined">
+                    @foreach (var status in WithSaved(_statuses, _settings.ClosedStatusId, _settings.ClosedStatusName))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex justify-end mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save ConnectWise settings</MudButton>
+        </div>
+    </MudPaper>
+
+    <PsaIntegrationTestPanel Psa="PsaKind.ConnectWise" />
+}
+
+@code {
+    /// <summary>Raised with whether ConnectWise is switched on in the saved settings, after loading and after saving.</summary>
+    [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+
+    private ConnectWiseSettings? _settings;
+    private string? _newPrivateKey;
+    private bool _loading;
+    private List<PsaOption> _boards = [];
+    private List<PsaOption> _statuses = [];
+    private List<PsaOption> _types = [];
+    private List<PsaOption> _priorities = [];
+
+    private static string ClientIdHelp => ConnectWiseSettings.DefaultClientId.Length > 0
+        ? "dotMARC sends its own ConnectWise client ID. Enter yours from developer.connectwise.com only if you want to use your own."
+        : "Required. Create a client ID at developer.connectwise.com and enter it here.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _settings = await ConnectWiseSettingsService.GetAsync(db);
+        await EnabledChanged.InvokeAsync(_settings.Enabled);
+    }
+
+    /// <summary>The loaded options, plus the saved choice by its saved name when the lists haven't been loaded, so a
+    /// select never shows a bare number.</summary>
+    private static IEnumerable<PsaOption> WithSaved(IReadOnlyList<PsaOption> options, int? savedId, string? savedName) =>
+        savedId is { } id && options.All(option => option.Id != id)
+            ? options.Prepend(new PsaOption(id, savedName ?? id.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            : options;
+
+    private async Task LoadOptionsAsync()
+    {
+        _loading = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var saved = await ConnectWiseSettingsService.GetAsync(db);
+            _boards = (await ConnectWiseClient.ListBoardsAsync(saved)).ToList();
+            _priorities = (await ConnectWiseClient.ListPrioritiesAsync(saved)).ToList();
+            if (_settings!.BoardId is { } boardId)
+            {
+                await LoadBoardOptionsAsync(saved, boardId);
+            }
+
+            Snackbar.Add("Loaded boards and priorities from ConnectWise.", Severity.Success);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            Logger.LogWarning(exception, "Loading ConnectWise ticket options failed");
+            ShowError($"Couldn't load options from ConnectWise. {exception.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnBoardChangedAsync(int? boardId)
+    {
+        _settings!.BoardId = boardId;
+
+        // Statuses and types belong to a board, so the old board's choices no longer apply.
+        (_settings.StatusId, _settings.TypeId, _settings.ClosedStatusId) = (null, null, null);
+        _statuses = [];
+        _types = [];
+        if (boardId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await LoadBoardOptionsAsync(await ConnectWiseSettingsService.GetAsync(db), boardId.Value);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            Logger.LogWarning(exception, "Loading ConnectWise board {BoardId} options failed", boardId);
+            ShowError($"Couldn't load that board's statuses and types. {exception.Message}");
+        }
+    }
+
+    private async Task LoadBoardOptionsAsync(ConnectWiseSettings saved, int boardId)
+    {
+        _statuses = (await ConnectWiseClient.ListBoardStatusesAsync(saved, boardId)).ToList();
+        _types = (await ConnectWiseClient.ListBoardTypesAsync(saved, boardId)).ToList();
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            // Keep the names of the chosen options beside their ids, so the selects show names before the lists load.
+            _settings!.BoardName = NameOf(_boards, _settings.BoardId) ?? _settings.BoardName;
+            _settings.StatusName = NameOf(_statuses, _settings.StatusId) ?? _settings.StatusName;
+            _settings.TypeName = _settings.TypeId is null ? null : NameOf(_types, _settings.TypeId) ?? _settings.TypeName;
+            _settings.PriorityName = NameOf(_priorities, _settings.PriorityId) ?? _settings.PriorityName;
+            _settings.ClosedStatusName = NameOf(_statuses, _settings.ClosedStatusId) ?? _settings.ClosedStatusName;
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await ConnectWiseSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _settings, string.IsNullOrWhiteSpace(_newPrivateKey) ? null : _newPrivateKey);
+            _newPrivateKey = null;
+            Snackbar.Add("ConnectWise settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _settings = await ConnectWiseSettingsService.GetAsync(reloadDb);
+            await EnabledChanged.InvokeAsync(_settings.Enabled);
+        }
+        catch (ArgumentException exception)
+        {
+            ShowError(exception.Message);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Saving ConnectWise settings failed");
+            Snackbar.Add("Failed to save ConnectWise settings. Try again.", Severity.Error);
+        }
+    }
+
+    private static string? NameOf(IReadOnlyList<PsaOption> options, int? id) => options.FirstOrDefault(option => option.Id == id)?.Name;
+
+    // Stays on screen until dismissed: these messages can be long.
+    private void ShowError(string message) => Snackbar.Add(message, Severity.Error, config => config.RequireInteraction = true);
+}

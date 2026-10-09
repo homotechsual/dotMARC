@@ -1,0 +1,48 @@
+@using System.Globalization
+
+@* The daily pass rate as a small line, with a gap for days with no mail. No chart library: a few polylines. *@
+<svg width="@Width" height="@Height" viewBox="0 0 @Width @Height" role="img" style="overflow: visible;">
+    <title>Daily DMARC pass rate over the last 30 days</title>
+    @foreach (var segment in Segments())
+    {
+        <polyline points="@segment" fill="none" stroke="var(--mud-palette-primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+    }
+</svg>
+
+@code {
+    private const int Width = 120;
+    private const int Height = 24;
+
+    [Parameter, EditorRequired] public IReadOnlyList<double?> Rates { get; set; } = [];
+
+    /// <summary>One polyline per run of days with mail, so a day without mail breaks the line instead of dipping to zero.
+    /// A run of one day is drawn as a short flat dash so it's still visible.</summary>
+    private IEnumerable<string> Segments()
+    {
+        var points = new List<string>();
+        var step = Rates.Count > 1 ? (double)Width / (Rates.Count - 1) : 0;
+        for (var index = 0; index <= Rates.Count; index++)
+        {
+            if (index < Rates.Count && Rates[index] is { } rate)
+            {
+                var x = index * step;
+                var y = Height - rate * Height;
+                points.Add(string.Create(CultureInfo.InvariantCulture, $"{x:0.#},{y:0.#}"));
+                continue;
+            }
+
+            if (points.Count == 1)
+            {
+                var single = points[0].Split(',');
+                var x = double.Parse(single[0], CultureInfo.InvariantCulture);
+                points.Add(string.Create(CultureInfo.InvariantCulture, $"{x + 2:0.#},{single[1]}"));
+            }
+
+            if (points.Count > 0)
+            {
+                yield return string.Join(' ', points);
+                points.Clear();
+            }
+        }
+    }
+}

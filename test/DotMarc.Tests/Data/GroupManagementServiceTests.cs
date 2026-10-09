@@ -1,5 +1,7 @@
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.Portal;
+using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -50,11 +52,12 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     {
         using var context = CreateContext();
 
-        var result = await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Compute (Bridgend) Limited", CancellationToken.None, haloClientId: 37);
+        var result = await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Compute (Bridgend) Limited", CancellationToken.None, (PsaKind.HaloPsa, new PsaCompany("37", "Compute (Bridgend) Limited")));
 
         Assert.Equal(GroupManagementService.AddGroupResult.Added, result);
         using var verify = CreateContext();
-        Assert.Equal(37, verify.Groups.Single().HaloClientId);
+        var link = verify.PsaCompanyLinks.Single();
+        Assert.Equal((PsaKind.HaloPsa, "37", verify.Groups.Single().Id), (link.Psa, link.CompanyId, link.GroupId!.Value));
     }
 
     [Fact]
@@ -65,7 +68,7 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
         await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client A", CancellationToken.None);
 
         using var verify = CreateContext();
-        Assert.Null(verify.Groups.Single().HaloClientId);
+        Assert.Empty(verify.PsaCompanyLinks);
     }
 
     [Fact]
@@ -161,31 +164,50 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SetHaloClientIdAsync_UpdatesTheGroupsMapping()
+    public async Task SetPsaCompanyAsync_LinksAndRelinksInOnePsa_AndAuditsEachChange()
     {
         await using var context = CreateContext();
         var group = new Group { Name = "Client A" };
         context.Groups.Add(group);
         await context.SaveChangesAsync();
 
-        await GroupManagementService.SetHaloClientIdAsync(context, TestActors.Admin, group.Id, 42);
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.ConnectWise, new PsaCompany("250", "Contoso Ltd"));
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.ConnectWise, new PsaCompany("251", "Contoso Group"));
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.HaloPsa, new PsaCompany("7", "Contoso"));
 
         await using var verify = CreateContext();
-        Assert.Equal(42, (await verify.Groups.SingleAsync(g => g.Id == group.Id)).HaloClientId);
+        var links = (await verify.PsaCompanyLinks.Where(link => link.GroupId == group.Id).ToListAsync()).OrderBy(link => link.Psa).ToList();
+        Assert.Equal([(PsaKind.HaloPsa, "7", "Contoso"), (PsaKind.ConnectWise, "251", "Contoso Group")], links.Select(link => (link.Psa, link.CompanyId, link.CompanyName)));
+        var entries = await verify.AuditEntries.Where(entry => entry.Action == AuditActions.GroupPsaCompanyChanged).ToListAsync();
+        Assert.Equal(3, entries.Count);
     }
 
     [Fact]
-    public async Task SetHaloClientIdAsync_ClearsTheMapping_WhenPassedNull()
+    public async Task SetPsaCompanyAsync_WithNoCompany_RemovesThatPsasLinkOnly()
     {
         await using var context = CreateContext();
-        var group = new Group { Name = "Client A", HaloClientId = 42 };
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }, new PsaCompanyLink { Psa = PsaKind.ConnectWise, CompanyId = "250", CompanyName = "Contoso Ltd" }] };
         context.Groups.Add(group);
         await context.SaveChangesAsync();
 
-        await GroupManagementService.SetHaloClientIdAsync(context, TestActors.Admin, group.Id, null);
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.HaloPsa, null);
 
         await using var verify = CreateContext();
-        Assert.Null((await verify.Groups.SingleAsync(g => g.Id == group.Id)).HaloClientId);
+        Assert.Equal(PsaKind.ConnectWise, (await verify.PsaCompanyLinks.SingleAsync()).Psa);
+    }
+
+    [Fact]
+    public async Task SetPsaCompanyAsync_TheSameCompanyAgain_ChangesAndAuditsNothing()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new PsaCompanyLink { Psa = PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Contoso" }] };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        await GroupManagementService.SetPsaCompanyAsync(context, TestActors.Admin, group.Id, PsaKind.HaloPsa, new PsaCompany("7", "Contoso"));
+
+        await using var verify = CreateContext();
+        Assert.Empty(await verify.AuditEntries.ToListAsync());
     }
 
     [Fact]
@@ -193,14 +215,14 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     {
         await using (var context = CreateContext())
         {
-            await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client A", CancellationToken.None, haloClientId: 37);
+            await GroupManagementService.AddGroupAsync(context, TestActors.Admin, "Client A", CancellationToken.None, (PsaKind.HaloPsa, new PsaCompany("37", "Client A Ltd")));
         }
 
         await using var verify = CreateContext();
         var group = await verify.Groups.SingleAsync();
         var entry = await verify.AuditEntries.SingleAsync();
         Assert.Equal((AuditActions.GroupAdded, group.Id.ToString(), "Added group Client A"), (entry.Action, entry.TargetId, entry.Summary));
-        Assert.Equal([new AuditFieldChange("Halo client", null, "37")], entry.Changes);
+        Assert.Equal([new AuditFieldChange("Halo client", null, "Client A Ltd")], entry.Changes);
     }
 
     [Fact]
@@ -284,5 +306,87 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
 
         await using var verify = CreateContext();
         Assert.False(await verify.Groups.AnyAsync(group => group.Id == groupId));
+    }
+
+    [Fact]
+    public async Task RemoveGroupAsync_APortalGrantsLastGroup_IsRefused()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [] };
+        var group = new Group { Name = "Aurora Retail" };
+        context.UserAccesses.Add(new UserAccess { Email = "client@aurora.example", Role = viewerRole, ScopedGroups = [group], IsClientPortal = true });
+        await context.SaveChangesAsync();
+
+        var result = await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, group.Id);
+
+        Assert.Equal(GroupManagementService.RemoveGroupResult.LastGroupOfClientPortal, result);
+        await using var verify = CreateContext();
+        Assert.Single(verify.Groups);
+    }
+
+    [Fact]
+    public async Task RemoveGroupAsync_APortalGrantWithOtherGroups_IsAllowed()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [] };
+        var aurora = new Group { Name = "Aurora Retail" };
+        var auroraOnline = new Group { Name = "Aurora Online" };
+        context.UserAccesses.Add(new UserAccess { Email = "client@aurora.example", Role = viewerRole, ScopedGroups = [aurora, auroraOnline], IsClientPortal = true });
+        await context.SaveChangesAsync();
+
+        Assert.Equal(GroupManagementService.RemoveGroupResult.Removed, await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, aurora.Id));
+    }
+
+    [Fact]
+    public async Task SetBrandingAsync_SavesAndAudits_AndClearingEveryFieldRemovesTheRow()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput("Aurora Retail Ltd", null, null, "#7A1FA2", null));
+        await using (var verify = CreateContext())
+        {
+            var saved = await GroupManagementService.GetBrandingAsync(verify, group.Id);
+            Assert.Equal(("Aurora Retail Ltd", "#7A1FA2"), (saved!.DisplayName, saved.PrimaryColour));
+            Assert.Equal(AuditActions.GroupBrandingChanged, (await verify.AuditEntries.SingleAsync()).Action);
+        }
+
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput(null, null, null, null, null));
+
+        await using var verifyCleared = CreateContext();
+        Assert.Null(await GroupManagementService.GetBrandingAsync(verifyCleared, group.Id));
+    }
+
+    [Fact]
+    public async Task SetBrandingAsync_RefusesAnInvalidColour()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput(null, null, null, "purple", null)));
+
+        Assert.StartsWith("Primary colour must be a hex colour such as #1A73E8.", exception.Message);
+    }
+
+    [Fact]
+    public async Task DeletingAGroup_DeletesItsBranding_AndItsLogo()
+    {
+        await using var context = CreateContext();
+        var group = new Group { Name = "Aurora Retail" };
+        context.Groups.Add(group);
+        await context.SaveChangesAsync();
+        var logo = await BrandingSettingsService.UploadImageAsync(context, TestActors.Admin, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4]);
+        await GroupManagementService.SetBrandingAsync(context, TestActors.Admin, group.Id, new GroupBrandingInput("Aurora Retail Ltd", logo.ImageId, null, null, null));
+
+        await GroupManagementService.RemoveGroupAsync(context, TestActors.Admin, group.Id);
+
+        await using var verify = CreateContext();
+        Assert.Empty(verify.GroupBrandings);
+        Assert.Empty(verify.BrandingImages);
     }
 }

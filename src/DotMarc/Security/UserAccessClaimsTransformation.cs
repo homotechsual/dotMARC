@@ -17,6 +17,9 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
     public const string PermissionClaimType = "dotmarc:permission";
     public const string ScopedGroupClaimType = "dotmarc:scoped-group";
 
+    /// <summary>Present (with the value "true") on a person whose grant uses the client portal.</summary>
+    public const string ClientPortalClaimType = "dotmarc:client-portal";
+
     // Marks a principal as already having been through resolution below, independent of how
     // many (if any) PermissionClaimType/ScopedGroupClaimType claims that resolution produced. A
     // scopable Role with an empty Permissions list resolves to zero permission claims but N
@@ -68,6 +71,10 @@ public sealed class UserAccessClaimsTransformation : IClaimsTransformation
         var identity = (ClaimsIdentity)principal.Identity;
         identity.AddClaim(new Claim(ResolvedClaimType, "true"));
         identity.AddClaims(AccessClaims.For(access.Role, access.ScopedGroups.Select(group => group.Id)));
+        if (access.IsClientPortal)
+        {
+            identity.AddClaim(new Claim(ClientPortalClaimType, "true"));
+        }
 
         return principal;
     }

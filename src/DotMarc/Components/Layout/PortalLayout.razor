@@ -1,0 +1,177 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject PortalBrandLoader BrandLoader
+@inject NavigationManager Navigation
+@inject Microsoft.AspNetCore.Authorization.IAuthorizationService AuthorizationService
+@inject ILogger<PortalLayout> Logger
+
+@* The client portal's own layout: the brand, the client's name, dark mode and sign out. No menus, and nothing that
+   reveals or links to dotMARC's internal pages. Staff previewing a Group (/portal/preview/{id}) get that Group's brand and
+   a banner saying so; the preview page itself checks they may. *@
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <a href="@_homeHref" class="d-flex align-center" style="color: inherit; text-decoration: none; gap: 0.75rem;">
+            @if (_brand is null)
+            {
+                @* While the brand loads, show nothing rather than flash dotMARC's own logo at a client. *@
+            }
+            else if (PortalBranding.AppBarLogo(_brand, _isDarkMode) is { } logoId)
+            {
+                <img src="@($"/branding/logo/{logoId}")" alt="@_brand.ProductName" height="40" />
+            }
+            else
+            {
+                <MudText Typo="Typo.h6">@_brand.ProductName</MudText>
+            }
+            @if (_brand is not null && _brand.Heading != _brand.ProductName)
+            {
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-1" Style="border-color: currentColor; opacity: 0.4;" />
+                <MudText Typo="Typo.h6">@_brand.Heading</MudText>
+            }
+        </a>
+        <MudSpacer />
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="Toggle dark mode" />
+        <form method="post" action="/signout" class="d-inline">
+            <AntiforgeryToken />
+            <MudIconButton ButtonType="ButtonType.Submit" Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit" title="Sign out" />
+        </form>
+    </MudAppBar>
+    <MudMainContent>
+        @if (_previewOf is not null)
+        {
+            <MudAlert Severity="Severity.Info" Square="true" Dense="true">
+                Preview: this is what clients of @_previewOf see.
+                <MudLink Href="/groups" Class="ml-2">Back to Manage groups</MudLink>
+            </MudAlert>
+        }
+        <MudContainer MaxWidth="MaxWidth.Large" Class="my-4">
+            <CascadingValue Value="_brand">
+                @Body
+            </CascadingValue>
+        </MudContainer>
+        @if (_brand is not null && HasSupportDetails(_brand))
+        {
+            <footer class="pa-4 mt-4 d-flex flex-wrap justify-center mud-text-secondary" style="gap: 1.5rem;">
+                @if (_brand.SupportEmail is { } email)
+                {
+                    <MudLink Href="@($"mailto:{email}")" Typo="Typo.body2">@email</MudLink>
+                }
+                @if (_brand.SupportUrl is { } url)
+                {
+                    <MudLink Href="@url" Target="_blank" rel="noopener noreferrer" Typo="Typo.body2">@url</MudLink>
+                }
+                @if (_brand.SupportPhone is { } phone)
+                {
+                    <MudText Typo="Typo.body2">@phone</MudText>
+                }
+                @if (_brand.FooterText is { } footerText)
+                {
+                    <MudText Typo="Typo.body2">@footerText</MudText>
+                }
+            </footer>
+        }
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private MudTheme _theme = PortalTheme.Default;
+    private ResolvedBrand? _brand;
+    private bool _isDarkMode;
+    private string? _previewOf;
+    private string _homeHref = "/portal";
+    private int? _requestedPreviewGroupId;
+    private bool _requestedOnce;
+    private readonly LatestLoad _latestBrand = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadBrandAsync();
+    }
+
+    // Moving between a preview's pages, or from one preview to another, keeps the layout, so the brand is reloaded only
+    // when the Group being previewed changes.
+    // Quick navigation can overlap loads, so only the newest one's result is shown.
+    private async Task LoadBrandAsync()
+    {
+        var previewGroupId = PortalScope.PreviewGroupId(new Uri(Navigation.Uri).AbsolutePath);
+        if (_requestedOnce && previewGroupId == _requestedPreviewGroupId)
+        {
+            return;
+        }
+
+        _requestedPreviewGroupId = previewGroupId;
+        _requestedOnce = true;
+        var (isLatest, (scope, brand)) = await _latestBrand.RunAsync(async () =>
+        {
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var scope = PortalScope.ForUser(user);
+            if (previewGroupId is { } groupId && await PortalScope.MayPreviewAsync(AuthorizationService, user, groupId)
+                && await BrandLoader.LoadGroupNameAsync(groupId) is { } groupName)
+            {
+                scope = PortalScope.Preview(groupId, groupName);
+            }
+
+            return (scope, await BrandLoader.LoadAsync(scope.GroupIds));
+        });
+        if (!isLatest)
+        {
+            return;
+        }
+
+        _brand = brand;
+        _theme = PortalTheme.For(brand);
+        _previewOf = scope.PreviewOf;
+        _homeHref = scope.HomeHref;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args) =>
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await LoadBrandAsync();
+                StateHasChanged();
+            }
+            catch (Exception exception)
+            {
+                // Nothing awaits this handler, so an error would otherwise vanish; the page keeps the brand it has.
+                _requestedOnce = false;
+                Logger.LogWarning(exception, "Couldn't load the portal brand after navigating to {Uri}", args.Location);
+            }
+        });
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // The same saved preference as the app's own layout, read once the circuit can run JS.
+            _isDarkMode = await Js.InvokeAsync<string?>("localStorage.getItem", "dotmarc-dark-mode") == "true";
+            StateHasChanged();
+        }
+    }
+
+    private static bool HasSupportDetails(ResolvedBrand brand) =>
+        brand.SupportEmail is not null || brand.SupportUrl is not null || brand.SupportPhone is not null || brand.FooterText is not null;
+
+    private async Task ToggleDarkModeAsync()
+    {
+        _isDarkMode = !_isDarkMode;
+        await Js.InvokeVoidAsync("localStorage.setItem", "dotmarc-dark-mode", _isDarkMode ? "true" : "false");
+    }
+}

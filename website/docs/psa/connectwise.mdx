@@ -1,0 +1,66 @@
+---
+title: ConnectWise
+sidebar_position: 2
+description: Raise and close ConnectWise PSA tickets from dotMARC alerts, and resolve alerts when a tech closes the ticket.
+---
+
+# ConnectWise
+
+dotMARC can open a ConnectWise PSA (Manage) ticket when an alert fires, close it when the alert resolves, and resolve
+the alert when a tech closes the ticket in ConnectWise. It can do this alongside HaloPSA and Autotask: see
+[PSA integration](../psa-integration.mdx) for how several PSAs work together.
+
+## 1. Create an API member
+
+In ConnectWise, go to **System > Members > API Members** and add a member for dotMARC. Give it a security role that can:
+
+- read companies (Companies: Company Maintenance, inquire level)
+- read service boards, their statuses and types, and priorities (Service Desk: Service Tickets, inquire level)
+- add and edit service tickets and their notes (Service Desk: Service Tickets, add and edit)
+
+Then open the member's **API Keys** tab and generate a key pair. ConnectWise shows the private key once, so copy it
+before you close the dialog.
+
+## 2. The client ID
+
+ConnectWise asks every integration to send a client ID with each request. dotMARC sends its own, so you don't need one.
+If your organisation prefers its integrations to use its own client ID, register one at
+[developer.connectwise.com](https://developer.connectwise.com) and enter it under **Client ID override**.
+
+## 3. Connect dotMARC
+
+In dotMARC, open **Manage > PSA settings** and choose the **ConnectWise** tab.
+
+1. Enter the **Site**: your ConnectWise API host, such as `api-eu.myconnectwise.net`, `api-na.myconnectwise.net` or
+   `api-au.myconnectwise.net`. Pasting the full URL is fine; dotMARC keeps the host.
+2. Enter the **Company ID** you sign in to ConnectWise with, and the API member's **Public key** and **Private key**.
+3. Select **Save ConnectWise settings**.
+4. Select **Load options from ConnectWise**, then choose:
+   - the **Board** alert tickets go on
+   - the **New ticket status** they start in
+   - a **Type**, if your board uses them
+   - the **Priority**
+   - the **Closed status** dotMARC sets when an alert resolves
+5. Turn on **Enable ConnectWise tickets** and save again.
+
+## 4. Link companies
+
+Tickets go to the ConnectWise company linked to the domain's Group. On **Manage > Groups**, each Group has a
+**ConnectWise company** column. **Companies without a group** lists ConnectWise companies that no Group matches yet,
+and can create a Group for each, already linked. A Domain can override its Groups' company on **Manage > Domains**.
+
+## 5. How closing works
+
+When an alert resolves, dotMARC adds an internal note ("Resolved automatically by dotMARC.") and moves the ticket to your
+closed status.
+
+ConnectWise has no webhook dotMARC uses, so dotMARC checks its open tickets every few minutes (every 5 by default, set
+with the `Psa:PollIntervalMinutes` setting). A ticket a tech closes, with any closed status, resolves its alert at the
+next check. If closing a ticket fails, dotMARC keeps trying at each check. A ticket deleted in ConnectWise is no longer
+checked, and its alert stays open.
+
+## 6. Test the integration
+
+**Test the integration** on the ConnectWise tab runs the whole lifecycle against your live ConnectWise with the saved
+settings. It creates a clearly marked test ticket, reads it back as open, closes it, and reads it back as closed, which
+is exactly how dotMARC notices a tech's close. Real alerts aren't touched. If a step fails, it says what to check.

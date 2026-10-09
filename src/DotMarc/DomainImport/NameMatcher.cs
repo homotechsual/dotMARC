@@ -1,4 +1,4 @@
-using DotMarc.Notifications;
+using DotMarc.Psa;
 
 namespace DotMarc.DomainImport;
 
@@ -16,8 +16,8 @@ public static class NameMatcher
     /// suffix such as "Ltd".</summary>
     public static bool IsSameName(string first, string second)
     {
-        var firstKey = HaloGroupSuggestions.LooseKey(first);
-        return firstKey.Length > 0 && firstKey == HaloGroupSuggestions.LooseKey(second);
+        var firstKey = PsaCompanySuggestions.LooseKey(first);
+        return firstKey.Length > 0 && firstKey == PsaCompanySuggestions.LooseKey(second);
     }
 
     /// <summary>Close existing names, best first: the same name written differently (case, punctuation, "Ltd"), then
@@ -25,7 +25,7 @@ public static class NameMatcher
     /// name would look like a typo of every other.</summary>
     public static IReadOnlyList<string> Suggest(string name, IEnumerable<string> existingNames, int maximum = 3)
     {
-        var key = HaloGroupSuggestions.LooseKey(name);
+        var key = PsaCompanySuggestions.LooseKey(name);
         var lowered = name.Trim().ToLowerInvariant();
 
         return existingNames
@@ -40,7 +40,7 @@ public static class NameMatcher
 
     private static int? Score(string key, string lowered, string existing)
     {
-        if (key.Length > 0 && key == HaloGroupSuggestions.LooseKey(existing))
+        if (key.Length > 0 && key == PsaCompanySuggestions.LooseKey(existing))
         {
             return 0;
         }

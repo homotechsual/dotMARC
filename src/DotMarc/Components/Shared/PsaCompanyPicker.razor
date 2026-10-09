@@ -1,0 +1,40 @@
+@using DotMarc.Psa
+@* One PSA's company for a Group or Domain. With the PSA's list loaded it's a searchable picker; when the list failed
+   to load it shows the saved name read-only, so a PSA that's down never blanks or changes a link. *@
+@if (Companies is null)
+{
+    <MudText Typo="Typo.body2">@(Current?.CompanyName ?? Placeholder)</MudText>
+}
+else
+{
+    @* With one column per PSA the table gets narrow, so keep room for a company name or "Use Group's". *@
+    <div style="min-width: 9rem;">
+        <SearchableSelect TValue="string" Options="_options" Value="Current?.CompanyId" ValueChanged="OnChangedAsync"
+                          Clearable="true" Placeholder="@Placeholder" Disabled="Disabled" />
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public PsaKind Psa { get; set; }
+    [Parameter] public IReadOnlyList<PsaCompany>? Companies { get; set; }
+    [Parameter] public PsaCompanyLink? Current { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "None";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<PsaCompany?> CompanyChanged { get; set; }
+
+    private List<SelectOption<string>> _options = [];
+
+    protected override void OnParametersSet()
+    {
+        _options = Companies?.Select(company => new SelectOption<string>(company.Id, company.Name)).ToList() ?? [];
+
+        // A linked company the PSA no longer lists still shows by its saved name, rather than as a blank picker.
+        if (Current is not null && _options.All(option => option.Value != Current.CompanyId))
+        {
+            _options.Insert(0, new SelectOption<string>(Current.CompanyId, Current.CompanyName));
+        }
+    }
+
+    private Task OnChangedAsync(string? companyId) =>
+        CompanyChanged.InvokeAsync(companyId is null ? null : _options.Where(option => option.Value == companyId).Select(option => new PsaCompany(option.Value, option.Text)).FirstOrDefault());
+}

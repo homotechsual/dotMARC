@@ -1,0 +1,38 @@
+@using DotMarc.Portal
+@using System.Globalization
+
+<MudCard Elevation="1" Style="height: 100%;">
+    <MudCardContent>
+        <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
+            <MudLink Href="@DomainHref" Typo="Typo.h6">@Summary.Name</MudLink>
+            <PortalHealthChip Health="Summary.Status.Health" />
+        </div>
+        @foreach (var reason in Summary.Status.Reasons)
+        {
+            <MudText Typo="Typo.body2">@reason</MudText>
+        }
+        <div class="d-flex align-center flex-wrap mt-3" style="gap: 1rem;">
+            <MudText Typo="Typo.body2">
+                @(Summary.PassRate is { } rate
+                    ? $"DMARC pass rate (30 days): {rate.ToString("P0", CultureInfo.InvariantCulture)}"
+                    : "No mail reported in the last 30 days")
+            </MudText>
+            <PortalTrendLine Rates="Summary.Trend" />
+        </div>
+        @if (Summary.OpenAlerts.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mt-2 d-block">
+                @Summary.OpenAlerts.Count open alert@(Summary.OpenAlerts.Count == 1 ? "" : "s")
+            </MudText>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public PortalDomainSummary Summary { get; set; } = null!;
+
+    /// <summary>Where the domain's page is. A preview passes its own prefix so links stay in the preview.</summary>
+    [Parameter] public string LinkPrefix { get; set; } = "/portal/domains/";
+
+    private string DomainHref => LinkPrefix + Uri.EscapeDataString(Summary.Name);
+}

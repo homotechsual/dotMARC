@@ -100,7 +100,7 @@ public static class ImportEndpoints
             CanAddGroups: Has(user, Permission.GroupsAdd),
             CanAddTags: Has(user, Permission.TagsAdd));
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var snapshot = await ImportSnapshotLoader.LoadAsync(context, table, null, null, mxHostsLookup, cancellationToken);
+        var snapshot = await ImportSnapshotLoader.LoadAsync(context, table, [], mxHostsLookup, cancellationToken);
         var plan = DomainImportPlanner.Plan(table, snapshot, mode, permissions);
         if (unknownNames == "skip" && plan.UnknownNames.Count > 0)
         {

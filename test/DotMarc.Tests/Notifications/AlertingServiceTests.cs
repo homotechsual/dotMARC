@@ -41,7 +41,7 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
         {
             Enabled = enabled,
-            DeliveryMode = "Teams",
+            TeamsEnabled = true,
             TeamsWebhookUrl = "https://example.test/webhook",
             MissingReportThresholdDays = missingReportThresholdDays,
             CooldownMinutes = cooldownMinutes,
@@ -468,10 +468,8 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     private async Task SeedMappedMonitoredDomainAsync(string domainName)
     {
         await using var context = CreateContext();
-        var haloSettings = await context.HaloPsaSettings.SingleAsync();
-        haloSettings.Enabled = true;
-        haloSettings.AccountName = "contoso";
-        var group = new Group { Name = "Client A", HaloClientId = 7 };
+        await PsaTestSupport.MakeHaloReadyAsync(context);
+        var group = new Group { Name = "Client A", PsaCompanyLinks = [new DotMarc.Psa.PsaCompanyLink { Psa = DotMarc.Psa.PsaKind.HaloPsa, CompanyId = "7", CompanyName = "Client A" }] };
         context.Groups.Add(group);
         context.Domains.Add(new Domain
         {
@@ -491,14 +489,14 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         await SeedSettingsAsync();
         await SeedMappedMonitoredDomainAsync("contoso.io");
         var fakeHalo = new CountingHaloPsaClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), new PsaTicketService(fakeHalo), NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), PsaTestSupport.ForHalo(fakeHalo), NullLogger<AlertingService>.Instance);
 
         await service.CheckPinnedDomainsAsync();
 
         await using var verify = CreateContext();
         var alert = await verify.AlertEvents.SingleAsync();
         Assert.Equal(1, fakeHalo.CreateCallCount);
-        Assert.Equal("9000", alert.ExternalTicketId);
+        Assert.Equal("9000", (await verify.AlertTickets.SingleAsync(ticket => ticket.AlertEventId == alert.Id)).TicketId);
     }
 
     [Fact]
@@ -513,14 +511,14 @@ public sealed class AlertingServiceTests : IAsyncLifetime
 
         var fakeNotifier = new FakeAlertWebhookClient();
         var fakeHalo = new CountingHaloPsaClient();
-        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, new PsaTicketService(fakeHalo), NullLogger<AlertingService>.Instance);
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), fakeNotifier, PsaTestSupport.ForHalo(fakeHalo), NullLogger<AlertingService>.Instance);
 
         await service.CheckPinnedDomainsAsync();
 
         await using var verify = CreateContext();
         var alert = await verify.AlertEvents.SingleAsync();
         Assert.Equal(AlertTypes.MissedReport, alert.AlertType);
-        Assert.Null(alert.ExternalTicketId);
+        Assert.Empty(verify.AlertTickets);
         Assert.Equal(1, fakeNotifier.CallCount);
         Assert.Equal(0, fakeHalo.CreateCallCount);
     }
@@ -544,5 +542,5 @@ public sealed class AlertingServiceTests : IAsyncLifetime
         }
     }
 
-    private static IPsaTicketService CreateNoOpPsaTicketService() => new PsaTicketService(new NoOpHaloPsaClient());
+    private static IPsaTicketService CreateNoOpPsaTicketService() => PsaTestSupport.ForHalo(new NoOpHaloPsaClient());
 }

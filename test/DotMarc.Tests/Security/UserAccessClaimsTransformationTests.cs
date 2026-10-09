@@ -168,4 +168,22 @@ public sealed class UserAccessClaimsTransformationTests : IAsyncLifetime
         Assert.Empty(principal.FindAll(UserAccessClaimsTransformation.PermissionClaimType));
         Assert.Single(principal.FindAll(UserAccessClaimsTransformation.ScopedGroupClaimType));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TransformAsync_AddsTheClientPortalClaim_OnlyForAPortalGrant(bool isClientPortal)
+    {
+        using (var context = CreateContext())
+        {
+            var role = new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = [Permission.DomainsView] };
+            context.UserAccesses.Add(new UserAccess { Email = "client@example.com", Role = role, ScopedGroups = [new Group { Name = "Client A" }], IsClientPortal = isClientPortal });
+            context.SaveChanges();
+        }
+
+        var transformation = new UserAccessClaimsTransformation(CreateFactory());
+        var principal = await transformation.TransformAsync(PrincipalFor("oid-portal", "client@example.com"));
+
+        Assert.Equal(isClientPortal, principal.HasClaim(UserAccessClaimsTransformation.ClientPortalClaimType, "true"));
+    }
 }

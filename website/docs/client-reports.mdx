@@ -1,0 +1,112 @@
+---
+sidebar_position: 7
+description: Send each client a branded PDF report of their email security, weekly, monthly or quarterly, by email.
+---
+
+# Client reports
+
+dotMARC can send each client a regular report of their email security: a branded PDF, emailed weekly, monthly or
+quarterly, or on demand. It's built for the conversation an MSP has with a client: what's protected, what changed since
+last time, and what to do next.
+
+## What's in a report
+
+A report covers one Group (one client) and every monitored domain in it, for one week, month, quarter or a custom range:
+
+- **Cover:** your logo or product name, the client's name (their Group branding, if set), the period, and a one-line
+  verdict such as "2 of 3 domains are fully protected. 1 needs attention."
+- **Summary:** each domain's status (Protected, Monitoring only, Needs attention, No reports yet), messages seen, DMARC
+  pass rate, and the change from the previous week, month or quarter.
+- **Pass rate trend:** a daily line per domain (weekly for ranges over three months), for up to six domains.
+- **Each domain:** its policy in plain words, its health checks, the top ten senders with who owns them, how much of
+  their mail passed and failed, what receivers did with the mail (delivered, sent to spam, rejected), and alerts raised
+  or resolved in the period.
+- **What to do next:** a short list built from fixed rules, such as moving a domain from monitoring to a quarantine
+  policy, publishing a missing SPF record, or a named sender that is failing DMARC.
+
+The email itself is short: the verdict and summary table in your colours, your support details, and the PDF attached.
+It contains no remote images, so nothing is blocked or tracked.
+
+Reports use your branding from **Manage > Branding** and the Group's own branding where it has one. PDFs can only
+include PNG or JPEG logos; with only an SVG logo, the report shows your product name instead.
+
+## Setting up email
+
+Open **Manage > Email & reports** and choose how dotMARC sends email.
+
+### Microsoft Graph
+
+Graph sends from a mailbox in your Microsoft 365 tenant, using the app registration dotMARC already uses to read DMARC
+reports:
+
+1. In the app registration's **API permissions**, add the Microsoft Graph **Application** permission `Mail.Send` and
+   grant admin consent.
+2. The application access policy from [Getting started](./getting-started.mdx) already limits the app to the mailboxes in
+   its security group. To send from the DMARC reports mailbox, nothing more is needed. To send from another mailbox,
+   such as `reports@your-msp.example`, add that mailbox to the same group:
+
+   ```powershell
+   Add-DistributionGroupMember -Identity "dotMARC DMARC Reports Scope" -Member "reports@your-msp.example"
+   ```
+
+3. Choose **Microsoft Graph** and set the **From address** to that mailbox. It's prefilled with the reports mailbox.
+
+Reports are normally well under 1 MB and go in a single request. Graph caps a request at 4 MB, so a report larger than
+about 3 MB (only likely with a very large logo) is sent differently: dotMARC creates it as a draft in the sending mailbox,
+uploads the PDF in pieces, then sends it. Creating the draft needs one more permission, `Mail.ReadWrite` (Application),
+in place of `Mail.Read`. Without it, smaller reports still send and a large one fails with a message saying the
+permission is missing. Reports are limited to 25 MB whichever way they're sent.
+
+### SMTP
+
+SMTP works with any mail server or relay service (Microsoft 365, Google Workspace, SendGrid, Mailgun and so on). Enter
+the host, port, security (STARTTLS on port 587 is the usual choice), username and password, and the from address and
+name. The password is stored encrypted and never shown again.
+
+### Test email
+
+After saving, use **Send a test email** to check the settings. If it fails, the page shows the error from Graph or the
+SMTP server, such as a missing permission or a rejected sign-in.
+
+## When reports go out
+
+Also on **Email & reports**:
+
+- **Time zone:** weeks (Monday to Sunday), months and quarters start at midnight in this time zone. It defaults to UTC.
+- **Send hour:** scheduled reports go out at this hour on the first day after the period ends, for example 06:00 on
+  1 April for March.
+- **Number format:** how numbers and percentages are written, for example 1,200 and 99.5% for the United Kingdom, or
+  1.200 and 99,5 % for Germany. The report's words and dates stay in English.
+
+Turning a schedule on doesn't send a backlog: the first report is the first period that ends after you turned it on.
+
+## Schedules and recipients
+
+On **Manage groups**, each Group has a **Reports** button:
+
+- **Schedule:** Off, weekly, monthly or quarterly.
+- **Recipients:** type addresses, or pick from the people who already have access limited to that Group (its client
+  portal users and other Group-scoped grants). A report can go to at most 25 recipients, all on one email.
+- The dialog shows when the next report goes out, and a history of the last ten reports for the Group.
+
+The Group's row shows a chip with its schedule, or **Report failed** in red when its latest scheduled report failed.
+
+## Sending or downloading on demand
+
+The same dialog can send or download a report for any past week, month or quarter, or a custom range of up to 366
+days, for example for a quarterly business review. **Send now** goes to the recipients you choose there, and
+**Download PDF** sends nothing. Reports sent this way are recorded in the history and the audit log, and never affect
+the schedule.
+
+## When sending fails
+
+A scheduled report that can't be sent is retried every hour. After 24 hours dotMARC stops trying for that period, marks
+it failed, and raises a **Client report failed** alert through your alert channels (Teams, Slack, webhook). It doesn't
+create a PSA ticket unless you turn that on in the ticket rules. The alert closes once a later report for the Group is
+sent. If email is off when a report is due, that period is skipped without an alert.
+
+## Who can manage reports
+
+Reports need the **ReportsManage** permission, which the Admin role has. Give it to a custom role on the Access page to
+let others manage reports. Staff limited to some Groups can only manage reports for those Groups. Client portal users
+never see reports settings.

@@ -1,0 +1,167 @@
+@using DotMarc.Data
+@using DotMarc.Components.Shared
+@using DotMarc.Psa
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuditRecorder AuditRecorder
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject PsaIntegrationTestService Tester
+@inject IEnumerable<IPsaProvider> Providers
+@inject ISnackbar Snackbar
+@inject ILogger<PsaIntegrationTestPanel> Logger
+
+@* Runs one PSA's integration test and shows each step as it goes. *@
+<MudPaper Class="pa-4 mt-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-2">Test the integration</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3">
+        Checks the whole lifecycle against your live @Psa.DisplayName(), using the <b>saved</b> settings: it creates a
+        clearly marked test ticket from the most recent alert's details, reads it back, closes it, and reads it back again
+        to check dotMARC sees the close. Real alerts are not touched.
+    </MudText>
+    @ChildContent
+
+    @if (_needsCompany)
+    {
+        <SearchableSelect TValue="string" Label="@($"{Psa.CompanyLabel()} to test with")" Options="_companyOptions" @bind-Value="_chosenCompanyId"
+                          Variant="Variant.Outlined" Class="mb-3" Clearable="true" />
+    }
+
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_running" OnClick="RunAsync"
+               StartIcon="@Icons.Material.Filled.PlayArrow">@(_running ? "Testing..." : "Run the full test")</MudButton>
+
+    @if (_steps.Count > 0)
+    {
+        <div class="mt-3">
+            @foreach (var step in _steps)
+            {
+                <div class="d-flex align-start mb-2" style="gap: 0.75rem;">
+                    @if (step.Outcome == PsaTestOutcome.Running)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@StepIcon(step.Outcome)" Color="@StepColor(step.Outcome)" />
+                    }
+                    <div>
+                        <MudText Typo="Typo.subtitle2">@step.Name</MudText>
+                        <MudText Typo="Typo.body2" Style="overflow-wrap:anywhere">@step.Detail</MudText>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (_run is { } finishedRun && !_running)
+    {
+        @if (finishedRun.Succeeded)
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-2">The whole lifecycle worked: @Psa.DisplayName() accepted the ticket, closed it, and dotMARC saw it close.</MudAlert>
+        }
+        else if (!finishedRun.NeedsCompanyChoice)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-2">Not everything passed. The step marked with a warning or error above says what to check; the details are also in Manage > Server logs.</MudAlert>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public PsaKind Psa { get; set; }
+
+    /// <summary>Anything the PSA's tab wants to add under the description, such as what else its test checks.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _running;
+    private bool _needsCompany;
+    private string? _chosenCompanyId;
+    private List<SelectOption<string>> _companyOptions = [];
+    private readonly List<PsaTestStep> _steps = [];
+    private PsaTestRun? _run;
+
+    private static string AuditAction(PsaKind psa) => psa switch
+    {
+        PsaKind.HaloPsa => AuditActions.HaloIntegrationTested,
+        PsaKind.ConnectWise => AuditActions.ConnectWiseIntegrationTested,
+        PsaKind.Autotask => AuditActions.AutotaskIntegrationTested,
+        _ => throw new ArgumentOutOfRangeException(nameof(psa), psa, "No audit action for this PSA's integration test.")
+    };
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        _run = null;
+        _steps.Clear();
+        try
+        {
+            var progress = new Progress<PsaTestStep>(step =>
+            {
+                var index = _steps.FindIndex(existing => existing.Name == step.Name);
+                if (index >= 0)
+                {
+                    _steps[index] = step;
+                }
+                else
+                {
+                    _steps.Add(step);
+                }
+
+                _ = InvokeAsync(StateHasChanged);
+            });
+
+            _run = await Tester.RunAsync(Psa, _chosenCompanyId, progress, null, CancellationToken.None);
+            await AuditRecorder.RecordAsync(AuditLog.Create(await AuditActorAccessor.GetAsync(), AuditEntryKind.Change,
+                AuditAction(Psa), AuditTarget.Settings(Psa.DisplayName()),
+                $"Tested the {Psa.DisplayName()} integration: {(_run.Succeeded ? "passed" : "did not pass")}"));
+
+            // The progress callbacks are posted asynchronously, so take the final list from the run itself rather than
+            // trusting they have all landed.
+            _steps.Clear();
+            _steps.AddRange(_run.Steps);
+            _needsCompany = _run.NeedsCompanyChoice;
+            if (_needsCompany && _companyOptions.Count == 0)
+            {
+                await LoadCompaniesAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "The {Psa} integration test failed unexpectedly", Psa.DisplayName());
+            Snackbar.Add($"The test couldn't run: {exception.Message}", Severity.Error, config => config.RequireInteraction = true);
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task LoadCompaniesAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var provider = Providers.Single(candidate => candidate.Kind == Psa);
+            _companyOptions = (await provider.ListCompaniesAsync(db)).Select(company => new SelectOption<string>(company.Id, company.Name)).ToList();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Loading {Psa} companies for the integration test failed", Psa.DisplayName());
+            Snackbar.Add($"Couldn't load the {Psa.CompanyLabel()}s to choose from. {exception.Message}", Severity.Error, config => config.RequireInteraction = true);
+        }
+    }
+
+    private static string StepIcon(PsaTestOutcome outcome) => outcome switch
+    {
+        PsaTestOutcome.Passed => Icons.Material.Filled.CheckCircle,
+        PsaTestOutcome.Warning => Icons.Material.Filled.Warning,
+        PsaTestOutcome.Failed => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+
+    private static Color StepColor(PsaTestOutcome outcome) => outcome switch
+    {
+        PsaTestOutcome.Passed => Color.Success,
+        PsaTestOutcome.Warning => Color.Warning,
+        PsaTestOutcome.Failed => Color.Error,
+        _ => Color.Default
+    };
+}

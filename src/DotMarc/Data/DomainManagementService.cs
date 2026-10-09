@@ -1,3 +1,4 @@
+using DotMarc.Psa;
 using DotMarc.Audit;
 using DotMarc.Dns;
 using Microsoft.EntityFrameworkCore;
@@ -80,18 +81,24 @@ public static class DomainManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Sets (or clears, with null) a domain's Halo client override, from Manage Domains.</summary>
-    public static async Task SetHaloClientIdAsync(DotMarcDbContext context, AuditActor actor, int domainId, int? haloClientId, CancellationToken cancellationToken = default)
+    /// <summary>Sets (or clears, with null) a domain's own company in one PSA, overriding its Groups', from Manage domains
+    /// and import.</summary>
+    public static async Task SetPsaCompanyAsync(DotMarcDbContext context, AuditActor actor, int domainId, PsaKind psa, PsaCompany? company, CancellationToken cancellationToken = default)
     {
-        var domain = await context.Domains.SingleAsync(d => d.Id == domainId, cancellationToken).ConfigureAwait(false);
-        var changes = new AuditChanges().Field("Halo client", domain.HaloClientId, haloClientId);
-        if (!changes.Any)
+        var domain = await context.Domains.Include(candidate => candidate.PsaCompanyLinks).SingleAsync(candidate => candidate.Id == domainId, cancellationToken).ConfigureAwait(false);
+        var existing = domain.PsaCompanyLinks.FirstOrDefault(link => link.Psa == psa);
+        if (existing?.CompanyId == company?.Id)
         {
             return;
         }
 
-        domain.HaloClientId = haloClientId;
-        AuditLog.Record(context, actor, AuditActions.DomainHaloClientChanged, AuditTarget.For(domain), $"Changed the Halo client for {domain.Name}", changes);
+        var changes = new AuditChanges().Field(psa.CompanyLabel(), existing?.CompanyName, company?.Name);
+        if (PsaCompanyLinks.Apply(domain.PsaCompanyLinks, existing, psa, company) is { } removed)
+        {
+            context.PsaCompanyLinks.Remove(removed);
+        }
+
+        AuditLog.Record(context, actor, AuditActions.DomainPsaCompanyChanged, AuditTarget.For(domain), $"Changed the {psa.CompanyLabel()} for {domain.Name}", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

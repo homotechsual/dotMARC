@@ -6,7 +6,7 @@ description: How dotMARC's alerting works, the alert types it raises, delivery c
 # Alerts
 
 dotMARC raises an alert when something about a monitored domain needs attention, delivers it
-through Teams and/or a generic webhook, and shows the same event in the **Alerts** feed. An alert
+through Teams, Slack and/or a generic webhook, and shows the same event in the **Alerts** feed. An alert
 resolves itself automatically once the underlying condition clears, no manual dismissal needed.
 
 ## Alert types
@@ -41,9 +41,7 @@ permission, granted separately from `AlertsView`.
 | Setting | Description |
 | --- | --- |
 | Enable notifications | Master on/off switch. Disabled means no alerts are raised or delivered at all, not just silenced delivery. |
-| Delivery mode | `Teams`, `Generic`, or `Both`. |
-| Teams webhook URL | Required if delivery mode is `Teams` or `Both`. |
-| Generic webhook URL | Required if delivery mode is `Generic` or `Both`. |
+| Teams, Slack, Generic | A switch and webhook URL for each channel. Alerts go to every channel that's switched on and has a URL. **Send test** posts a marked test alert to the URL as typed, before you save. |
 | Missing report threshold (days) | How many days without a report before `MissedReport` fires. Default `2`. |
 | Cooldown (minutes) | Minimum time between repeat firings of the same open alert. Default `180`. |
 | Monitor interval (seconds) | How often the background check for missed reports runs. Default `300`. |
@@ -52,8 +50,8 @@ permission, granted separately from `AlertsView`.
 | Alert when nameservers change | On by default. |
 | Close policy and nameserver alerts after (days) | `0` (default) keeps them open until acknowledged or their ticket is closed. |
 
-Both webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
-`https://user:pass@host/...`); anything else is rejected on save.
+Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
+`https://user:pass@host/...`); anything else is rejected on save, and **Send test** won't post to it.
 
 ## DNS health alerts
 
@@ -91,7 +89,7 @@ still failing, so a brief DNS hiccup doesn't page anyone. The same applies to po
 Upgrading to a version with DNS health alerts doesn't raise a flood of alerts: on its first run dotMARC notes which
 checks pass and the current policy and nameservers, and only alerts on changes from there.
 
-Nameservers changed alerts don't open a HaloPSA ticket by default. Change that with the ticket rules, like any other
+Nameservers changed alerts don't open a PSA ticket by default. Change that with the ticket rules, like any other
 alert type.
 
 ### Closing policy and nameserver alerts
@@ -100,15 +98,16 @@ A weaker DMARC policy or new nameservers may be deliberate, so these alerts comp
 these closes the alert and accepts the current policy or nameservers as the new normal:
 
 * **Acknowledge** on the Alerts page (needs `AlertsManage`). It's recorded in the [audit log](./audit-log.mdx).
-* **Closing its HaloPSA ticket.**
+* **Closing its PSA ticket** in HaloPSA, ConnectWise or Autotask.
 * **Closing automatically** after the number of days in **Close policy and nameserver alerts after (days)**, if set.
 
 ## Delivery channels
 
 Delivery is best-effort: a failed webhook call is logged as a warning and does not stop the alert
 from being recorded or shown in the Alerts feed, and does not affect the rest of that check cycle.
+Each channel is sent separately, so one that's down doesn't stop the others.
 
-For syncing alerts to a PSA instead of (or alongside) Teams/webhook delivery, see [PSA
+For syncing alerts to a PSA instead of (or alongside) Teams, Slack or webhook delivery, see [PSA
 integration](./psa-integration.mdx).
 
 ### Teams
@@ -116,6 +115,16 @@ integration](./psa-integration.mdx).
 Sent as an Adaptive Card (`application/vnd.microsoft.card.adaptive`, schema version 1.5) via
 `POST` to the Teams webhook URL, with the domain, alert type, and message as a fact set under the
 alert title.
+
+### Slack
+
+Sent as a `POST` to a Slack incoming webhook, using Slack's Block Kit layout: a "dotMARC alert" header, the alert
+title, the domain and alert type side by side, then the message. To get a webhook URL:
+
+1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
+2. Under **Incoming Webhooks**, turn them on, then **Add New Webhook to Workspace** and pick the channel.
+3. Copy the URL (it starts `https://hooks.slack.com/services/`) into **Slack webhook URL**, switch Slack on, and use
+   **Send test** to check it.
 
 ### Generic webhook
 

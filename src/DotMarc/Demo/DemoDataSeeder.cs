@@ -14,6 +14,7 @@ public static class DemoDataSeeder
     public const string AdminEmail = "demo-admin@nova-msp.example";
     public const string ViewerEmail = "demo-viewer@nova-msp.example";
     public const string ViewerScopedGroupName = "Aurora Retail";
+    public const string ClientEmail = "demo-client@aurora-retail.example";
 
     public static async Task ResetAsync(DotMarcDbContext context, DemoDataset dataset, CancellationToken cancellationToken = default)
     {
@@ -49,7 +50,7 @@ public static class DemoDataSeeder
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
                 "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates", "DomainDkimRecords",
-                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries"
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);
@@ -279,7 +280,48 @@ public static class DemoDataSeeder
 
         context.UserAccesses.AddRange(
             new UserAccess { Email = AdminEmail, Role = adminRole },
-            new UserAccess { Email = ViewerEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]] });
+            new UserAccess { Email = ViewerEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]] },
+            new UserAccess { Email = ClientEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]], IsClientPortal = true });
+
+        // The brand is a singleton row the truncate above leaves alone, so reset it here: the fictional MSP's brand,
+        // with Aurora Retail's own name and colour layered over it for the Demo Client.
+        var brand = await context.BrandingSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        brand.ProductName = "Nova MSP";
+        brand.PrimaryColour = "#0B5FFF";
+        brand.SecondaryColour = "#FF6B00";
+        brand.LogoImageId = null;
+        brand.DarkLogoImageId = null;
+        brand.SupportEmail = "help@nova-msp.example";
+        brand.SupportUrl = "https://nova-msp.example/support";
+        brand.SupportPhone = null;
+        brand.FooterText = null;
+        context.GroupBrandings.Add(new DotMarc.Portal.GroupBranding
+        {
+            GroupId = groupsByName[ViewerScopedGroupName].Id, DisplayName = "Aurora Retail Ltd", PrimaryColour = "#7A1FA2",
+        });
+
+        // Report and email settings are singleton rows the truncate leaves alone too; put them back so one visitor's
+        // changes don't stay for everyone. The demo never sends email whatever these say.
+        var reportSettings = await context.ReportSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        reportSettings.TimeZoneId = "UTC";
+        reportSettings.SendHour = 6;
+        reportSettings.NumberFormat = DotMarc.Reporting.ClientReports.ReportSettings.DefaultNumberFormat;
+        var emailSettings = await context.EmailSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        emailSettings.Provider = DotMarc.Email.EmailProvider.Off;
+        emailSettings.FromAddress = null;
+        emailSettings.FromName = null;
+        emailSettings.SmtpHost = null;
+        emailSettings.SmtpPort = 587;
+        emailSettings.SmtpSecurity = DotMarc.Email.SmtpSecurity.StartTls;
+        emailSettings.SmtpUsername = null;
+        emailSettings.SmtpPasswordConfigured = false;
+
+        // A monthly report schedule, so the Reports dialog has something to show. The demo never sends email.
+        context.GroupReportSchedules.Add(new DotMarc.Reporting.ClientReports.GroupReportSchedule
+        {
+            GroupId = groupsByName[ViewerScopedGroupName].Id, Frequency = DotMarc.Reporting.ClientReports.ReportFrequency.Monthly,
+            Recipients = ["reports@aurora-retail.example"], StartedUtc = DateTimeOffset.UtcNow,
+        });
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }

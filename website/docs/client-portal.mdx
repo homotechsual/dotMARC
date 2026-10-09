@@ -1,0 +1,93 @@
+---
+sidebar_position: 6
+description: Give clients a simple, branded view of their own domains, in your brand or theirs.
+---
+
+# Client portal
+
+The client portal is a simplified, read-only view of dotMARC for your clients. Instead of the dashboard your team uses,
+a client contact signs in at the same dotMARC address and sees a short summary of their own domains, in your brand (or
+their own, if you set one for their Group). There are no menus, settings or buttons that change anything.
+
+## Turning it on for someone
+
+The portal is a switch on an access grant, so it's set per person:
+
+1. Open **Manage > Access** and grant the client contact access by email, as usual.
+2. Give the grant a role that can be limited to Groups (such as Viewer) and select the client's Groups.
+3. Turn on the grant's **Client portal** switch.
+
+The switch is refused for a grant that isn't limited to Groups, because a portal user must only ever see their own
+domains. For the same reason, you can't remove the last Group from a grant while its portal switch is on.
+
+Once it's on, that person only ever sees the portal. Opening any other dotMARC page sends them back to it, and they
+can't use the API. Turn the switch off to give them the normal dotMARC view instead.
+
+See [Permissions & Access](./permissions-and-access.mdx) for how roles and Group-scoped grants work.
+
+## What clients see
+
+**Your domains** lists every domain in the client's Groups, with an overall verdict at the top and, for each domain,
+a status, the reasons behind it, the DMARC pass rate over the last 30 days with a small trend line, and how many alerts
+are open.
+
+Each domain has one of four statuses:
+
+| Status | What it means |
+| --- | --- |
+| Protected | The DMARC policy rejects or quarantines failing mail, and every health check passes. |
+| Monitoring only | The DMARC policy only reports, so mail spoofing the domain isn't blocked yet. |
+| Needs attention | A health check is failing or an alert is open. The reasons are listed under the status. |
+| No reports yet | No DMARC reports have arrived. They usually start within a few days of adding a domain. |
+
+Opening a domain shows its page:
+
+- **Policy**: what happens to mail that fails DMARC, in plain words.
+- **Health**: the DMARC, DMARC reporting, SPF, MX, DKIM, TLS reporting and (when set up) MTA-STS checks.
+- **Who sends as this domain**: the busiest senders reported in the last 30 days, whether they passed SPF and DKIM,
+  and what receivers did with their mail.
+- **Alerts**: alerts from the last 30 days, open or resolved.
+
+Clients can switch between light and dark mode and sign out. They can't fix, push, recheck or configure anything, and
+they never see other clients' domains, your team's pages or the API.
+
+## Branding
+
+Open **Manage > Branding** to set how the portal looks:
+
+- **Product name**: your name for the portal. It's shown in the app bar when there's no logo, in page titles, and as
+  the heading for a client with several Groups.
+- **Primary colour**: links, buttons and highlights.
+- **Secondary colour**: the app bar in light mode.
+- **Logo** and **Dark logo**: PNG, JPEG or SVG, up to 512 KB. A wide logo about 40 pixels tall works best. The logo
+  is for light backgrounds and the dark logo for dark ones. The dark logo is shown in dark mode, and in light mode too
+  when your secondary colour is dark, because the app bar is then dark. Without a dark logo, the logo is used
+  everywhere.
+- **Support email**, **Support URL**, **Support phone** and **Footer text**: shown at the foot of every portal page so
+  clients know how to reach you.
+
+A warning appears under a colour that is hard to read on white (below the WCAG AA contrast ratio of 4.5 to 1). You can
+still save it. The preview below the form shows the portal in light and dark mode with your unsaved changes.
+
+SVG logos are checked when you upload them. An SVG that contains scripts, event handlers or links to anything outside
+the file is refused, since the portal is shown to people outside your business.
+
+### Branding a Group
+
+On **Manage groups**, the **Branding** button on each Group sets that client's own display name, logo, dark logo and
+colours. Anything left empty uses your brand, and a Group with its own branding shows a **Branded** chip.
+
+When a portal user's grant covers several Groups:
+
+- If exactly one of their Groups has its own branding, that branding is used.
+- If two or more have their own branding, none wins, so your brand is used.
+- The heading is the Group's display name (or its name) when they have one Group, and your product name when they have
+  several.
+
+## Previewing as a client
+
+The Group branding dialog has a **Preview as client** link that opens `/portal/preview/<group id>`: the portal exactly
+as that Group's clients see it, with a banner saying it's a preview. You need permission to manage Groups to use it,
+and staff limited to some Groups can only preview those.
+
+Send clients a regular report too: see [Client reports](./client-reports.mdx).

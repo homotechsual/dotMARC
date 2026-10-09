@@ -50,7 +50,7 @@ public sealed class ImportSnapshotLoaderTests : IAsyncLifetime
         }
 
         await using var loadContext = CreateContext();
-        var snapshot = await ImportSnapshotLoader.LoadAsync(loadContext, Table("Contoso.com\nnew.com"), null, "HaloPSA isn't connected.", new FakeMxHostsLookup(), CancellationToken.None);
+        var snapshot = await ImportSnapshotLoader.LoadAsync(loadContext, Table("Contoso.com\nnew.com"), [], new FakeMxHostsLookup(), CancellationToken.None);
 
         var contoso = Assert.Single(snapshot.DomainsByName).Value;
         Assert.Equal("contoso.com", contoso.Name);
@@ -58,8 +58,7 @@ public sealed class ImportSnapshotLoaderTests : IAsyncLifetime
         Assert.Equal(["selector1"], contoso.DkimSelectors);
         Assert.Equal(["Client A"], snapshot.GroupNames);
         Assert.Equal(["primary"], snapshot.TagNames);
-        Assert.Null(snapshot.HaloClients);
-        Assert.Equal("HaloPSA isn't connected.", snapshot.HaloUnavailableReason);
+        Assert.Empty(snapshot.PsaCompanies);
     }
 
     [Fact]
@@ -72,7 +71,7 @@ public sealed class ImportSnapshotLoaderTests : IAsyncLifetime
         }
 
         await using var loadContext = CreateContext();
-        var snapshot = await ImportSnapshotLoader.LoadAsync(loadContext, Table("xn--bcher-kva.example"), null, null, new FakeMxHostsLookup(), CancellationToken.None);
+        var snapshot = await ImportSnapshotLoader.LoadAsync(loadContext, Table("xn--bcher-kva.example"), [], new FakeMxHostsLookup(), CancellationToken.None);
 
         Assert.Equal("bücher.example", Assert.Single(snapshot.DomainsByName, pair => pair.Key == "xn--bcher-kva.example").Value.Name);
     }
@@ -86,7 +85,7 @@ public sealed class ImportSnapshotLoaderTests : IAsyncLifetime
         await using var context = CreateContext();
         var snapshot = await ImportSnapshotLoader.LoadAsync(context,
             Table("domain,mta-sts mode,mx hosts\nneeds.com,testing,\ngiven.com,enforce,mail.given.com\noff.com,off,\nnothing.com,,"),
-            null, null, lookup, CancellationToken.None);
+            [], lookup, CancellationToken.None);
 
         Assert.Equal(["needs.com"], lookup.LookedUp);
         Assert.Equal(["mail.needs.com"], snapshot.LookedUpMxHosts["needs.com"]);

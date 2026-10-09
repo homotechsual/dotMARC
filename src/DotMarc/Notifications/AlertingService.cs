@@ -1,3 +1,4 @@
+using System.Globalization;
 using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Reporting;
@@ -12,6 +13,8 @@ public interface IAlertingService
     Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default);
     Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default);
     Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default);
+    Task RaiseClientReportFailedAsync(int groupId, string groupName, string periodLabel, string error, CancellationToken cancellationToken = default);
+    Task ResolveClientReportFailedAsync(int groupId, CancellationToken cancellationToken = default);
 }
 
 public sealed class AlertingService : IAlertingService
@@ -276,7 +279,7 @@ public sealed class AlertingService : IAlertingService
             copy.ResolvedUtc = resolvedUtc;
             try
             {
-                await _psaTicketService.CloseTicketAsync(db, copy, cancellationToken).ConfigureAwait(false);
+                await _psaTicketService.CloseTicketsAsync(db, copy, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -307,7 +310,7 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _psaTicketService.CloseTicketAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
+            await _psaTicketService.CloseTicketsAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -366,12 +369,47 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _psaTicketService.CreateTicketAsync(context, alert, cancellationToken).ConfigureAwait(false);
+            await _psaTicketService.CreateTicketsAsync(context, alert, cancellationToken).ConfigureAwait(false);
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to create PSA ticket for {DomainName} alert {AlertType}.", domainName, alertType);
+        }
+    }
+
+    /// <summary>What a Group's failed report alert is about. Stored where a domain alert stores its domain name; it ends
+    /// with the Group's id so the alert still resolves after the Group is renamed.</summary>
+    public static string ClientReportAlertSubject(int groupId, string groupName) =>
+        string.Create(CultureInfo.InvariantCulture, $"Client report for {groupName} (group {groupId})");
+
+    private static string ClientReportSubjectSuffix(int groupId) => string.Create(CultureInfo.InvariantCulture, $"(group {groupId})");
+
+    public async Task RaiseClientReportFailedAsync(int groupId, string groupName, string periodLabel, string error, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var settings = await NotificationSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
+        if (!settings.Enabled)
+        {
+            return;
+        }
+
+        await EnsureAlertAsync(db, settings, ClientReportAlertSubject(groupId, groupName), AlertTypes.ClientReportFailed, "Warning", "Client report failed",
+            $"The {periodLabel} report for {groupName} couldn't be sent for 24 hours. Last error: {error}", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ResolveClientReportFailedAsync(int groupId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var suffix = ClientReportSubjectSuffix(groupId);
+        var subjects = await db.AlertEvents
+            .Where(alert => alert.AlertType == AlertTypes.ClientReportFailed && !alert.IsResolved && alert.DomainName.EndsWith(suffix))
+            .Select(alert => alert.DomainName)
+            .Distinct()
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var subject in subjects)
+        {
+            await ResolveAllCopiesAsync(subject, AlertTypes.ClientReportFailed, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -433,10 +471,10 @@ public sealed class AlertingService : IAlertingService
         foreach (var alertId in staleAlertIds)
         {
             await using var alertContext = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-            var outcome = await AlertAcknowledgement.AcknowledgeAsync(alertContext, AutoCloseActor, alertId, _psaTicketService, cancellationToken).ConfigureAwait(false);
-            if (outcome == AcknowledgeOutcome.AcknowledgedButTicketNotClosed)
+            var result = await AlertAcknowledgement.AcknowledgeAsync(alertContext, AutoCloseActor, alertId, _psaTicketService, cancellationToken).ConfigureAwait(false);
+            if (result.Outcome == AcknowledgeOutcome.AcknowledgedButTicketNotClosed)
             {
-                _logger.LogWarning("Closed alert {AlertId} automatically, but couldn't close its PSA ticket.", alertId);
+                _logger.LogWarning("Closed alert {AlertId} automatically, but couldn't close all its PSA tickets. dotMARC will keep trying.", alertId);
             }
         }
     }

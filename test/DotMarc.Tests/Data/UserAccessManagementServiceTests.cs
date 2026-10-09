@@ -255,4 +255,56 @@ public sealed class UserAccessManagementServiceTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.DoesNotContain(verify.AuditEntries, entry => entry.Action == AuditActions.AccessRevoked);
     }
+
+    [Fact]
+    public async Task SetClientPortalAsync_OnAScopedGrant_TurnsItOnAndAudits()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [Permission.DomainsView] };
+        var access = new UserAccess { Email = "client@aurora.example", Role = viewerRole, ScopedGroups = [new Group { Name = "Aurora Retail" }] };
+        context.UserAccesses.Add(access);
+        await context.SaveChangesAsync();
+
+        var result = await UserAccessManagementService.SetClientPortalAsync(context, TestActors.Admin, access.Id, true);
+
+        Assert.Equal(UserAccessManagementService.SetClientPortalResult.Updated, result);
+        await using var verify = CreateContext();
+        Assert.True((await verify.UserAccesses.SingleAsync()).IsClientPortal);
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Equal(AuditActions.AccessClientPortalChanged, entry.Action);
+        Assert.Contains(entry.Changes, change => change.Field == "Client portal" && change.New == "Yes");
+    }
+
+    [Fact]
+    public async Task SetClientPortalAsync_OnAnUnscopedGrant_IsRefused()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [Permission.DomainsView] };
+        var access = new UserAccess { Email = "client@aurora.example", Role = viewerRole };
+        context.UserAccesses.Add(access);
+        await context.SaveChangesAsync();
+
+        var result = await UserAccessManagementService.SetClientPortalAsync(context, TestActors.Admin, access.Id, true);
+
+        Assert.Equal(UserAccessManagementService.SetClientPortalResult.NeedsScopedGroups, result);
+        await using var verify = CreateContext();
+        Assert.False((await verify.UserAccesses.SingleAsync()).IsClientPortal);
+        Assert.Empty(verify.AuditEntries);
+    }
+
+    [Fact]
+    public async Task UpdateAccessAsync_RemovingAPortalGrantsLastGroup_IsRefused()
+    {
+        await using var context = CreateContext();
+        var viewerRole = new Role { Name = "Client viewer", IsScopable = true, Permissions = [Permission.DomainsView] };
+        var access = new UserAccess { Email = "client@aurora.example", Role = viewerRole, ScopedGroups = [new Group { Name = "Aurora Retail" }], IsClientPortal = true };
+        context.UserAccesses.Add(access);
+        await context.SaveChangesAsync();
+
+        var result = await UserAccessManagementService.UpdateAccessAsync(context, TestActors.Admin, access.Id, viewerRole.Id, []);
+
+        Assert.Equal(UserAccessManagementService.UpdateAccessResult.ClientPortalNeedsGroups, result);
+        await using var verify = CreateContext();
+        Assert.Single((await verify.UserAccesses.Include(grant => grant.ScopedGroups).SingleAsync()).ScopedGroups);
+    }
 }

@@ -1,0 +1,124 @@
+@using DotMarc.Components.Pages
+@using DotMarc.Components.Portal
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.Portal
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+@* A Group's own portal branding, layered over the MSP brand from Branding. Every field is optional. *@
+<MudDialog>
+    <TitleContent>Portal branding for @GroupName</TitleContent>
+    <DialogContent>
+        @if (_msp is null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Anything left empty uses your brand from Branding. A client with several branded Groups sees your brand instead.
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12">
+                    <FieldWithHelp Topic="Display name" Help="The client's name as the portal heads it, if it should differ from the Group's name.">
+                        <MudTextField Label="Display name" @bind-Value="_displayName" MaxLength="100" Variant="Variant.Outlined"
+                                      Placeholder="@GroupName" HelperText="@(string.IsNullOrWhiteSpace(_displayName) ? $"Using the Group's name ({GroupName})" : null)" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <BrandColourField Label="Primary colour" Help="Used for links, buttons and highlights in this client's portal."
+                                      @bind-Value="_primaryColour" DefaultColour="@_msp.PrimaryColour" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <BrandColourField Label="Secondary colour" Help="Used for the app bar in light mode in this client's portal."
+                                      @bind-Value="_secondaryColour" DefaultColour="@_msp.SecondaryColour" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <BrandLogoField Label="Logo" Help="@BrandingSettingsPage.LogoHelp" @bind-ImageId="_logoImageId" FallbackHint="Using your logo" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <BrandLogoField Label="Dark logo" Help="@BrandingSettingsPage.DarkLogoHelp" @bind-ImageId="_darkLogoImageId" IsDark="true"
+                                    FallbackHint="@(_logoImageId is null ? "Using your dark logo" : "Using this Group's logo")" />
+                </MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Preview</MudText>
+            <PortalBrandPreview Brand="PreviewBrand" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Href="@($"/portal/preview/{GroupId}")" Target="_blank" StartIcon="@Icons.Material.Filled.OpenInNew">Preview as client</MudButton>
+        <MudSpacer />
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_busy || _msp is null" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int GroupId { get; set; }
+    [Parameter] public string GroupName { get; set; } = "";
+
+    private BrandingSettings? _msp;
+    private string? _displayName;
+    private string? _primaryColour;
+    private string? _secondaryColour;
+    private Guid? _logoImageId;
+    private Guid? _darkLogoImageId;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var branding = await GroupManagementService.GetBrandingAsync(db, GroupId);
+        _displayName = branding?.DisplayName;
+        _primaryColour = branding?.PrimaryColour;
+        _secondaryColour = branding?.SecondaryColour;
+        _logoImageId = branding?.LogoImageId;
+        _darkLogoImageId = branding?.DarkLogoImageId;
+        _msp = await db.BrandingSettings.AsNoTracking().SingleAsync();
+    }
+
+    private GroupBrandingInput Input => new(_displayName, _logoImageId, _darkLogoImageId, _primaryColour, _secondaryColour);
+
+    // Resolved exactly as a client of this one Group would see it, with the unsaved fields.
+    private ResolvedBrand PreviewBrand
+    {
+        get
+        {
+            var input = Input;
+            var unsaved = new GroupBranding
+            {
+                GroupId = GroupId,
+                DisplayName = string.IsNullOrWhiteSpace(input.DisplayName) ? null : input.DisplayName.Trim(),
+                LogoImageId = input.LogoImageId,
+                DarkLogoImageId = input.DarkLogoImageId,
+                PrimaryColour = BrandColours.IsValid(input.PrimaryColour) ? input.PrimaryColour : null,
+                SecondaryColour = BrandColours.IsValid(input.SecondaryColour) ? input.SecondaryColour : null,
+            };
+            return PortalBranding.Resolve(_msp!, [new ScopedGroupBrand(GroupName, unsaved)]);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await GroupManagementService.SetBrandingAsync(db, await AuditActorAccessor.GetAsync(), GroupId, Input);
+            Snackbar.Add($"Portal branding for {GroupName} saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (ArgumentException exception)
+        {
+            Snackbar.Add(exception.Message.Split(" (Parameter")[0], Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

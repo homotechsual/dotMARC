@@ -71,6 +71,48 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ResetAsync_GivesAuroraRetailAMonthlyReportSchedule()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        var schedule = await verify.GroupReportSchedules.SingleAsync();
+        Assert.Equal(DemoDataSeeder.ViewerScopedGroupName, (await verify.Groups.SingleAsync(group => group.Id == schedule.GroupId)).Name);
+        Assert.Equal(DotMarc.Reporting.ClientReports.ReportFrequency.Monthly, schedule.Frequency);
+        Assert.Equal(["reports@aurora-retail.example"], schedule.Recipients);
+    }
+
+    [Fact]
+    public async Task ResetAsync_PutsReportAndEmailSettingsBack()
+    {
+        using (var context = CreateContext())
+        {
+            var reports = await context.ReportSettings.SingleAsync();
+            reports.TimeZoneId = "Australia/Sydney";
+            reports.SendHour = 22;
+            reports.NumberFormat = "de-DE";
+            var email = await context.EmailSettings.SingleAsync();
+            email.Provider = DotMarc.Email.EmailProvider.Smtp;
+            email.FromAddress = "someone@example.com";
+            email.SmtpHost = "smtp.example.com";
+            await context.SaveChangesAsync();
+        }
+
+        using (var context = CreateContext())
+        {
+            await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        var resetReports = await verify.ReportSettings.SingleAsync();
+        var resetEmail = await verify.EmailSettings.SingleAsync();
+        Assert.Equal(("UTC", 6, "en-GB"), (resetReports.TimeZoneId, resetReports.SendHour, resetReports.NumberFormat));
+        Assert.Equal((DotMarc.Email.EmailProvider.Off, (string?)null, (string?)null), (resetEmail.Provider, resetEmail.FromAddress, resetEmail.SmtpHost));
+    }
+
+    [Fact]
     public async Task ResetAsync_IsRepeatable_WithoutAccumulatingDuplicateRows()
     {
         using (var context = CreateContext())
@@ -86,7 +128,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         using var verify = CreateContext();
         Assert.Equal(25, await verify.Domains.CountAsync());
         Assert.Equal(2, await verify.Roles.CountAsync());
-        Assert.Equal(2, await verify.UserAccesses.CountAsync());
+        Assert.Equal(3, await verify.UserAccesses.CountAsync()); // Demo Admin, Demo Viewer and Demo Client
     }
 
     [Fact]
@@ -208,7 +250,7 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
 
         using var verify = CreateContext();
         Assert.Equal(25, await verify.Domains.CountAsync());
-        Assert.Equal(2, await verify.UserAccesses.CountAsync());
+        Assert.Equal(3, await verify.UserAccesses.CountAsync()); // Demo Admin, Demo Viewer and Demo Client
     }
 
     [Fact]

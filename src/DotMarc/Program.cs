@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -105,7 +106,8 @@ if (serverLogStore.IsCapturing)
     builder.Logging.AddProvider(new DotMarc.ServerLogs.InMemoryLoggerProvider(serverLogStore));
 }
 
-builder.Services.AddSingleton<IPsaTicketService, PsaTicketService>();
+builder.Services.AddSingleton<PsaTicketService>();
+builder.Services.AddSingleton<IPsaTicketService>(services => services.GetRequiredService<PsaTicketService>());
 builder.Services.AddSingleton<IAlertingService, AlertingService>();
 
 if (!demoOptions.Enabled)
@@ -147,7 +149,10 @@ builder.Services.AddHttpClient<ITlsrptDnsChecker, TlsrptDnsChecker>(client =>
 builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(builder.Configuration.GetSection(DotMarc.MtaSts.MtaStsOptions.SectionName));
 
 builder.Services.AddHttpClient<ITeamsWebhookClient, TeamsWebhookClient>();
+builder.Services.AddHttpClient(DotMarc.Email.GraphEmailSender.HttpClientName, client => client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/"));
+builder.Services.AddSingleton<DotMarc.Email.IEmailSenderFactory, DotMarc.Email.EmailSenderFactory>();
 builder.Services.AddHttpClient<IGenericWebhookClient, GenericWebhookClient>();
+builder.Services.AddHttpClient<ISlackWebhookClient, SlackWebhookClient>();
 builder.Services.AddSingleton<IAlertWebhookClient, AlertWebhookClient>();
 
 // KeyVault:VaultUri is only set by infra/main.bicep when enableKeyVaultWrite is true (see
@@ -166,14 +171,33 @@ else
 
 builder.Services.AddSingleton<HaloPsaTokenCache>();
 builder.Services.AddSingleton<HaloWebhookActivity>();
-builder.Services.AddTransient<HaloIntegrationTestService>();
+builder.Services.AddTransient<DotMarc.Psa.PsaIntegrationTestService>();
 builder.Services.AddHttpClient<IHaloPsaClient, HaloPsaClient>();
+builder.Services.AddHttpClient<DotMarc.Psa.ConnectWise.IConnectWiseClient, DotMarc.Psa.ConnectWise.ConnectWiseClient>();
+builder.Services.AddSingleton<DotMarc.Psa.Autotask.AutotaskZoneCache>();
+builder.Services.AddHttpClient<DotMarc.Psa.Autotask.IAutotaskClient, DotMarc.Psa.Autotask.AutotaskClient>();
+// The demo instance gets a pretend PSA so visitors can see tickets raised and closed; a real install talks to the real ones.
+if (demoOptions.Enabled)
+{
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.HaloPsa, services.GetRequiredService<TimeProvider>()));
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.ConnectWise, services.GetRequiredService<TimeProvider>()));
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.Autotask, services.GetRequiredService<TimeProvider>()));
+}
+else
+{
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, HaloPsaProvider>();
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.ConnectWise.ConnectWiseProvider>();
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.Autotask.AutotaskProvider>();
+}
+builder.Services.AddScoped<DotMarc.Psa.PsaDirectory>();
 
 // Runs regardless of demo mode: it only reads Domain rows already in the database (no Graph
 // mailbox dependency), so it's just as meaningful against seeded demo data as against real
 // polled reports.
 builder.Services.AddHostedService<PinnedDomainHealthMonitor>();
 builder.Services.AddHostedService<DotMarc.Audit.AuditRetentionService>();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<DotMarc.Psa.PsaTicketPoller>();
 
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsDnsVerifier, DotMarc.MtaSts.MtaStsDnsVerifier>(client =>
 {
@@ -312,6 +336,7 @@ if (demoOptions.Enabled)
         {
             options.LoginPath = "/demo";
             options.AccessDeniedPath = "/AccessDenied";
+            options.Events.OnRedirectToAccessDenied = DotMarc.Portal.ClientPortalRedirects.OnRedirectToAccessDenied;
         });
 }
 else
@@ -325,7 +350,12 @@ else
     // them an explanation instead of a raw 404/403.
     builder.Services.Configure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
         Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme,
-        options => options.AccessDeniedPath = "/AccessDenied");
+        options =>
+        {
+            options.AccessDeniedPath = "/AccessDenied";
+            // Client portal users are sent back to the portal rather than to the access denied page.
+            options.Events.OnRedirectToAccessDenied = DotMarc.Portal.ClientPortalRedirects.OnRedirectToAccessDenied;
+        });
 
     // Records each Entra sign-in once, as it completes, rather than in the claims transformation, which runs on
     // every request. Chains onto whatever handler Microsoft.Identity.Web has already set.
@@ -376,7 +406,17 @@ builder.Services.AddAuthorization(options =>
         nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
 
     ApiPolicies.Add(options);
+
+    // The client portal's own policy. ClientPortalGate fails every other policy for portal users.
+    options.AddPolicy(DotMarc.Portal.ClientPortalGate.PolicyName, policy => policy.RequireAuthenticatedUser().AddRequirements(new DotMarc.Portal.ClientPortalRequirement()));
 });
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, DotMarc.Portal.ClientPortalGate>();
+builder.Services.AddScoped<DotMarc.Portal.PortalData>();
+builder.Services.AddScoped<DotMarc.Portal.PortalBrandLoader>();
+builder.Services.AddScoped<DotMarc.Reporting.ClientReports.ClientReportBuilder>();
+builder.Services.AddScoped<DotMarc.Reporting.ClientReports.ClientReportDispatcher>();
+builder.Services.AddScoped<DotMarc.Reporting.ClientReports.ClientReportRunner>();
+builder.Services.AddHostedService<DotMarc.Reporting.ClientReports.ClientReportScheduler>();
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
@@ -467,6 +507,10 @@ if (demoOptions.Enabled)
             case "viewer":
                 email = DotMarc.Demo.DemoDataSeeder.ViewerEmail;
                 displayName = $"Demo Viewer ({DotMarc.Demo.DemoDataSeeder.ViewerScopedGroupName})";
+                break;
+            case "client":
+                email = DotMarc.Demo.DemoDataSeeder.ClientEmail;
+                displayName = $"Demo Client ({DotMarc.Demo.DemoDataSeeder.ViewerScopedGroupName})";
                 break;
             default:
                 return Results.BadRequest($"Unknown demo persona '{persona}'.");
@@ -732,7 +776,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
 // 400 a malformed body regardless of whether the secret is even right. The secret check has to
 // happen first, and body parsing happens only after it passes, inside the handler.
 app.MapPost("/integrations/halopsa/webhook/{secret}", async (
-    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, IHaloPsaClient haloClient, ILogger<Program> logger) =>
+    string secret, HttpRequest request, IDbContextFactory<DotMarcDbContext> dbContextFactory, HaloWebhookActivity webhookActivity, IHaloPsaClient haloClient, IPsaTicketService ticketService, ILogger<Program> logger) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var settings = await context.HaloPsaSettings.SingleAsync();
@@ -791,21 +835,66 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
         return Results.Ok();
     }
 
-    var ticketId = payload.TicketId.ToString();
-    var alert = await context.AlertEvents.FirstOrDefaultAsync(e =>
-        e.ExternalTicketProvider == "HaloPSA" && e.ExternalTicketId == ticketId && !e.IsResolved);
+    // Resolves the alert (accepting a policy or nameserver change, as Acknowledge does) and closes its other PSA tickets.
+    var resolvedAnAlert = await DotMarc.Psa.PsaTicketClosure.ResolveFromTicketAsync(
+        context, ticketService, DotMarc.Psa.PsaKind.HaloPsa, payload.TicketId.ToString(System.Globalization.CultureInfo.InvariantCulture), request.HttpContext.RequestAborted);
+    await context.SaveChangesAsync();
 
-    if (alert is not null)
+    webhookActivity.Record(HaloWebhookDelivery.ClosedStatus, payload.TicketId, payload.StatusId, resolvedAnAlert: resolvedAnAlert);
+    return Results.Ok();
+}).AllowAnonymous();
+
+// A report as a PDF download, for the Reports dialog. Staff limited to some Groups can only download theirs.
+app.MapGet("/reports/groups/{groupId:int}/pdf", async (int groupId, string? start, string? end, HttpContext httpContext,
+    DotMarc.Reporting.ClientReports.ClientReportRunner runner, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+{
+    if (!DotMarc.Reporting.ClientReports.ClientReportAccess.MayManage(httpContext.User, groupId))
     {
-        alert.IsResolved = true;
-        alert.ResolvedUtc = DateTimeOffset.UtcNow;
-        // Closing a policy or nameserver alert's ticket accepts the change, the same as Acknowledge.
-        await DnsHealthBaselines.AcceptCurrentAsync(context, alert, request.HttpContext.RequestAborted);
-        await context.SaveChangesAsync();
+        return Results.Forbid();
     }
 
-    webhookActivity.Record(HaloWebhookDelivery.ClosedStatus, payload.TicketId, payload.StatusId, resolvedAnAlert: alert is not null);
-    return Results.Ok();
+    if (!DateOnly.TryParseExact(start, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var startDay)
+        || !DateOnly.TryParseExact(end, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var endDay))
+    {
+        return Results.BadRequest("start and end must be dates such as 2026-03-01.");
+    }
+
+    DotMarc.Reporting.ClientReports.ReportPeriod period;
+    try
+    {
+        period = DotMarc.Reporting.ClientReports.ReportPeriods.FromRange(startDay, endDay, await runner.ZoneAsync(cancellationToken), timeProvider.GetUtcNow());
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(exception.Message.Split(" (Parameter")[0]);
+    }
+
+    var rendered = await runner.RenderAsync(groupId, period, cancellationToken);
+    return rendered is { } file ? Results.File(file.Pdf, "application/pdf", file.FileName) : Results.NotFound();
+}).RequireAuthorization(nameof(Permission.ReportsManage));
+
+// Logos are shown to clients, on sign-in pages and in emails, so they're served without sign-in. Each upload gets a new
+// unguessable id, so the response can be cached for good.
+app.MapGet("/branding/logo/{id:guid}", async (Guid id, HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var image = await context.BrandingImages.AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == id);
+    if (image is null)
+    {
+        return Results.NotFound();
+    }
+
+    var headers = httpContext.Response.Headers;
+    headers.CacheControl = "public, max-age=31536000, immutable";
+    headers.ETag = $"\"{image.Sha256}\"";
+    headers.XContentTypeOptions = "nosniff";
+    if (image.ContentType == "image/svg+xml")
+    {
+        // Opened directly, an SVG is a document; this keeps it from running or fetching anything even so.
+        headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'";
+    }
+
+    return Results.File(image.Bytes, image.ContentType);
 }).AllowAnonymous();
 
 app.MapDotMarcApi();

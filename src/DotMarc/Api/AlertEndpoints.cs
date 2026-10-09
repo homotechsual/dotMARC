@@ -114,11 +114,11 @@ public static class AlertEndpoints
                 : "Only DMARC policy weakened and nameservers changed alerts can be acknowledged. Other alerts close themselves once the problem is fixed.");
         }
 
-        var outcome = await AlertAcknowledgement.AcknowledgeAsync(context, AuditActor.FromPrincipal(user), id, psaTicketService, cancellationToken);
-        return outcome switch
+        var result = await AlertAcknowledgement.AcknowledgeAsync(context, AuditActor.FromPrincipal(user), id, psaTicketService, cancellationToken);
+        return result.Outcome switch
         {
-            AcknowledgeOutcome.Acknowledged => TypedResults.Ok(new ApiAcknowledgement(true)),
-            AcknowledgeOutcome.AcknowledgedButTicketNotClosed => TypedResults.Ok(new ApiAcknowledgement(false)),
+            AcknowledgeOutcome.Acknowledged or AcknowledgeOutcome.AcknowledgedButTicketNotClosed =>
+                TypedResults.Ok(new ApiAcknowledgement(result.Tickets.Failed == 0, result.Tickets.Closed, result.Tickets.Failed)),
             _ => ApiProblems.Conflict("This alert can't be acknowledged."),
         };
     }

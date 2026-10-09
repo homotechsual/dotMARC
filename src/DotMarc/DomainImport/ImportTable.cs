@@ -1,6 +1,8 @@
+using DotMarc.Psa;
 namespace DotMarc.DomainImport;
 
-public enum ImportColumn { Domain, Groups, Tags, HaloClient, Monitored, DkimSelectors, MtaStsMode, MtaStsMxHosts, MtaStsMaxAge }
+// Headerless input is read in this order, so new columns go at the end.
+public enum ImportColumn { Domain, Groups, Tags, HaloClient, Monitored, DkimSelectors, MtaStsMode, MtaStsMxHosts, MtaStsMaxAge, ConnectWiseCompany, AutotaskCompany }
 
 public enum MtaStsImportMode { Off, None, Testing, Enforce }
 
@@ -26,7 +28,7 @@ public sealed record ImportTableRow(
     string RawDomain,
     NameListCell? Groups,
     NameListCell? Tags,
-    string? HaloClient,
+    IReadOnlyDictionary<PsaKind, string> PsaCompanies,
     bool? Monitored,
     IReadOnlyList<string>? DkimSelectors,
     MtaStsImportMode? MtaStsMode,
@@ -47,6 +49,8 @@ public sealed record ImportTable(IReadOnlySet<ImportColumn> Columns, IReadOnlyLi
         ["groups"] = ImportColumn.Groups, ["group"] = ImportColumn.Groups,
         ["tags"] = ImportColumn.Tags, ["tag"] = ImportColumn.Tags,
         ["haloclient"] = ImportColumn.HaloClient, ["halo"] = ImportColumn.HaloClient,
+        ["connectwisecompany"] = ImportColumn.ConnectWiseCompany, ["connectwise"] = ImportColumn.ConnectWiseCompany,
+        ["autotaskcompany"] = ImportColumn.AutotaskCompany, ["autotask"] = ImportColumn.AutotaskCompany,
         ["monitored"] = ImportColumn.Monitored,
         ["dkimselectors"] = ImportColumn.DkimSelectors, ["dkim"] = ImportColumn.DkimSelectors,
         ["mtastsmode"] = ImportColumn.MtaStsMode, ["mtasts"] = ImportColumn.MtaStsMode,
@@ -128,7 +132,10 @@ public sealed record ImportTable(IReadOnlySet<ImportColumn> Columns, IReadOnlyLi
             Cell(ImportColumn.Domain),
             ImportValueParser.NameList(Cell(ImportColumn.Groups)),
             ImportValueParser.NameList(Cell(ImportColumn.Tags)),
-            ImportValueParser.Text(Cell(ImportColumn.HaloClient)),
+            PsaImportColumns.All
+                .Select(column => (column.Psa, Name: ImportValueParser.Text(Cell(column.Column))))
+                .Where(entry => entry.Name is not null)
+                .ToDictionary(entry => entry.Psa, entry => entry.Name!),
             ImportValueParser.Monitored(Cell(ImportColumn.Monitored), problems),
             ImportValueParser.DkimSelectors(Cell(ImportColumn.DkimSelectors), problems),
             ImportValueParser.MtaStsMode(Cell(ImportColumn.MtaStsMode), problems),

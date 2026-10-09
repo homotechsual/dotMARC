@@ -11,7 +11,8 @@ namespace DotMarc.Data;
 public static class UserAccessManagementService
 {
     public enum GrantAccessResult { Granted, InvalidEmail, AlreadyExists, RoleNotFound }
-    public enum UpdateAccessResult { Updated, RoleNotFound }
+    public enum UpdateAccessResult { Updated, RoleNotFound, ClientPortalNeedsGroups }
+    public enum SetClientPortalResult { Updated, NeedsScopedGroups }
     public enum RevokeAccessResult { Revoked, LastAdminGuard }
 
     public static async Task<GrantAccessResult> GrantAccessAsync(DotMarcDbContext context, AuditActor actor, string rawEmail, int roleId, IReadOnlyList<int> groupIds, CancellationToken cancellationToken = default)
@@ -75,6 +76,11 @@ public static class UserAccessManagementService
         var groups = role.IsScopable
             ? await context.Groups.Where(g => groupIds.Contains(g.Id)).ToListAsync(cancellationToken).ConfigureAwait(false)
             : [];
+        if (access.IsClientPortal && groups.Count == 0)
+        {
+            return UpdateAccessResult.ClientPortalNeedsGroups;
+        }
+
         var changes = new AuditChanges()
             .Field("Role", access.Role.Name, role.Name)
             .Set("Groups", access.ScopedGroups.Select(group => group.Name), groups.Select(group => group.Name));
@@ -88,6 +94,30 @@ public static class UserAccessManagementService
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return UpdateAccessResult.Updated;
+    }
+
+    /// <summary>Turns the client portal on or off for a grant. A portal grant must be limited to Groups: with none it
+    /// would see every domain, which is never what a client should get.</summary>
+    public static async Task<SetClientPortalResult> SetClientPortalAsync(DotMarcDbContext context, AuditActor actor, int userAccessId, bool isClientPortal, CancellationToken cancellationToken = default)
+    {
+        var access = await context.UserAccesses.Include(u => u.Role).Include(u => u.ScopedGroups).AsSplitQuery()
+            .SingleAsync(u => u.Id == userAccessId, cancellationToken).ConfigureAwait(false);
+        if (isClientPortal && (!access.Role.IsScopable || access.ScopedGroups.Count == 0))
+        {
+            return SetClientPortalResult.NeedsScopedGroups;
+        }
+
+        var changes = new AuditChanges().Field("Client portal", access.IsClientPortal, isClientPortal);
+        if (!changes.Any)
+        {
+            return SetClientPortalResult.Updated;
+        }
+
+        access.IsClientPortal = isClientPortal;
+        AuditLog.Record(context, actor, AuditActions.AccessClientPortalChanged, AuditTarget.For(access),
+            $"{(isClientPortal ? "Turned on" : "Turned off")} the client portal for {access.Email}", changes);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return SetClientPortalResult.Updated;
     }
 
     /// <summary>Refuses to revoke the last remaining grant that carries AccessManage - doing so

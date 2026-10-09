@@ -39,7 +39,7 @@ public sealed class ApiKeyExpiryAlertingTests : IAsyncLifetime
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
     private AlertingService CreateService(FakeAlertWebhookClient notifier) =>
-        new(new FakeDbContextFactory(_connectionString), notifier, new PsaTicketService(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
+        new(new FakeDbContextFactory(_connectionString), notifier, PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);
 
     private async Task<ApiKey> SeedKeyAsync(string name, DateTimeOffset expiresUtc)
     {

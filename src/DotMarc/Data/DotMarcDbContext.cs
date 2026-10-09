@@ -34,11 +34,15 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
+    public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
+    public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
     public DbSet<DomainDkimRecord> DomainDkimRecords => Set<DomainDkimRecord>();
     public DbSet<DnsRecordSettings> DnsRecordSettings => Set<DnsRecordSettings>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<HaloPsaSettings> HaloPsaSettings => Set<HaloPsaSettings>();
+    public DbSet<DotMarc.Psa.ConnectWise.ConnectWiseSettings> ConnectWiseSettings => Set<DotMarc.Psa.ConnectWise.ConnectWiseSettings>();
+    public DbSet<DotMarc.Psa.Autotask.AutotaskSettings> AutotaskSettings => Set<DotMarc.Psa.Autotask.AutotaskSettings>();
     public DbSet<EncryptedSecret> EncryptedSecrets => Set<EncryptedSecret>();
     public DbSet<CloudflareDnsSettings> CloudflareDnsSettings => Set<CloudflareDnsSettings>();
     public DbSet<AzureDnsSettings> AzureDnsSettings => Set<AzureDnsSettings>();
@@ -46,6 +50,13 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<AuditSettings> AuditSettings => Set<AuditSettings>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+    public DbSet<DotMarc.Portal.BrandingSettings> BrandingSettings => Set<DotMarc.Portal.BrandingSettings>();
+    public DbSet<DotMarc.Portal.BrandingImage> BrandingImages => Set<DotMarc.Portal.BrandingImage>();
+    public DbSet<DotMarc.Portal.GroupBranding> GroupBrandings => Set<DotMarc.Portal.GroupBranding>();
+    public DbSet<DotMarc.Email.EmailSettings> EmailSettings => Set<DotMarc.Email.EmailSettings>();
+    public DbSet<DotMarc.Reporting.ClientReports.ReportSettings> ReportSettings => Set<DotMarc.Reporting.ClientReports.ReportSettings>();
+    public DbSet<DotMarc.Reporting.ClientReports.GroupReportSchedule> GroupReportSchedules => Set<DotMarc.Reporting.ClientReports.GroupReportSchedule>();
+    public DbSet<DotMarc.Reporting.ClientReports.ClientReportDelivery> ClientReportDeliveries => Set<DotMarc.Reporting.ClientReports.ClientReportDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -307,6 +318,30 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
                 .HasFilter("\"GroupId\" IS NULL");
         });
 
+        modelBuilder.Entity<DotMarc.Psa.PsaCompanyLink>(entity =>
+        {
+            entity.Property(link => link.Psa).HasConversion<string>().HasMaxLength(20);
+            entity.Property(link => link.CompanyId).HasMaxLength(64);
+            entity.Property(link => link.CompanyName).HasMaxLength(256);
+            entity.HasOne<Group>().WithMany(group => group.PsaCompanyLinks).HasForeignKey(link => link.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Domain>().WithMany(domain => domain.PsaCompanyLinks).HasForeignKey(link => link.DomainId).OnDelete(DeleteBehavior.Cascade);
+
+            // Nulls are distinct in a PostgreSQL unique index, so these allow any number of domain links per PSA in the
+            // first and group links in the second, while keeping one link per PSA per owner.
+            entity.HasIndex(link => new { link.Psa, link.GroupId }).IsUnique();
+            entity.HasIndex(link => new { link.Psa, link.DomainId }).IsUnique();
+            entity.ToTable(table => table.HasCheckConstraint("CK_PsaCompanyLinks_OneOwner", "(\"GroupId\" IS NULL) <> (\"DomainId\" IS NULL)"));
+        });
+
+        modelBuilder.Entity<DotMarc.Psa.AlertTicket>(entity =>
+        {
+            entity.Property(ticket => ticket.Psa).HasConversion<string>().HasMaxLength(20);
+            entity.Property(ticket => ticket.TicketId).HasMaxLength(64);
+            entity.HasOne<AlertEvent>().WithMany(alert => alert.Tickets).HasForeignKey(ticket => ticket.AlertEventId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(ticket => new { ticket.AlertEventId, ticket.Psa }).IsUnique();
+            entity.HasIndex(ticket => new { ticket.Psa, ticket.TicketId });
+        });
+
         modelBuilder.Entity<DomainAlertState>(entity =>
         {
             entity.Property(state => state.Item).HasMaxLength(40);
@@ -377,9 +412,76 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(auditEntry => new { auditEntry.TargetType, auditEntry.TargetId });
         });
         modelBuilder.Entity<HaloPsaSettings>().HasData(new HaloPsaSettings { Id = 1 });
+        modelBuilder.Entity<DotMarc.Psa.ConnectWise.ConnectWiseSettings>().HasData(new DotMarc.Psa.ConnectWise.ConnectWiseSettings { Id = 1 });
+        modelBuilder.Entity<DotMarc.Psa.Autotask.AutotaskSettings>().HasData(new DotMarc.Psa.Autotask.AutotaskSettings { Id = 1 });
         modelBuilder.Entity<CloudflareDnsSettings>().HasData(new CloudflareDnsSettings { Id = 1 });
         modelBuilder.Entity<AzureDnsSettings>().HasData(new AzureDnsSettings { Id = 1 });
         modelBuilder.Entity<GoogleCloudDnsSettings>().HasData(new GoogleCloudDnsSettings { Id = 1 });
         modelBuilder.Entity<DnsRecordSettings>().HasData(new DnsRecordSettings { Id = 1 });
+
+        modelBuilder.Entity<DotMarc.Portal.BrandingSettings>(entity =>
+        {
+            entity.Property(settings => settings.ProductName).HasMaxLength(60);
+            entity.Property(settings => settings.PrimaryColour).HasMaxLength(7);
+            entity.Property(settings => settings.SecondaryColour).HasMaxLength(7);
+            entity.Property(settings => settings.SupportEmail).HasMaxLength(254);
+            entity.Property(settings => settings.SupportUrl).HasMaxLength(500);
+            entity.Property(settings => settings.SupportPhone).HasMaxLength(40);
+            entity.Property(settings => settings.FooterText).HasMaxLength(200);
+            entity.HasData(new DotMarc.Portal.BrandingSettings
+            {
+                Id = 1,
+                ProductName = "dotMARC",
+                PrimaryColour = DotMarc.Portal.BrandingSettings.DefaultPrimaryColour,
+                SecondaryColour = DotMarc.Portal.BrandingSettings.DefaultSecondaryColour,
+            });
+        });
+        modelBuilder.Entity<DotMarc.Portal.BrandingImage>(entity =>
+        {
+            entity.Property(image => image.Id).ValueGeneratedNever();
+            entity.Property(image => image.ContentType).HasMaxLength(40);
+            entity.Property(image => image.Sha256).HasMaxLength(64);
+        });
+        modelBuilder.Entity<DotMarc.Reporting.ClientReports.ReportSettings>(entity =>
+        {
+            entity.Property(settings => settings.TimeZoneId).HasMaxLength(64);
+            entity.Property(settings => settings.NumberFormat).HasMaxLength(20).HasDefaultValue(DotMarc.Reporting.ClientReports.ReportSettings.DefaultNumberFormat);
+            entity.HasData(new DotMarc.Reporting.ClientReports.ReportSettings { Id = 1 });
+        });
+        modelBuilder.Entity<DotMarc.Reporting.ClientReports.GroupReportSchedule>(entity =>
+        {
+            entity.HasKey(schedule => schedule.GroupId);
+            entity.HasOne<Group>().WithOne().HasForeignKey<DotMarc.Reporting.ClientReports.GroupReportSchedule>(schedule => schedule.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(schedule => schedule.Frequency).HasConversion<string>().HasMaxLength(10);
+        });
+        modelBuilder.Entity<DotMarc.Reporting.ClientReports.ClientReportDelivery>(entity =>
+        {
+            entity.HasOne<Group>().WithMany().HasForeignKey(delivery => delivery.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(delivery => delivery.Kind).HasConversion<string>().HasMaxLength(10);
+            entity.Property(delivery => delivery.Status).HasConversion<string>().HasMaxLength(10);
+            entity.Property(delivery => delivery.RequestedBy).HasMaxLength(254);
+            entity.Property(delivery => delivery.Error).HasMaxLength(1000);
+            entity.HasIndex(delivery => new { delivery.GroupId, delivery.PeriodStart, delivery.PeriodEnd })
+                .IsUnique()
+                .HasFilter("\"Kind\" = 'Scheduled'");
+        });
+        modelBuilder.Entity<DotMarc.Email.EmailSettings>(entity =>
+        {
+            entity.Property(settings => settings.Provider).HasConversion<string>().HasMaxLength(10);
+            entity.Property(settings => settings.SmtpSecurity).HasConversion<string>().HasMaxLength(15);
+            entity.Property(settings => settings.FromAddress).HasMaxLength(254);
+            entity.Property(settings => settings.FromName).HasMaxLength(100);
+            entity.Property(settings => settings.SmtpHost).HasMaxLength(253);
+            entity.Property(settings => settings.SmtpUsername).HasMaxLength(254);
+            entity.HasData(new DotMarc.Email.EmailSettings { Id = 1 });
+        });
+        modelBuilder.Entity<DotMarc.Portal.GroupBranding>(entity =>
+        {
+            entity.HasKey(branding => branding.GroupId);
+            entity.HasOne<Group>().WithOne().HasForeignKey<DotMarc.Portal.GroupBranding>(branding => branding.GroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(branding => branding.DisplayName).HasMaxLength(100);
+            entity.Property(branding => branding.PrimaryColour).HasMaxLength(7);
+            entity.Property(branding => branding.SecondaryColour).HasMaxLength(7);
+        });
     }
 }

@@ -42,7 +42,9 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         var settings = await NotificationSettingsService.GetAsync(context, CancellationToken.None);
 
         Assert.True(settings.Enabled);
-        Assert.Equal("Teams", settings.DeliveryMode);
+        Assert.True(settings.TeamsEnabled);
+        Assert.False(settings.SlackEnabled);
+        Assert.False(settings.GenericWebhookEnabled);
         Assert.Equal(2, settings.MissingReportThresholdDays);
         Assert.Equal(180, settings.CooldownMinutes);
         Assert.Equal(300, settings.MonitorIntervalSeconds);
@@ -56,7 +58,10 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
         {
             Enabled = false,
-            DeliveryMode = "Generic",
+            TeamsEnabled = false,
+            SlackEnabled = true,
+            SlackWebhookUrl = "https://hooks.slack.com/services/T000/B000/secret",
+            GenericWebhookEnabled = true,
             TeamsWebhookUrl = "https://example.test/teams",
             GenericWebhookUrl = "https://example.test/generic",
             MissingReportThresholdDays = 5,
@@ -68,7 +73,10 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         var stored = await verify.NotificationSettings.SingleAsync(CancellationToken.None);
 
         Assert.False(stored.Enabled);
-        Assert.Equal("Generic", stored.DeliveryMode);
+        Assert.False(stored.TeamsEnabled);
+        Assert.True(stored.SlackEnabled);
+        Assert.Equal("https://hooks.slack.com/services/T000/B000/secret", stored.SlackWebhookUrl);
+        Assert.True(stored.GenericWebhookEnabled);
         Assert.Equal("https://example.test/teams", stored.TeamsWebhookUrl);
         Assert.Equal("https://example.test/generic", stored.GenericWebhookUrl);
         Assert.Equal(5, stored.MissingReportThresholdDays);
@@ -81,14 +89,15 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
 
-        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { Enabled = false, DeliveryMode = "Teams" }, CancellationToken.None);
-        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { Enabled = true, DeliveryMode = "Both" }, CancellationToken.None);
+        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { Enabled = false, TeamsEnabled = true }, CancellationToken.None);
+        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { Enabled = true, TeamsEnabled = true, GenericWebhookEnabled = true }, CancellationToken.None);
 
         await using var verify = CreateContext();
         Assert.Single(verify.NotificationSettings);
         var stored = await verify.NotificationSettings.SingleAsync(CancellationToken.None);
         Assert.True(stored.Enabled);
-        Assert.Equal("Both", stored.DeliveryMode);
+        Assert.True(stored.TeamsEnabled);
+        Assert.True(stored.GenericWebhookEnabled);
     }
 
     [Theory]
@@ -102,11 +111,48 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
             NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
             {
-                DeliveryMode = "Generic",
+                GenericWebhookEnabled = true,
                 GenericWebhookUrl = webhookUrl
             }, CancellationToken.None));
 
         Assert.Contains("Generic webhook URL", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("http://hooks.slack.com/services/insecure")]
+    [InlineData("https://user:password@hooks.slack.com/services/secret")]
+    public async Task SaveAsync_RejectsUnsafeSlackWebhookUrls(string webhookUrl)
+    {
+        await using var context = CreateContext();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings { SlackEnabled = true, SlackWebhookUrl = webhookUrl }, CancellationToken.None));
+
+        Assert.Contains("Slack webhook URL", exception.Message);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RecordsTheSlackSwitch_AndTheSlackUrlOnlyAsChanged()
+    {
+        NotificationSettings updated;
+        await using (var loadContext = CreateContext())
+        {
+            updated = await loadContext.NotificationSettings.AsNoTracking().SingleAsync();
+        }
+
+        updated.SlackEnabled = true;
+        updated.SlackWebhookUrl = "https://hooks.slack.com/services/T000/B000/secret-token";
+        await using (var context = CreateContext())
+        {
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, updated, CancellationToken.None);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Contains(entry.Changes, change => change.Field == "Slack" && change.New == "Yes");
+        var urlChange = Assert.Single(entry.Changes, change => change.Field == "Slack webhook URL");
+        Assert.True(urlChange.Secret);
+        Assert.Null(urlChange.New);
     }
 
     [Fact]
