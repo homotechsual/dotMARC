@@ -19,14 +19,16 @@ public static class DmarcReportParser
 
         if (!report.ValidReport || report.Feedback is null)
         {
-            throw new InvalidDataException("DMARC aggregate report failed schema validation.");
+            // DmarcRua's own messages name the element at fault, so the log and the parse failure say what to fix.
+            var reasons = string.Join(" ", report.Errors.Select(error => error.Message).Distinct().Take(3));
+            throw new InvalidDataException($"DMARC aggregate report failed schema validation. {reasons}".TrimEnd());
         }
 
         var feedback = report.Feedback;
         var records = feedback.Record.Select(r => new ParsedReportRecord(
             r.Row.SourceIp,
             r.Row.Count,
-            r.Row.PolicyEvaluated.Disposition.ToString(),
+            MapDisposition(r.Row.PolicyEvaluated.Disposition),
             r.Row.PolicyEvaluated.Spf.ToString(),
             r.Row.PolicyEvaluated.Dkim.ToString(),
             r.Identifiers.HeaderFrom,
@@ -44,22 +46,25 @@ public static class DmarcReportParser
 
     private static AggregateReport LoadReport(byte[] xmlBytes)
     {
-        if (TryDeserialize(xmlBytes, out var report, out var firstError))
+        var deserialized = TryDeserialize(xmlBytes, out var report, out var firstError);
+        if (deserialized && report!.ValidReport)
         {
             return report;
         }
 
-        // DmarcRua deserializes with strict, case-sensitive enums, so a report that deviates from
-        // the schema in small, well-understood ways (capitalised values, "no policy") is rejected
-        // outright and, being left unread in the mailbox, retried on every poll forever. Retry once
-        // with those values normalised. Reports that already parse never take this path.
-        var normalized = NormalizeEnumValues(xmlBytes);
-        if (normalized is not null && TryDeserialize(normalized, out report, out _))
+        // DmarcRua deserializes with strict, case-sensitive enums and validates against a schema
+        // that predates DMARCbis, so a report that deviates in small, well-understood ways
+        // (capitalised values, "no policy", DMARCbis's generator and psd) is rejected and, being
+        // left unread in the mailbox, retried on every poll forever. Retry once with those
+        // normalised. Reports that already parse and validate never take this path.
+        var normalized = NormalizeReport(xmlBytes);
+        if (normalized is not null && TryDeserialize(normalized, out var normalizedReport, out _))
         {
-            return report;
+            return normalizedReport;
         }
 
-        throw new InvalidDataException("Could not deserialize DMARC aggregate report XML.", firstError);
+        // A report that deserialized but didn't validate goes back for Parse to name its errors.
+        return deserialized ? report! : throw new InvalidDataException("Could not deserialize DMARC aggregate report XML.", firstError);
     }
 
     private static bool TryDeserialize(byte[] xmlBytes, [NotNullWhen(true)] out AggregateReport? report, out Exception? error)
@@ -90,10 +95,18 @@ public static class DmarcReportParser
         "dkim/result", "spf/result", "spf/scope"
     ];
 
-    /// <summary>Returns the report re-serialized with its enum-valued elements normalised, or null
-    /// when the XML can't be read at all or nothing needed changing (so a retry would be pointless).
-    /// The document is saved back in its own declared encoding, so non-ASCII text survives.</summary>
-    private static byte[]? NormalizeEnumValues(byte[] xmlBytes)
+    /// <summary>DMARCbis elements DmarcRua's schema doesn't know, as "parent/element" local names.
+    /// dotMARC doesn't use them, so they're removed rather than failing the report.</summary>
+    private static readonly HashSet<string> UnsupportedDmarcbisElements =
+    [
+        "report_metadata/generator", "policy_published/psd"
+    ];
+
+    /// <summary>Returns the report re-serialized with its enum-valued elements normalised and the
+    /// DMARCbis elements DmarcRua doesn't know removed, or null when the XML can't be read at all or
+    /// nothing needed changing (so a retry would be pointless). The document is saved back in its
+    /// own declared encoding, so non-ASCII text survives.</summary>
+    private static byte[]? NormalizeReport(byte[] xmlBytes)
     {
         XDocument document;
         try
@@ -111,6 +124,13 @@ public static class DmarcReportParser
         foreach (var element in document.Descendants().Where(e => !e.HasElements && e.Parent is not null).ToList())
         {
             var elementName = element.Name.LocalName;
+            if (UnsupportedDmarcbisElements.Contains($"{element.Parent!.Name.LocalName}/{elementName}"))
+            {
+                element.Remove();
+                changed = true;
+                continue;
+            }
+
             if (!EnumValuedElements.Contains($"{element.Parent!.Name.LocalName}/{elementName}"))
             {
                 continue;
@@ -141,6 +161,15 @@ public static class DmarcReportParser
         var isPolicyValue = elementName is "disposition" or "p" or "sp" or "np";
         return isPolicyValue && normalized == "no policy" ? "none" : normalized;
     }
+
+    /// <summary>The action the receiver applied. Anything but quarantine or reject means none was:
+    /// DMARCbis's "pass", and the "nil" and empty values some reporters send.</summary>
+    private static string MapDisposition(ActionDispositionType disposition) => disposition switch
+    {
+        ActionDispositionType.Quarantine => nameof(DispositionResult.Quarantine),
+        ActionDispositionType.Reject => nameof(DispositionResult.Reject),
+        _ => nameof(DispositionResult.None),
+    };
 
     private static List<ParsedAuthDetail> MapAuthDetails(AuthResultType authResults)
     {

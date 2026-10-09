@@ -98,17 +98,21 @@ public class DmarcReportParserTests
         string authSpfResult = "pass",
         string? reasonType = null,
         string encoding = "UTF-8",
-        string orgName = "google.com")
+        string orgName = "google.com",
+        string feedbackAttributes = "",
+        string metadataExtra = "",
+        string policyExtra = "")
     {
         var reason = reasonType is null ? "" : $"<reason><type>{reasonType}</type><comment>test</comment></reason>";
         var xml = $"""
             <?xml version="1.0" encoding="{encoding}" ?>
-            <feedback>
+            <feedback{feedbackAttributes}>
               <report_metadata>
                 <org_name>{orgName}</org_name>
                 <email>noreply@example.com</email>
                 <report_id>normalise-1</report_id>
                 <date_range><begin>1754438400</begin><end>1754524800</end></date_range>
+                {metadataExtra}
               </report_metadata>
               <policy_published>
                 <domain>contoso.io</domain>
@@ -117,6 +121,7 @@ public class DmarcReportParserTests
                 <p>{policyPublished}</p>
                 <sp>{policyPublished}</sp>
                 <pct>100</pct>
+                {policyExtra}
               </policy_published>
               <record>
                 <row>
@@ -204,6 +209,37 @@ public class DmarcReportParserTests
         var garbage = "not xml at all"u8.ToArray();
 
         Assert.Throws<InvalidDataException>(() => DmarcReportParser.Parse(garbage));
+    }
+
+    [Theory]
+    [InlineData("", "<generator>Reporter 2.1</generator>", "")]
+    [InlineData("", "", "<psd>n</psd>")]
+    [InlineData(" xmlns=\"urn:ietf:params:xml:ns:dmarc-2.0\"", "<generator>Reporter 2.1</generator>", "<np>reject</np><psd>n</psd><testing>n</testing><discovery_method>treewalk</discovery_method>")]
+    public void Parse_AcceptsDmarcbisElements(string feedbackAttributes, string metadataExtra, string policyExtra)
+    {
+        // DMARCbis adds the generator that wrote a report and the psd tag, which DmarcRua's schema predates. Reports
+        // with them and no DMARCbis namespace failed validation and were retried on every poll.
+        var result = DmarcReportParser.Parse(BuildReport(feedbackAttributes: feedbackAttributes, metadataExtra: metadataExtra, policyExtra: policyExtra));
+
+        Assert.Equal("contoso.io", result.Domain);
+        Assert.Equal(4, result.Records.Single().MessageCount);
+    }
+
+    [Fact]
+    public void Parse_TreatsAPassDispositionAsNone()
+    {
+        // DMARCbis reports "pass" when the message passed DMARC, so no policy was applied.
+        var result = DmarcReportParser.Parse(BuildReport(disposition: "pass"));
+
+        Assert.Equal("None", result.Records.Single().Disposition);
+    }
+
+    [Fact]
+    public void Parse_NamesWhatFailedValidation()
+    {
+        var exception = Assert.Throws<InvalidDataException>(() => DmarcReportParser.Parse(BuildReport(metadataExtra: "<surprise>yes</surprise>")));
+
+        Assert.Contains("surprise", exception.Message);
     }
 
     [Fact]
