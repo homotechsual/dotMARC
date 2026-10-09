@@ -60,9 +60,10 @@ public static partial class ClientReportDocument
         {
             AddSummary(section, report);
             AddTrend(section, report);
+            var zone = ReportSettingsService.ResolveZone(report.TimeZoneId);
             foreach (var domain in report.Domains)
             {
-                AddDomain(section, domain);
+                AddDomain(section, domain, zone);
             }
         }
 
@@ -181,7 +182,7 @@ public static partial class ClientReportDocument
         }
     }
 
-    private static void AddDomain(Section section, ClientReportDomain domain)
+    private static void AddDomain(Section section, ClientReportDomain domain, TimeZoneInfo zone)
     {
         section.AddParagraph(domain.Name, StyleNames.Heading2);
         var status = section.AddParagraph(StatusText(domain.Status.Health));
@@ -234,8 +235,8 @@ public static partial class ClientReportDocument
             section.AddParagraph("Alerts").Format.Font.Bold = true;
             foreach (var alert in domain.Alerts)
             {
-                var raised = ReportPeriod.Format(DateOnly.FromDateTime(alert.CreatedUtc.UtcDateTime));
-                var resolved = alert.ResolvedUtc is { } at ? $", resolved {ReportPeriod.Format(DateOnly.FromDateTime(at.UtcDateTime))}" : ", still open";
+                var raised = ReportPeriod.Format(ReportPeriods.LocalDay(alert.CreatedUtc, zone));
+                var resolved = alert.ResolvedUtc is { } at ? $", resolved {ReportPeriod.Format(ReportPeriods.LocalDay(at, zone))}" : ", still open";
                 section.AddParagraph($"{alert.Title}: raised {raised}{resolved}.");
             }
         }

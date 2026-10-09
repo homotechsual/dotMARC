@@ -11,6 +11,9 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
 {
     public const string HttpClientName = "GraphEmail";
 
+    /// <summary>Graph refuses a sendMail request over 4 MB, and attachments grow by a third when base64-encoded.</summary>
+    private const int MaximumRequestBytes = 4 * 1024 * 1024;
+
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         EmailLimits.Check(message);
@@ -33,9 +36,15 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
             saveToSentItems = false,
         };
 
+        var json = JsonSerializer.Serialize(payload);
+        if (Encoding.UTF8.GetByteCount(json) > MaximumRequestBytes)
+        {
+            throw new EmailSendException("The message is too large to send through Microsoft Graph (over 4 MB once encoded).");
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Post, $"users/{Uri.EscapeDataString(mailbox).Replace("%40", "@")}/sendMail")
         {
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
         HttpResponseMessage response;
         try

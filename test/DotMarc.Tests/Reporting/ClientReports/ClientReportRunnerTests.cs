@@ -110,6 +110,20 @@ public sealed class ClientReportRunnerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SendNow_WhenTheDatabaseFails_SaysSo_RatherThanThrowing()
+    {
+        var unreachable = new FakeDbContextFactory("Host=127.0.0.1;Port=1;Database=nowhere;Username=nobody;Password=none;Timeout=2");
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 4, 2, 0, 0, 0, TimeSpan.Zero));
+        var runner = new ClientReportRunner(unreachable, new ClientReportBuilder(unreachable, new PortalBrandLoader(unreachable), clock),
+            new FixedSenderFactory(new RecordingSender()), new RecordingAlerts(), clock);
+
+        var result = await runner.SendNowAsync(TestActors.Admin, 1, March, ["it@aurora-retail.example"], CancellationToken.None);
+
+        Assert.False(result.Sent);
+        Assert.StartsWith("Couldn't send the report:", result.Message);
+    }
+
+    [Fact]
     public async Task Render_ReturnsAPdfNamedForThePeriod()
     {
         var groupId = await AddGroupAsync();

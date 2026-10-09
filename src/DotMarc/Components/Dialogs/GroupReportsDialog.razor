@@ -160,6 +160,7 @@
     private IReadOnlyList<string> _sendNowRecipients = [];
     private IReadOnlyList<string> _suggestions = [];
     private IReadOnlyList<ClientReportDelivery> _deliveries = [];
+    private (ReportPeriod Period, DateTimeOffset DueUtc)? _next;
     private ReportPeriodKind _pickKind = ReportPeriodKind.Month;
     private int _pickIndex;
     private DateTime? _customStart;
@@ -190,6 +191,9 @@
         _frequency = _schedule?.Frequency ?? ReportFrequency.Off;
         _recipients = _schedule?.Recipients ?? [];
         _deliveries = await ClientReportService.ListDeliveriesAsync(db, GroupId, 10);
+        _next = _schedule is { Frequency: not ReportFrequency.Off } schedule
+            ? await ClientReportService.GetNextScheduledAsync(db, schedule, _zone, _sendHour, Now)
+            : null;
     }
 
     private DateTimeOffset Now => TimeProvider.GetUtcNow();
@@ -202,34 +206,9 @@
     private string Local(DateTimeOffset utc) =>
         TimeZoneInfo.ConvertTime(utc, _zone).ToString("d MMMM yyyy HH:mm", CultureInfo.InvariantCulture);
 
-    /// <summary>The next report the schedule will send: the last complete period, unless it has been dealt with or fell
-    /// due before the schedule started, in which case the one after it.</summary>
-    private string NextReportText
-    {
-        get
-        {
-            if (_schedule is null || _schedule.Frequency == ReportFrequency.Off)
-            {
-                return "Not scheduled.";
-            }
-
-            var next = ReportPeriods.Previous(_schedule.Frequency, _zone, Now);
-            var handled = ReportPeriods.DueUtc(next, _zone, _sendHour) < _schedule.StartedUtc
-                || _deliveries.Any(delivery => delivery.Kind == ClientReportDeliveryKind.Scheduled && delivery.PeriodStart == next.Start
-                    && delivery.Status != ClientReportDeliveryStatus.Pending);
-            if (handled)
-            {
-                next = next.Kind switch
-                {
-                    ReportPeriodKind.Week => ReportPeriods.Week(next.End.AddDays(1)),
-                    ReportPeriodKind.Month => ReportPeriods.Month(next.End.AddDays(1)),
-                    _ => ReportPeriods.Quarter(next.End.AddDays(1)),
-                };
-            }
-
-            return $"Next report: {next.Label}, sends {Local(ReportPeriods.DueUtc(next, _zone, _sendHour))} ({_zone.Id}).";
-        }
-    }
+    private string NextReportText => _next is { } next
+        ? $"Next report: {next.Period.Label}, sends {Local(next.DueUtc)} ({_zone.Id})."
+        : "Not scheduled.";
 
     private IReadOnlyList<ReportPeriod> Choices => _pickKind == ReportPeriodKind.Custom ? [] : ReportPeriods.Recent(_pickKind, _zone, Now, 12);
 

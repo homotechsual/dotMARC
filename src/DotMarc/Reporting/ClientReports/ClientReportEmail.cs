@@ -25,7 +25,7 @@ public static class ClientReportEmail
             html.Append("<table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr style=\"text-align:left\"><th>Domain</th><th>Messages</th><th>Pass rate</th><th>Change</th></tr>");
             foreach (var domain in report.Domains)
             {
-                html.Append($"<tr><td>{E(domain.Name)}</td><td>{domain.Messages:N0}</td><td>{E(domain.PassRate?.ToString("P1", System.Globalization.CultureInfo.InvariantCulture) ?? "No mail")}</td><td>{E(domain.ChangeText)}</td></tr>");
+                html.Append($"<tr><td>{E(domain.Name)}</td><td>{domain.Messages.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}</td><td>{E(domain.PassRate?.ToString("P1", System.Globalization.CultureInfo.InvariantCulture) ?? "No mail")}</td><td>{E(domain.ChangeText)}</td></tr>");
             }
 
             html.Append("</table>");
@@ -47,7 +47,7 @@ public static class ClientReportEmail
             .AppendLine();
         foreach (var domain in report.Domains)
         {
-            text.AppendLine($"{domain.Name}: {domain.Messages:N0} messages, pass rate {domain.PassRate?.ToString("P1", System.Globalization.CultureInfo.InvariantCulture) ?? "no mail"} {domain.ChangeText}".TrimEnd());
+            text.AppendLine($"{domain.Name}: {domain.Messages.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} messages, pass rate {domain.PassRate?.ToString("P1", System.Globalization.CultureInfo.InvariantCulture) ?? "no mail"} {domain.ChangeText}".TrimEnd());
         }
 
         text.AppendLine().AppendLine("The full report is attached.");

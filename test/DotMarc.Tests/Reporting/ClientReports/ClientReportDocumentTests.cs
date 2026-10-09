@@ -44,7 +44,7 @@ public sealed class ClientReportDocumentTests
     [Fact]
     public void AGroupWithNoDomains_StillRenders_AndSaysSo()
     {
-        var report = SampleReport(domains: []) with { Verdict = "There are no domains in this report.", NextSteps = [ClientReportNextSteps.NothingToDo] };
+        var report = SampleReport(domains: []) with { Verdict = "There are no domains in this report.", NextSteps = ClientReportNextSteps.For([], []) };
 
         var pdf = ClientReportDocument.Render(report);
 
@@ -72,6 +72,20 @@ public sealed class ClientReportDocumentTests
         Assert.Contains(withLogo.Sections[0].Elements.OfType<MigraDoc.DocumentObjectModel.Shapes.Image>(), _ => true);
         Assert.Contains("Nova MSP", withoutLogo);
         ClientReportDocument.Render(SampleReport(logo: png)); // renders without throwing
+    }
+
+    [Fact]
+    public void AlertDates_AreInTheReportsTimeZone()
+    {
+        var report = SampleReport() with { TimeZoneId = "Australia/Sydney" };
+
+        // 13:30 UTC is already 00:30 the next day in Sydney (UTC+11 in March), so both dates move on a day.
+        var withAlert = report with
+        {
+            Domains = [report.Domains[0] with { Alerts = [new ClientReportAlert("SPF record broken", new DateTimeOffset(2026, 3, 2, 13, 30, 0, TimeSpan.Zero), new DateTimeOffset(2026, 3, 4, 13, 30, 0, TimeSpan.Zero))] }],
+        };
+
+        Assert.Contains("SPF record broken: raised 3 March 2026, resolved 5 March 2026.", MigraDocText.Of(ClientReportDocument.Build(withAlert)));
     }
 
     [Fact]

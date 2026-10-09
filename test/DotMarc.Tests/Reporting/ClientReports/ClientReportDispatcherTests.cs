@@ -125,15 +125,15 @@ public sealed class ClientReportDispatcherTests : IAsyncLifetime
     [Fact]
     public async Task ASchedule_TurnedOnMidPeriod_WaitsForTheNextPeriod()
     {
-        var groupId = await AddScheduledGroupAsync();
+        var groupId = await AddScheduledGroupAsync(frequency: ReportFrequency.Weekly);
+        _clock.Advance(TimeSpan.FromDays(14)); // 15 April 05:00 UTC
         await using (var context = CreateContext())
         {
-            var schedule = await context.GroupReportSchedules.SingleAsync();
-            schedule.StartedUtc = new DateTimeOffset(2026, 4, 15, 0, 0, 0, TimeSpan.Zero);
-            await context.SaveChangesAsync();
+            // Switching to monthly on 15 April restarts the schedule then, through the real path.
+            await ClientReportService.SetScheduleAsync(context, TestActors.Admin, groupId, ReportFrequency.Monthly, ["it@aurora-retail.example"], _clock);
         }
 
-        _clock.Advance(TimeSpan.FromDays(15)); // 16 April: March is due but fell due before the schedule started
+        _clock.Advance(TimeSpan.FromDays(1)); // 16 April: March is due but fell due before the schedule started
 
         await Dispatcher().RunOnceAsync(CancellationToken.None);
 

@@ -31,6 +31,20 @@ public sealed class ClientReportRunner(
 
     public async Task<ManualSendResult> SendNowAsync(AuditActor actor, int groupId, ReportPeriod period, IReadOnlyList<string> recipients, CancellationToken cancellationToken)
     {
+        // The dialog awaits this directly, so an unexpected error (the database unreachable, say) must come back as a
+        // message rather than end the user's session.
+        try
+        {
+            return await SendNowUncheckedAsync(actor, groupId, period, recipients, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new ManualSendResult(false, $"Couldn't send the report: {exception.Message}");
+        }
+    }
+
+    private async Task<ManualSendResult> SendNowUncheckedAsync(AuditActor actor, int groupId, ReportPeriod period, IReadOnlyList<string> recipients, CancellationToken cancellationToken)
+    {
         List<string> tidied;
         try
         {

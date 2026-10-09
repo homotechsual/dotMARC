@@ -10,7 +10,7 @@ public static class ClientReportService
     public static Task<GroupReportSchedule?> GetScheduleAsync(DotMarcDbContext context, int groupId, CancellationToken cancellationToken = default) =>
         context.GroupReportSchedules.AsNoTracking().SingleOrDefaultAsync(schedule => schedule.GroupId == groupId, cancellationToken);
 
-    public static async Task SetScheduleAsync(DotMarcDbContext context, AuditActor actor, int groupId, ReportFrequency frequency, IReadOnlyList<string> recipients, CancellationToken cancellationToken = default)
+    public static async Task SetScheduleAsync(DotMarcDbContext context, AuditActor actor, int groupId, ReportFrequency frequency, IReadOnlyList<string> recipients, TimeProvider? timeProvider = null, CancellationToken cancellationToken = default)
     {
         var tidied = ReportRecipients.Normalise(recipients);
         if (frequency != ReportFrequency.Off && tidied.Count == 0)
@@ -46,7 +46,7 @@ public static class ClientReportService
 
             if (existing.Frequency != frequency || existing.StartedUtc == default)
             {
-                existing.StartedUtc = DateTimeOffset.UtcNow;
+                existing.StartedUtc = (timeProvider ?? TimeProvider.System).GetUtcNow();
             }
 
             existing.Frequency = frequency;
@@ -82,6 +82,27 @@ public static class ClientReportService
         .Distinct(StringComparer.Ordinal)
         .Order(StringComparer.Ordinal)
         .ToList();
+
+    /// <summary>The report the schedule will send next and when: the last complete period, unless it has been dealt with
+    /// (sent, failed or skipped) or fell due before the schedule started, in which case the one after it.</summary>
+    public static async Task<(ReportPeriod Period, DateTimeOffset DueUtc)> GetNextScheduledAsync(DotMarcDbContext context, GroupReportSchedule schedule, TimeZoneInfo zone, int sendHour, DateTimeOffset nowUtc, CancellationToken cancellationToken = default)
+    {
+        var next = ReportPeriods.Previous(schedule.Frequency, zone, nowUtc);
+        var handled = ReportPeriods.DueUtc(next, zone, sendHour) < schedule.StartedUtc
+            || await context.ClientReportDeliveries.AnyAsync(delivery => delivery.GroupId == schedule.GroupId && delivery.Kind == ClientReportDeliveryKind.Scheduled
+                && delivery.PeriodStart == next.Start && delivery.PeriodEnd == next.End && delivery.Status != ClientReportDeliveryStatus.Pending, cancellationToken).ConfigureAwait(false);
+        if (handled)
+        {
+            next = next.Kind switch
+            {
+                ReportPeriodKind.Week => ReportPeriods.Week(next.End.AddDays(1)),
+                ReportPeriodKind.Month => ReportPeriods.Month(next.End.AddDays(1)),
+                _ => ReportPeriods.Quarter(next.End.AddDays(1)),
+            };
+        }
+
+        return (next, ReportPeriods.DueUtc(next, zone, sendHour));
+    }
 
     public static async Task<IReadOnlyList<ClientReportDelivery>> ListDeliveriesAsync(DotMarcDbContext context, int groupId, int count, CancellationToken cancellationToken = default) =>
         await context.ClientReportDeliveries.AsNoTracking()

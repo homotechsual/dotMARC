@@ -11,7 +11,7 @@ internal static class MigraDocText
     public static string Of(Document document)
     {
         var text = new StringBuilder();
-        foreach (Section section in document.Sections)
+        foreach (var section in document.Sections.OfType<Section>())
         {
             Append(section.Elements, text);
             Append(section.Footers.Primary.Elements, text);
@@ -31,9 +31,9 @@ internal static class MigraDocText
                     text.AppendLine();
                     break;
                 case Table table:
-                    foreach (Row row in table.Rows)
+                    foreach (var row in table.Rows.OfType<Row>())
                     {
-                        foreach (Cell cell in row.Cells)
+                        foreach (var cell in row.Cells.OfType<Cell>())
                         {
                             Append(cell.Elements, text);
                         }

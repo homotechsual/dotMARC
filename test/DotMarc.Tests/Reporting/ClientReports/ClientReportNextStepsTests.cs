@@ -18,6 +18,12 @@ public sealed class ClientReportNextStepsTests
         name, new PortalDomainStatus(PortalHealth.Protected, []), messages, 1.0, null, [], "", [], senders, new ReceiverActions(messages, 0, 0, 0), []);
 
     [Fact]
+    public void AGroupWithNoDomains_IsNotToldEveryDomainIsProtected()
+    {
+        Assert.Equal([ClientReportNextSteps.NoDomains], ClientReportNextSteps.For([], []));
+    }
+
+    [Fact]
     public void AnAllProtectedGroup_HasNothingToDo()
     {
         Assert.Equal([ClientReportNextSteps.NothingToDo], ClientReportNextSteps.For([Healthy()], [Row("aurora-retail.example", 100)]));

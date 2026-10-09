@@ -7,10 +7,16 @@ namespace DotMarc.Reporting.ClientReports;
 public static class ClientReportNextSteps
 {
     public const string NothingToDo = "Nothing to do. Every domain is protected.";
+    public const string NoDomains = "No domains are being reported on yet.";
     private const double FailingSenderShare = 0.05;
 
     public static IReadOnlyList<string> For(IReadOnlyList<Domain> domains, IReadOnlyList<ClientReportDomain> reportDomains)
     {
+        if (domains.Count == 0)
+        {
+            return [NoDomains];
+        }
+
         var rows = reportDomains.ToDictionary(row => row.Name, StringComparer.OrdinalIgnoreCase);
         var steps = new List<string>();
 

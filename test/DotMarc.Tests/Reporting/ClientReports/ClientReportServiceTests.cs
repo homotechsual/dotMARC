@@ -123,6 +123,47 @@ public sealed class ClientReportServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheScheduleStarts_ByTheGivenClock()
+    {
+        await using var context = CreateContext();
+        var group = await AddGroupAsync(context);
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 3, 15, 9, 30, 0, TimeSpan.Zero));
+
+        await ClientReportService.SetScheduleAsync(context, TestActors.Admin, group.Id, ReportFrequency.Monthly, ["it@aurora-retail.example"], clock);
+
+        Assert.Equal(clock.GetUtcNow(), (await ClientReportService.GetScheduleAsync(context, group.Id))!.StartedUtc);
+    }
+
+    [Fact]
+    public async Task TheNextReport_IsTheFollowingPeriod_OnceTheLastIsSent_HoweverManyManualSendsCameSince()
+    {
+        await using var context = CreateContext();
+        var group = await AddGroupAsync(context);
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero));
+        await ClientReportService.SetScheduleAsync(context, TestActors.Admin, group.Id, ReportFrequency.Monthly, ["it@aurora-retail.example"], clock);
+        context.ClientReportDeliveries.Add(new ClientReportDelivery
+        {
+            GroupId = group.Id, PeriodStart = new DateOnly(2026, 3, 1), PeriodEnd = new DateOnly(2026, 3, 31), Kind = ClientReportDeliveryKind.Scheduled,
+            Status = ClientReportDeliveryStatus.Sent, SentUtc = new DateTimeOffset(2026, 4, 1, 6, 0, 0, TimeSpan.Zero),
+        });
+        for (var day = 2; day <= 13; day++)
+        {
+            context.ClientReportDeliveries.Add(new ClientReportDelivery
+            {
+                GroupId = group.Id, PeriodStart = new DateOnly(2026, 3, 1), PeriodEnd = new DateOnly(2026, 3, 31), Kind = ClientReportDeliveryKind.Manual,
+                Status = ClientReportDeliveryStatus.Sent, SentUtc = new DateTimeOffset(2026, 4, day, 9, 0, 0, TimeSpan.Zero),
+            });
+        }
+
+        await context.SaveChangesAsync();
+        var schedule = (await ClientReportService.GetScheduleAsync(context, group.Id))!;
+
+        var next = await ClientReportService.GetNextScheduledAsync(context, schedule, TimeZoneInfo.Utc, sendHour: 6, new DateTimeOffset(2026, 4, 20, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(("April 2026", new DateTimeOffset(2026, 5, 1, 6, 0, 0, TimeSpan.Zero)), (next.Period.Label, next.DueUtc));
+    }
+
+    [Fact]
     public async Task TurningItOffWithNoRecipients_RemovesTheSchedule()
     {
         await using var context = CreateContext();

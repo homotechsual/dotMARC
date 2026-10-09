@@ -22,6 +22,24 @@ public sealed class ClientReportEmailTests
     }
 
     [Fact]
+    public void Numbers_AreFormattedTheSameWhateverTheServersCulture()
+    {
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+        try
+        {
+            var message = ClientReportEmail.Compose(ClientReportDocumentTests.SampleReport(), [0x25], ["it@aurora-retail.example"]);
+
+            Assert.Contains("1,200", message.HtmlBody);
+            Assert.Contains("1,200 messages", message.TextBody);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Fact]
     public void NamesFromData_AreText_NotMarkup()
     {
         var report = ClientReportDocumentTests.SampleReport() with

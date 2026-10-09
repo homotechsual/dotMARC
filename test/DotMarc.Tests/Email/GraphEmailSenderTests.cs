@@ -42,6 +42,19 @@ public sealed class GraphEmailSenderTests
     }
 
     [Fact]
+    public async Task AMessageTooLargeForGraphOnceEncoded_IsRefusedBeforeSending()
+    {
+        var (sender, handler) = Create();
+        var largestAllowed = new byte[EmailLimits.MaximumAttachmentBytes]; // passes EmailLimits, but encodes to just over 4 MB
+
+        var exception = await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync(new EmailMessage(["it@aurora-retail.example"], "Subject", "<p>Hi</p>", "Hi",
+            [new EmailAttachment("report.pdf", "application/pdf", largestAllowed)]), CancellationToken.None));
+
+        Assert.Contains("too large to send through Microsoft Graph", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task AGraphError_IsAnEmailSendException_CarryingGraphsMessage()
     {
         var (sender, handler) = Create();

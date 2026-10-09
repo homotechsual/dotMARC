@@ -844,8 +844,6 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
     return Results.Ok();
 }).AllowAnonymous();
 
-// Logos are shown to clients, on sign-in pages and in emails, so they're served without sign-in. Each upload gets a new
-// unguessable id, so the response can be cached for good.
 // A report as a PDF download, for the Reports dialog. Staff limited to some Groups can only download theirs.
 app.MapGet("/reports/groups/{groupId:int}/pdf", async (int groupId, string? start, string? end, HttpContext httpContext,
     DotMarc.Reporting.ClientReports.ClientReportRunner runner, TimeProvider timeProvider, CancellationToken cancellationToken) =>
@@ -875,6 +873,8 @@ app.MapGet("/reports/groups/{groupId:int}/pdf", async (int groupId, string? star
     return rendered is { } file ? Results.File(file.Pdf, "application/pdf", file.FileName) : Results.NotFound();
 }).RequireAuthorization(nameof(Permission.ReportsManage));
 
+// Logos are shown to clients, on sign-in pages and in emails, so they're served without sign-in. Each upload gets a new
+// unguessable id, so the response can be cached for good.
 app.MapGet("/branding/logo/{id:guid}", async (Guid id, HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();
