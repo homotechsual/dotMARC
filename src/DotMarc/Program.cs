@@ -414,6 +414,9 @@ builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationH
 builder.Services.AddScoped<DotMarc.Portal.PortalData>();
 builder.Services.AddScoped<DotMarc.Portal.PortalBrandLoader>();
 builder.Services.AddScoped<DotMarc.Reporting.ClientReports.ClientReportBuilder>();
+builder.Services.AddScoped<DotMarc.Reporting.ClientReports.ClientReportDispatcher>();
+builder.Services.AddScoped<DotMarc.Reporting.ClientReports.ClientReportRunner>();
+builder.Services.AddHostedService<DotMarc.Reporting.ClientReports.ClientReportScheduler>();
 
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
@@ -843,6 +846,35 @@ app.MapPost("/integrations/halopsa/webhook/{secret}", async (
 
 // Logos are shown to clients, on sign-in pages and in emails, so they're served without sign-in. Each upload gets a new
 // unguessable id, so the response can be cached for good.
+// A report as a PDF download, for the Reports dialog. Staff limited to some Groups can only download theirs.
+app.MapGet("/reports/groups/{groupId:int}/pdf", async (int groupId, string? start, string? end, HttpContext httpContext,
+    DotMarc.Reporting.ClientReports.ClientReportRunner runner, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+{
+    if (!DotMarc.Reporting.ClientReports.ClientReportAccess.MayManage(httpContext.User, groupId))
+    {
+        return Results.Forbid();
+    }
+
+    if (!DateOnly.TryParseExact(start, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var startDay)
+        || !DateOnly.TryParseExact(end, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var endDay))
+    {
+        return Results.BadRequest("start and end must be dates such as 2026-03-01.");
+    }
+
+    DotMarc.Reporting.ClientReports.ReportPeriod period;
+    try
+    {
+        period = DotMarc.Reporting.ClientReports.ReportPeriods.FromRange(startDay, endDay, await runner.ZoneAsync(cancellationToken), timeProvider.GetUtcNow());
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(exception.Message.Split(" (Parameter")[0]);
+    }
+
+    var rendered = await runner.RenderAsync(groupId, period, cancellationToken);
+    return rendered is { } file ? Results.File(file.Pdf, "application/pdf", file.FileName) : Results.NotFound();
+}).RequireAuthorization(nameof(Permission.ReportsManage));
+
 app.MapGet("/branding/logo/{id:guid}", async (Guid id, HttpContext httpContext, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
 {
     await using var context = await dbContextFactory.CreateDbContextAsync();

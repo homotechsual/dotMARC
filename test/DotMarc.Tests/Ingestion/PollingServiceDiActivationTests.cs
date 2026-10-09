@@ -108,5 +108,8 @@ public sealed class PollingServiceDiActivationTests : IAsyncLifetime
         public Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RaiseClientReportFailedAsync(int groupId, string groupName, string periodLabel, string error, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ResolveClientReportFailedAsync(int groupId, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
