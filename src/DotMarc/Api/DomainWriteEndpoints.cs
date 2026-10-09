@@ -17,26 +17,26 @@ public static class DomainWriteEndpoints
             .WithSummary("Add a domain")
             .WithDescription("Adds a domain for dotMARC to monitor. It shows as missing reports until its first DMARC report arrives.");
 
-        api.MapPut("/domains/{id:int}/groups", SetGroupsAsync)
+        api.MapPut("/domains/{domain}/groups", SetGroupsAsync)
             .RequirePermission(Permission.DomainsEdit)
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainGroups")
             .WithSummary("Set a domain's groups")
-            .WithDescription("Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them.");
+            .WithDescription($"Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. {ApiDomainKey.Description}");
 
-        api.MapPut("/domains/{id:int}/tags", SetTagsAsync)
+        api.MapPut("/domains/{domain}/tags", SetTagsAsync)
             .RequirePermission(Permission.DomainsEdit)
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainTags")
             .WithSummary("Set a domain's tags")
-            .WithDescription("Replaces the domain's tags with exactly these.");
+            .WithDescription($"Replaces the domain's tags with exactly these. {ApiDomainKey.Description}");
 
-        api.MapPut("/domains/{id:int}/monitoring", SetMonitoringAsync)
+        api.MapPut("/domains/{domain}/monitoring", SetMonitoringAsync)
             .RequirePermission(Permission.DomainsEdit)
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainMonitoring")
             .WithSummary("Turn monitoring on or off")
-            .WithDescription("Whether dotMARC alerts on the domain's missing reports and DNS health.");
+            .WithDescription($"Whether dotMARC alerts on the domain's missing reports and DNS health. {ApiDomainKey.Description}");
     }
 
     private static async Task<Results<Created<ApiDomain>, ValidationProblem, ProblemHttpResult>> AddDomainAsync(
@@ -72,7 +72,7 @@ public static class DomainWriteEndpoints
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> SetGroupsAsync(
-        int id, ApiSetGroupsRequest request, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
+        [Microsoft.AspNetCore.Mvc.FromRoute(Name = "domain")] string domainKey, ApiSetGroupsRequest request, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
     {
         if (request.GroupIds is not { } requestedIds)
         {
@@ -81,10 +81,10 @@ public static class DomainWriteEndpoints
 
         var scope = ApiScope.From(user);
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var domain = await scope.Domains(context.Domains.AsNoTracking()).Include(candidate => candidate.Groups).SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        var domain = await ApiDomainKey.Matching(scope.Domains(context.Domains.AsNoTracking()), domainKey).Include(candidate => candidate.Groups).SingleOrDefaultAsync(cancellationToken);
         if (domain is null)
         {
-            return ApiProblems.NotFound($"domain {id}");
+            return ApiProblems.NotFound($"domain {domainKey}");
         }
 
         // Scope first: a scoped key's own groups exist, so answering "no such group" for others would tell it which
@@ -104,12 +104,12 @@ public static class DomainWriteEndpoints
 
         // A scoped key can't see the domain's other groups, so it can't remove them either.
         var keptOutsideScope = domain.Groups.Where(group => !scope.Includes(group.Id)).Select(group => group.Id);
-        await GroupManagementService.SetDomainGroupsAsync(context, AuditActor.FromPrincipal(user), id, distinctIds.Concat(keptOutsideScope).Distinct().ToList(), cancellationToken);
+        await GroupManagementService.SetDomainGroupsAsync(context, AuditActor.FromPrincipal(user), domain.Id, distinctIds.Concat(keptOutsideScope).Distinct().ToList(), cancellationToken);
         return TypedResults.NoContent();
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> SetTagsAsync(
-        int id, ApiSetTagsRequest request, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
+        [Microsoft.AspNetCore.Mvc.FromRoute(Name = "domain")] string domainKey, ApiSetTagsRequest request, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
     {
         if (request.TagIds is not { } requestedIds)
         {
@@ -117,9 +117,10 @@ public static class DomainWriteEndpoints
         }
 
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await ApiScope.From(user).Domains(context.Domains).AnyAsync(domain => domain.Id == id, cancellationToken))
+        var id = await ApiDomainKey.Matching(ApiScope.From(user).Domains(context.Domains), domainKey).Select(domain => (int?)domain.Id).SingleOrDefaultAsync(cancellationToken);
+        if (id is null)
         {
-            return ApiProblems.NotFound($"domain {id}");
+            return ApiProblems.NotFound($"domain {domainKey}");
         }
 
         var distinctIds = requestedIds.Distinct().ToList();
@@ -130,12 +131,12 @@ public static class DomainWriteEndpoints
             return ApiProblems.Validation("tagIds", $"There's no tag {missingIds[0]}.");
         }
 
-        await TagManagementService.SetDomainTagsAsync(context, AuditActor.FromPrincipal(user), id, distinctIds, cancellationToken);
+        await TagManagementService.SetDomainTagsAsync(context, AuditActor.FromPrincipal(user), id.Value, distinctIds, cancellationToken);
         return TypedResults.NoContent();
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> SetMonitoringAsync(
-        int id, ApiSetMonitoringRequest request, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
+        [Microsoft.AspNetCore.Mvc.FromRoute(Name = "domain")] string domainKey, ApiSetMonitoringRequest request, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, CancellationToken cancellationToken)
     {
         if (request.Monitored is not { } monitored)
         {
@@ -143,12 +144,13 @@ public static class DomainWriteEndpoints
         }
 
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await ApiScope.From(user).Domains(context.Domains).AnyAsync(domain => domain.Id == id, cancellationToken))
+        var id = await ApiDomainKey.Matching(ApiScope.From(user).Domains(context.Domains), domainKey).Select(domain => (int?)domain.Id).SingleOrDefaultAsync(cancellationToken);
+        if (id is null)
         {
-            return ApiProblems.NotFound($"domain {id}");
+            return ApiProblems.NotFound($"domain {domainKey}");
         }
 
-        await DomainManagementService.SetMonitoredAsync(context, AuditActor.FromPrincipal(user), id, monitored, cancellationToken);
+        await DomainManagementService.SetMonitoredAsync(context, AuditActor.FromPrincipal(user), id.Value, monitored, cancellationToken);
         return TypedResults.NoContent();
     }
 }

@@ -254,4 +254,17 @@ public sealed class DomainWriteEndpointTests : IAsyncLifetime
         var errors = body.RootElement.GetProperty("errors");
         Assert.Contains(errors.EnumerateObject(), error => error.Name.Contains("name"));
     }
+
+    [Fact]
+    public async Task SetMonitoring_ByName_Works()
+    {
+        var domainId = await _host.SeedDomainAsync("api-monitor-by-name.example");
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView, Permission.DomainsEdit]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync("/api/v1/domains/api-monitor-by-name.example/monitoring", new { monitored = false });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.False((await client.GetFromJsonAsync<ApiDomainDetail>($"/api/v1/domains/{domainId}"))!.Monitored);
+    }
 }

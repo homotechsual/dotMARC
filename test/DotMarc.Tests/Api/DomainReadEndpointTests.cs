@@ -146,6 +146,45 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
         Assert.Equal("api-health.example", detail.DnsProvider.Zone);
     }
 
+    [Theory]
+    [InlineData("api-by-name.example")]
+    [InlineData("API-By-Name.Example")]
+    [InlineData("api-by-name.example.")]
+    public async Task GetDomain_ByName_FindsTheSameDomainAsItsId(string name)
+    {
+        var domainId = await _host.SeedDomainAsync("api-by-name.example");
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var detail = await client.GetFromJsonAsync<ApiDomainDetail>($"/api/v1/domains/{name}");
+
+        Assert.Equal((domainId, "api-by-name.example"), (detail!.Id, detail.Name));
+    }
+
+    [Fact]
+    public async Task GetReportSummary_ByName_Works()
+    {
+        await _host.SeedDomainAsync("api-summary-by-name.example");
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.GetAsync("/api/v1/domains/api-summary-by-name.example/reports/summary?days=7");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AScopedKey_CantReachAHiddenDomain_ByNameEither()
+    {
+        var ownGroupId = await _host.SeedGroupAsync("api-name-scope-own");
+        var otherGroupId = await _host.SeedGroupAsync("api-name-scope-other");
+        await _host.SeedDomainAsync("api-name-scope-hidden.example", groupIds: [otherGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/v1/domains/api-name-scope-hidden.example")).StatusCode);
+    }
+
     [Fact]
     public async Task GetDomain_Unknown_Is404()
     {

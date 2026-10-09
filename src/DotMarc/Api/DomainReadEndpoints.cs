@@ -21,25 +21,29 @@ public static class DomainReadEndpoints
             .WithSummary("List domains")
             .WithDescription($"Domains this key can see, in dashboard order, {DefaultPageSize} a page by default and at most {MaximumPageSize}. Filter by group id, tag id or monitoring. The pass rate covers the last 30 days and is null with no reports.");
 
-        api.MapGet("/domains/{id:int}", GetDomainAsync)
+        api.MapGet("/domains/{domain}", GetDomainAsync)
             .RequirePermission(Permission.DomainsView)
             .WithTags(ApiTags.Domains)
             .WithName("GetDomain")
             .WithSummary("Get a domain and its health")
-            .WithDescription("The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran.");
+            .WithDescription($"The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran. {ApiDomainKey.Description}");
 
-        api.MapGet("/domains/{id:int}/reports/summary", GetReportSummaryAsync)
+        api.MapGet("/domains/{domain}/reports/summary", GetReportSummaryAsync)
             .RequirePermission(Permission.DomainsView)
             .WithTags(ApiTags.Domains)
             .WithName("GetReportSummary")
             .WithSummary("Summarise a domain's DMARC reports")
-            .WithDescription("Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30).");
+            .WithDescription($"Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30). {ApiDomainKey.Description}");
     }
 
     /// <summary>One domain the scope can see, with its groups and tags, or null.</summary>
     public static Task<Domain?> LoadForApiAsync(DotMarcDbContext context, ApiScope scope, int domainId, CancellationToken cancellationToken) =>
-        scope.Domains(context.Domains.AsNoTracking())
-            .Where(domain => domain.Id == domainId)
+        LoadForApiAsync(context, scope, domainId.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    /// <summary>One domain the scope can see, by id or name (see <see cref="ApiDomainKey"/>), with its groups and tags,
+    /// or null.</summary>
+    public static Task<Domain?> LoadForApiAsync(DotMarcDbContext context, ApiScope scope, string domainKey, CancellationToken cancellationToken) =>
+        ApiDomainKey.Matching(scope.Domains(context.Domains.AsNoTracking()), domainKey)
             .Include(domain => domain.Groups)
             .Include(domain => domain.Tags)
             .AsSplitQuery()
@@ -118,22 +122,22 @@ public static class DomainReadEndpoints
     }
 
     private static async Task<Results<Ok<ApiDomainDetail>, ProblemHttpResult>> GetDomainAsync(
-        int id, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, CancellationToken cancellationToken)
+        [Microsoft.AspNetCore.Mvc.FromRoute(Name = "domain")] string domainKey, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         var scope = ApiScope.From(user);
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var domain = await LoadForApiAsync(context, scope, id, cancellationToken);
-        if (domain is null)
+        var found = await LoadForApiAsync(context, scope, domainKey, cancellationToken);
+        if (found is null)
         {
-            return ApiProblems.NotFound($"domain {id}");
+            return ApiProblems.NotFound($"domain {domainKey}");
         }
 
-        var passRates = await PassRatesAsync(context, [domain.Id], DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow()), cancellationToken);
-        return TypedResults.Ok(ApiDomainDetail.From(domain, scope, PassRateOf(passRates, domain.Id)));
+        var passRates = await PassRatesAsync(context, [found.Id], DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow()), cancellationToken);
+        return TypedResults.Ok(ApiDomainDetail.From(found, scope, PassRateOf(passRates, found.Id)));
     }
 
     private static async Task<Results<Ok<ApiReportSummary>, ValidationProblem, ProblemHttpResult>> GetReportSummaryAsync(
-        int id, int? days, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, CancellationToken cancellationToken)
+        [Microsoft.AspNetCore.Mvc.FromRoute(Name = "domain")] string domainKey, int? days, ClaimsPrincipal user, IDbContextFactory<DotMarcDbContext> dbFactory, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         var maximumDays = (int)DomainStatistics.ReportWindow.TotalDays;
         var windowDays = days ?? maximumDays;
@@ -144,8 +148,7 @@ public static class DomainReadEndpoints
 
         var cutoffUtc = timeProvider.GetUtcNow().AddDays(-windowDays);
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var domain = await ApiScope.From(user).Domains(context.Domains.AsNoTracking())
-            .Where(candidate => candidate.Id == id)
+        var domain = await ApiDomainKey.Matching(ApiScope.From(user).Domains(context.Domains.AsNoTracking()), domainKey)
             .Include(candidate => candidate.Reports.Where(report => report.ReceivedUtc >= cutoffUtc))
             .ThenInclude(report => report.Records)
             .ThenInclude(record => record.OverrideReasons)
@@ -156,7 +159,7 @@ public static class DomainReadEndpoints
             .SingleOrDefaultAsync(cancellationToken);
         if (domain is null)
         {
-            return ApiProblems.NotFound($"domain {id}");
+            return ApiProblems.NotFound($"domain {domainKey}");
         }
 
         var breakdown = DomainStatistics.GetReasonBreakdown(domain.Reports);
