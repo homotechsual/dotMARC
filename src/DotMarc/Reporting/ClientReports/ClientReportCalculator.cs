@@ -39,11 +39,7 @@ public static class ClientReportCalculator
                     PortalWording.HealthRows(domain),
                     TopSenders(inPeriod, inputs.Owners),
                     Receivers(inPeriod),
-                    inputs.PeriodAlerts
-                        .Where(alert => alert.DomainName == domain.Name)
-                        .OrderBy(alert => alert.CreatedUtc)
-                        .Select(alert => new ClientReportAlert(alert.Title, alert.CreatedUtc, alert.ResolvedUtc))
-                        .ToList());
+                    Alerts(inputs.PeriodAlerts.Where(alert => alert.DomainName == domain.Name)));
             })
             .ToList();
 
@@ -53,6 +49,18 @@ public static class ClientReportCalculator
             domains, ClientReportNextSteps.For(inputs.Domains.OrderBy(domain => domain.Name, StringComparer.OrdinalIgnoreCase).ToList(), domains),
             inputs.NowUtc);
     }
+
+    /// <summary>An alert left open is raised again after each cooldown as a new row, so copies are folded into one line:
+    /// when it was first raised, and when it was resolved (or still open, if any copy is).</summary>
+    private static IReadOnlyList<ClientReportAlert> Alerts(IEnumerable<AlertEvent> alerts) =>
+        alerts
+            .GroupBy(alert => (alert.AlertType, alert.Title))
+            .Select(copies => new ClientReportAlert(
+                copies.Key.Title,
+                copies.Min(alert => alert.CreatedUtc),
+                copies.Any(alert => !alert.IsResolved) ? null : copies.Max(alert => alert.ResolvedUtc)))
+            .OrderBy(alert => alert.CreatedUtc)
+            .ToList();
 
     private static bool Covers(ReportPeriod period, Report report, TimeZoneInfo zone)
     {

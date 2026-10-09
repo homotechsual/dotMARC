@@ -66,23 +66,46 @@ public static class TrendChart
         return lines;
     }
 
+    /// <summary>Where each legend entry goes: left to right, starting a new row when the next one wouldn't fit.</summary>
+    public static IReadOnlyList<(int Row, double X)> LegendLayout(IReadOnlyList<double> entryWidths, double availableWidth)
+    {
+        var positions = new List<(int Row, double X)>();
+        var (row, x) = (0, 0.0);
+        foreach (var width in entryWidths)
+        {
+            if (x > 0 && x + width > availableWidth)
+            {
+                (row, x) = (row + 1, 0.0);
+            }
+
+            positions.Add((row, x));
+            x += width;
+        }
+
+        return positions;
+    }
+
     public static void Paint(XGraphics graphics, XRect area, IReadOnlyList<TrendSeries> series, IReadOnlyList<string> xLabels)
     {
         var labelFont = new XFont(ReportFontResolver.FamilyName, 7);
         var legendFont = new XFont(ReportFontResolver.FamilyName, 8);
         var grey = XColor.FromArgb(0x9E, 0x9E, 0x9E);
 
-        // Legend across the top.
-        var legendX = area.Left + AxisLabelWidth;
-        foreach (var line in series)
+        // Legend across the top, wrapping onto more rows when the names don't fit on one.
+        var legendLeft = area.Left + AxisLabelWidth;
+        var entryWidths = series.Select(line => 18 + graphics.MeasureString(line.Name, legendFont).Width + 14).ToList();
+        var legend = LegendLayout(entryWidths, area.Right - legendLeft);
+        for (var index = 0; index < series.Count; index++)
         {
-            var pen = new XPen(Colour(line.ColourHex), 2);
-            graphics.DrawLine(pen, legendX, area.Top + 6, legendX + 14, area.Top + 6);
-            graphics.DrawString(line.Name, legendFont, XBrushes.Black, legendX + 18, area.Top + 9);
-            legendX += 18 + graphics.MeasureString(line.Name, legendFont).Width + 14;
+            var (row, offset) = legend[index];
+            var x = legendLeft + offset;
+            var y = area.Top + row * LegendHeight;
+            graphics.DrawLine(new XPen(Colour(series[index].ColourHex), 2), x, y + 6, x + 14, y + 6);
+            graphics.DrawString(series[index].Name, legendFont, XBrushes.Black, x + 18, y + 9);
         }
 
-        var plot = new XRect(area.Left + AxisLabelWidth, area.Top + LegendHeight, area.Width - AxisLabelWidth, area.Height - LegendHeight - XLabelHeight);
+        var legendHeight = (legend.Count == 0 ? 1 : legend.Max(entry => entry.Row) + 1) * LegendHeight;
+        var plot = new XRect(area.Left + AxisLabelWidth, area.Top + legendHeight, area.Width - AxisLabelWidth, area.Height - legendHeight - XLabelHeight);
         var (low, high) = Scale(series);
         double Y(double rate) => plot.Bottom - ((rate * 100) - low) / (high - low) * plot.Height;
         var count = Math.Max(1, series.Count == 0 ? 0 : series.Max(line => line.Points.Count));

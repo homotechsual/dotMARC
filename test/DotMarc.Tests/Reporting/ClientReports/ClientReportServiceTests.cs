@@ -103,6 +103,26 @@ public sealed class ClientReportServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChangingTheFrequency_SkipsAScheduledReportStillRetrying()
+    {
+        await using var context = CreateContext();
+        var group = await AddGroupAsync(context);
+        await ClientReportService.SetScheduleAsync(context, TestActors.Admin, group.Id, ReportFrequency.Monthly, ["it@aurora-retail.example"]);
+        context.ClientReportDeliveries.Add(new ClientReportDelivery
+        {
+            GroupId = group.Id, PeriodStart = new DateOnly(2026, 3, 1), PeriodEnd = new DateOnly(2026, 3, 31), Kind = ClientReportDeliveryKind.Scheduled,
+            Recipients = ["it@aurora-retail.example"], Status = ClientReportDeliveryStatus.Pending, Attempts = 3, Error = "Mailbox unavailable",
+        });
+        await context.SaveChangesAsync();
+
+        await ClientReportService.SetScheduleAsync(context, TestActors.Admin, group.Id, ReportFrequency.Weekly, ["it@aurora-retail.example"]);
+
+        await using var verify = CreateContext();
+        var delivery = await verify.ClientReportDeliveries.SingleAsync();
+        Assert.Equal((ClientReportDeliveryStatus.Skipped, "The schedule changed"), (delivery.Status, delivery.Error));
+    }
+
+    [Fact]
     public async Task TurningItOffWithNoRecipients_RemovesTheSchedule()
     {
         await using var context = CreateContext();

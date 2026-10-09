@@ -61,6 +61,15 @@ public sealed class SmtpEmailSenderTests
     }
 
     [Fact]
+    public async Task AMistypedAddress_IsAnEmailSendException()
+    {
+        var sender = new SmtpEmailSender(new SmtpConnection("localhost", FreePort(), SmtpSecurity.None, null, null, "reports@nova-msp.example", "Nova MSP"));
+
+        await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync(
+            new EmailMessage(["bob@"], "Subject", "<p>Hi</p>", "Hi", []), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task NoServerListening_IsAnEmailSendException()
     {
         var sender = new SmtpEmailSender(new SmtpConnection("localhost", FreePort(), SmtpSecurity.None, null, null, "reports@nova-msp.example", "Nova MSP"));

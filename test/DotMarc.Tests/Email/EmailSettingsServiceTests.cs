@@ -81,6 +81,31 @@ public sealed class EmailSettingsServiceTests : IAsyncLifetime
         Assert.StartsWith(message, exception.Message);
     }
 
+    [Theory]
+    [InlineData("smtp.elsewhere.example", 587, "reports")]
+    [InlineData("smtp.nova-msp.example", 465, "reports")]
+    [InlineData("smtp.nova-msp.example", 587, "someone-else")]
+    public async Task ChangingTheSmtpServer_NeedsThePasswordAgain(string host, int port, string username)
+    {
+        await using var context = CreateContext();
+        var secrets = new FakeSecretStore();
+        var settings = await EmailSettingsService.GetAsync(context);
+        settings.Provider = EmailProvider.Smtp;
+        settings.FromAddress = "reports@nova-msp.example";
+        settings.SmtpHost = "smtp.nova-msp.example";
+        settings.SmtpUsername = "reports";
+        await EmailSettingsService.SaveAsync(context, TestActors.Admin, secrets, settings, "the-password");
+
+        settings.SmtpHost = host;
+        settings.SmtpPort = port;
+        settings.SmtpUsername = username;
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => EmailSettingsService.SaveAsync(context, TestActors.Admin, secrets, settings, null));
+
+        Assert.StartsWith("Enter the SMTP password again, since the server or username changed.", exception.Message);
+        await EmailSettingsService.SaveAsync(context, TestActors.Admin, secrets, settings, "the-new-password");
+        Assert.Equal("the-new-password", secrets.Secrets[EmailSettings.SmtpPasswordSecretKey]);
+    }
+
     [Fact]
     public async Task Save_RefusesAPortOutOfRange()
     {

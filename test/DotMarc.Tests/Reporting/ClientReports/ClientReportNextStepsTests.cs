@@ -48,6 +48,16 @@ public sealed class ClientReportNextStepsTests
     }
 
     [Fact]
+    public void ADomainWithNoDmarcRecord_IsOnlyToldToPublishOne()
+    {
+        var domain = Healthy();
+        domain.DmarcPolicy = null;
+        domain.DmarcCheckStatus = DmarcCheckStatus.MissingOwnRecord;
+
+        Assert.Equal(["Publish a DMARC record for aurora-retail.example."], ClientReportNextSteps.For([domain], [Row("aurora-retail.example", 100)]));
+    }
+
+    [Fact]
     public void AFailingCheck_GetsItsOwnSentence()
     {
         var domain = Healthy();

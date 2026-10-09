@@ -20,6 +20,7 @@ public static class ClientReportService
 
         var group = await context.Groups.SingleAsync(candidate => candidate.Id == groupId, cancellationToken).ConfigureAwait(false);
         var existing = await context.GroupReportSchedules.SingleOrDefaultAsync(schedule => schedule.GroupId == groupId, cancellationToken).ConfigureAwait(false);
+        var previousFrequency = existing?.Frequency ?? ReportFrequency.Off;
         var changes = new AuditChanges()
             .Field("Frequency", existing?.Frequency ?? ReportFrequency.Off, frequency)
             .Set("Recipients", existing?.Recipients ?? [], tidied);
@@ -50,6 +51,20 @@ public static class ClientReportService
 
             existing.Frequency = frequency;
             existing.Recipients = tidied;
+        }
+
+        // A period still retrying belongs to the old frequency, which the scheduler no longer looks at; close it off so it
+        // doesn't sit as "retrying" for ever, never giving up or raising its alert.
+        if (previousFrequency != frequency)
+        {
+            var retrying = await context.ClientReportDeliveries
+                .Where(delivery => delivery.GroupId == groupId && delivery.Kind == ClientReportDeliveryKind.Scheduled && delivery.Status == ClientReportDeliveryStatus.Pending)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var delivery in retrying)
+            {
+                delivery.Status = ClientReportDeliveryStatus.Skipped;
+                delivery.Error = "The schedule changed";
+            }
         }
 
         AuditLog.Record(context, actor, AuditActions.GroupReportScheduleChanged, AuditTarget.For(group), $"Changed the report schedule for group {group.Name}", changes);

@@ -2,6 +2,7 @@ using DotMarc.Data;
 using DotMarc.Email;
 using DotMarc.Notifications;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace DotMarc.Reporting.ClientReports;
 
@@ -19,7 +20,44 @@ public sealed class ClientReportDispatcher(
     public static readonly TimeSpan RetryInterval = TimeSpan.FromHours(1);
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromHours(24);
 
+    /// <summary>Only one instance sends reports at a time (two replicas, or two revisions overlapping during a deploy),
+    /// so a report is never sent twice. Same pattern and key range as PollingService's leader locks.</summary>
+    internal const long ClientReportLeaderLockKey = 84_200_025;
+
     public async Task RunOnceAsync(CancellationToken cancellationToken)
+    {
+        string connectionString;
+        await using (var context = await dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false))
+        {
+            connectionString = context.Database.GetConnectionString()
+                ?? throw new InvalidOperationException("DotMarcDbContext has no connection string configured.");
+        }
+
+        // A transaction-scoped advisory lock, so it can never outlive the connection it was taken on.
+        await using var lockConnection = new NpgsqlConnection(connectionString);
+        await lockConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var lockTransaction = await lockConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", lockConnection, lockTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("key", ClientReportLeaderLockKey);
+            if (!(bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!)
+            {
+                logger.LogDebug("Another instance is sending client reports; skipping this run.");
+                return;
+            }
+        }
+
+        try
+        {
+            await RunLockedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await lockTransaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunLockedAsync(CancellationToken cancellationToken)
     {
         ReportSettings settings;
         List<(GroupReportSchedule Schedule, string GroupName)> schedules;
@@ -94,36 +132,57 @@ public sealed class ClientReportDispatcher(
         delivery.Attempts++;
         delivery.FirstAttemptUtc ??= now;
         delivery.LastAttemptUtc = now;
+
+        // Claim the attempt before sending, so the period is on record even if this instance stops part-way.
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        Exception? failure = null;
         try
         {
             var report = await builder.BuildAsync(schedule.GroupId, period, zone, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("The Group no longer exists.");
             var pdf = ClientReportDocument.Render(report);
             await sender.SendAsync(ClientReportEmail.Compose(report, pdf, delivery.Recipients), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            failure = exception;
+        }
+
+        if (failure is null)
+        {
+            // The email has gone; nothing after this point may record it as failed.
             delivery.Status = ClientReportDeliveryStatus.Sent;
             delivery.SentUtc = now;
             delivery.Error = null;
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await alerting.ResolveClientReportFailedAsync(schedule.GroupId, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            delivery.Error = exception.Message.Length > 1000 ? exception.Message[..1000] : exception.Message;
-            var givingUp = now - delivery.FirstAttemptUtc >= GiveUpAfter;
-            if (givingUp)
+            try
             {
-                delivery.Status = ClientReportDeliveryStatus.Failed;
+                await alerting.ResolveClientReportFailedAsync(schedule.GroupId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                logger.LogWarning(exception, "Sent the {Period} report for group {GroupName}, but couldn't close its failure alert.", period.Label, groupName);
             }
 
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            if (givingUp)
-            {
-                await alerting.RaiseClientReportFailedAsync(schedule.GroupId, groupName, period.Label, delivery.Error, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                logger.LogWarning(exception, "The {Period} report for group {GroupName} couldn't be sent; trying again in an hour.", period.Label, groupName);
-            }
+            return;
+        }
+
+        delivery.Error = failure.Message.Length > 1000 ? failure.Message[..1000] : failure.Message;
+        var givingUp = now - delivery.FirstAttemptUtc >= GiveUpAfter;
+        if (givingUp)
+        {
+            delivery.Status = ClientReportDeliveryStatus.Failed;
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (givingUp)
+        {
+            await alerting.RaiseClientReportFailedAsync(schedule.GroupId, groupName, period.Label, delivery.Error, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            logger.LogWarning(failure, "The {Period} report for group {GroupName} couldn't be sent; trying again in an hour.", period.Label, groupName);
         }
     }
 }

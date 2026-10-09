@@ -20,6 +20,12 @@ public static class EmailSettingsService
         // A no-tracking snapshot, because the caller may pass the very instance this context is tracking.
         var saved = await context.EmailSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
         var hasNewPassword = !string.IsNullOrEmpty(newSmtpPassword);
+        var serverChanged = saved.SmtpHost != updated.SmtpHost || saved.SmtpPort != updated.SmtpPort || saved.SmtpUsername != updated.SmtpUsername;
+        if (updated.Provider == EmailProvider.Smtp && saved.SmtpPasswordConfigured && serverChanged && !hasNewPassword)
+        {
+            // Otherwise anyone who can edit these settings could point the saved password at a server of their choosing.
+            throw new ArgumentException("Enter the SMTP password again, since the server or username changed.", nameof(newSmtpPassword));
+        }
         var changes = new AuditChanges()
             .Field("Provider", saved.Provider, updated.Provider)
             .Field("From address", saved.FromAddress, updated.FromAddress)

@@ -145,6 +145,22 @@ public sealed class ClientReportCalculatorTests
     }
 
     [Fact]
+    public void RepeatedCopiesOfAnAlert_AreListedOnce_FromTheFirstRaised()
+    {
+        var domain = AuroraDomain();
+        AlertEvent Copy(int day, bool resolved) => new()
+        {
+            DomainName = "aurora-retail.example", AlertType = AlertTypes.MissedReport, Severity = "Warning", Title = "Missing expected DMARC report", Message = "",
+            CreatedUtc = new DateTimeOffset(2026, 3, day, 0, 0, 0, TimeSpan.Zero), IsResolved = resolved,
+            ResolvedUtc = resolved ? new DateTimeOffset(2026, 3, day, 3, 0, 0, TimeSpan.Zero) : null,
+        };
+
+        var alert = Assert.Single(Build([domain], [], periodAlerts: [Copy(5, true), Copy(3, true), Copy(7, false)]).Domains.Single().Alerts);
+
+        Assert.Equal((new DateTimeOffset(2026, 3, 3, 0, 0, 0, TimeSpan.Zero), (DateTimeOffset?)null), (alert.CreatedUtc, alert.ResolvedUtc));
+    }
+
+    [Fact]
     public void TheVerdict_IsThePortals()
     {
         var report = Build([AuroraDomain(), AuroraDomain(2, "shop.aurora-retail.example")], []);

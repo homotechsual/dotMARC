@@ -287,6 +287,63 @@ public sealed class ClientReportDispatcherTests : IAsyncLifetime
         Assert.Equal(["finance@aurora-retail.example"], _sender.Sent.Single().To);
     }
 
+    [Fact]
+    public async Task TwoInstancesRunningAtOnce_SendTheReportOnce()
+    {
+        await AddScheduledGroupAsync();
+        _clock.Advance(TimeSpan.FromHours(1));
+        var blocking = new BlockingSender();
+
+        var first = Dispatcher(blocking).RunOnceAsync(CancellationToken.None);
+        await blocking.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var second = Dispatcher(blocking).RunOnceAsync(CancellationToken.None);
+        await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(10)));
+        blocking.Release.SetResult(); // always released, so a second send shows up as a second call rather than a hang
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(1, blocking.Calls);
+    }
+
+    [Fact]
+    public async Task ASentReport_StaysSent_WhenResolvingTheAlertFails()
+    {
+        var groupId = await AddScheduledGroupAsync();
+        _clock.Advance(TimeSpan.FromHours(1));
+        var factory = new FakeDbContextFactory(_connectionString);
+        var dispatcher = new ClientReportDispatcher(factory, new ClientReportBuilder(factory, new PortalBrandLoader(factory), _clock),
+            new FixedSenderFactory(_sender), new ThrowingAlerts(), _clock, NullLogger<ClientReportDispatcher>.Instance);
+
+        await dispatcher.RunOnceAsync(CancellationToken.None);
+
+        var delivery = await DeliveryAsync(groupId);
+        Assert.Equal((ClientReportDeliveryStatus.Sent, (string?)null), (delivery.Status, delivery.Error));
+    }
+
+    private sealed class BlockingSender : IEmailSender
+    {
+        private int _calls;
+        public int Calls => _calls;
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _calls);
+            Entered.TrySetResult();
+            await Release.Task;
+        }
+    }
+
+    private sealed class ThrowingAlerts : DotMarc.Notifications.IAlertingService
+    {
+        public Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ResolveDomainAlertAsync(string domainName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task HandleTlsrptReportAsync(string domainName, long failedSessionCount, IReadOnlyList<string> failureTypes, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, DotMarc.Reporting.ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RaiseClientReportFailedAsync(int groupId, string groupName, string periodLabel, string error, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ResolveClientReportFailedAsync(int groupId, CancellationToken cancellationToken = default) => throw new InvalidOperationException("The alert store is down.");
+    }
+
     private sealed class FailFirstSender : IEmailSender
     {
         private int _calls;

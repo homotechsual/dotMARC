@@ -33,6 +33,14 @@ public sealed class TrendChartTests
         Assert.Equal(expected, TrendChart.Gridlines(low, high));
 
     [Fact]
+    public void TheLegend_WrapsOntoANewRow_RatherThanRunningOffThePage()
+    {
+        var positions = TrendChart.LegendLayout([200, 200, 200], availableWidth: 450);
+
+        Assert.Equal([(0, 0.0), (0, 200.0), (1, 0.0)], positions);
+    }
+
+    [Fact]
     public void TheScale_NeverGoesBelowZero_AndIsWholeWithNoData()
     {
         Assert.Equal((0.0, 100.0), TrendChart.Scale([new TrendSeries("a", "#000000", [0.02])]));

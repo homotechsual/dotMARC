@@ -14,7 +14,16 @@ public sealed class SmtpEmailSender(SmtpConnection connection) : IEmailSender
 
         var mime = new MimeMessage { Subject = message.Subject };
         mime.From.Add(new MailboxAddress(connection.FromName, connection.FromAddress));
-        mime.To.AddRange(message.To.Select(address => MailboxAddress.Parse(address)));
+        foreach (var address in message.To)
+        {
+            if (!MailboxAddress.TryParse(address, out var mailbox) || string.IsNullOrEmpty(mailbox.Domain))
+            {
+                throw new EmailSendException($"{address} isn't a valid email address.");
+            }
+
+            mime.To.Add(mailbox);
+        }
+
         var body = new BodyBuilder { HtmlBody = message.HtmlBody, TextBody = message.TextBody };
         foreach (var attachment in message.Attachments)
         {

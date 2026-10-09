@@ -14,8 +14,10 @@ public static class ClientReportNextSteps
         var rows = reportDomains.ToDictionary(row => row.Name, StringComparer.OrdinalIgnoreCase);
         var steps = new List<string>();
 
-        // No policy found is monitoring too, as the portal and the status column treat it.
-        foreach (var domain in domains.Where(domain => domain.DmarcPolicy is null or DmarcPolicyLevel.None))
+        // No policy found is monitoring too, as the portal and the status column treat it, unless there's no record at
+        // all, which gets the single step of publishing one below.
+        foreach (var domain in domains.Where(domain => domain.DmarcPolicy == DmarcPolicyLevel.None
+            || (domain.DmarcPolicy is null && domain.DmarcCheckStatus != DmarcCheckStatus.MissingOwnRecord)))
         {
             steps.Add($"Move {domain.Name} from monitoring to a quarantine policy, so mail that fails DMARC is sent to spam.");
         }
