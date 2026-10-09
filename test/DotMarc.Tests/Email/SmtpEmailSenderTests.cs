@@ -57,7 +57,7 @@ public sealed class SmtpEmailSenderTests
         Assert.Equal("Aurora Retail Ltd email security report: March 2026", received.Subject);
         Assert.Equal(["it@aurora-retail.example", "finance@aurora-retail.example"], received.To.Mailboxes.Select(mailbox => mailbox.Address));
         Assert.Equal(("Nova MSP", "reports@nova-msp.example"), (received.From.Mailboxes.Single().Name, received.From.Mailboxes.Single().Address));
-        Assert.Equal("report.pdf", Assert.Single(received.Attachments).ContentDisposition.FileName);
+        Assert.Equal("report.pdf", Assert.Single(received.Attachments).ContentDisposition!.FileName);
     }
 
     [Fact]
