@@ -2,6 +2,8 @@
 description: Use dotMARC from scripts and other tools with an API key.
 ---
 
+import Link from '@docusaurus/Link';
+
 # API
 
 dotMARC has a JSON API for the things MSPs most often script: listing domains and their DNS health, pulling DMARC report
@@ -11,6 +13,8 @@ alerts. Everything else stays in the web app for now.
 The [API reference](/api/dotmarc-api) lists every endpoint with its request and response shapes and examples. The
 same OpenAPI document is served by your dotMARC at `/api/v1/openapi.json`,
 which most API tools (Postman, Insomnia, Bruno and the like) can import directly.
+
+<Link className="button button--primary button--lg margin-vert--md" to="/api/dotmarc-api">API reference</Link>
 
 ## Create a key
 
@@ -38,6 +42,18 @@ curl https://dotmarc.example.com/api/v1/domains \
 
 A missing, expired or revoked key gets `401`. A key whose role lacks the permission an endpoint needs gets `403`. The
 API ignores browser sign-ins: it only accepts keys.
+
+## Finding a domain
+
+Anywhere a path takes a domain, such as `/api/v1/domains/{domain}`, you can give its id or its name, so a script that
+knows the name doesn't need to look up the id first:
+
+```bash
+curl https://dotmarc.example.com/api/v1/domains/contoso.example   -H "Authorization: Bearer dmk_..."
+```
+
+Names match however they're written: any case, with or without a trailing dot. A domain name can never be all digits,
+so a number is always read as an id.
 
 ## Keys limited to groups
 

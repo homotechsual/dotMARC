@@ -15,6 +15,10 @@
             revoke the old. The API's description is at <MudLink Href="/api/v1/openapi.json" Target="_blank">/api/v1/openapi.json</MudLink>.
         </MudText>
         <DocsLink Href="https://dotmarc.app/docs/api" Text="Using the API" Class="ml-2" />
+        <MudSpacer />
+        @* One click to every endpoint, rather than the docs page and then its reference link. *@
+        <MudButton Href="https://dotmarc.app/api/dotmarc-api/" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.MenuBook" Class="ml-4 flex-shrink-0">API reference</MudButton>
     </div>
 
     @if (_newSecret is not null)
