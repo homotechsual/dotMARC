@@ -15,28 +15,32 @@ public static class DomainWriteEndpoints
             .WithTags(ApiTags.Domains)
             .WithName("AddDomain")
             .WithSummary("Add a domain")
-            .WithDescription("Adds a domain for dotMARC to monitor. It shows as missing reports until its first DMARC report arrives.");
+            .WithDescription("Adds a domain for dotMARC to monitor. It shows as missing reports until its first DMARC report arrives.")
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         api.MapPut("/domains/{domain}/groups", SetGroupsAsync)
             .RequirePermission(Permission.DomainsEdit)
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainGroups")
             .WithSummary("Set a domain's groups")
-            .WithDescription($"Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. {ApiDomainKey.Description}");
+            .WithDescription($"Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. {ApiDomainKey.Description}")
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapPut("/domains/{domain}/tags", SetTagsAsync)
             .RequirePermission(Permission.DomainsEdit)
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainTags")
             .WithSummary("Set a domain's tags")
-            .WithDescription($"Replaces the domain's tags with exactly these. {ApiDomainKey.Description}");
+            .WithDescription($"Replaces the domain's tags with exactly these. {ApiDomainKey.Description}")
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapPut("/domains/{domain}/monitoring", SetMonitoringAsync)
             .RequirePermission(Permission.DomainsEdit)
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainMonitoring")
             .WithSummary("Turn monitoring on or off")
-            .WithDescription($"Whether dotMARC alerts on the domain's missing reports and DNS health. {ApiDomainKey.Description}");
+            .WithDescription($"Whether dotMARC alerts on the domain's missing reports and DNS health. {ApiDomainKey.Description}")
+            .ProducesProblem(StatusCodes.Status404NotFound);
     }
 
     private static async Task<Results<Created<ApiDomain>, ValidationProblem, ProblemHttpResult>> AddDomainAsync(

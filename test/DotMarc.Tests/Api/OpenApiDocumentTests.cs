@@ -91,6 +91,47 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EveryOperation_DescribesEachErrorItCanReturn_AsAProblem()
+    {
+        // Every operation can also answer 401, 403, 429 and 500; these are the errors particular to each.
+        int[] everyOperation = [401, 403, 429, 500];
+        var particular = new Dictionary<string, int[]>
+        {
+            ["GET /api/v1/alerts"] = [400],
+            ["POST /api/v1/alerts/{id}/acknowledge"] = [404, 409],
+            ["GET /api/v1/domains"] = [400],
+            ["POST /api/v1/domains"] = [400, 409],
+            ["POST /api/v1/domains/import"] = [400],
+            ["GET /api/v1/domains/{domain}"] = [404],
+            ["GET /api/v1/domains/{domain}/reports/summary"] = [400, 404],
+            ["PUT /api/v1/domains/{domain}/groups"] = [400, 404],
+            ["PUT /api/v1/domains/{domain}/tags"] = [400, 404],
+            ["PUT /api/v1/domains/{domain}/monitoring"] = [400, 404],
+            ["GET /api/v1/groups"] = [],
+            ["GET /api/v1/tags"] = [],
+        };
+        using var document = JsonDocument.Parse(await FetchDocumentAsync());
+        var operations = document.RootElement.GetProperty("paths").EnumerateObject()
+            .SelectMany(path => path.Value.EnumerateObject().Select(operation => (Name: $"{operation.Name.ToUpperInvariant()} {path.Name}", Body: operation.Value)))
+            .ToList();
+
+        Assert.Equal(particular.Keys.Order(), operations.Select(operation => operation.Name).Order());
+        Assert.All(operations, operation =>
+        {
+            var errors = operation.Body.GetProperty("responses").EnumerateObject().Where(response => int.Parse(response.Name) >= 400).ToList();
+            Assert.Equal(particular[operation.Name].Concat(everyOperation).Order(), errors.Select(response => int.Parse(response.Name)).Order());
+            Assert.All(errors, response =>
+            {
+                Assert.True(response.Value.GetProperty("content").TryGetProperty("application/problem+json", out _),
+                    $"{operation.Name} {response.Name} isn't described as problem+json");
+                var description = response.Value.GetProperty("description").GetString();
+                Assert.False(string.IsNullOrWhiteSpace(description) || description == Microsoft.AspNetCore.WebUtilities.ReasonPhrases.GetReasonPhrase(int.Parse(response.Name)),
+                    $"{operation.Name} {response.Name} has no description beyond its status's name");
+            });
+        });
+    }
+
+    [Fact]
     public async Task EveryOperation_IsInOneReadableSection_AndEverySectionIsDescribed()
     {
         string[] sections = ["Domains", "Imports", "Groups and tags", "Alerts"];

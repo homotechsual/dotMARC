@@ -25,7 +25,9 @@ public static class AlertEndpoints
             .WithTags(ApiTags.Alerts)
             .WithName("AcknowledgeAlert")
             .WithSummary("Acknowledge an alert")
-            .WithDescription("Closes a DMARC policy weakened or nameservers changed alert and accepts the current value as normal, closing its PSA ticket too. Other alerts close themselves once fixed, so acknowledging them is a conflict. ticketClosed is false when the ticket couldn't be closed and needs closing by hand.");
+            .WithDescription("Closes a DMARC policy weakened or nameservers changed alert and accepts the current value as normal, closing its PSA ticket too. Other alerts close themselves once fixed, so acknowledging them is a conflict. ticketClosed is false when the ticket couldn't be closed and needs closing by hand.")
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
     }
 
     private static async Task<Results<Ok<ApiPage<ApiAlert>>, ValidationProblem>> ListAlertsAsync(

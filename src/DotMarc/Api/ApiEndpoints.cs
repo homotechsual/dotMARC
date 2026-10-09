@@ -13,7 +13,12 @@ public static class ApiEndpoints
     {
         var api = app.MapGroup("/api/v1")
             .RequireAuthorization(ApiPolicies.AnyKey)
-            .RequireRateLimiting(RateLimiterPolicy);
+            .RequireRateLimiting(RateLimiterPolicy)
+            // Any operation can answer these; ApiDocument describes each. Errors particular to an operation are on it.
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
 
         GroupAndTagEndpoints.Map(api);
         DomainReadEndpoints.Map(api);

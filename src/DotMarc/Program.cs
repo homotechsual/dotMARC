@@ -462,6 +462,10 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 }
 
+// An error the API didn't expect is a problem+json 500, as its OpenAPI document says, not the UI's error page. Ahead of
+// UseDotMarcBadRequests, so a request the API couldn't read stays the 400 that turns it into.
+app.UseWhen(httpContext => httpContext.Request.Path.StartsWithSegments("/api"), api => api.UseExceptionHandler());
+
 // FallbackPolicy below requires an authenticated user with a permission claim on every endpoint
 // by default. Without AllowAnonymous, static assets inherit that policy too - the very first
 // unauthenticated request (before anyone has signed in or picked a demo persona) gets its CSS/JS

@@ -14,6 +14,18 @@ public static class ApiDocument
     public const string DocumentPath = "/api/v1/openapi.json";
     private const string PermissionExtension = "x-dotmarc-permission";
 
+    /// <summary>What each error means, for every operation that can return it. All are problem+json.</summary>
+    private static readonly Dictionary<string, string> ErrorDescriptions = new()
+    {
+        ["400"] = "The request couldn't be used. `errors` names each field that's wrong and why.",
+        ["401"] = "No API key was sent, or the key is unknown, expired or revoked.",
+        ["403"] = "The key's role doesn't have the permission this operation needs, or the key is limited to certain groups and this would reach outside them. `detail` says which.",
+        ["404"] = "There's no such item, or this key can't see it. A key limited to certain groups can't see what's outside them.",
+        ["409"] = "The request conflicts with how things are now, such as a domain that's already in dotMARC or an alert that can't be acknowledged. `detail` says what.",
+        ["429"] = "This key has made more requests this minute than dotMARC allows (120 by default). Wait for the number of seconds in the Retry-After header, then try again.",
+        ["500"] = "Something went wrong in dotMARC that the request didn't cause. It's safe to retry a read; check before retrying a change. If it keeps happening, dotMARC's logs have the details.",
+    };
+
     /// <summary>The project's VersionPrefix, from the informational version without any "+commit" suffix.</summary>
     public static string Version { get; } =
         (typeof(ApiDocument).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
@@ -58,6 +70,15 @@ public static class ApiDocument
                     operation.Extensions ??= new Dictionary<string, IOpenApiExtension>();
                     operation.Extensions[PermissionExtension] = new JsonNodeExtension(JsonValue.Create(permission.Permission.ToString()));
                     operation.Description = $"{operation.Description}\n\nNeeds the {permission.Permission} permission.".TrimStart();
+                }
+
+                // ASP.NET describes an error only by its status's name; say when each one happens instead.
+                foreach (var (statusCode, response) in operation.Responses ?? [])
+                {
+                    if (response is OpenApiResponse openApiResponse && ErrorDescriptions.TryGetValue(statusCode, out var description))
+                    {
+                        openApiResponse.Description = description;
+                    }
                 }
 
                 return Task.CompletedTask;

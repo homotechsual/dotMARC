@@ -26,14 +26,16 @@ public static class DomainReadEndpoints
             .WithTags(ApiTags.Domains)
             .WithName("GetDomain")
             .WithSummary("Get a domain and its health")
-            .WithDescription($"The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran. {ApiDomainKey.Description}");
+            .WithDescription($"The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran. {ApiDomainKey.Description}")
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapGet("/domains/{domain}/reports/summary", GetReportSummaryAsync)
             .RequirePermission(Permission.DomainsView)
             .WithTags(ApiTags.Domains)
             .WithName("GetReportSummary")
             .WithSummary("Summarise a domain's DMARC reports")
-            .WithDescription($"Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30). {ApiDomainKey.Description}");
+            .WithDescription($"Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30). {ApiDomainKey.Description}")
+            .ProducesProblem(StatusCodes.Status404NotFound);
     }
 
     /// <summary>One domain the scope can see, with its groups and tags, or null.</summary>
