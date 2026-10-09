@@ -38,6 +38,16 @@ public sealed class ClientReportNextStepsTests
     }
 
     [Fact]
+    public void ADomainWithNoPolicyFound_IsAlsoToldToMoveToQuarantine()
+    {
+        var domain = Healthy();
+        domain.DmarcPolicy = null;
+
+        Assert.Equal(["Move aurora-retail.example from monitoring to a quarantine policy, so mail that fails DMARC is sent to spam."],
+            ClientReportNextSteps.For([domain], [Row("aurora-retail.example", 100)]));
+    }
+
+    [Fact]
     public void AFailingCheck_GetsItsOwnSentence()
     {
         var domain = Healthy();

@@ -1,0 +1,234 @@
+@page "/reports/settings"
+@attribute [Authorize(Policy = "ReportsManage")]
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.Demo
+@using DotMarc.Email
+@using DotMarc.Graph
+@using DotMarc.Notifications
+@using DotMarc.Reporting.ClientReports
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISecretStore SecretStore
+@inject IEmailSenderFactory SenderFactory
+@inject IOptions<DemoOptions> DemoOptions
+@inject IServiceProvider Services
+@inject ISnackbar Snackbar
+
+<PageTitle>dotMARC - Email &amp; reports</PageTitle>
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">Email &amp; reports</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/client-reports" Text="Sending client reports" Class="ml-2" />
+</div>
+<MudText Typo="Typo.body1" Class="mb-4">
+    How dotMARC sends email, and when client reports go out. Each Group's report schedule is set from Manage groups.
+</MudText>
+
+@if (_email is not null && _reports is not null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-4">Email</MudText>
+        @if (_isDemo)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">The demo doesn't send email. Reports can still be downloaded from Manage groups.</MudAlert>
+        }
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Send email with" Help="Microsoft Graph sends from a mailbox in your Microsoft 365 tenant. SMTP works with any mail server or relay service. Off means no email is sent.">
+                    <MudSelect T="EmailProvider" Label="Send email with" Value="_email.Provider" ValueChanged="ProviderChanged" Disabled="_isDemo" Variant="Variant.Outlined">
+                        <MudSelectItem T="EmailProvider" Value="EmailProvider.Off">Off</MudSelectItem>
+                        <MudSelectItem T="EmailProvider" Value="EmailProvider.Graph">Microsoft Graph</MudSelectItem>
+                        <MudSelectItem T="EmailProvider" Value="EmailProvider.Smtp">SMTP</MudSelectItem>
+                    </MudSelect>
+                </FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6"></MudItem>
+            @if (_email.Provider != EmailProvider.Off)
+            {
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp Topic="From address" Help="@(_email.Provider == EmailProvider.Graph
+                                       ? "Graph sends as this mailbox. It must be a mailbox in your Microsoft 365 tenant, and the app registration needs the Mail.Send permission."
+                                       : "The address reports come from. Your SMTP server must be allowed to send as it.")">
+                        <MudTextField Label="From address" @bind-Value="_email.FromAddress" Disabled="_isDemo" Variant="Variant.Outlined" InputType="InputType.Email" />
+                    </FieldWithHelp>
+                </MudItem>
+            }
+            @if (_email.Provider == EmailProvider.Smtp)
+            {
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp Topic="From name" Help="The sender name people see. Leave it empty to use your product name from Branding.">
+                        <MudTextField Label="From name" @bind-Value="_email.FromName" MaxLength="100" Disabled="_isDemo" Variant="Variant.Outlined" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp Topic="SMTP host" Help="Your mail server or relay service, such as smtp.office365.com or smtp.sendgrid.net.">
+                        <MudTextField Label="SMTP host" @bind-Value="_email.SmtpHost" Disabled="_isDemo" Variant="Variant.Outlined" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="6" md="3">
+                    <FieldWithHelp Topic="SMTP port" Help="Usually 587 with STARTTLS, or 465 with TLS on connect.">
+                        <MudNumericField T="int" Label="Port" @bind-Value="_email.SmtpPort" Min="1" Max="65535" Disabled="_isDemo" Variant="Variant.Outlined" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="6" md="3">
+                    <FieldWithHelp Topic="SMTP security" Help="STARTTLS upgrades the connection to encrypted after connecting (port 587). TLS on connect encrypts from the start (port 465). None is only for a relay on a private network.">
+                        <MudSelect T="SmtpSecurity" Label="Security" @bind-Value="_email.SmtpSecurity" Disabled="_isDemo" Variant="Variant.Outlined">
+                            <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.StartTls">STARTTLS</MudSelectItem>
+                            <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.SslOnConnect">TLS on connect</MudSelectItem>
+                            <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.None">None</MudSelectItem>
+                        </MudSelect>
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp Topic="SMTP username" Help="Leave empty if your server doesn't need a sign-in.">
+                        <MudTextField Label="Username" @bind-Value="_email.SmtpUsername" Disabled="_isDemo" Variant="Variant.Outlined" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp Topic="SMTP password" Help="Stored encrypted and never shown again.">
+                        <MudTextField Label="Password" @bind-Value="_newPassword" InputType="InputType.Password" Disabled="_isDemo" Variant="Variant.Outlined"
+                                      HelperText="@(_email.SmtpPasswordConfigured ? "A password is saved. Leave blank to keep it." : "No password saved.")" />
+                    </FieldWithHelp>
+                </MudItem>
+            }
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" Disabled="_isDemo || _busy" OnClick="SaveEmailAsync">Save email settings</MudButton>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.subtitle1">Send a test email</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">Uses the saved settings. Save first if you've changed them.</MudText>
+        <div class="d-flex align-center flex-wrap" style="gap: 0.75rem;">
+            <MudTextField Label="Send to" @bind-Value="_testAddress" Disabled="_isDemo" Variant="Variant.Outlined" InputType="InputType.Email" Style="min-width: 300px;" />
+            <MudButton Variant="Variant.Outlined" Disabled="_isDemo || _busy || string.IsNullOrWhiteSpace(_testAddress)" OnClick="SendTestAsync">Send test email</MudButton>
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-4">Reports</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Time zone" Help="Weeks, months and quarters start at midnight in this time zone, and scheduled reports go out at the send hour here.">
+                    <MudAutocomplete T="string" Label="Time zone" @bind-Value="_reports.TimeZoneId" SearchFunc="SearchZones" MaxItems="50" Variant="Variant.Outlined" />
+                </FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Send hour" Help="The hour scheduled reports go out, on the first day after each week, month or quarter ends.">
+                    <MudSelect T="int" Label="Send at" @bind-Value="_reports.SendHour" Variant="Variant.Outlined">
+                        @for (var hour = 0; hour < 24; hour++)
+                        {
+                            var value = hour;
+                            <MudSelectItem T="int" Value="value">@($"{value:00}:00")</MudSelectItem>
+                        }
+                    </MudSelect>
+                </FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" Disabled="_busy" OnClick="SaveReportsAsync">Save report settings</MudButton>
+    </MudPaper>
+}
+
+@code {
+    private EmailSettings? _email;
+    private ReportSettings? _reports;
+    private string? _newPassword;
+    private string? _testAddress;
+    private bool _busy;
+    private bool _isDemo;
+    private IReadOnlyList<string> _zones = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isDemo = DemoOptions.Value.Enabled;
+        _zones = ReportSettingsService.ListAvailableZones();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _email = await db.EmailSettings.AsNoTracking().SingleAsync();
+        _reports = await db.ReportSettings.AsNoTracking().SingleAsync();
+    }
+
+    private Task<IEnumerable<string>> SearchZones(string? text, CancellationToken cancellationToken) =>
+        Task.FromResult(string.IsNullOrWhiteSpace(text)
+            ? _zones.AsEnumerable()
+            : _zones.Where(zone => zone.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    private void ProviderChanged(EmailProvider provider)
+    {
+        _email!.Provider = provider;
+        // Graph sends as a mailbox in the tenant; the reports mailbox is the natural default.
+        if (provider == EmailProvider.Graph && string.IsNullOrWhiteSpace(_email.FromAddress))
+        {
+            _email.FromAddress = Services.GetService<IOptions<GraphOptions>>()?.Value.MailboxAddress;
+        }
+    }
+
+    private static string Clean(ArgumentException exception) => exception.Message.Split(" (Parameter")[0];
+
+    private async Task SaveEmailAsync()
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await EmailSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStore, _email!, _newPassword);
+            _newPassword = null;
+            _email = await db.EmailSettings.AsNoTracking().SingleAsync();
+            Snackbar.Add("Email settings saved.", Severity.Success);
+        }
+        catch (ArgumentException exception)
+        {
+            Snackbar.Add(Clean(exception), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SendTestAsync()
+    {
+        _busy = true;
+        try
+        {
+            var sender = await SenderFactory.GetAsync(CancellationToken.None);
+            if (sender is null)
+            {
+                Snackbar.Add("Email is off.", Severity.Warning);
+                return;
+            }
+
+            var address = _testAddress!.Trim();
+            await sender.SendAsync(new EmailMessage([address], "dotMARC test email",
+                "<p>This is a test email from dotMARC. Email is working.</p>", "This is a test email from dotMARC. Email is working.", []), CancellationToken.None);
+            Snackbar.Add($"Test email sent to {address}.", Severity.Success);
+        }
+        catch (EmailSendException exception)
+        {
+            Snackbar.Add(exception.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveReportsAsync()
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await ReportSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), _reports!);
+            Snackbar.Add("Report settings saved.", Severity.Success);
+        }
+        catch (ArgumentException exception)
+        {
+            Snackbar.Add(Clean(exception), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

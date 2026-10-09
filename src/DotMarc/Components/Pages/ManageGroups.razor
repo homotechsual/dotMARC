@@ -5,6 +5,7 @@
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
+@using DotMarc.Reporting.ClientReports
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -133,6 +134,9 @@
                         <MudTh>Ticket rules</MudTh>
                     }
                     <MudTh>Portal branding</MudTh>
+                    <AuthorizeView Policy="ReportsManage" Context="authState">
+                        <MudTh>Client reports</MudTh>
+                    </AuthorizeView>
                     <MudTh></MudTh>
                 </tr>
                 @if (_showGroupFilters)
@@ -159,6 +163,9 @@
                         </MudTh>
                     }
                     <MudTh></MudTh>
+                    <AuthorizeView Policy="ReportsManage" Context="authState">
+                        <MudTh></MudTh>
+                    </AuthorizeView>
                     <MudTh></MudTh>
                 </tr>
                 }
@@ -224,6 +231,23 @@
                         }
                     </div>
                 </MudTd>
+                <AuthorizeView Policy="ReportsManage" Context="authState">
+                    <MudTd>
+                        <div class="d-flex align-center" style="gap: 0.5rem;">
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Assessment" OnClick="@(() => OpenReportsAsync(context))">
+                                Reports
+                            </MudButton>
+                            @if (_failedReportGroupIds.Contains(context.Id))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error">Report failed</MudChip>
+                            }
+                            else if (_reportFrequencies.TryGetValue(context.Id, out var frequency))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@frequency</MudChip>
+                            }
+                        </div>
+                    </MudTd>
+                </AuthorizeView>
                 <MudTd>
                     <AuthorizeView Policy="GroupsDelete" Context="authState">
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
@@ -347,6 +371,8 @@
     private bool _creatingFromPsa;
     private Dictionary<int, int> _ticketRuleOverrideCounts = [];
     private HashSet<int> _brandedGroupIds = [];
+    private Dictionary<int, ReportFrequency> _reportFrequencies = [];
+    private HashSet<int> _failedReportGroupIds = [];
     private string _newGroupName = "";
     private string? _addGroupError;
     private string _newTagName = "";
@@ -423,6 +449,7 @@
             .ToListAsync();
         _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
         _brandedGroupIds = (await db.GroupBrandings.Select(branding => branding.GroupId).ToListAsync()).ToHashSet();
+        await LoadReportChipsAsync(db);
         _tags = await db.Tags
             .AsNoTracking()
             .OrderBy(t => t.Name)
@@ -762,6 +789,43 @@
             {
                 Snackbar.Add("Couldn't refresh the Branded chips. Reload the page to see the latest.", Severity.Warning);
             }
+        }
+    }
+
+    /// <summary>Each Group's schedule frequency, and which Groups' latest scheduled report failed.</summary>
+    private async Task LoadReportChipsAsync(DotMarcDbContext db)
+    {
+        _reportFrequencies = await db.GroupReportSchedules
+            .Where(schedule => schedule.Frequency != ReportFrequency.Off)
+            .ToDictionaryAsync(schedule => schedule.GroupId, schedule => schedule.Frequency);
+        // The latest scheduled delivery is the one with no later scheduled delivery for the same Group.
+        _failedReportGroupIds = (await db.ClientReportDeliveries
+            .Where(delivery => delivery.Kind == ClientReportDeliveryKind.Scheduled && delivery.Status == ClientReportDeliveryStatus.Failed)
+            .Where(delivery => !db.ClientReportDeliveries.Any(later => later.GroupId == delivery.GroupId
+                && later.Kind == ClientReportDeliveryKind.Scheduled && later.PeriodStart > delivery.PeriodStart))
+            .Select(delivery => delivery.GroupId)
+            .ToListAsync()).ToHashSet();
+    }
+
+    private async Task OpenReportsAsync(GroupRow row)
+    {
+        var parameters = new DialogParameters<GroupReportsDialog>
+        {
+            { dialog => dialog.GroupId, row.Id },
+            { dialog => dialog.GroupName, row.Name }
+        };
+        var dialogRef = await DialogService.ShowAsync<GroupReportsDialog>("Client reports", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        await dialogRef.Result;
+
+        // Refresh the report chips. A failure here must not escape the handler; the chips just stay as they were.
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await LoadReportChipsAsync(db);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Couldn't refresh the report chips. Reload the page to see the latest.", Severity.Warning);
         }
     }
 

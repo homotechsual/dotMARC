@@ -71,6 +71,20 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ResetAsync_GivesAuroraRetailAMonthlyReportSchedule()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        var schedule = await verify.GroupReportSchedules.SingleAsync();
+        Assert.Equal(DemoDataSeeder.ViewerScopedGroupName, (await verify.Groups.SingleAsync(group => group.Id == schedule.GroupId)).Name);
+        Assert.Equal(DotMarc.Reporting.ClientReports.ReportFrequency.Monthly, schedule.Frequency);
+        Assert.Equal(["reports@aurora-retail.example"], schedule.Recipients);
+    }
+
+    [Fact]
     public async Task ResetAsync_IsRepeatable_WithoutAccumulatingDuplicateRows()
     {
         using (var context = CreateContext())

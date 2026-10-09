@@ -300,6 +300,13 @@ public static class DemoDataSeeder
             GroupId = groupsByName[ViewerScopedGroupName].Id, DisplayName = "Aurora Retail Ltd", PrimaryColour = "#7A1FA2",
         });
 
+        // A monthly report schedule, so the Reports dialog has something to show. The demo never sends email.
+        context.GroupReportSchedules.Add(new DotMarc.Reporting.ClientReports.GroupReportSchedule
+        {
+            GroupId = groupsByName[ViewerScopedGroupName].Id, Frequency = DotMarc.Reporting.ClientReports.ReportFrequency.Monthly,
+            Recipients = ["reports@aurora-retail.example"], StartedUtc = DateTimeOffset.UtcNow,
+        });
+
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

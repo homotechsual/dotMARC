@@ -1,0 +1,68 @@
+@using DotMarc.Email
+@using DotMarc.Reporting.ClientReports
+
+@* Report recipients as chips. Typing suggests the Group's people (from their access grants) and accepts any other
+   address; each is checked as it's added, and the list stops at the most a report can go to. *@
+<div>
+    <MudAutocomplete T="string" Label="@Label" Value="_input" ValueChanged="AddAsync" SearchFunc="SearchAsync" CoerceText="false" CoerceValue="false"
+                     ResetValueOnEmptyText="true" Clearable="true" Variant="Variant.Outlined" Disabled="Disabled"
+                     HelperText="Type an address and press Enter, or pick someone from the list." />
+    @if (_problem is not null)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block">@_problem</MudText>
+    }
+    <div class="d-flex flex-wrap mt-2" style="gap: 0.25rem;">
+        @foreach (var recipient in Recipients)
+        {
+            <MudChip T="string" Size="Size.Small" OnClose="@(() => RemoveAsync(recipient))" Disabled="Disabled">@recipient</MudChip>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public IReadOnlyList<string> Recipients { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyList<string>> RecipientsChanged { get; set; }
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+
+    private string? _input;
+    private string? _problem;
+
+    private Task<IEnumerable<string>> SearchAsync(string? text, CancellationToken cancellationToken)
+    {
+        var typed = text?.Trim() ?? "";
+        var matches = Suggestions
+            .Where(suggestion => !Recipients.Contains(suggestion, StringComparer.OrdinalIgnoreCase))
+            .Where(suggestion => typed.Length == 0 || suggestion.Contains(typed, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (typed.Contains('@') && !matches.Contains(typed, StringComparer.OrdinalIgnoreCase))
+        {
+            matches.Insert(0, typed);
+        }
+
+        return Task.FromResult<IEnumerable<string>>(matches);
+    }
+
+    private async Task AddAsync(string? value)
+    {
+        _input = null;
+        _problem = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        try
+        {
+            await RecipientsChanged.InvokeAsync(ReportRecipients.Normalise(Recipients.Append(value)));
+        }
+        catch (ArgumentException exception)
+        {
+            _problem = exception.Message.Split(" (Parameter")[0];
+        }
+    }
+
+    private Task RemoveAsync(string recipient) =>
+        RecipientsChanged.InvokeAsync(Recipients.Where(existing => existing != recipient).ToList());
+}

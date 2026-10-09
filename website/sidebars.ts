@@ -56,7 +56,7 @@ const sidebars: SidebarsConfig = {
         title: 'Administer dotMARC',
         description: 'Control who can see what, keep dotMARC up to date, and see what the server is doing.',
       },
-      items: ['permissions-and-access', 'client-portal', 'updating', 'server-logs', 'audit-log'],
+      items: ['permissions-and-access', 'client-portal', 'client-reports', 'updating', 'server-logs', 'audit-log'],
     },
     {
       type: 'category',

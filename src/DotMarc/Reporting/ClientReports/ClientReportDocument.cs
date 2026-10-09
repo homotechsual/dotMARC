@@ -2,9 +2,10 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using DotMarc.Portal;
 using MigraDoc.DocumentObjectModel;
-using MigraDoc.DocumentObjectModel.Shapes.Charts;
+using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
+using PdfSharp.Drawing;
 
 namespace DotMarc.Reporting.ClientReports;
 
@@ -20,6 +21,7 @@ public static partial class ClientReportDocument
         ReportFontResolver.EnsureInstalled();
         var renderer = new PdfDocumentRenderer { Document = Build(report) };
         renderer.RenderDocument();
+        PaintTrendCharts(renderer);
         using var stream = new MemoryStream();
         renderer.PdfDocument.Save(stream, closeStream: false);
         return stream.ToArray();
@@ -118,53 +120,64 @@ public static partial class ClientReportDocument
         }
     }
 
+    /// <summary>What a trend chart placeholder carries, for <see cref="PaintTrendCharts"/>.</summary>
+    private sealed record TrendChartData(IReadOnlyList<TrendSeries> Series, IReadOnlyList<string> XLabels);
+
     private static void AddTrend(Section section, ClientReport report)
     {
         section.AddParagraph("Pass rate trend", StyleNames.Heading2);
         var charted = report.Domains.OrderByDescending(domain => domain.Messages).Take(ChartedDomainLimit).ToList();
-        var chart = new Chart(ChartType.Line)
-        {
-            Width = Unit.FromCentimeter(16),
-            Height = Unit.FromCentimeter(6),
-            DisplayBlanksAs = BlankType.NotPlotted,
-        };
-        chart.YAxis.MinimumScale = 0;
-        chart.YAxis.MaximumScale = 100;
-        chart.YAxis.MajorTickMark = TickMarkType.Outside;
-        chart.YAxis.HasMajorGridlines = true;
-        chart.XAxis.MajorTickMark = TickMarkType.None;
-        chart.TopArea.AddLegend();
-        var points = charted.Count == 0 ? 0 : charted[0].Trend.Count;
-        var labels = chart.XValues.AddXSeries();
-        for (var point = 0; point < points; point++)
-        {
-            labels.Add(point % Math.Max(1, points / 6) == 0 ? (point + 1).ToString(CultureInfo.InvariantCulture) : "");
-        }
+        var points = charted.Count == 0 ? 0 : charted.Max(domain => domain.Trend.Count);
+        var labelEvery = Math.Max(1, points / 6);
+        var xLabels = Enumerable.Range(0, points)
+            .Select(point => point % labelEvery == 0 ? XLabel(report.Period, point, points) : "")
+            .ToList();
 
-        for (var index = 0; index < charted.Count; index++)
-        {
-            var series = chart.SeriesCollection.AddSeries();
-            series.Name = charted[index].Name;
-            series.LineFormat.Color = Hex(SeriesColours[index]);
-            series.MarkerStyle = MarkerStyle.None;
-            foreach (var rate in charted[index].Trend)
-            {
-                if (rate is { } value)
-                {
-                    series.Add(value * 100);
-                }
-                else
-                {
-                    series.AddBlank();
-                }
-            }
-        }
+        // An empty frame where the chart goes; PaintTrendCharts draws it once the pages are laid out.
+        var placeholder = section.AddTextFrame();
+        placeholder.Width = Unit.FromCentimeter(16);
+        placeholder.Height = Unit.FromCentimeter(6.5);
+        placeholder.RelativeHorizontal = RelativeHorizontal.Margin;
+        placeholder.WrapFormat.Style = WrapStyle.TopBottom;
+        placeholder.Tag = new TrendChartData(
+            charted.Select((domain, index) => new TrendSeries(domain.Name, SeriesColours[index], domain.Trend)).ToList(),
+            xLabels);
 
-        section.Add(chart);
         var others = report.Domains.Except(charted).Select(domain => domain.Name).ToList();
         if (others.Count > 0)
         {
             section.AddParagraph($"Not charted: {string.Join(", ", others)}").Format.Font.Size = 8;
+        }
+    }
+
+    /// <summary>The label for a trend point: the day of the month for daily points, the bucket's first date for weekly ones.</summary>
+    private static string XLabel(ReportPeriod period, int point, int points)
+    {
+        var bucketDays = points == period.Days ? 1 : 7;
+        var day = period.Start.AddDays(point * bucketDays);
+        return day.ToString(bucketDays == 1 && period.Days <= 31 ? "%d" : "d MMM", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Draws each trend chart onto the page where MigraDoc placed its placeholder frame.</summary>
+    private static void PaintTrendCharts(PdfDocumentRenderer renderer)
+    {
+        for (var pageNumber = 1; pageNumber <= renderer.PdfDocument.PageCount; pageNumber++)
+        {
+            var placeholders = (renderer.DocumentRenderer.GetRenderInfoFromPage(pageNumber) ?? [])
+                .Where(info => info.DocumentObject is TextFrame { Tag: TrendChartData })
+                .ToList();
+            if (placeholders.Count == 0)
+            {
+                continue;
+            }
+
+            using var graphics = XGraphics.FromPdfPage(renderer.PdfDocument.Pages[pageNumber - 1], XGraphicsPdfPageOptions.Append);
+            foreach (var info in placeholders)
+            {
+                var area = info.LayoutInfo.ContentArea;
+                var data = (TrendChartData)((TextFrame)info.DocumentObject).Tag!;
+                TrendChart.Paint(graphics, new XRect(area.X.Point, area.Y.Point, area.Width.Point, area.Height.Point), data.Series, data.XLabels);
+            }
         }
     }
 

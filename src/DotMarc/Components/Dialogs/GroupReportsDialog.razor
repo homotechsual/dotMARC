@@ -1,0 +1,320 @@
+@using System.Globalization
+@using DotMarc.Components.Reports
+@using DotMarc.Data
+@using DotMarc.Email
+@using DotMarc.Reporting.ClientReports
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IEmailSenderFactory SenderFactory
+@inject ClientReportRunner Runner
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TimeProvider TimeProvider
+@inject ISnackbar Snackbar
+
+@* A Group's client reports: its schedule and recipients, sending or downloading a report for any past period, and
+   what has been sent. *@
+<MudDialog>
+    <TitleContent>Client reports for @GroupName</TitleContent>
+    <DialogContent>
+        @if (!_loaded)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (!_mayManage)
+        {
+            <MudAlert Severity="Severity.Warning">You can't manage reports for this Group.</MudAlert>
+        }
+        else
+        {
+            @if (!_emailOn)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3">
+                    Email is off, so reports can't be sent. Set it up on <MudLink Href="/reports/settings">Email &amp; reports</MudLink>. You can still download reports.
+                </MudAlert>
+            }
+
+            <MudText Typo="Typo.h6">Schedule</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="ReportFrequency" Label="Send a report" @bind-Value="_frequency" Variant="Variant.Outlined">
+                        <MudSelectItem T="ReportFrequency" Value="ReportFrequency.Off">Off</MudSelectItem>
+                        <MudSelectItem T="ReportFrequency" Value="ReportFrequency.Weekly">Weekly</MudSelectItem>
+                        <MudSelectItem T="ReportFrequency" Value="ReportFrequency.Monthly">Monthly</MudSelectItem>
+                        <MudSelectItem T="ReportFrequency" Value="ReportFrequency.Quarterly">Quarterly</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <RecipientsField Label="Recipients" @bind-Recipients="_recipients" Suggestions="_suggestions" />
+                </MudItem>
+            </MudGrid>
+            <div class="d-flex align-center flex-wrap mt-2" style="gap: 1rem;">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SaveScheduleAsync">Save schedule</MudButton>
+                <MudText Typo="Typo.body2">@NextReportText</MudText>
+            </div>
+            @if (LatestScheduled is { } latest)
+            {
+                @if (latest.Status == ClientReportDeliveryStatus.Failed)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-1">Last report failed: @latest.Error</MudText>
+                }
+                else if (latest.Status == ClientReportDeliveryStatus.Sent && latest.SentUtc is { } sentUtc)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">Last sent @Local(sentUtc).</MudText>
+                }
+            }
+
+            <MudText Typo="Typo.h6" Class="mt-6">Send now or download</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="ReportPeriodKind" Label="Covering" @bind-Value="_pickKind" Variant="Variant.Outlined">
+                        <MudSelectItem T="ReportPeriodKind" Value="ReportPeriodKind.Week">A week</MudSelectItem>
+                        <MudSelectItem T="ReportPeriodKind" Value="ReportPeriodKind.Month">A month</MudSelectItem>
+                        <MudSelectItem T="ReportPeriodKind" Value="ReportPeriodKind.Quarter">A quarter</MudSelectItem>
+                        <MudSelectItem T="ReportPeriodKind" Value="ReportPeriodKind.Custom">A custom range</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                @if (_pickKind == ReportPeriodKind.Custom)
+                {
+                    <MudItem xs="6" md="4">
+                        <MudDatePicker Label="From" @bind-Date="_customStart" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="6" md="4">
+                        <MudDatePicker Label="To" @bind-Date="_customEnd" Variant="Variant.Outlined" />
+                    </MudItem>
+                }
+                else
+                {
+                    <MudItem xs="12" md="8">
+                        <MudSelect T="int" Label="Period" @bind-Value="_pickIndex" Variant="Variant.Outlined">
+                            @{ var choices = Choices; }
+                            @for (var index = 0; index < choices.Count; index++)
+                            {
+                                var value = index;
+                                <MudSelectItem T="int" Value="value">@choices[value].Label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+                <MudItem xs="12">
+                    <RecipientsField Label="Send to" @bind-Recipients="_sendNowRecipients" Suggestions="_suggestions" Disabled="!_emailOn" />
+                </MudItem>
+            </MudGrid>
+            var (picked, problem) = PickedPeriod;
+            @if (problem is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block">@problem</MudText>
+            }
+            <div class="d-flex align-center flex-wrap mt-2" style="gap: 0.75rem;">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                           Disabled="_busy || !_emailOn || picked is null || _sendNowRecipients.Count == 0" OnClick="@(() => SendNowAsync(picked!))">Send now</MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" Disabled="picked is null"
+                           Href="@(picked is null ? null : DownloadHref(picked))" Target="_blank">Download PDF</MudButton>
+            </div>
+
+            <MudText Typo="Typo.h6" Class="mt-6">History</MudText>
+            @if (_deliveries.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">No reports yet.</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <thead><tr><th>Period</th><th>When</th><th>How</th><th>To</th><th>Outcome</th></tr></thead>
+                    <tbody>
+                        @foreach (var delivery in _deliveries)
+                        {
+                            <tr>
+                                <td>@PeriodLabel(delivery)</td>
+                                <td>@((delivery.SentUtc ?? delivery.LastAttemptUtc) is { } at ? Local(at) : "")</td>
+                                <td>@(delivery.Kind == ClientReportDeliveryKind.Manual ? $"Sent by {delivery.RequestedBy}" : "Scheduled")</td>
+                                <td><MudTooltip Text="@string.Join(", ", delivery.Recipients)">@delivery.Recipients.Count</MudTooltip></td>
+                                <td>@Outcome(delivery)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int GroupId { get; set; }
+    [Parameter] public string GroupName { get; set; } = "";
+
+    private bool _loaded;
+    private bool _mayManage;
+    private bool _emailOn;
+    private bool _busy;
+    private TimeZoneInfo _zone = TimeZoneInfo.Utc;
+    private int _sendHour = 6;
+    private GroupReportSchedule? _schedule;
+    private ReportFrequency _frequency;
+    private IReadOnlyList<string> _recipients = [];
+    private IReadOnlyList<string> _sendNowRecipients = [];
+    private IReadOnlyList<string> _suggestions = [];
+    private IReadOnlyList<ClientReportDelivery> _deliveries = [];
+    private ReportPeriodKind _pickKind = ReportPeriodKind.Month;
+    private int _pickIndex;
+    private DateTime? _customStart;
+    private DateTime? _customEnd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _mayManage = ClientReportAccess.MayManage(user, GroupId);
+        if (_mayManage)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var settings = await ReportSettingsService.GetAsync(db);
+            _zone = ReportSettingsService.ResolveZone(settings.TimeZoneId);
+            _sendHour = settings.SendHour;
+            _suggestions = await ClientReportService.ListSuggestedRecipientsAsync(db, GroupId);
+            _emailOn = await SenderFactory.GetAsync(CancellationToken.None) is not null;
+            await LoadScheduleAsync(db);
+            _sendNowRecipients = _recipients;
+        }
+
+        _loaded = true;
+    }
+
+    private async Task LoadScheduleAsync(DotMarcDbContext db)
+    {
+        _schedule = await ClientReportService.GetScheduleAsync(db, GroupId);
+        _frequency = _schedule?.Frequency ?? ReportFrequency.Off;
+        _recipients = _schedule?.Recipients ?? [];
+        _deliveries = await ClientReportService.ListDeliveriesAsync(db, GroupId, 10);
+    }
+
+    private DateTimeOffset Now => TimeProvider.GetUtcNow();
+
+    private ClientReportDelivery? LatestScheduled => _deliveries
+        .Where(delivery => delivery.Kind == ClientReportDeliveryKind.Scheduled)
+        .OrderByDescending(delivery => delivery.PeriodStart)
+        .FirstOrDefault();
+
+    private string Local(DateTimeOffset utc) =>
+        TimeZoneInfo.ConvertTime(utc, _zone).ToString("d MMMM yyyy HH:mm", CultureInfo.InvariantCulture);
+
+    /// <summary>The next report the schedule will send: the last complete period, unless it has been dealt with or fell
+    /// due before the schedule started, in which case the one after it.</summary>
+    private string NextReportText
+    {
+        get
+        {
+            if (_schedule is null || _schedule.Frequency == ReportFrequency.Off)
+            {
+                return "Not scheduled.";
+            }
+
+            var next = ReportPeriods.Previous(_schedule.Frequency, _zone, Now);
+            var handled = ReportPeriods.DueUtc(next, _zone, _sendHour) < _schedule.StartedUtc
+                || _deliveries.Any(delivery => delivery.Kind == ClientReportDeliveryKind.Scheduled && delivery.PeriodStart == next.Start
+                    && delivery.Status != ClientReportDeliveryStatus.Pending);
+            if (handled)
+            {
+                next = next.Kind switch
+                {
+                    ReportPeriodKind.Week => ReportPeriods.Week(next.End.AddDays(1)),
+                    ReportPeriodKind.Month => ReportPeriods.Month(next.End.AddDays(1)),
+                    _ => ReportPeriods.Quarter(next.End.AddDays(1)),
+                };
+            }
+
+            return $"Next report: {next.Label}, sends {Local(ReportPeriods.DueUtc(next, _zone, _sendHour))} ({_zone.Id}).";
+        }
+    }
+
+    private IReadOnlyList<ReportPeriod> Choices => _pickKind == ReportPeriodKind.Custom ? [] : ReportPeriods.Recent(_pickKind, _zone, Now, 12);
+
+    private (ReportPeriod? Period, string? Problem) PickedPeriod
+    {
+        get
+        {
+            if (_pickKind != ReportPeriodKind.Custom)
+            {
+                var choices = Choices;
+                return (choices[Math.Clamp(_pickIndex, 0, choices.Count - 1)], null);
+            }
+
+            if (_customStart is not { } start || _customEnd is not { } end)
+            {
+                return (null, null);
+            }
+
+            try
+            {
+                return (ReportPeriods.FromRange(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), _zone, Now), null);
+            }
+            catch (ArgumentException exception)
+            {
+                return (null, exception.Message.Split(" (Parameter")[0]);
+            }
+        }
+    }
+
+    private string DownloadHref(ReportPeriod period) =>
+        string.Create(CultureInfo.InvariantCulture, $"/reports/groups/{GroupId}/pdf?start={period.Start:yyyy-MM-dd}&end={period.End:yyyy-MM-dd}");
+
+    private string PeriodLabel(ClientReportDelivery delivery)
+    {
+        try
+        {
+            return ReportPeriods.FromRange(delivery.PeriodStart, delivery.PeriodEnd, _zone, Now).Label;
+        }
+        catch (ArgumentException)
+        {
+            return $"{ReportPeriod.Format(delivery.PeriodStart)} to {ReportPeriod.Format(delivery.PeriodEnd)}";
+        }
+    }
+
+    private static string Outcome(ClientReportDelivery delivery) => delivery.Status switch
+    {
+        ClientReportDeliveryStatus.Sent => "Sent",
+        ClientReportDeliveryStatus.Failed => $"Failed: {delivery.Error}",
+        ClientReportDeliveryStatus.Skipped => $"Skipped: {delivery.Error}",
+        _ => delivery.Error is null ? "Waiting to send" : $"Retrying: {delivery.Error}",
+    };
+
+    private async Task SaveScheduleAsync()
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await ClientReportService.SetScheduleAsync(db, await AuditActorAccessor.GetAsync(), GroupId, _frequency, _recipients);
+            await LoadScheduleAsync(db);
+            Snackbar.Add($"Report schedule for {GroupName} saved.", Severity.Success);
+        }
+        catch (ArgumentException exception)
+        {
+            Snackbar.Add(exception.Message.Split(" (Parameter")[0], Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SendNowAsync(ReportPeriod period)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Runner.SendNowAsync(await AuditActorAccessor.GetAsync(), GroupId, period, _sendNowRecipients, CancellationToken.None);
+            Snackbar.Add(result.Message, result.Sent ? Severity.Success : Severity.Error);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _deliveries = await ClientReportService.ListDeliveriesAsync(db, GroupId, 10);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

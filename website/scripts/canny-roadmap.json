@@ -78,11 +78,10 @@
   {
     "title": "Add scheduled client report export (PDF and email digest)",
     "version": "v0.9.0",
-    "status": "planned",
+    "status": "complete",
     "details": [
-      "MSPs typically hand each client a regular summary of their email authentication posture. dotMARC is currently a dashboard you have to open, so there is no report you can send.",
-      "Proposal: generate a per-Group or per-domain report (pass rate trends, top failing sources, reject and quarantine reasons, DNS health status) as a PDF, and optionally email it to chosen recipients on a schedule such as monthly.",
-      "This is separate from alerting, which already exists."
+      "Each Group can get a branded PDF report weekly, monthly or quarterly, emailed through Microsoft Graph or SMTP: a summary of every domain's status and pass rate with the change from the last period, a trend chart, per-domain policy, health, top senders and what receivers did, and a plain-language list of what to do next.",
+      "Reports can also be sent or downloaded on demand for any past period. Periods follow your chosen time zone, failed sends are retried for a day before raising an alert, and every delivery is recorded."
     ]
   },
   {
