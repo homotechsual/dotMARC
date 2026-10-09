@@ -26,6 +26,7 @@
     <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
     <PackageReference Include="DmarcRua" Version="2.0.1" />
     <PackageReference Include="ExcelDataReader" Version="3.9.0" />
+    <PackageReference Include="PDFsharp-MigraDoc" Version="6.2.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,4 +35,7 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Reporting/ClientReports/Fonts/*.ttf" />
+  </ItemGroup>
 </Project>
