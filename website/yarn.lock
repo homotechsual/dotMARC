@@ -2749,7 +2749,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@docusaurus/types@npm:3.10.2, @docusaurus/types@npm:^3.10.2":
+"@docusaurus/types@npm:3.10.2, @docusaurus/types@npm:^3.0.0, @docusaurus/types@npm:^3.10.2":
   version: 3.10.2
   resolution: "@docusaurus/types@npm:3.10.2"
   dependencies:
@@ -7205,6 +7205,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"docusaurus-theme-github-codeblock@npm:~2.0.2":
+  version: 2.0.2
+  resolution: "docusaurus-theme-github-codeblock@npm:2.0.2"
+  dependencies:
+    "@docusaurus/types": "npm:^3.0.0"
+  checksum: 10c0/9de760df4b3811f219eecbe877fbc574685f8c01d8ad6547dea657c91c06b09cc16220491470ea7d913c93bfaa0464b7a0ffef4e49cf884efc3c86fe9013dd8c
+  languageName: node
+  linkType: hard
+
 "docusaurus-theme-openapi-docs@npm:^5.2.0":
   version: 5.2.0
   resolution: "docusaurus-theme-openapi-docs@npm:5.2.0"
@@ -7365,6 +7374,7 @@ __metadata:
     autoprefixer: "npm:^10.6.1"
     clsx: "npm:^2.1.1"
     docusaurus-plugin-openapi-docs: "npm:^5.2.0"
+    docusaurus-theme-github-codeblock: "npm:~2.0.2"
     docusaurus-theme-openapi-docs: "npm:^5.2.0"
     playwright: "npm:^1.63.0"
     postcss: "npm:^8.5.29"

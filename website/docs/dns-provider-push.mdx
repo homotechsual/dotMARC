@@ -133,9 +133,8 @@ than the one this app registration lives in, so it must not be restricted to a s
 delegated **Azure Service Management** → `user_impersonation` permission.
 
 :::tip[Set it up with a script]
-[`create-azure-dns-app.sh`](https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/create-azure-dns-app.sh)
-does all of the above and prints the client ID and secret to enter in dotMARC. Run it in Azure Cloud Shell (Bash), or
-anywhere with bash and a signed-in Azure CLI, giving it your dotMARC host:
+`create-azure-dns-app.sh` does all of the above and prints the client ID and secret to enter in dotMARC. Run it in
+Azure Cloud Shell (Bash), or anywhere with bash and a signed-in Azure CLI, giving it your dotMARC host:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/create-azure-dns-app.sh
@@ -146,6 +145,15 @@ Running it again reuses the app rather than creating another, adding the redirec
 new secret alongside the old one. `--name` changes the app's name, and `--secret-years` how long the secret lasts
 (2 years by default).
 :::
+
+<details>
+<summary>The script</summary>
+
+```bash reference title="create-azure-dns-app.sh"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/create-azure-dns-app.sh
+```
+
+</details>
 
 <Checklist id="dns-provider-push-azure-dns" items={[
   "Registered a separate, dedicated Entra app registration for this",
@@ -172,16 +180,24 @@ one-time review in Google Cloud Console that can take several days to turn aroun
 lead time before relying on this provider for a customer outside your own test-user allowlist.
 
 :::tip[Get started with a script]
-[`prepare-google-cloud-dns.sh`](https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/prepare-google-cloud-dns.sh)
-enables both APIs in your project, then prints the redirect URI, the two scopes and a direct console link for each
-remaining step. gcloud can't create this kind of OAuth client, so the consent screen and client are still made in
-the console. Run it in Google Cloud Shell, or anywhere with bash and a signed-in gcloud CLI:
+`prepare-google-cloud-dns.sh` enables both APIs in your project, then prints the redirect URI, the two scopes and a
+direct console link for each remaining step. gcloud can't create this kind of OAuth client, so the consent screen and
+client are still made in the console. Run it in Google Cloud Shell, or anywhere with bash and a signed-in gcloud CLI:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/prepare-google-cloud-dns.sh
 bash prepare-google-cloud-dns.sh dotmarc.contoso.example your-project-id
 ```
 :::
+
+<details>
+<summary>The script</summary>
+
+```bash reference title="prepare-google-cloud-dns.sh"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/prepare-google-cloud-dns.sh
+```
+
+</details>
 
 <Checklist id="dns-provider-push-google-cloud-dns" items={[
   "Enabled the Cloud DNS API and Cloud Resource Manager API",
