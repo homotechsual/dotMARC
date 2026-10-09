@@ -220,6 +220,7 @@ else
             _haloStatuses = (await HaloPsaClient.ListStatusesAsync(_haloSettings)).ToList();
             _haloPriorities = (await HaloPsaClient.ListPrioritiesAsync(_haloSettings)).ToList();
             await LoadHaloAgentsAsync();
+            await RememberOptionNamesAsync(db => PsaOptionNameCache.RememberHaloAsync(db, _haloTicketTypes, _haloPriorities, _haloStatuses, _haloAgents));
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
         {
@@ -254,6 +255,21 @@ else
 
     // Halo only lets an API agent whose role can see agents list them. That mustn't undo the lists that
     // did load, so it reports its own problem and leaves "don't assign" and any saved agent in place.
+    /// <summary>Stores the saved choices' names now the lists are loaded, so they show after a reload without a save. A
+    /// failure only means the numbers may show again later, so it never stops the options loading.</summary>
+    private async Task RememberOptionNamesAsync(Func<DotMarcDbContext, Task> remember)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await remember(db);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Couldn't store the HaloPSA option names");
+        }
+    }
+
     private async Task LoadHaloAgentsAsync()
     {
         try

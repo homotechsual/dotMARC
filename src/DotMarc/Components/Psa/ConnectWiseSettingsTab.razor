@@ -168,6 +168,18 @@ else
                 await LoadBoardOptionsAsync(saved, boardId);
             }
 
+            // Store the saved choices' names now, so they show after a reload without a save. The board's statuses and
+            // types only count when they're for the saved board. A failure here never stops the options loading.
+            try
+            {
+                var forSavedBoard = saved.BoardId == _settings.BoardId;
+                await PsaOptionNameCache.RememberConnectWiseAsync(db, _boards, forSavedBoard ? _statuses : [], forSavedBoard ? _types : [], _priorities);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                Logger.LogWarning(exception, "Couldn't store the ConnectWise option names");
+            }
+
             Snackbar.Add("Loaded boards and priorities from ConnectWise.", Severity.Success);
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)

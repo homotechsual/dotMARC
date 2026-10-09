@@ -158,6 +158,18 @@ else
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             _picklists = await AutotaskClient.GetTicketPicklistsAsync(await AutotaskSettingsService.GetAsync(db));
+
+            // Store the saved choices' names now, so they show after a reload without a save. A failure here never stops
+            // the options loading.
+            try
+            {
+                await PsaOptionNameCache.RememberAutotaskAsync(db, _picklists);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                Logger.LogWarning(exception, "Couldn't store the Autotask option names");
+            }
+
             Snackbar.Add("Loaded queues, ticket types, issue types, priorities and statuses from Autotask.", Severity.Success);
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
