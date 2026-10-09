@@ -67,7 +67,7 @@ internal static class ImportValueParser
         var normalized = new List<string>();
         foreach (var host in hosts)
         {
-            // MTA-STS allows a leading wildcard label, such as *.mail.contoso.com.
+            // MTA-STS allows a leading wildcard label, such as *.mail.contoso.example.
             var wildcard = host.StartsWith("*.", StringComparison.Ordinal);
             if (!DomainNameValidator.TryNormalize(wildcard ? host[2..] : host, out var hostName))
             {

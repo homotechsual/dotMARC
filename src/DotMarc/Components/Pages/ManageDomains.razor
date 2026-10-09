@@ -25,7 +25,7 @@
     <MudPaper Class="pa-4 mb-4" Elevation="1">
         <MudGrid>
             <MudItem xs="9">
-                <MudTextField @bind-Value="_newDomainName" Label="Domain name" Placeholder="contoso.com" Variant="Variant.Outlined"
+                <MudTextField @bind-Value="_newDomainName" Label="Domain name" Placeholder="contoso.example" Variant="Variant.Outlined"
                               Error="@(_addError is not null)" ErrorText="@_addError" Immediate="true" />
             </MudItem>
             <MudItem xs="3" Class="d-flex align-start" Style="gap:0.5rem">
@@ -289,7 +289,7 @@ else
 
         _addError = result switch
         {
-            DomainManagementService.AddDomainResult.InvalidName => "Enter a valid domain name (e.g. contoso.com).",
+            DomainManagementService.AddDomainResult.InvalidName => "Enter a valid domain name (e.g. contoso.example).",
             DomainManagementService.AddDomainResult.AlreadyMonitored => "That domain is already monitored.",
             _ => null
         };

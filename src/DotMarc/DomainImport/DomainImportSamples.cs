@@ -7,9 +7,9 @@ public static class DomainImportSamples
     private static readonly string[][] Rows =
     [
         ["domain", "groups", "tags", "halo client", "monitored", "dkim selectors", "mta-sts mode", "mta-sts mx hosts", "mta-sts max age", "connectwise company", "autotask company"],
-        ["contoso.com", "Contoso", "primary", "Contoso Ltd", "yes", "selector1;selector2", "testing", "mail.contoso.com", "604800", "Contoso Limited", "Contoso Ltd"],
-        ["fabrikam.com", "Fabrikam;Europe", "", "", "yes", "", "", "", "", "", ""],
-        ["old.contoso.com", "Contoso", "-primary", "", "no", "", "off", "", "", "", ""],
+        ["contoso.example", "Contoso", "primary", "Contoso Ltd", "yes", "selector1;selector2", "testing", "mail.contoso.example", "604800", "Contoso Limited", "Contoso Ltd"],
+        ["fabrikam.example", "Fabrikam;Europe", "", "", "yes", "", "", "", "", "", ""],
+        ["old.contoso.example", "Contoso", "-primary", "", "no", "", "off", "", "", "", ""],
     ];
 
     public static string Csv { get; } = string.Join("\r\n", Rows.Select(row => string.Join(',', row.Select(QuoteIfNeeded)))) + "\r\n";

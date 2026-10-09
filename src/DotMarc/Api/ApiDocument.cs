@@ -105,19 +105,19 @@ internal static class ApiExamples
 
     private static readonly Dictionary<Type, object> Samples = new()
     {
-        [typeof(ApiDomain)] = new ApiDomain(42, "contoso.com", true, [new ApiNamedRef(3, "Contoso")], [new ApiNamedRef(7, "Microsoft 365")], ExampleTime, 0.987),
+        [typeof(ApiDomain)] = new ApiDomain(42, "contoso.example", true, [new ApiNamedRef(3, "Contoso")], [new ApiNamedRef(7, "Microsoft 365")], ExampleTime, 0.987),
         [typeof(ApiGroup)] = new ApiGroup(3, "Contoso", 12),
         [typeof(ApiTag)] = new ApiTag(7, "Microsoft 365", "Primary", 30),
         [typeof(ApiCheck)] = new ApiCheck("Ok", ExampleTime, null),
         [typeof(ApiSource)] = new ApiSource("203.0.113.25", 1480, "Pass", "Pass", "None"),
-        [typeof(ApiAlert)] = new ApiAlert(901, "SpfRecordBroken", "SPF record broken", "contoso.com", new ApiNamedRef(42, "contoso.com"), "Warning",
-            "SPF record broken", "contoso.com's SPF record has more than 10 DNS lookups.", ExampleTime, false, null, false),
-        [typeof(ApiAddDomainRequest)] = new ApiAddDomainRequest("contoso.com"),
+        [typeof(ApiAlert)] = new ApiAlert(901, "SpfRecordBroken", "SPF record broken", "contoso.example", new ApiNamedRef(42, "contoso.example"), "Warning",
+            "SPF record broken", "contoso.example's SPF record has more than 10 DNS lookups.", ExampleTime, false, null, false),
+        [typeof(ApiAddDomainRequest)] = new ApiAddDomainRequest("contoso.example"),
         [typeof(ApiSetGroupsRequest)] = new ApiSetGroupsRequest([3, 5]),
         [typeof(ApiSetTagsRequest)] = new ApiSetTagsRequest([7]),
         [typeof(ApiSetMonitoringRequest)] = new ApiSetMonitoringRequest(true),
         [typeof(ApiImportRequest)] = new ApiImportRequest("skip", "skip",
-            [new ApiImportDomain("contoso.com", ["Contoso"], ["Microsoft 365"], true), new ApiImportDomain("fabrikam.com", ["Fabrikam"], null, null)]),
+            [new ApiImportDomain("contoso.example", ["Contoso"], ["Microsoft 365"], true), new ApiImportDomain("fabrikam.example", ["Fabrikam"], null, null)]),
         [typeof(ApiAcknowledgement)] = new ApiAcknowledgement(true, 1, 0),
     };
 

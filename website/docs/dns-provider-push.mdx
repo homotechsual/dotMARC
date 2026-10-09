@@ -70,7 +70,7 @@ a CNAME target or a TXT value with the key. Where to find them:
 
 Selectors that already have a record in DNS are filled in from it, whatever the mail platform. For a Microsoft 365
 domain with nothing published yet, each selector starts with the part of its target that follows from the domain
-(`selector1-contoso-com._domainkey.`). The rest, your tenant's `onmicrosoft.com` name and a letter Microsoft assigns,
+(for `contoso.example`, `selector1-contoso-example._domainkey.`). The rest, your tenant's `onmicrosoft.com` name and a letter Microsoft assigns,
 can only come from Microsoft 365, and dotMARC won't save a target that stops at `._domainkey`.
 
 Paste records as the console shows them: quotes and line breaks are tidied away. Once a selector has a record, the DKIM

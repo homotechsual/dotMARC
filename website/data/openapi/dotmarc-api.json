@@ -29,7 +29,7 @@
       },
       "ApiAddDomainRequest": {
         "example": {
-          "name": "contoso.com"
+          "name": "contoso.example"
         },
         "properties": {
           "name": {
@@ -47,15 +47,15 @@
           "acknowledgeable": false,
           "domain": {
             "id": 42,
-            "name": "contoso.com"
+            "name": "contoso.example"
           },
           "id": 901,
-          "message": "contoso.com's SPF record has more than 10 DNS lookups.",
+          "message": "contoso.example's SPF record has more than 10 DNS lookups.",
           "raisedUtc": "2026-10-01T09:30:00+00:00",
           "resolved": false,
           "resolvedUtc": null,
           "severity": "Warning",
-          "subject": "contoso.com",
+          "subject": "contoso.example",
           "title": "SPF record broken",
           "type": "SpfRecordBroken",
           "typeName": "SPF record broken"
@@ -201,7 +201,7 @@
           "id": 42,
           "lastReportReceivedUtc": "2026-10-01T09:30:00+00:00",
           "monitored": true,
-          "name": "contoso.com",
+          "name": "contoso.example",
           "passRate": 0.987,
           "tags": [
             {
@@ -415,7 +415,7 @@
                 "Contoso"
               ],
               "monitored": true,
-              "name": "contoso.com",
+              "name": "contoso.example",
               "tags": [
                 "Microsoft 365"
               ]
@@ -425,7 +425,7 @@
                 "Fabrikam"
               ],
               "monitored": null,
-              "name": "fabrikam.com",
+              "name": "fabrikam.example",
               "tags": null
             }
           ],
@@ -1158,18 +1158,17 @@
         "x-dotmarc-permission": "DomainsAdd"
       }
     },
-    "/api/v1/domains/{id}": {
+    "/api/v1/domains/{domain}": {
       "get": {
-        "description": "The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran.\n\nNeeds the DomainsView permission.",
+        "description": "The domain with the results of dotMARC's last DNS checks. The API never runs checks itself; checkedUtc says when each last ran. Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsView permission.",
         "operationId": "GetDomain",
         "parameters": [
           {
             "in": "path",
-            "name": "id",
+            "name": "domain",
             "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -1192,18 +1191,17 @@
         "x-dotmarc-permission": "DomainsView"
       }
     },
-    "/api/v1/domains/{id}/groups": {
+    "/api/v1/domains/{domain}/groups": {
       "put": {
-        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them.\n\nNeeds the DomainsEdit permission.",
+        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
         "operationId": "SetDomainGroups",
         "parameters": [
           {
             "in": "path",
-            "name": "id",
+            "name": "domain",
             "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -1239,18 +1237,17 @@
         "x-dotmarc-permission": "DomainsEdit"
       }
     },
-    "/api/v1/domains/{id}/monitoring": {
+    "/api/v1/domains/{domain}/monitoring": {
       "put": {
-        "description": "Whether dotMARC alerts on the domain's missing reports and DNS health.\n\nNeeds the DomainsEdit permission.",
+        "description": "Whether dotMARC alerts on the domain's missing reports and DNS health. Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
         "operationId": "SetDomainMonitoring",
         "parameters": [
           {
             "in": "path",
-            "name": "id",
+            "name": "domain",
             "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -1286,18 +1283,17 @@
         "x-dotmarc-permission": "DomainsEdit"
       }
     },
-    "/api/v1/domains/{id}/reports/summary": {
+    "/api/v1/domains/{domain}/reports/summary": {
       "get": {
-        "description": "Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30).\n\nNeeds the DomainsView permission.",
+        "description": "Volume, pass rate, why failing mail was let through or rejected, and the 20 busiest sending IPs, over the last 1 to 30 days (default 30). Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsView permission.",
         "operationId": "GetReportSummary",
         "parameters": [
           {
             "in": "path",
-            "name": "id",
+            "name": "domain",
             "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           },
           {
@@ -1338,18 +1334,17 @@
         "x-dotmarc-permission": "DomainsView"
       }
     },
-    "/api/v1/domains/{id}/tags": {
+    "/api/v1/domains/{domain}/tags": {
       "put": {
-        "description": "Replaces the domain's tags with exactly these.\n\nNeeds the DomainsEdit permission.",
+        "description": "Replaces the domain's tags with exactly these. Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
         "operationId": "SetDomainTags",
         "parameters": [
           {
             "in": "path",
-            "name": "id",
+            "name": "domain",
             "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           }
         ],

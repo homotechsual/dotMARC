@@ -27,8 +27,8 @@ public static class DomainNameValidator
         reason = candidate switch
         {
             "" => "The domain is empty.",
-            _ when candidate.Contains("://", StringComparison.Ordinal) || candidate.Contains('/') => "That's a web address. Use just the domain, for example contoso.com.",
-            _ when candidate.Contains('@') => "That's an email address. Use just the domain, for example contoso.com.",
+            _ when candidate.Contains("://", StringComparison.Ordinal) || candidate.Contains('/') => "That's a web address. Use just the domain, for example contoso.example.",
+            _ when candidate.Contains('@') => "That's an email address. Use just the domain, for example contoso.example.",
             _ when candidate.Any(char.IsWhiteSpace) => "A domain can't contain spaces.",
             _ => null
         };
@@ -45,7 +45,7 @@ public static class DomainNameValidator
         var rawLabels = candidate.Split('.');
         if (rawLabels.Length < 2)
         {
-            reason = "A domain needs at least two parts, for example contoso.com.";
+            reason = "A domain needs at least two parts, for example contoso.example.";
             return false;
         }
 
