@@ -1,0 +1,57 @@
+---
+slug: v0-9-1
+date: 2026-10-09T18:38:52.058Z
+title: "dotMARC v0.9.1: DMARCbis reports, report email fixes, and a friendlier API"
+description: Reports in the new DMARCbis format import again, report email recovers from permission changes, the API finds domains by name and documents every error, and DNS push setup scripts.
+authors: [mikey]
+tags: [release]
+---
+
+Fixes and polish from the first days of [`v0.9.0`](/releases-updates/v0-9-0) in use, led by DMARC reports that
+stopped importing.
+
+{/* truncate */}
+
+## DMARC reports in the DMARCbis format
+
+Some reporters have started adding parts of DMARCbis, the updated DMARC standard, to their aggregate reports. Reports
+that named the software that generated them, or included the new `psd` tag, failed with "DMARC aggregate report failed
+schema validation" and were retried on every poll. They now import, as do reports whose disposition is DMARCbis's
+`pass`.
+
+Reports left unread by the failure are picked up again on the next poll after you update. If a report still can't be
+read, the log and its parse failure now name the element at fault.
+
+## Client report email
+
+* **New permissions take effect straight away.** dotMARC fetches a fresh Microsoft Graph token when you save
+  **Manage > Email & reports**, and retries a refused send once with a new token, so adding a permission no longer
+  needs a restart.
+* **Clearer refusals.** When Exchange's application access policy blocks a send, the error says so. The
+  [Client reports](/docs/client-reports) page shows how to check the policy, and that changes to it can take a while
+  to apply.
+
+## A friendlier API
+
+* **Find a domain by name.** Every `/domains/{domain}` route takes the domain's name, such as `contoso.example`, as
+  well as its id, so a script that knows the name needs one request, not two.
+* **Every error is documented.** Each operation now lists the errors it can return (401, 403, 404, 409, 429 and 500)
+  and what each means. An unexpected error comes back as problem+json, like every other API error, instead of the
+  web page it returned before.
+* **One click to the reference.** [Using the API](/docs/api) and the API keys tab on **Access** link straight to the
+  API reference.
+* Examples use the reserved `.example` domains.
+
+## DNS push setup scripts
+
+Setting up [DNS push](/docs/dns-provider-push) for Azure DNS is now one command: a script creates the Entra app with
+the right redirect URI and permission, and prints the client ID and secret to enter in dotMARC. For Google Cloud DNS,
+a script turns on the APIs and gives you a link for each remaining step in the console. The docs show each script.
+
+## Smaller changes
+
+* HaloPSA, ConnectWise and Autotask settings remember the names of your chosen ticket types, priorities and statuses
+  as soon as the options load, so they no longer show as numbers after a reload.
+* Help icons sit centred on their fields, and the **Send test** buttons are as tall as the inputs beside them.
+* A new [AI use](/docs/ai-use) page explains how AI tools help build dotMARC, and that a human developer reviews every
+  change before release.

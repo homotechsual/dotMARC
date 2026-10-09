@@ -921,7 +921,7 @@
   "info": {
     "description": "Read domains, DNS health, DMARC report summaries, groups, tags and alerts, and add, import and organise domains. Authenticate with an API key from dotMARC's Access page: `Authorization: Bearer dmk_...`. Each operation needs the permission named in its description, and a key limited to certain groups only sees their domains. Each key may make 120 requests a minute.",
     "title": "dotMARC API",
-    "version": "0.9.0"
+    "version": "0.9.1"
   },
   "openapi": "3.0.4",
   "paths": {
