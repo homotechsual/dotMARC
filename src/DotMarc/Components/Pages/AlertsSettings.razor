@@ -50,8 +50,8 @@ else
                                       ValueChanged="@(url => channelSetting.SetUrl(_settings!, url))" InputType="InputType.Url" Variant="Variant.Outlined" />
                     </FieldWithHelp>
                 </MudItem>
-                <MudItem xs="12" md="2" Class="d-flex align-center">
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Send" Disabled="@(_testingChannel is not null || string.IsNullOrWhiteSpace(channelSetting.GetUrl(_settings)))"
+                <MudItem xs="12" md="2" Class="d-flex align-start">
+                    <MudButton Variant="Variant.Outlined" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Send" Disabled="@(_testingChannel is not null || string.IsNullOrWhiteSpace(channelSetting.GetUrl(_settings)))"
                                OnClick="@(() => SendTestAlertAsync(channelSetting))">@(_testingChannel == channelSetting.Channel ? "Sending..." : "Send test")</MudButton>
                 </MudItem>
             }

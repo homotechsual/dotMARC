@@ -100,9 +100,9 @@
         <MudDivider Class="my-4" />
         <MudText Typo="Typo.subtitle1">Send a test email</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">Uses the saved settings. Save first if you've changed them.</MudText>
-        <div class="d-flex align-center flex-wrap" style="gap: 0.75rem;">
+        <div class="d-flex align-start flex-wrap" style="gap: 0.75rem;">
             <MudTextField Label="Send to" @bind-Value="_testAddress" Disabled="_isDemo" Variant="Variant.Outlined" InputType="InputType.Email" Style="min-width: 300px;" />
-            <MudButton Variant="Variant.Outlined" Disabled="_isDemo || _busy || string.IsNullOrWhiteSpace(_testAddress)" OnClick="SendTestAsync">Send test email</MudButton>
+            <MudButton Variant="Variant.Outlined" Class="button-beside-input" Disabled="_isDemo || _busy || string.IsNullOrWhiteSpace(_testAddress)" OnClick="SendTestAsync">Send test email</MudButton>
         </div>
     </MudPaper>
 
