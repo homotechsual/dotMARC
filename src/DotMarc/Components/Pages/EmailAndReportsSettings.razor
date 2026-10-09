@@ -199,6 +199,9 @@
             await EmailSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStore, _email!, _newPassword);
             _newPassword = null;
             _email = await db.EmailSettings.AsNoTracking().SingleAsync();
+
+            // A cached Graph token predates any permission granted since (Mail.Send, say); start afresh.
+            Services.GetService<IGraphTokenProvider>()?.Invalidate();
             Snackbar.Add("Email settings saved.", Severity.Success);
         }
         catch (ArgumentException exception)

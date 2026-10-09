@@ -11,14 +11,49 @@ public sealed class GraphEmailSenderTests
 {
     private sealed class FixedToken : IGraphTokenProvider
     {
+        public int Invalidations { get; private set; }
+
         public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken) => Task.FromResult("token");
+
+        public void Invalidate() => Invalidations++;
     }
 
-    private static (GraphEmailSender Sender, FakeHttpMessageHandler Handler) Create()
+    private static (GraphEmailSender Sender, FakeHttpMessageHandler Handler) Create() => Create(new FixedToken());
+
+    private static (GraphEmailSender Sender, FakeHttpMessageHandler Handler) Create(FixedToken token)
     {
         var handler = new FakeHttpMessageHandler { StatusCode = HttpStatusCode.Accepted, ResponseBody = "" };
         var http = new HttpClient(handler) { BaseAddress = new Uri("https://graph.microsoft.com/v1.0/") };
-        return (new GraphEmailSender(http, new FixedToken(), "reports@nova-msp.example"), handler);
+        return (new GraphEmailSender(http, token, "reports@nova-msp.example"), handler);
+    }
+
+    [Fact]
+    public async Task ARefusalWithAStaleToken_IsRetriedOnce_WithAFreshToken()
+    {
+        var token = new FixedToken();
+        var (sender, handler) = Create(token);
+        handler.StatusCodes.Enqueue(HttpStatusCode.Forbidden);
+        handler.ResponseBodies.Enqueue("""{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}""");
+        handler.StatusCodes.Enqueue(HttpStatusCode.Accepted);
+        handler.ResponseBodies.Enqueue("");
+
+        await sender.SendAsync(new EmailMessage(["it@aurora-retail.example"], "Subject", "<p>Hi</p>", "Hi", []), CancellationToken.None);
+
+        Assert.Equal((2, 1), (handler.Requests.Count, token.Invalidations));
+    }
+
+    [Fact]
+    public async Task ARefusalThatPersists_WithAFreshToken_IsReported()
+    {
+        var token = new FixedToken();
+        var (sender, handler) = Create(token);
+        handler.StatusCode = HttpStatusCode.Forbidden;
+        handler.ResponseBody = """{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}""";
+
+        await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync(
+            new EmailMessage(["it@aurora-retail.example"], "Subject", "<p>Hi</p>", "Hi", []), CancellationToken.None));
+
+        Assert.Equal((2, 1), (handler.Requests.Count, token.Invalidations));
     }
 
     [Fact]
@@ -88,13 +123,13 @@ public sealed class GraphEmailSenderTests
     public async Task ALargeMessage_WithoutMailReadWrite_SaysWhichPermissionIsMissing()
     {
         var (sender, handler) = Create();
-        handler.StatusCodes.Enqueue(HttpStatusCode.Forbidden);
-        handler.ResponseBodies.Enqueue("""{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}""");
+        handler.StatusCode = HttpStatusCode.Forbidden;
+        handler.ResponseBody = """{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}""";
 
         var exception = await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync(LargeMessage(), CancellationToken.None));
 
         Assert.Contains("Mail.ReadWrite", exception.Message);
-        Assert.Single(handler.Requests);
+        Assert.Equal(2, handler.Requests.Count); // the draft, then once more with a fresh token
     }
 
     [Fact]

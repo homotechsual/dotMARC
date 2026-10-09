@@ -27,7 +27,7 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
         var json = JsonSerializer.Serialize(new { message = MessageBody(message, includeAttachments: true), saveToSentItems = false });
         if (Encoding.UTF8.GetByteCount(json) <= MaximumRequestBytes)
         {
-            using var sent = await GraphAsync(HttpMethod.Post, $"{MailboxPath}/sendMail", Json(json), "", cancellationToken).ConfigureAwait(false);
+            using var sent = await GraphAsync(HttpMethod.Post, $"{MailboxPath}/sendMail", () => Json(json), "", cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -37,8 +37,8 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
     private async Task SendLargeAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         const string draftHint = " Sending a report over 4 MB creates it as a draft first, which needs the Mail.ReadWrite application permission as well as Mail.Send.";
-        using var created = await GraphAsync(HttpMethod.Post, $"{MailboxPath}/messages",
-            Json(JsonSerializer.Serialize(MessageBody(message, includeAttachments: false))), draftHint, cancellationToken).ConfigureAwait(false);
+        var draftJson = JsonSerializer.Serialize(MessageBody(message, includeAttachments: false));
+        using var created = await GraphAsync(HttpMethod.Post, $"{MailboxPath}/messages", () => Json(draftJson), draftHint, cancellationToken).ConfigureAwait(false);
         var draftId = ReadString(await created.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), "id")
             ?? throw new EmailSendException("Microsoft Graph created the draft but didn't say its id.");
         var draftPath = $"{MailboxPath}/messages/{Uri.EscapeDataString(draftId)}";
@@ -50,14 +50,14 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
                 await UploadAsync(draftPath, attachment, cancellationToken).ConfigureAwait(false);
             }
 
-            using var sent = await GraphAsync(HttpMethod.Post, $"{draftPath}/send", content: null, "", cancellationToken).ConfigureAwait(false);
+            using var sent = await GraphAsync(HttpMethod.Post, $"{draftPath}/send", () => null, "", cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Don't leave a half-built report sitting in the mailbox's drafts.
             try
             {
-                using var deleted = await GraphAsync(HttpMethod.Delete, draftPath, content: null, "", CancellationToken.None).ConfigureAwait(false);
+                using var deleted = await GraphAsync(HttpMethod.Delete, draftPath, () => null, "", CancellationToken.None).ConfigureAwait(false);
             }
             catch (EmailSendException)
             {
@@ -73,7 +73,7 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
         {
             AttachmentItem = new { attachmentType = "file", name = attachment.FileName, size = attachment.Bytes.Length, contentType = attachment.ContentType },
         });
-        using var session = await GraphAsync(HttpMethod.Post, $"{draftPath}/attachments/createUploadSession", Json(sessionRequest), "", cancellationToken).ConfigureAwait(false);
+        using var session = await GraphAsync(HttpMethod.Post, $"{draftPath}/attachments/createUploadSession", () => Json(sessionRequest), "", cancellationToken).ConfigureAwait(false);
         var uploadUrl = ReadString(await session.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), "uploadUrl")
             ?? throw new EmailSendException("Microsoft Graph didn't return an upload address for the attachment.");
 
@@ -117,22 +117,33 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
     private static StringContent Json(string json) => new(json, Encoding.UTF8, "application/json");
 
     /// <summary>A Graph call with the app's token; throws <see cref="EmailSendException"/> with Graph's message (and
-    /// <paramref name="forbiddenHint"/>, or the general Mail.Send hint, on a 403).</summary>
-    private async Task<HttpResponseMessage> GraphAsync(HttpMethod method, string path, HttpContent? content, string forbiddenHint, CancellationToken cancellationToken)
+    /// <paramref name="forbiddenHint"/>, or the general Mail.Send hint, on a 403). A 403 is tried once more with a fresh
+    /// token, since the cached one may predate a permission granted since.</summary>
+    private async Task<HttpResponseMessage> GraphAsync(HttpMethod method, string path, Func<HttpContent?> content, string forbiddenHint, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(method, path) { Content = content };
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            throw new EmailSendException($"Couldn't sign in to Microsoft Graph: {exception.Message}", exception);
-        }
+            using var request = new HttpRequestMessage(method, path) { Content = content() };
+            try
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw new EmailSendException($"Couldn't sign in to Microsoft Graph: {exception.Message}", exception);
+            }
 
-        var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
-        await EnsureSuccessAsync(response, forbiddenHint, cancellationToken).ConfigureAwait(false);
-        return response;
+            var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden && attempt == 1)
+            {
+                response.Dispose();
+                tokenProvider.Invalidate();
+                continue;
+            }
+
+            await EnsureSuccessAsync(response, forbiddenHint, cancellationToken).ConfigureAwait(false);
+            return response;
+        }
     }
 
     private async Task<HttpResponseMessage> SendRawAsync(HttpRequestMessage request, CancellationToken cancellationToken)
