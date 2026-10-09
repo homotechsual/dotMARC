@@ -300,6 +300,22 @@ public static class DemoDataSeeder
             GroupId = groupsByName[ViewerScopedGroupName].Id, DisplayName = "Aurora Retail Ltd", PrimaryColour = "#7A1FA2",
         });
 
+        // Report and email settings are singleton rows the truncate leaves alone too; put them back so one visitor's
+        // changes don't stay for everyone. The demo never sends email whatever these say.
+        var reportSettings = await context.ReportSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        reportSettings.TimeZoneId = "UTC";
+        reportSettings.SendHour = 6;
+        reportSettings.NumberFormat = DotMarc.Reporting.ClientReports.ReportSettings.DefaultNumberFormat;
+        var emailSettings = await context.EmailSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        emailSettings.Provider = DotMarc.Email.EmailProvider.Off;
+        emailSettings.FromAddress = null;
+        emailSettings.FromName = null;
+        emailSettings.SmtpHost = null;
+        emailSettings.SmtpPort = 587;
+        emailSettings.SmtpSecurity = DotMarc.Email.SmtpSecurity.StartTls;
+        emailSettings.SmtpUsername = null;
+        emailSettings.SmtpPasswordConfigured = false;
+
         // A monthly report schedule, so the Reports dialog has something to show. The demo never sends email.
         context.GroupReportSchedules.Add(new DotMarc.Reporting.ClientReports.GroupReportSchedule
         {
