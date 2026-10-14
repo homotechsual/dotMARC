@@ -11,6 +11,12 @@ internal sealed class FakeGraphMailboxClient : IGraphMailboxClient
 
     public bool FailGetUnreadMessages { get; set; }
 
+    public MailboxAccess Access { get; set; } = new("dmarc-reports@example.com", 0, true);
+    public Exception? AccessFailure { get; set; }
+
+    public Task<MailboxAccess> CheckAccessAsync(CancellationToken cancellationToken) =>
+        AccessFailure is null ? Task.FromResult(Access) : Task.FromException<MailboxAccess>(AccessFailure);
+
     public Task<IReadOnlyList<MailboxMessage>> GetUnreadMessagesAsync(CancellationToken cancellationToken)
     {
         if (FailGetUnreadMessages)

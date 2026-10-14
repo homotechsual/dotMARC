@@ -68,6 +68,7 @@ public sealed class PollingServiceDiActivationTests : IAsyncLifetime
         services.AddLogging();
         services.AddDbContext<DotMarcDbContext>(options => options.UseNpgsql(_connectionString));
         services.AddSingleton<IGraphMailboxClient>(new NoOpGraphMailboxClient());
+        services.AddSingleton<PollNowSignal>();
         services.AddSingleton<IAlertingService>(new NoOpAlertingService());
         services.Configure<GraphOptions>(o =>
         {
@@ -97,6 +98,7 @@ public sealed class PollingServiceDiActivationTests : IAsyncLifetime
             Task.FromResult<IReadOnlyList<MailboxAttachment>>([]);
 
         public Task MarkAsReadAsync(string messageId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<MailboxAccess> CheckAccessAsync(CancellationToken cancellationToken) => Task.FromResult(new MailboxAccess("", 0, true));
     }
 
     private sealed class NoOpAlertingService : IAlertingService

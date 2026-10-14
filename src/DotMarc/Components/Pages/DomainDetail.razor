@@ -63,7 +63,17 @@ else
                 <MudItem xs="4"><MudText>Volume (30d): <b>@_totalVolume</b></MudText></MudItem>
                 <MudItem xs="4"><MudText>Sources: <b>@_sourceCount</b></MudText></MudItem>
             </MudGrid>
-            <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
+            @if (_hasTrend)
+            {
+                <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="my-4">
+                    No DMARC reports received for this domain in the last 30 days. If they should be arriving, check mailbox
+                    access on the <MudLink Href="/dashboard">dashboard</MudLink>.
+                </MudAlert>
+            }
             @if (_reasonBreakdown is { Total: > 0 } breakdown)
             {
                 <MudPaper Class="pa-4 mt-4" Elevation="1">
@@ -553,6 +563,7 @@ else
     private int _sourceCount;
     private List<ChartSeries<double>> _series = [];
     private string[] _xAxisLabels = [];
+    private bool _hasTrend;
     private ReasonBreakdown? _reasonBreakdown;
     private double[] _reasonData = [];
     private string[] _reasonLabels = ["Benign override", "Local policy", "Other", "SPF failure (inferred)", "DKIM failure (inferred)", "SPF & DKIM failure (inferred)", "No reason given"];
@@ -781,28 +792,10 @@ else
             _ = DetectMailServicesInBackgroundAsync();
         }
 
-        // Bucket by day-received (of the report, not the record) rather than the record itself,
-        // since ReportRecord has no timestamp of its own - Report.ReceivedUtc is what's available.
-        var dailyBuckets = _domain.Reports
-            .SelectMany(r => r.Records.Select(rec => new { Date = DateOnly.FromDateTime(r.ReceivedUtc.UtcDateTime), rec.Disposition, rec.MessageCount }))
-            .GroupBy(x => x.Date)
-            .ToDictionary(g => g.Key, g => new
-            {
-                None = g.Where(x => x.Disposition == DispositionResult.None).Sum(x => x.MessageCount),
-                Quarantine = g.Where(x => x.Disposition == DispositionResult.Quarantine).Sum(x => x.MessageCount),
-                Reject = g.Where(x => x.Disposition == DispositionResult.Reject).Sum(x => x.MessageCount)
-            });
-
-        var days = Enumerable.Range(0, 30)
-            .Select(i => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-29 + i)))
-            .ToList();
-        _xAxisLabels = days.Select(d => d.ToString("MM/dd")).ToArray();
-        _series =
-        [
-            new ChartSeries<double> { Name = "Passed (none)", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.None : 0)).ToArray() },
-            new ChartSeries<double> { Name = "Quarantined", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.Quarantine : 0)).ToArray() },
-            new ChartSeries<double> { Name = "Rejected", Data = days.Select(d => (double)(dailyBuckets.TryGetValue(d, out var b) ? b.Reject : 0)).ToArray() }
-        ];
+        var trend = DispositionTrend.Build(_domain.Reports, DateOnly.FromDateTime(DateTime.UtcNow));
+        _xAxisLabels = trend.Labels.ToArray();
+        _series = trend.Series.ToList();
+        _hasTrend = trend.HasData;
 
         _reasonBreakdown = DomainStatistics.GetReasonBreakdown(_domain.Reports);
         _reasonData = [_reasonBreakdown.BenignOverride, _reasonBreakdown.LocalPolicy, _reasonBreakdown.Other, _reasonBreakdown.InferredSpfFailure, _reasonBreakdown.InferredDkimFailure, _reasonBreakdown.InferredBothFailure, _reasonBreakdown.NoReasonGiven];

@@ -128,7 +128,15 @@ if (!demoOptions.Enabled)
     {
         client.BaseAddress = new Uri("https://graph.microsoft.com/v1.0/");
     });
+
+    // The TLS reports client throws when no TLS reports mailbox is set up, so it's only resolved when one is.
+    builder.Services.AddScoped(services => new MailboxAccessCheck(
+        services.GetRequiredService<IGraphMailboxClient>(),
+        () => services.GetService<ITlsrptGraphMailboxClient>(),
+        services.GetRequiredService<Microsoft.Extensions.Options.IOptions<GraphOptions>>()));
 }
+
+builder.Services.AddSingleton<DotMarc.Ingestion.PollNowSignal>();
 
 builder.Services.AddHttpClient<IDmarcDnsChecker, DmarcDnsChecker>(client =>
 {

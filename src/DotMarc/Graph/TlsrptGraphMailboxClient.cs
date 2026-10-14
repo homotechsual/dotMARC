@@ -47,6 +47,17 @@ public sealed class TlsrptGraphMailboxClient : ITlsrptGraphMailboxClient
         using var response = await SendAsync(HttpMethod.Patch, $"users/{_mailboxAddress}/messages/{messageId}", content, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<MailboxAccess> CheckAccessAsync(CancellationToken cancellationToken)
+    {
+        var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"users/{_mailboxAddress}/mailFolders/inbox?$select=unreadItemCount");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await GraphAccessProblem.EnsureSuccessAsync(response, token, _tokenProvider, _mailboxAddress, _options, isWrite: false, cancellationToken).ConfigureAwait(false);
+        var folder = JsonSerializer.Deserialize<InboxCount>(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), JsonOptions)!;
+        return new MailboxAccess(_mailboxAddress, folder.UnreadItemCount, GraphAccessProblem.CanMarkRead(token));
+    }
+
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, path) { Content = content };
@@ -61,4 +72,5 @@ public sealed class TlsrptGraphMailboxClient : ITlsrptGraphMailboxClient
     private sealed record MessageDto(string Id, string Subject, bool HasAttachments);
     private sealed record AttachmentListResponse([property: JsonPropertyName("value")] List<AttachmentDto> Value);
     private sealed record AttachmentDto(string Name, string ContentType, string ContentBytes);
+    private sealed record InboxCount(int UnreadItemCount);
 }

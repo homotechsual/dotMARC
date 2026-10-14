@@ -60,6 +60,9 @@ public static class GraphAccessProblem
         return policy;
     }
 
+    /// <summary>Whether the token lets dotMARC mark messages read, or null when the token can't be read.</summary>
+    public static bool? CanMarkRead(string accessToken) => RolesIn(accessToken)?.Contains(ReadWrite);
+
     /// <summary>The roles in an app-only token, or null when the token can't be read.</summary>
     private static IReadOnlyList<string>? RolesIn(string accessToken)
     {

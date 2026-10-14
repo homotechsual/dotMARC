@@ -11,6 +11,8 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IServiceProvider Services
+@inject DotMarc.Ingestion.PollNowSignal PollNow
 
 <PageTitle>dotMARC - Dashboard</PageTitle>
 <div class="d-flex align-center mb-1">
@@ -243,10 +245,81 @@ else
                 }
             </MudText>
         }
+
+        @* Only when dotMARC polls a real mailbox: the demo has none. *@
+        @if (Services.GetService<DotMarc.Graph.MailboxAccessCheck>() is not null)
+        {
+            <AuthorizeView Policy="LogsView" Context="logsAuth">
+                <div class="d-flex flex-wrap mt-3" style="gap: 0.5rem;">
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.MarkEmailRead" Disabled="@_checkingMailbox" OnClick="CheckMailboxAsync">Check mailbox access</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Sync" Disabled="@_pollingNow" OnClick="PollNowAsync">@(_pollingNow ? "Polling..." : "Poll now")</MudButton>
+                </div>
+                @foreach (var result in _mailboxChecks)
+                {
+                    <MudAlert Severity="@(result.Problem is null ? Severity.Success : result.CanRead ? Severity.Warning : Severity.Error)" Dense="true" Class="mt-2">
+                        <b>@result.Purpose</b>: @result.Summary
+                        @if (result.Problem is not null)
+                        {
+                            <br />
+                            @foreach (var part in DotMarc.Components.Shared.TextLinks.Split(result.Problem))
+                            {
+                                if (part.IsLink)
+                                {
+                                    <MudLink Href="@part.Text" Target="_blank" Underline="Underline.Always">@part.Text</MudLink>
+                                }
+                                else
+                                {
+                                    @part.Text
+                                }
+                            }
+                        }
+                    </MudAlert>
+                }
+            </AuthorizeView>
+        }
     </MudPaper>
 }
 
 @code {
+    private bool _checkingMailbox;
+    private bool _pollingNow;
+    private IReadOnlyList<DotMarc.Graph.MailboxCheckResult> _mailboxChecks = [];
+
+    /// <summary>Reads each polled mailbox without changing anything, so an admin can see whether dotMARC can reach it.</summary>
+    private async Task CheckMailboxAsync()
+    {
+        _checkingMailbox = true;
+        try
+        {
+            await using var scope = Services.CreateAsyncScope();
+            _mailboxChecks = await scope.ServiceProvider.GetRequiredService<DotMarc.Graph.MailboxAccessCheck>().CheckAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _checkingMailbox = false;
+        }
+    }
+
+    /// <summary>Wakes the poller instead of waiting for the next scheduled poll, then shows how that poll went.</summary>
+    private async Task PollNowAsync()
+    {
+        _pollingNow = true;
+        try
+        {
+            await PollNow.RequestAsync().WaitAsync(TimeSpan.FromMinutes(2));
+            await LoadAsync();
+            Snackbar.Add(_lastPoll?.Succeeded == true ? "Mailbox polled." : "The poll ran but failed. See the polling status for why.", _lastPoll?.Succeeded == true ? Severity.Success : Severity.Warning);
+        }
+        catch (TimeoutException)
+        {
+            Snackbar.Add("The poll is taking a while. The polling status will show the result when it finishes.", Severity.Info);
+        }
+        finally
+        {
+            _pollingNow = false;
+        }
+    }
+
     private DashboardSummary? _summary;
     private List<DashboardDomainRow> _rows = [];
     private PollStatusRow? _lastPoll;

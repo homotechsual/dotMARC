@@ -57,6 +57,17 @@ public sealed class GraphMailboxClient : IGraphMailboxClient
         await SendAsync(HttpMethod.Patch, path, content, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<MailboxAccess> CheckAccessAsync(CancellationToken cancellationToken)
+    {
+        var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"users/{_options.MailboxAddress}/mailFolders/inbox?$select=unreadItemCount");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await GraphAccessProblem.EnsureSuccessAsync(response, token, _tokenProvider, _options.MailboxAddress, _options, isWrite: false, cancellationToken).ConfigureAwait(false);
+        var folder = JsonSerializer.Deserialize<InboxCount>(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), JsonOptions)!;
+        return new MailboxAccess(_options.MailboxAddress, folder.UnreadItemCount, GraphAccessProblem.CanMarkRead(token));
+    }
+
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, path) { Content = content };
@@ -74,4 +85,5 @@ public sealed class GraphMailboxClient : IGraphMailboxClient
 
     private sealed record AttachmentListResponse([property: JsonPropertyName("value")] List<AttachmentDto> Value);
     private sealed record AttachmentDto(string Name, string ContentType, string ContentBytes);
+    private sealed record InboxCount(int UnreadItemCount);
 }

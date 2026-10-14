@@ -100,4 +100,37 @@ public sealed class GraphMailboxAccessTests
 
         Assert.IsNotType<GraphAccessException>(exception);
     }
+
+    [Fact]
+    public async Task CheckingAccess_ReadsTheInboxUnreadCount_AndWhetherReportsCanBeMarkedRead()
+    {
+        var (client, _, handler) = Create("Mail.ReadWrite");
+        handler.ResponseBody = """{"id":"inbox","displayName":"Inbox","unreadItemCount":4,"totalItemCount":10}""";
+
+        var access = await client.CheckAccessAsync(CancellationToken.None);
+
+        Assert.Equal(new MailboxAccess("dmarc-reports@example.com", 4, true), access);
+        Assert.EndsWith("users/dmarc-reports@example.com/mailFolders/inbox?$select=unreadItemCount", Uri.UnescapeDataString(handler.Requests[0].RequestUri!.ToString()));
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
+    }
+
+    [Fact]
+    public async Task CheckingAccess_WithReadOnlyPermission_SaysReportsCantBeMarkedRead()
+    {
+        var (_, client, handler) = Create("Mail.Read");
+        handler.ResponseBody = """{"unreadItemCount":0}""";
+
+        Assert.Equal(new MailboxAccess("tlsrpt@example.com", 0, false), await client.CheckAccessAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CheckingAccess_WithoutConsent_ExplainsIt()
+    {
+        var (client, _, handler) = Create();
+        (handler.StatusCode, handler.ResponseBody) = (HttpStatusCode.Forbidden, AccessDenied);
+
+        var exception = await Assert.ThrowsAsync<GraphAccessException>(() => client.CheckAccessAsync(CancellationToken.None));
+
+        Assert.Contains("admin consent", exception.Message);
+    }
 }
