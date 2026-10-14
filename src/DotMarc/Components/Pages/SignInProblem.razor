@@ -1,0 +1,57 @@
+@page "/SignInProblem"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using DotMarc.Security
+@inject IConfiguration Configuration
+
+<PageTitle>dotMARC - Sign-in problem</PageTitle>
+
+@if (Reason == "admin-consent")
+{
+    <MudText Typo="Typo.h5" Class="mb-2">An administrator needs to approve dotMARC</MudText>
+    <MudText Class="mb-2">
+        Your Microsoft Entra tenant only lets administrators approve new apps, and dotMARC hasn't been approved yet. An
+        Entra administrator (such as a Global Administrator or Cloud Application Administrator) needs to grant consent
+        once, for everyone in the tenant.
+    </MudText>
+    @if (ConsentUrl is not null)
+    {
+        <MudText Class="mb-2">Send them this link. It opens Microsoft's approval page for dotMARC:</MudText>
+        <MudText Class="mb-4"><MudLink Href="@ConsentUrl">@ConsentUrl</MudLink></MudText>
+    }
+    else
+    {
+        <MudText Class="mb-4">
+            They can grant it in the Entra admin center under App registrations, the dotMARC app, API permissions,
+            Grant admin consent.
+        </MudText>
+    }
+}
+else if (Reason == "cancelled")
+{
+    <MudText Typo="Typo.h5" Class="mb-2">Sign-in was cancelled</MudText>
+    <MudText Class="mb-4">The sign-in was cancelled, or dotMARC's request for access was declined. Try again when you're ready.</MudText>
+}
+else
+{
+    <MudText Typo="Typo.h5" Class="mb-2">Sign-in didn't work</MudText>
+    <MudText Class="mb-4">
+        Microsoft Entra couldn't complete the sign-in. Try again, and if it keeps happening, ask whoever runs dotMARC to
+        check its logs and its Entra app registration.
+    </MudText>
+}
+
+@if (SignInFailure.IsCodeLike(Code))
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">Error code from Microsoft: @Code</MudText>
+}
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Try again</MudButton>
+
+@code {
+    [SupplyParameterFromQuery(Name = "reason")] public string? Reason { get; set; }
+
+    [SupplyParameterFromQuery(Name = "code")] public string? Code { get; set; }
+
+    private string? ConsentUrl => SignInFailure.AdminConsentUrl(Configuration["EntraId:Instance"], Configuration["EntraId:TenantId"], Configuration["EntraId:ClientId"]);
+}

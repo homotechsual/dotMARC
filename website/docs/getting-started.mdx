@@ -53,12 +53,16 @@ dotMARC needs **two separate** Entra app registrations: do not reuse one for bot
    via the standard confidential-client authorization-code flow, so the token exchange after
    sign-in needs this secret even though the app itself is only used for interactive sign-in.
 4. No API permissions needed beyond the default `User.Read`.
+5. If your tenant only lets administrators approve apps, open **API permissions** and select **Grant admin consent**.
+   Without it, people can't sign in: dotMARC shows "An administrator needs to approve dotMARC" with a link an Entra
+   administrator can use to approve it (error `AADSTS65001` or `consent_required`).
 
 <Checklist id="getting-started-dashboard-app" items={[
   "Registered the dotmarc-dashboard app registration",
   "Added the signin-oidc Web redirect URI",
   "Checked \"ID tokens\" under Implicit grant and hybrid flows",
   "Created a client secret",
+  "Granted admin consent, if your tenant requires it",
 ]} />
 
 ## Configure

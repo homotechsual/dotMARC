@@ -381,6 +381,24 @@ else
                     await signInAuditor.RecordAsync(principal, tokenValidatedContext.HttpContext.RequestAborted);
                 }
             };
+
+            // A sign-in Entra sends back as failed, most often because the tenant hasn't approved dotMARC yet, goes to a
+            // page that says why instead of the generic error page.
+            var previousOnRemoteFailure = options.Events.OnRemoteFailure;
+            options.Events.OnRemoteFailure = async remoteFailureContext =>
+            {
+                await previousOnRemoteFailure(remoteFailureContext);
+                if (remoteFailureContext.Result is not null)
+                {
+                    return;
+                }
+
+                var failure = DotMarc.Security.SignInFailure.Classify(remoteFailureContext.Failure?.Message);
+                remoteFailureContext.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>()
+                    .LogWarning(remoteFailureContext.Failure, "Entra sign-in failed ({SignInFailureKind}, {SignInFailureCode})", failure.Kind, failure.Code);
+                remoteFailureContext.Response.Redirect(failure.ProblemPagePath);
+                remoteFailureContext.HandleResponse();
+            };
         });
 }
 

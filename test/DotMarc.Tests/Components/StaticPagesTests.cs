@@ -45,6 +45,7 @@ public sealed class StaticPagesTests : IAsyncLifetime
     [Theory]
     [InlineData("/demo")]
     [InlineData("/AccessDenied")]
+    [InlineData("/SignInProblem?reason=admin-consent&code=AADSTS65001")]
     public async Task APageForSignedOutVisitors_DoesntStartACircuit(string path)
     {
         using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -63,5 +64,32 @@ public sealed class StaticPagesTests : IAsyncLifetime
         var html = await client.GetStringAsync("/dashboard");
 
         Assert.Contains(InteractiveServerMarker, html);
+    }
+
+    [Fact]
+    public async Task TheSignInProblemPage_ExplainsMissingAdminConsent_WithAConsentLinkForThisApp()
+    {
+        await using var factory = _factory!.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("EntraId:TenantId", "contoso-tenant");
+            builder.UseSetting("EntraId:ClientId", "client-1");
+        });
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var html = await client.GetStringAsync("/SignInProblem?reason=admin-consent&code=AADSTS65001");
+
+        Assert.Contains("administrator", html);
+        Assert.Contains("https://login.microsoftonline.com/contoso-tenant/adminconsent?client_id=client-1", html);
+        Assert.Contains("AADSTS65001", html);
+    }
+
+    [Fact]
+    public async Task TheSignInProblemPage_ShowsOnlyACodeThatLooksLikeOne()
+    {
+        using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var html = await client.GetStringAsync("/SignInProblem?reason=other&code=%3Cb%3Ecall%20us%3C%2Fb%3E");
+
+        Assert.DoesNotContain("call us", html);
     }
 }
