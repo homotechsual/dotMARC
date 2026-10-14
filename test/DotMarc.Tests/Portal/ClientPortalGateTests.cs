@@ -81,7 +81,7 @@ public sealed class ClientPortalGateTests
 
         var allowed = pages.Where(ClientPortalGate.AllowsPortalUserOn).Select(type => type.Name).OrderBy(name => name);
 
-        Assert.Equal(["AccessDenied", "DemoSignIn", "Error", "PortalDomain", "PortalHome"], allowed);
+        Assert.Equal(["AccessDenied", "DemoSignIn", "Error", "PortalDomain", "PortalHome", "SignInProblem"], allowed);
     }
 
     [Fact]
