@@ -63,7 +63,7 @@ public sealed class GraphMailboxClient : IGraphMailboxClient
         var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        await GraphAccessProblem.EnsureSuccessAsync(response, token, _tokenProvider, _options.MailboxAddress, _options, isWrite: method == HttpMethod.Patch, cancellationToken).ConfigureAwait(false);
         return response;
     }
 

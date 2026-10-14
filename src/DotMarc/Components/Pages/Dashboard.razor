@@ -223,7 +223,24 @@ else
         {
             <MudText Color="Color.Error" Style="overflow-wrap:anywhere">
                 Last poll (@_lastPoll.PolledUtc.ToString("yyyy-MM-dd HH:mm:ss")) failed:
-                @(string.IsNullOrWhiteSpace(_lastPoll.ErrorMessage) ? "no error message was recorded." : _lastPoll.ErrorMessage)
+                @if (string.IsNullOrWhiteSpace(_lastPoll.ErrorMessage))
+                {
+                    <span>no error message was recorded.</span>
+                }
+                else
+                {
+                    @foreach (var part in DotMarc.Components.Shared.TextLinks.Split(_lastPoll.ErrorMessage))
+                    {
+                        if (part.IsLink)
+                        {
+                            <MudLink Href="@part.Text" Target="_blank" Color="Color.Error" Underline="Underline.Always">@part.Text</MudLink>
+                        }
+                        else
+                        {
+                            @part.Text
+                        }
+                    }
+                }
             </MudText>
         }
     </MudPaper>

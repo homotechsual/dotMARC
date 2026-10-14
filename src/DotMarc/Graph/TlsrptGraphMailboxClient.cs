@@ -9,11 +9,13 @@ public sealed class TlsrptGraphMailboxClient : ITlsrptGraphMailboxClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
     private readonly string _mailboxAddress;
+    private readonly GraphOptions _options;
     private readonly IGraphTokenProvider _tokenProvider;
 
     public TlsrptGraphMailboxClient(HttpClient http, IOptions<GraphOptions> options, IGraphTokenProvider tokenProvider)
     {
         _http = http;
+        _options = options.Value;
         _mailboxAddress = options.Value.TlsrptMailboxAddress ?? throw new InvalidOperationException("Graph:TlsrptMailboxAddress is required for TLSRPT mailbox access.");
         _tokenProvider = tokenProvider;
     }
@@ -48,9 +50,10 @@ public sealed class TlsrptGraphMailboxClient : ITlsrptGraphMailboxClient
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, path) { Content = content };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
+        var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        await GraphAccessProblem.EnsureSuccessAsync(response, token, _tokenProvider, _mailboxAddress, _options, isWrite: method == HttpMethod.Patch, cancellationToken).ConfigureAwait(false);
         return response;
     }
 

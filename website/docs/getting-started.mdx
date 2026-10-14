@@ -14,8 +14,10 @@ dotMARC needs **two separate** Entra app registrations: do not reuse one for bot
 ## 1. Mailbox access (app-only)
 
 1. **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
-2. **API permissions** → add Microsoft Graph **Application** permission `Mail.Read`, then grant
+2. **API permissions** → add Microsoft Graph **Application** permission `Mail.ReadWrite`, then grant
    admin consent. To send [client reports](./client-reports.mdx) through Graph, also add `Mail.Send`.
+   dotMARC marks each report it has read, which is why it needs `Mail.ReadWrite` rather than `Mail.Read`. If
+   permissions are missing, the dashboard's poll status says which, with a link to grant admin consent.
 3. **Certificates & secrets** → create a client secret.
 4. Restrict this app's mailbox access via an Exchange **Application Access Policy**. Exchange
    requires the policy scope to be a **security principal** (for example a mail-enabled security
@@ -36,7 +38,7 @@ dotMARC needs **two separate** Entra app registrations: do not reuse one for bot
 
 <Checklist id="getting-started-mailbox-app" items={[
   "Registered the dotmarc-mailbox app registration",
-  "Added the Mail.Read Application permission and granted admin consent",
+  "Added the Mail.ReadWrite Application permission and granted admin consent",
   "Created a client secret",
   "Created a security group scoping the Application Access Policy to just the DMARC reports mailbox",
 ]} />
