@@ -59,4 +59,15 @@ public sealed class DnsPushStateProtectorTests
         Assert.Equal("the payload", state!.Payload);
         Assert.Null(protector.Unprotect(protector.Protect(1, "dmarc", "verifier", now), now)!.Payload);
     }
+
+    [Fact]
+    public void ThePageGivenPushId_SurvivesTheRoundTrip()
+    {
+        var protector = CreateProtector();
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+
+        var result = protector.Unprotect(protector.Protect(42, "spf", "test-verifier", now, payload: null, pushId: "0f8fad5b-d9cb-469f-a165-70867728950e"), now);
+
+        Assert.Equal("0f8fad5b-d9cb-469f-a165-70867728950e", result!.PushId);
+    }
 }

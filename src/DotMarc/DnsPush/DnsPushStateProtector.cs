@@ -16,9 +16,9 @@ public sealed class DnsPushStateProtector
     public DnsPushStateProtector(IDataProtectionProvider dataProtectionProvider) =>
         _protector = dataProtectionProvider.CreateProtector("DotMarc.DnsPush.State.v1");
 
-    public string Protect(int domainId, string pushTarget, string codeVerifier, DateTimeOffset nowUtc, string? payload = null)
+    public string Protect(int domainId, string pushTarget, string codeVerifier, DateTimeOffset nowUtc, string? payload = null, string? pushId = null)
     {
-        var state = new DnsPushState(domainId, pushTarget, codeVerifier, nowUtc.Add(Lifetime), payload);
+        var state = new DnsPushState(domainId, pushTarget, codeVerifier, nowUtc.Add(Lifetime), payload, pushId);
         return _protector.Protect(JsonSerializer.Serialize(state));
     }
 

@@ -35,39 +35,65 @@
         // popup sidesteps that entirely, and the /dns-push/{provider}/callback endpoint closes it
         // itself once the OAuth round trip finishes, posting the outcome back via postMessage
         // rather than redirecting (which would just navigate the popup, not this tab).
+        // A provider's sign-in page can cut the popup off from this page (Cloudflare's sends
+        // Cross-Origin-Opener-Policy: same-origin). Then window.opener is gone, so the result comes back
+        // over a BroadcastChannel too, matched by this push's own id, and the popup looks closed here
+        // while the person is still signing in, so "closed" means "waiting", not "cancelled".
+        let currentDnsPush = null;
         window.dotMarcOpenDnsPush = (url, dotNetRef) => {
-            const popup = window.open(url, 'dnsPush', 'width=520,height=680');
+            currentDnsPush?.finish(null);
+            const pushId = crypto.randomUUID();
+            const popup = window.open(`${url}&pushId=${pushId}`, 'dnsPush', 'width=520,height=680');
             if (!popup) {
                 dotNetRef.invokeMethodAsync('OnDnsPushPopupBlocked');
                 return;
             }
 
+            const channel = 'BroadcastChannel' in window ? new BroadcastChannel('dotmarc-dns-push') : null;
             let settled = false;
+            let giveUp = null;
             const finish = outcome => {
                 if (settled) {
                     return;
                 }
                 settled = true;
                 window.removeEventListener('message', onMessage);
+                channel?.close();
                 clearInterval(poll);
-                dotNetRef.invokeMethodAsync('OnDnsPushResult', outcome);
+                clearTimeout(giveUp);
+                currentDnsPush = null;
+                if (outcome !== null) {
+                    dotNetRef.invokeMethodAsync('OnDnsPushResult', outcome);
+                }
+            };
+            const accept = data => {
+                if (data && typeof data.dnsPush === 'string' && data.pushId === pushId) {
+                    finish(data.dnsPush);
+                    try { popup.close(); } catch { }
+                }
             };
             const onMessage = event => {
-                if (event.origin !== window.location.origin || !event.data || typeof event.data.dnsPush !== 'string') {
-                    return;
+                if (event.origin === window.location.origin) {
+                    accept(event.data);
                 }
-                finish(event.data.dnsPush);
-                popup.close();
             };
             window.addEventListener('message', onMessage);
-            // Covers the popup closing without ever posting a message: the user closed it by
-            // hand, or something (an early /start failure, an extension) killed it mid-flow.
+            if (channel) {
+                channel.onmessage = event => accept(event.data);
+            }
+
+            // The popup looking closed may only mean the provider cut it off: wait for the result, give the
+            // person a Cancel, and give up once the push's signed state has expired anyway.
             const poll = setInterval(() => {
                 if (popup.closed) {
-                    finish('cancelled');
+                    clearInterval(poll);
+                    dotNetRef.invokeMethodAsync('OnDnsPushWaiting');
+                    giveUp = setTimeout(() => finish('cancelled'), 6 * 60 * 1000);
                 }
             }, 500);
+            currentDnsPush = { finish };
         };
+        window.dotMarcCancelDnsPush = () => currentDnsPush?.finish('cancelled');
     </script>
 </body>
 </html>

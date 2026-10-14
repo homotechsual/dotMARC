@@ -652,7 +652,7 @@ app.MapGet("/audit/export", async (HttpContext httpContext, IDbContextFactory<Do
 }).RequireAuthorization(nameof(Permission.AuditView));
 
 app.MapGet("/dns-push/{provider}/start", async (
-    string provider, int domainId, string target, string? payload, HttpContext httpContext,
+    string provider, int domainId, string target, string? payload, string? pushId, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
     IAuthorizationService authorizationService) =>
 {
@@ -682,7 +682,8 @@ app.MapGet("/dns-push/{provider}/start", async (
     }
 
     var (codeVerifier, codeChallenge) = PkceGenerator.Generate();
-    var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow, payload);
+    // The page's own id for this push, handed back with the result. Only a GUID is kept: it's echoed into the result page.
+    var state = stateProtector.Protect(domainId, target, codeVerifier, DateTimeOffset.UtcNow, payload, Guid.TryParse(pushId, out var parsedPushId) ? parsedPushId.ToString() : null);
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
 
     return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
@@ -698,7 +699,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     var decodedState = state is null ? null : stateProtector.Unprotect(state, DateTimeOffset.UtcNow);
     if (pushProvider is null || decodedState is null)
     {
-        return DnsPushPopupResult.Close("invalid");
+        return DnsPushPopupResult.Close("invalid", decodedState?.PushId);
     }
 
     // The signed state proves the /start redirect was legitimate, but says nothing about whether
@@ -708,24 +709,24 @@ app.MapGet("/dns-push/{provider}/callback", async (
     var changeBuilder = changeBuilders.Find(decodedState.PushTarget);
     if (changeBuilder is null)
     {
-        return DnsPushPopupResult.Close("invalid");
+        return DnsPushPopupResult.Close("invalid", decodedState?.PushId);
     }
     var authResult = await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy);
     if (!authResult.Succeeded)
     {
-        return DnsPushPopupResult.Close("invalid");
+        return DnsPushPopupResult.Close("invalid", decodedState?.PushId);
     }
 
     await using var context = await dbContextFactory.CreateDbContextAsync();
     var domain = await context.Domains.AsNoTracking().Include(d => d.DkimRecords).SingleOrDefaultAsync(d => d.Id == decodedState.DomainId);
     if (domain is null)
     {
-        return DnsPushPopupResult.Close("invalid");
+        return DnsPushPopupResult.Close("invalid", decodedState?.PushId);
     }
 
     if (error is not null || code is null)
     {
-        return DnsPushPopupResult.Close("cancelled");
+        return DnsPushPopupResult.Close("cancelled", decodedState.PushId);
     }
 
     // Every push target except dmarc-auth writes into domain.Name's own zone; dmarc-auth writes
@@ -747,12 +748,12 @@ app.MapGet("/dns-push/{provider}/callback", async (
             // means the lookup succeeded but no configured account owns that zone) - report it
             // as a generic error instead of implying a permissions/configuration problem that
             // doesn't exist.
-            return DnsPushPopupResult.Close("error");
+            return DnsPushPopupResult.Close("error", decodedState.PushId);
         }
         var domainProviderKey = domainZoneDetection.Provider.ToProviderKey();
         if (!string.Equals(domainProviderKey, provider, StringComparison.OrdinalIgnoreCase))
         {
-            return DnsPushPopupResult.Close("zone-not-found");
+            return DnsPushPopupResult.Close("zone-not-found", decodedState.PushId);
         }
         domainZone = domainZoneDetection.ZoneName;
     }
@@ -760,7 +761,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
     var plan = await changeBuilder.BuildAsync(new DnsPushRequest(domain, provider, domainZone, decodedState.Payload), CancellationToken.None);
     if (plan.Refusal is not null)
     {
-        return DnsPushPopupResult.Close(plan.Refusal);
+        return DnsPushPopupResult.Close(plan.Refusal, decodedState.PushId);
     }
 
     var changes = plan.Changes;
@@ -794,7 +795,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
             decodedState.DomainId, decodedState.PushTarget, result.Outcome, result.DetailMessage);
     }
 
-    return DnsPushPopupResult.Close(resultFlag);
+    return DnsPushPopupResult.Close(resultFlag, decodedState.PushId);
 });
 
 // Connecting NinjaOne: an admin starts here from the NinjaOne tab, signs in at NinjaOne, and comes back to the
