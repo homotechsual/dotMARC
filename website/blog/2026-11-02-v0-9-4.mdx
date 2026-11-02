@@ -1,0 +1,62 @@
+---
+slug: v0-9-4
+date: 2026-11-02T16:30:25.661Z
+title: "dotMARC v0.9.4: clearer Microsoft 365 problems, mailbox checks and Cloudflare DNS push"
+description: dotMARC explains sign-in and mailbox problems with admin consent links, checks the reports mailbox on demand, and gets Cloudflare DNS push results back. The mailbox app now needs Mail.ReadWrite.
+authors: [mikey]
+tags: [release]
+---
+
+When something stands between dotMARC and Microsoft 365, dotMARC now says what it is and how to fix it, instead of a
+generic error or a bare "403". Cloudflare DNS pushes report back properly, and the dashboard can check the reports
+mailbox on demand.
+
+{/* truncate */}
+
+## Before you upgrade: the mailbox app needs Mail.ReadWrite
+
+dotMARC marks each report as read once it has stored it, and Microsoft Graph only allows that with the
+**`Mail.ReadWrite`** application permission. The setup guide used to ask for `Mail.Read`, which reads reports but
+can't mark them, so they stay unread and are fetched again every poll (and TLS reports are logged as parse failures).
+
+If your mailbox app registration has `Mail.Read`, replace it with `Mail.ReadWrite` under **API permissions** and grant
+admin consent again. Your Exchange application access policy still limits the app to the reports mailbox. The new
+**Check mailbox access** button on the dashboard tells you whether this is needed.
+
+## Clearer sign-in and mailbox problems
+
+* **Sign-in.** When your Entra tenant only lets administrators approve apps and dotMARC hasn't been approved, signing
+  in used to end on "Something went wrong". dotMARC now says an administrator needs to approve it and gives a link to
+  Microsoft's approval page for your app. A cancelled sign-in, or any other Entra error, gets its own page with
+  Microsoft's error code.
+* **Mailbox polling.** A poll that Microsoft Graph refuses now says why: the mail permission or its admin consent is
+  missing (with the consent link), the app has `Mail.Read` but needs `Mail.ReadWrite`, an Exchange application access
+  policy leaves the mailbox out, or the mailbox address doesn't exist. Once you fix it, the next poll picks the change
+  up rather than waiting an hour for the old sign-in to expire.
+
+## Check mailbox access and Poll now
+
+The polling status on the dashboard has two new buttons, for people with permission to view logs:
+
+* **Check mailbox access** reads the DMARC reports mailbox, and the TLS reports mailbox if you use one, without
+  changing anything. It says whether dotMARC can read it, how many unread messages are waiting, and whether it can
+  mark them as read.
+* **Poll now** runs a poll straight away instead of waiting for the next one, then shows how it went.
+
+## DNS push with Cloudflare
+
+Cloudflare's sign-in page cuts the push window off from dotMARC, so a push could run while dotMARC treated it as
+cancelled, leaving a blank window behind. The result now reaches dotMARC either way, the window says what happened
+before it closes, and while you're still signing in at your DNS provider dotMARC waits for you, with a **Cancel**
+button if you closed the window yourself.
+
+## Smaller changes
+
+* A domain with no reports in the last 30 days says so, instead of showing an empty chart, and the chart's dates no
+  longer overlap.
+* A [setup script](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh) creates
+  both Entra app registrations and their secrets with Azure CLI. The getting started and Azure deployment guides now
+  use it, and the Azure guide has a **Deploy to Azure** button.
+* **Manage > Branding** has a **Show sponsor link** switch for the GitHub Sponsors link in dotMARC and the client
+  portal. It's on by default, and turning it off is instance-wide and audited. See
+  [Branding](/docs/client-portal#branding).
