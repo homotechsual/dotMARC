@@ -1,5 +1,9 @@
 using DotMarc.Tests.Internal;
+using DotMarc.Data;
+using DotMarc.Portal;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DotMarc.Tests.Components;
@@ -64,6 +68,50 @@ public sealed class StaticPagesTests : IAsyncLifetime
         var html = await client.GetStringAsync("/dashboard");
 
         Assert.Contains(InteractiveServerMarker, html);
+    }
+
+    [Theory]
+    [InlineData("admin", "/dashboard")]
+    [InlineData("client", "/portal")]
+    public async Task SponsorLink_InBothLayouts_FollowsTheSavedSetting(string persona, string path)
+    {
+        const string sponsorUrl = "https://github.com/sponsors/homotechsual";
+        using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await client.PostAsync($"/demo/sign-in/{persona}", content: null);
+
+        var html = await client.GetStringAsync(path);
+        Assert.Contains(sponsorUrl, html);
+        Assert.Contains("Sponsor the project", html);
+
+        var dbFactory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var settings = await BrandingSettingsService.GetAsync(context);
+        settings.ShowSponsorLink = false;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+
+        Assert.DoesNotContain(sponsorUrl, await client.GetStringAsync(path));
+
+        settings.ShowSponsorLink = true;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+
+        Assert.Contains(sponsorUrl, await client.GetStringAsync(path));
+    }
+
+    [Fact]
+    public async Task SponsorToggle_IsOnTheAdminPage_WithTheSupportReminder()
+    {
+        using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await client.PostAsync("/demo/sign-in/admin", content: null);
+
+        var html = await client.GetStringAsync("/branding/settings");
+
+        Assert.Contains("Show sponsor link", html);
+        Assert.Contains("Please support the project if", html);
+        Assert.Contains("https://github.com/sponsors/homotechsual", html);
+
+        await client.PostAsync("/demo/sign-in/viewer", content: null);
+        var response = await client.GetAsync("/branding/settings");
+        Assert.False(response.IsSuccessStatusCode);
     }
 
     [Fact]

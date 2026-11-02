@@ -36,7 +36,8 @@ public static class BrandingSettingsService
             .Field("Support email", saved.SupportEmail, updated.SupportEmail)
             .Field("Support URL", saved.SupportUrl, updated.SupportUrl)
             .Field("Support phone", saved.SupportPhone, updated.SupportPhone)
-            .Field("Footer text", saved.FooterText, updated.FooterText);
+            .Field("Footer text", saved.FooterText, updated.FooterText)
+            .Field("Show sponsor link", saved.ShowSponsorLink, updated.ShowSponsorLink);
         if (!changes.Any)
         {
             return;

@@ -1503,6 +1503,9 @@ namespace DotMarc.Migrations
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)");
 
+                    b.Property<bool>("ShowSponsorLink")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SupportEmail")
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)");
@@ -1525,7 +1528,8 @@ namespace DotMarc.Migrations
                             Id = 1,
                             PrimaryColour = "#E3594F",
                             ProductName = "dotMARC",
-                            SecondaryColour = "#263141"
+                            SecondaryColour = "#263141",
+                            ShowSponsorLink = true
                         });
                 });
 

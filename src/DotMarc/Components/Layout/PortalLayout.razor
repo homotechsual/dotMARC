@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @using DotMarc.Portal
+@using DotMarc.Components.Shared
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
@@ -83,6 +84,9 @@
                 }
             </footer>
         }
+        <footer class="pa-4 d-flex justify-center">
+            <SponsorLink />
+        </footer>
     </MudMainContent>
 </MudLayout>
 

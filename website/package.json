@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
-    "start": "docusaurus clean-api-docs all && docusaurus gen-api-docs all && docusaurus start",
-    "build": "docusaurus clean-api-docs all && docusaurus gen-api-docs all && docusaurus build",
+    "start": "yarn gen-azure-template && docusaurus clean-api-docs all && docusaurus gen-api-docs all && docusaurus start",
+    "build": "yarn gen-azure-template && docusaurus clean-api-docs all && docusaurus gen-api-docs all && docusaurus build",
+    "gen-azure-template": "az bicep build --file ../infra/main.bicep --outfile static/azuredeploy.json",
     "swizzle": "docusaurus swizzle",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",

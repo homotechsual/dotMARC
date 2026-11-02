@@ -189,6 +189,11 @@ const config: Config = {
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
         {to: '/feedback', label: 'Feedback & Feature Requests', position: 'left'},
         {
+          href: 'https://github.com/sponsors/homotechsual',
+          label: 'Sponsor',
+          position: 'right',
+        },
+        {
           to: 'https://github.com/homotechsual/dotMARC',
           label: 'GitHub',
           position: 'right',
@@ -214,6 +219,7 @@ const config: Config = {
             {label: 'Releases and Updates', to: '/releases-updates'},
             {label: 'Demo', to: 'https://demo.dotmarc.app/'},
             {label: 'GitHub', href: 'https://github.com/homotechsual/dotMARC'},
+            {label: 'Sponsor the project', href: 'https://github.com/sponsors/homotechsual'},
             {label: 'License', to: '/license'},
           ],
         },

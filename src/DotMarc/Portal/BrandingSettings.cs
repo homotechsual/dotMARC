@@ -34,4 +34,5 @@ public sealed class BrandingSettings
     public string? SupportUrl { get; set; }
     public string? SupportPhone { get; set; }
     public string? FooterText { get; set; }
+    public bool ShowSponsorLink { get; set; } = true;
 }

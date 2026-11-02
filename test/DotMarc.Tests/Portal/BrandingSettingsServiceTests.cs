@@ -35,6 +35,56 @@ public sealed class BrandingSettingsServiceTests : IAsyncLifetime
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
     [Fact]
+    public async Task SponsorState_RefreshesSavedVisibility_AndNotifiesTheCircuit()
+    {
+        var state = new SponsorLinkState(new FakeDbContextFactory(_connectionString));
+        var changes = 0;
+        state.Changed += () => changes++;
+        Assert.False(state.IsVisible);
+
+        await state.RefreshAsync();
+        Assert.True(state.IsVisible);
+
+        await using var context = CreateContext();
+        var settings = await BrandingSettingsService.GetAsync(context);
+        settings.ShowSponsorLink = false;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+
+        await state.RefreshAsync();
+        Assert.False(state.IsVisible);
+        Assert.Equal(2, changes);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Save_SponsorVisibility_IsPersistedAndAudited(bool tracked)
+    {
+        await using var context = CreateContext();
+        var updated = tracked
+            ? await BrandingSettingsService.GetAsync(context)
+            : await context.BrandingSettings.AsNoTracking().SingleAsync();
+        Assert.True(updated.ShowSponsorLink);
+
+        updated.ShowSponsorLink = false;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, updated);
+
+        await using (var verify = CreateContext())
+        {
+            Assert.False((await BrandingSettingsService.GetAsync(verify)).ShowSponsorLink);
+            var entry = await verify.AuditEntries.SingleAsync();
+            Assert.Contains(entry.Changes, change => change.Field == "Show sponsor link" && change.Old == "Yes" && change.New == "No");
+        }
+
+        updated.ShowSponsorLink = true;
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, updated);
+
+        await using var restored = CreateContext();
+        Assert.True((await BrandingSettingsService.GetAsync(restored)).ShowSponsorLink);
+        Assert.Equal(2, await restored.AuditEntries.CountAsync());
+    }
+
+    [Fact]
     public async Task Save_StoresTheBrand_AndAuditsTheChanges()
     {
         await using var context = CreateContext();

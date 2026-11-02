@@ -13,3 +13,4 @@ local/
 .yarn/install-state.gz
 website/.yarn/install-state.gz
 .playwright-mcp
+website/static/azuredeploy.json

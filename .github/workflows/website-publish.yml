@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - 'website/**'
+      - 'infra/**'
       - '.github/workflows/website-publish.yml'
   pull_request:
     types:
@@ -19,6 +20,7 @@ on:
       - synchronize
     paths:
       - 'website/**'
+      - 'infra/**'
       - '.github/workflows/website-publish.yml'
   workflow_dispatch:
 
@@ -65,6 +67,9 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --check-cache --inline-builds
+
+      - name: Install pinned Bicep compiler
+        run: az bicep install --version v0.46.1
 
       - name: Build
         env:

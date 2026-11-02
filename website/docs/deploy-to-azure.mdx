@@ -7,6 +7,45 @@ import Checklist from '@site/src/components/Checklist';
 
 # Deploy to Azure
 
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fdotmarc.app%2Fazuredeploy.json)
+
+Use the button to open Azure's deployment form instead of running the CLI commands in steps 1 and 2.
+Complete the [two Entra app registrations](./getting-started.mdx) first, then choose a subscription,
+a **new resource group**, and a region supporting Container Apps and PostgreSQL Flexible Server.
+You need permission to create resources and role assignments (for example, Owner on the resource group).
+Review the Azure costs before deploying.
+
+Enter the app client/tenant IDs, reports mailbox, a PostgreSQL administrator password, and
+**initialAdminEmails** in the form. Do not leave the initial administrator emails blank: without
+them, nobody can access a fresh installation. The other options have the same defaults as the
+Bicep deployment below.
+
+:::important[Finish setup after deployment]
+
+The button provisions infrastructure, not the Entra registrations or a ready-to-use sign-in.
+After deployment, complete **steps 3 and 4 below**: register the dashboard redirect URI and populate
+Key Vault. Find the resource names and URLs on the portal deployment's **Outputs** tab. The CLI
+examples assume a deployment named `main`; replace `--name main` with your portal deployment name
+if you use those commands.
+
+:::
+
+The portal uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), compiled from
+`infra/main.bicep` into `website/static/azuredeploy.json` during every website build. Bicep remains
+the source of truth; the generated JSON is not checked in. Infrastructure changes trigger the website
+CI and publishing workflows automatically.
+
+Local website builds and the development server need Azure CLI and the same Bicep compiler as CI.
+No Azure sign-in is needed to compile the template:
+
+```powershell
+az bicep install --version v0.46.1
+cd website
+yarn gen-azure-template
+```
+
+`yarn build` and `yarn start` run this generation step automatically.
+
 `infra/main.bicep` provisions everything needed to run dotMARC on Azure:
 
 * A **Container Apps environment** (backed by a Log Analytics workspace) and a **Container App**
@@ -38,8 +77,8 @@ deployment (see below).
 
 <Checklist id="deploy-to-azure" items={[
   "Completed the two Entra app registrations (Getting Started)",
-  "Filled in infra/main.parameters.json or prepared --parameters overrides (step 1)",
-  "Ran az deployment group create (step 2)",
+  "Filled in the portal form, infra/main.parameters.json, or --parameters overrides (step 1)",
+  "Deployed through the portal button or az deployment group create (step 2)",
   "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 3)",
   "Populated the three Key Vault secrets and restarted the revision (step 4)",
 ]} />

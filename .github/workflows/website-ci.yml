@@ -6,10 +6,12 @@ on:
       - main
     paths:
       - 'website/**'
+      - 'infra/**'
       - '.github/workflows/website-ci.yml'
   pull_request:
     paths:
       - 'website/**'
+      - 'infra/**'
       - '.github/workflows/website-ci.yml'
 
 concurrency:
@@ -47,6 +49,9 @@ jobs:
 
       - name: Typecheck
         run: yarn typecheck
+
+      - name: Install pinned Bicep compiler
+        run: az bicep install --version v0.46.1
 
       - name: Build
         run: yarn build

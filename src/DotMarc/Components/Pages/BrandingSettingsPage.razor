@@ -9,6 +9,7 @@
 @inject AuditActorAccessor AuditActorAccessor
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject SponsorLinkState SponsorState
 
 <PageTitle>dotMARC - Branding</PageTitle>
 <div class="d-flex align-center mb-1">
@@ -16,11 +17,21 @@
     <DocsLink Href="https://dotmarc.app/docs/client-portal" Text="The client portal and branding" Class="ml-2" />
 </div>
 <MudText Typo="Typo.body1" Class="mb-4">
-    How the client portal looks to your clients. A Group can override the logo, colours and name from Manage groups.
+    How the client portal looks to your clients, and project support links throughout the app. A Group can override the logo, colours and name from Manage groups.
 </MudText>
 
 @if (_settings is not null)
 {
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-2">Project support</MudText>
+        <MudSwitch T="bool" @bind-Value="_settings.ShowSponsorLink" Color="Color.Primary"
+                   Label="Show sponsor link" />
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Show the GitHub Sponsors link in the staff app and client portal.
+            Please support the project if you're hiding the link:
+            <MudLink Href="https://github.com/sponsors/homotechsual" Target="_blank" rel="noopener noreferrer">GitHub Sponsors</MudLink>.
+        </MudText>
+    </MudPaper>
     <MudPaper Class="pa-4 mb-4">
         <MudText Typo="Typo.h5" Class="mb-4">Your brand</MudText>
         <MudGrid>
@@ -175,6 +186,7 @@
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             await BrandingSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), _settings!);
+            await SponsorState.RefreshAsync();
             Snackbar.Add("Branding saved.", Severity.Success);
         }
         catch (ArgumentException exception)

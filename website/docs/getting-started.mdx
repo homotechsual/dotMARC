@@ -11,16 +11,39 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 dotMARC needs **two separate** Entra app registrations: do not reuse one for both purposes.
 
+:::tip[Looking for setup scripts?]
+
+Use [`create-dotmarc-apps.sh`](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh)
+to create both registrations, add their Graph permissions, and generate client secrets. Sign in to
+the intended tenant with Azure CLI first. The script deliberately does not grant admin consent to the
+mailbox app until you have restricted its access using the Exchange steps below.
+
+:::
+
+Run it in Azure Cloud Shell (Bash), or anywhere with Bash and a signed-in Azure CLI:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/entra/create-dotmarc-apps.sh
+bash create-dotmarc-apps.sh --dashboard-redirect-uri https://dotmarc.example.com/signin-oidc
+```
+
+For Azure Container Apps, the hostname is assigned during deployment, so omit
+`--dashboard-redirect-uri` and add the deployed URL ending in `/signin-oidc` to the dashboard app
+after deployment. Add `--include-mail-send` if you plan to send [client reports](./client-reports.mdx)
+through Microsoft Graph. The script prints the two client IDs and newly-created secrets; copy the
+secrets when shown. Each run creates additional secrets for the reused app registrations.
+
 ## 1. Mailbox access (app-only)
 
-1. **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
-2. **API permissions** → add Microsoft Graph **Application** permission `Mail.ReadWrite`, then grant
-   admin consent. To send [client reports](./client-reports.mdx) through Graph, also add `Mail.Send`.
+1. If setting up manually, **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
+2. If setting up manually, add Microsoft Graph **Application** permission `Mail.ReadWrite`. To send
+   [client reports](./client-reports.mdx) through Graph, also add `Mail.Send`.
    dotMARC marks each report it has read, which is why it needs `Mail.ReadWrite` rather than `Mail.Read`. If
    permissions are missing, the dashboard's poll status says which, with a link to grant admin consent.
-3. **Certificates & secrets** → create a client secret.
-4. Restrict this app's mailbox access via an Exchange **Application Access Policy**. Exchange
-   requires the policy scope to be a **security principal** (for example a mail-enabled security
+3. If setting up manually, **Certificates & secrets** → create a client secret.
+4. Restrict this app's mailbox access via an Exchange **Application Access Policy before granting
+   admin consent**. The script adds the permission but intentionally does not grant consent first.
+   Exchange requires the policy scope to be a **security principal** (for example a mail-enabled security
    group), not the mailbox itself. Create a dedicated group for the DMARC reports mailbox, add
    that mailbox to the group, and then scope the policy to the group:
 
@@ -36,25 +59,30 @@ dotMARC needs **two separate** Entra app registrations: do not reuse one for bot
    If you already have the mail-enabled security group, use its `ObjectId` instead of the mailbox
    address. Do not pass the mailbox address directly to `-PolicyScopeGroupId`.
 
+   After creating the policy, grant admin consent in **API permissions** or run the
+   `az ad app permission admin-consent --id <mailbox-client-id>` command printed by the script.
+
 <Checklist id="getting-started-mailbox-app" items={[
   "Registered the dotmarc-mailbox app registration",
-  "Added the Mail.ReadWrite Application permission and granted admin consent",
+  "Added the Mail.ReadWrite Application permission",
   "Created a client secret",
   "Created a security group scoping the Application Access Policy to just the DMARC reports mailbox",
+  "Granted admin consent after restricting mailbox access",
 ]} />
 
 ## 2. Dashboard sign-in (delegated)
 
-1. **App registrations** → **New registration**, name it e.g. `dotmarc-dashboard`.
-2. **Authentication** → add a **Web** platform redirect URI:
+1. If setting up manually, **App registrations** → **New registration**, name it e.g. `dotmarc-dashboard`.
+2. Add an **Authentication** → **Web** platform redirect URI:
    `https://<your-deployment-host>/signin-oidc`. On the same page, under **Implicit grant and
    hybrid flows**, check **ID tokens** - Microsoft.Identity.Web's OIDC middleware requests an
    `id_token` as part of its hybrid authorization-code flow, and without this box checked sign-in
    fails at the Entra consent step (the redirect back to `/signin-oidc` never happens).
-3. **Certificates & secrets** → create a client secret. Microsoft.Identity.Web wires this app up
+3. If setting up manually, **Certificates & secrets** → create a client secret. Microsoft.Identity.Web wires this app up
    via the standard confidential-client authorization-code flow, so the token exchange after
    sign-in needs this secret even though the app itself is only used for interactive sign-in.
-4. No API permissions needed beyond the default `User.Read`.
+4. No API permissions are needed beyond delegated `User.Read` (added by the script; it is also the
+   default when registering an app in the portal).
 5. If your tenant only lets administrators approve apps, open **API permissions** and select **Grant admin consent**.
    Without it, people can't sign in: dotMARC shows "An administrator needs to approve dotMARC" with a link an Entra
    administrator can use to approve it (error `AADSTS65001` or `consent_required`).

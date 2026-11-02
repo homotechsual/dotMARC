@@ -1,0 +1,20 @@
+@implements IDisposable
+@inject DotMarc.Portal.SponsorLinkState SponsorState
+
+@if (SponsorState.IsVisible)
+{
+    <MudLink Href="https://github.com/sponsors/homotechsual" Target="_blank" rel="noopener noreferrer"
+             Typo="Typo.caption" Color="Color.Primary">Sponsor the project</MudLink>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        SponsorState.Changed += OnChanged;
+        await SponsorState.RefreshAsync();
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => SponsorState.Changed -= OnChanged;
+}

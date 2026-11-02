@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @using DotMarc.Demo
+@using DotMarc.Components.Shared
 @using Microsoft.Extensions.Options
 @using System.Reflection
 @implements IDisposable
@@ -94,6 +95,7 @@
                     <MudLink Href="https://dotmarc.app/license" Target="_blank" Color="Color.Primary">GNU Affero General Public License v3.0</MudLink>.
                     <MudLink Href="@_releaseNotesUrl" Target="_blank" Color="Color.Primary">v@_version</MudLink>.
                     <MudLink Href="https://github.com/homotechsual/dotMARC" Target="_blank" Color="Color.Primary">Source code</MudLink>.
+                    <SponsorLink />
                 </MudText>
             </MudContainer>
         </footer>

@@ -8,11 +8,18 @@ for the full design.
 
 dotMARC needs **two separate** Entra app registrations: do not reuse one for both purposes:
 
+To create both registrations and their client secrets with Azure CLI, sign in to the intended tenant
+and run [`scripts/entra/create-dotmarc-apps.sh`](scripts/entra/create-dotmarc-apps.sh) in Bash. Pass
+`--dashboard-redirect-uri https://<your-host>/signin-oidc` when the host is known, or add the redirect
+URI after deploying to Azure Container Apps. Add `--include-mail-send` if you plan to send client
+reports through Microsoft Graph. The script adds the Graph permissions but does not grant admin
+consent to the mailbox app; restrict mailbox access using the Exchange policy below first. Copy the
+secrets it prints, as they cannot be retrieved later.
+
 ### 1. Mailbox access (app-only)
 
 1. **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
-2. **API permissions** → add Microsoft Graph **Application** permission `Mail.ReadWrite`, then grant
-   admin consent.
+2. **API permissions** → add Microsoft Graph **Application** permission `Mail.ReadWrite`.
 3. **Certificates & secrets** → create a client secret.
 4. Restrict this app's mailbox access via an Exchange **Application Access Policy**. Exchange
    requires the policy scope to be a **security principal** (for example a mail-enabled security
@@ -31,11 +38,16 @@ dotMARC needs **two separate** Entra app registrations: do not reuse one for bot
    If you already have the mail-enabled security group, use its `ObjectId` instead of the mailbox
    address. Do not pass the mailbox address directly to `-PolicyScopeGroupId`.
 
+   After creating the policy, grant admin consent for `Mail.ReadWrite` in **API permissions**. If you
+   used the script, run the `az ad app permission admin-consent --id <mailbox-client-id>` command it
+   prints.
+
 ### 2. Dashboard sign-in (delegated)
 
 1. **App registrations** → **New registration**, name it e.g. `dotmarc-dashboard`.
 2. **Authentication** → add a **Web** platform redirect URI:
    `https://<your-deployment-host>/signin-oidc`.
+   Under **Implicit grant and hybrid flows**, enable **ID tokens**.
 3. **Certificates & secrets** → create a client secret. Microsoft.Identity.Web wires this app up
    via the standard confidential-client authorization-code flow, so the token exchange after
    sign-in needs this secret even though the app itself is only used for interactive sign-in.
@@ -130,6 +142,23 @@ reachable except through that trusted front-end, so any upstream proxy is truste
 per-deployment configuration.
 
 ## Deploy to Azure
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fdotmarc.app%2Fazuredeploy.json)
+
+The button opens Azure's deployment form for the infrastructure described below. Complete the two
+Entra app registrations first, then enter their client/tenant IDs, the reports mailbox, a PostgreSQL
+password, and `initialAdminEmails` in the form. Choose a new resource group and a region supporting
+the required services. You need permission to create resources and role assignments (for example,
+Owner on the resource group). Review the Azure costs before deploying.
+
+This is not an unattended installation: after deployment, complete steps 3 and 4 below to register
+the dashboard redirect URI and populate Key Vault. For portal deployments, use the deployment's
+**Outputs** tab to find the URLs and resource names; CLI examples below assume a deployment named
+`main`, so substitute the portal deployment name when using them.
+
+The button uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), generated from
+`infra/main.bicep` during every website build. Infrastructure changes automatically rebuild and
+publish the website, so there is no separate JSON template to maintain.
 
 For an existing deployment, see [Deploy to Azure: Update or redeploy dotMARC](https://dotmarc.app/docs/deploy-to-azure#5-update-or-redeploy-dotmarc)
 for checking the active image, updating immutable release tags, forcing a new revision when using
