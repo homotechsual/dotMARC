@@ -31,6 +31,10 @@ elapses since the open alert was created, so a genuinely down domain doesn't pag
 domain, type, severity, created/resolved timestamps, and message. It requires the `AlertsView`
 permission, which is part of the built-in Viewer role by default.
 
+Click an alert's domain name to open that domain's detail page. Open and resolved alerts both link to the domain.
+Alerts for a removed domain or an application-wide issue (such as a PSA connection) have no domain link.
+The domain page still requires the `DomainsView` permission and access to that domain.
+
 Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge** button for anyone with the
 `AlertsManage` permission. See [Closing policy and nameserver alerts](#closing-policy-and-nameserver-alerts).
 

@@ -1,6 +1,7 @@
 using DotMarc.Tests.Internal;
 using DotMarc.Data;
 using DotMarc.Portal;
+using DotMarc.Notifications;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,6 +69,47 @@ public sealed class StaticPagesTests : IAsyncLifetime
         var html = await client.GetStringAsync("/dashboard");
 
         Assert.Contains(InteractiveServerMarker, html);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Alerts_LinkToExistingDomains_ButNotSystemOrRemovedSubjects(bool resolved)
+    {
+        using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await client.PostAsync("/demo/sign-in/admin", content: null);
+
+        var dbFactory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var context = await dbFactory.CreateDbContextAsync();
+        context.AlertEvents.RemoveRange(await context.AlertEvents.ToListAsync());
+        context.AlertEvents.AddRange(
+            Alert("aurora-retail.example", AlertTypes.MissedReport),
+            Alert("removed.example", AlertTypes.MissedReport),
+            Alert("PSA: NinjaOne", AlertTypes.PsaConnectionLost));
+        await context.SaveChangesAsync();
+
+        var html = await client.GetStringAsync("/alerts");
+
+        Assert.Contains("href=\"/domains/aurora-retail.example\"", html);
+        Assert.DoesNotContain("href=\"/domains/removed.example\"", html);
+        Assert.DoesNotContain("href=\"/domains/PSA", html);
+        Assert.Contains("removed.example", html);
+        Assert.Contains("PSA: NinjaOne", html);
+
+        var domainPage = await client.GetAsync("/domains/aurora-retail.example");
+        Assert.True(domainPage.IsSuccessStatusCode);
+        Assert.Contains("aurora-retail.example", await domainPage.Content.ReadAsStringAsync());
+
+        AlertEvent Alert(string domain, string type) => new()
+        {
+            DomainName = domain,
+            AlertType = type,
+            Severity = "Warning",
+            Title = "Test alert",
+            Message = "Test alert navigation",
+            IsResolved = resolved,
+            ResolvedUtc = resolved ? DateTimeOffset.UtcNow : null,
+        };
     }
 
     [Theory]

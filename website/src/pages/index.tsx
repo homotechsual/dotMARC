@@ -136,7 +136,7 @@ export default function Home(): ReactNode {
         <meta name="twitter:description" content={heroCopy.subtitle} />
       </Head>
       <HomepageHeader />
-      <main className="relative z-10 mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
+      <main className="relative z-10 mx-auto max-w-7xl pb-16 lg:pb-24">
         <section className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/80 p-2 shadow-[0_24px_70px_rgba(38,49,65,0.14)] backdrop-blur dark:border-white/10 dark:bg-[#1e2a3a]/85">
           <ThemedImage
             alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"

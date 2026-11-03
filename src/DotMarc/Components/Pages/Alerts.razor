@@ -82,7 +82,16 @@ else
             }
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.DomainName</MudTd>
+            <MudTd DataLabel="Domain">
+                @if (_domainNames.Contains(context.DomainName))
+                {
+                    <MudLink Href="@($"/domains/{Uri.EscapeDataString(context.DomainName)}")">@context.DomainName</MudLink>
+                }
+                else
+                {
+                    @context.DomainName
+                }
+            </MudTd>
             <MudTd>@context.AlertType</MudTd>
             <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
             <MudTd>@FormatCreated(context)</MudTd>
@@ -119,6 +128,7 @@ else
 
 @code {
     private List<AlertEvent>? _alerts;
+    private HashSet<string> _domainNames = [];
     private Dictionary<PsaKind, string?> _ticketUrlTemplates = [];
 
     private string? _domainFilter;
@@ -171,6 +181,12 @@ else
             .OrderByDescending(e => e.CreatedUtc)
             .Take(100)
             .ToListAsync();
+
+        var alertDomainNames = _alerts.Select(alert => alert.DomainName).Distinct().ToArray();
+        _domainNames = (await db.Domains.AsNoTracking()
+            .Where(domain => alertDomainNames.Contains(domain.Name))
+            .Select(domain => domain.Name)
+            .ToListAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // A link that can't be built (the PSA's web address isn't known) just leaves its chips unlinked.
         var templates = new Dictionary<PsaKind, string?>();
