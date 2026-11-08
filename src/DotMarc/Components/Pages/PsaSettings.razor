@@ -29,6 +29,9 @@
     <MudTabPanel Text="Autotask" Icon="@TabIcon(_autotaskEnabled)">
         <div class="pt-4"><AutotaskSettingsTab EnabledChanged="@(enabled => _autotaskEnabled = enabled)" /></div>
     </MudTabPanel>
+    <MudTabPanel Text="SuperOps" Icon="@TabIcon(_superOpsEnabled)">
+        <div class="pt-4"><SuperOpsSettingsTab EnabledChanged="@(enabled => _superOpsEnabled = enabled)" /></div>
+    </MudTabPanel>
 </MudTabs>
 
 @code {
@@ -42,6 +45,7 @@
     private bool _ninjaOneEnabled;
     private bool _connectWiseEnabled;
     private bool _autotaskEnabled;
+    private bool _superOpsEnabled;
 
     protected override void OnInitialized()
     {

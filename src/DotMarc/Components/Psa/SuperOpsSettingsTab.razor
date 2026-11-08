@@ -1,0 +1,224 @@
+@using DotMarc.Data
+@using DotMarc.Components.Shared
+@using DotMarc.Notifications
+@using DotMarc.Psa
+@using DotMarc.Psa.SuperOps
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject ILogger<SuperOpsSettingsTab> Logger
+@inject ISuperOpsClient SuperOpsClient
+@inject ISecretStore SecretStoreAccessor
+
+@if (_settings is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudPaper Class="pa-4">
+        <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
+            <MudText Typo="Typo.h5">SuperOps</MudText>
+            <FieldWithHelp Topic="SuperOps tickets" Inline="true" Help="Opens a SuperOps ticket for each alert (as set under 'Which alerts create tickets' on Alert settings) and resolves it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket resolved or closed in SuperOps resolves its alert.">
+<MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable SuperOps tickets" />
+</FieldWithHelp>
+        </div>
+
+        <MudText Typo="Typo.subtitle1" Class="mt-2 mb-2">Connection</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Region" Help="Where your SuperOps account is hosted. If you sign in at a .superops.ai address in the US, choose United States.">
+<MudSelect T="string" Label="Region" @bind-Value="_settings.Region" Variant="Variant.Outlined">
+                    @foreach (var region in SuperOpsRegions.All)
+                    {
+                        <MudSelectItem T="string" Value="@region">@SuperOpsRegions.DisplayName(region)</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Subdomain" Help="The part before .superops.ai in your SuperOps web address. Pasting the full address is fine; only the subdomain is kept.">
+<MudTextField Label="Subdomain" @bind-Value="_settings.Subdomain" Placeholder="yourcompany" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="API token" Help="Created in SuperOps under Settings, My Profile, API Token. Tickets are raised as the person who owns the token, so a dedicated technician account for dotMARC is the tidiest choice. dotMARC keeps the token in its secret store and never shows it again, so leave this blank to keep the saved one.">
+<MudTextField Label="API token" @bind-Value="_newApiToken" InputType="InputType.Password" Variant="Variant.Outlined"
+              HelperText="@(_settings.ApiTokenConfigured ? "A token is already saved - leave blank to keep it." : "No token saved yet.")" />
+</FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex align-center justify-space-between flex-wrap mt-6 mb-1" style="gap: 0.5rem;">
+            <MudText Typo="Typo.subtitle1">Ticket defaults</MudText>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CloudDownload" Disabled="_loading" OnClick="LoadOptionsAsync">Load options from SuperOps</MudButton>
+        </div>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+            Loads the statuses, priorities, urgencies and categories to choose from. Save the connection first.
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Request type" Help="The ticket type alert tickets are created with, such as Incident or Service Request. It must match a request type in your SuperOps exactly.">
+<MudTextField Label="Request type" @bind-Value="_settings.RequestType" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="New ticket status" Help="The status alert tickets start in.">
+<MudSelect T="string" Label="New ticket status" @bind-Value="_settings.NewStatus" Variant="Variant.Outlined">
+                    @foreach (var status in WithSaved(_picklists?.Statuses, _settings.NewStatus))
+                    {
+                        <MudSelectItem T="string" Value="@status">@status</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Closed status" Help="The status dotMARC moves a ticket to when its alert resolves. A ticket a tech moves to this status, or to Resolved or Closed, resolves the alert.">
+<MudSelect T="string" Label="Closed status" @bind-Value="_settings.ClosedStatus" Variant="Variant.Outlined">
+                    @foreach (var status in WithSaved(_picklists?.Statuses, _settings.ClosedStatus))
+                    {
+                        <MudSelectItem T="string" Value="@status">@status</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Priority" Help="Optional: the priority alert tickets are created with. Left empty, SuperOps applies its own.">
+<MudSelect T="string" Label="Priority" @bind-Value="_settings.Priority" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var priority in WithSaved(_picklists?.Priorities, _settings.Priority))
+                    {
+                        <MudSelectItem T="string" Value="@priority">@priority</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Urgency" Help="Optional: the urgency alert tickets are created with.">
+<MudSelect T="string" Label="Urgency" @bind-Value="_settings.Urgency" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var urgency in WithSaved(_picklists?.Urgencies, _settings.Urgency))
+                    {
+                        <MudSelectItem T="string" Value="@urgency">@urgency</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Category" Help="The category alert tickets are created with. Many SuperOps accounts won't resolve a ticket that has no category, so choose one that suits alert tickets. dotMARC also applies it when resolving an older ticket that has none. It's optional in dotMARC because some accounts don't require it.">
+<MudSelect T="string" Label="Category" @bind-Value="_settings.Category" Variant="Variant.Outlined" Clearable="true"
+           HelperText="@(string.IsNullOrWhiteSpace(_settings.Category) ? "Recommended: SuperOps may refuse to resolve tickets without one." : "Used for new alert tickets and when resolving.")">
+                    @foreach (var category in WithSaved(_picklists?.Categories, _settings.Category))
+                    {
+                        <MudSelectItem T="string" Value="@category">@category</MudSelectItem>
+                    }
+                </MudSelect>
+</FieldWithHelp>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex justify-end mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save SuperOps settings</MudButton>
+        </div>
+    </MudPaper>
+
+    <PsaIntegrationTestPanel Psa="PsaKind.SuperOps" />
+}
+
+@code {
+    /// <summary>Raised with whether SuperOps is switched on in the saved settings, after loading and after saving.</summary>
+    [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+
+    private SuperOpsSettings? _settings;
+    private string? _newApiToken;
+    private bool _loading;
+    private SuperOpsPicklists? _picklists;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _settings = await SuperOpsSettingsService.GetAsync(db);
+        await EnabledChanged.InvokeAsync(_settings.Enabled);
+
+        // With a connection already saved, fill the pick lists now so the Category (and the rest) are ready to choose from.
+        await LoadOptionsAsync(quiet: true);
+    }
+
+    /// <summary>The loaded options, plus the saved choice when the lists haven't been loaded, so a select never shows blank.</summary>
+    private static IEnumerable<string> WithSaved(IReadOnlyList<string>? options, string? saved) =>
+        string.IsNullOrWhiteSpace(saved) || options?.Contains(saved, StringComparer.OrdinalIgnoreCase) == true
+            ? options ?? []
+            : (options ?? []).Prepend(saved);
+
+    private Task LoadOptionsAsync() => LoadOptionsAsync(quiet: false);
+
+    /// <summary>Loads the pick lists with the saved connection. When <paramref name="quiet"/>, it does nothing unless a
+    /// token and subdomain are saved, and a failure is only logged: the tab opening shouldn't pop errors.</summary>
+    private async Task LoadOptionsAsync(bool quiet)
+    {
+        if (quiet && (_settings is not { ApiTokenConfigured: true } || string.IsNullOrWhiteSpace(_settings.Subdomain)))
+        {
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _picklists = await SuperOpsClient.GetPicklistsAsync(await SuperOpsSettingsService.GetAsync(db));
+            if (!quiet)
+            {
+                Snackbar.Add("Loaded statuses, priorities, urgencies and categories from SuperOps.", Severity.Success);
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            Logger.LogWarning(exception, "Loading SuperOps ticket options failed");
+            if (!quiet)
+            {
+                ShowError($"Couldn't load options from SuperOps. {exception.Message}");
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await SuperOpsSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), SecretStoreAccessor, _settings!, string.IsNullOrWhiteSpace(_newApiToken) ? null : _newApiToken);
+            _newApiToken = null;
+            Snackbar.Add("SuperOps settings saved.", Severity.Success);
+
+            await using var reloadDb = await DbFactory.CreateDbContextAsync();
+            _settings = await SuperOpsSettingsService.GetAsync(reloadDb);
+            await EnabledChanged.InvokeAsync(_settings.Enabled);
+
+            // A first save has just made the connection usable: load the pick lists so the defaults can be chosen.
+            if (_picklists is null)
+            {
+                await LoadOptionsAsync(quiet: true);
+            }
+
+            if (_settings.Enabled && string.IsNullOrWhiteSpace(_settings.Category))
+            {
+                Snackbar.Add("No category is chosen. If your SuperOps requires one to resolve tickets, dotMARC won't be able to resolve them.", Severity.Warning);
+            }
+        }
+        catch (ArgumentException exception)
+        {
+            ShowError(exception.Message);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Saving SuperOps settings failed");
+            Snackbar.Add("Failed to save SuperOps settings. Try again.", Severity.Error);
+        }
+    }
+
+    // Stays on screen until dismissed: these messages can be long.
+    private void ShowError(string message) => Snackbar.Add(message, Severity.Error, config => config.RequireInteraction = true);
+}

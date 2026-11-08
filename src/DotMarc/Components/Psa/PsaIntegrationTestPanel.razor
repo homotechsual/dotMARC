@@ -84,6 +84,7 @@
         PsaKind.NinjaOne => AuditActions.NinjaOneIntegrationTested,
         PsaKind.ConnectWise => AuditActions.ConnectWiseIntegrationTested,
         PsaKind.Autotask => AuditActions.AutotaskIntegrationTested,
+        PsaKind.SuperOps => AuditActions.SuperOpsIntegrationTested,
         _ => throw new ArgumentOutOfRangeException(nameof(psa), psa, "No audit action for this PSA's integration test.")
     };
 
