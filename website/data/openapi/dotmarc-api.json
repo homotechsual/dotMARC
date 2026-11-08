@@ -2233,6 +2233,8 @@
                   "settings.halo.saved",
                   "settings.connectwise.saved",
                   "settings.autotask.saved",
+                  "settings.superops.saved",
+                  "superops.integration_tested",
                   "settings.ninjaone.saved",
                   "ninjaone.connected",
                   "ninjaone.disconnected",
