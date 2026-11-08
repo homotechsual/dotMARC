@@ -2,7 +2,7 @@ using DotMarc.Psa;
 namespace DotMarc.DomainImport;
 
 // Headerless input is read in this order, so new columns go at the end.
-public enum ImportColumn { Domain, Groups, Tags, HaloClient, Monitored, DkimSelectors, MtaStsMode, MtaStsMxHosts, MtaStsMaxAge, ConnectWiseCompany, AutotaskCompany, NinjaOneOrganisation }
+public enum ImportColumn { Domain, Groups, Tags, HaloClient, Monitored, DkimSelectors, MtaStsMode, MtaStsMxHosts, MtaStsMaxAge, ConnectWiseCompany, AutotaskCompany, NinjaOneOrganisation, SuperOpsClient }
 
 public enum MtaStsImportMode { Off, None, Testing, Enforce }
 
@@ -53,6 +53,7 @@ public sealed record ImportTable(IReadOnlySet<ImportColumn> Columns, IReadOnlyLi
         ["autotaskcompany"] = ImportColumn.AutotaskCompany, ["autotask"] = ImportColumn.AutotaskCompany,
         ["ninjaoneorganisation"] = ImportColumn.NinjaOneOrganisation, ["ninjaoneorganization"] = ImportColumn.NinjaOneOrganisation,
         ["ninjaone"] = ImportColumn.NinjaOneOrganisation, ["ninja"] = ImportColumn.NinjaOneOrganisation,
+        ["superopsclient"] = ImportColumn.SuperOpsClient, ["superops"] = ImportColumn.SuperOpsClient,
         ["monitored"] = ImportColumn.Monitored,
         ["dkimselectors"] = ImportColumn.DkimSelectors, ["dkim"] = ImportColumn.DkimSelectors,
         ["mtastsmode"] = ImportColumn.MtaStsMode, ["mtasts"] = ImportColumn.MtaStsMode,
