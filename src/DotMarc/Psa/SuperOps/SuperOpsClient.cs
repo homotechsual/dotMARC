@@ -191,7 +191,7 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
         var root = document.RootElement;
         var data = root.TryGetProperty("data", out var dataElement) && dataElement.ValueKind == JsonValueKind.Object ? dataElement.Clone() : (JsonElement?)null;
         var hasRequired = requiredField is null
-            ? data is not null
+            ? data is { } available && available.EnumerateObject().Any(property => property.Value.ValueKind != JsonValueKind.Null)
             : data is { } present && present.TryGetProperty(requiredField, out var field) && field.ValueKind == JsonValueKind.Object;
         if (hasRequired)
         {
