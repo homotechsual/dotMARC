@@ -162,6 +162,18 @@ public sealed class SuperOpsClientTests
         Assert.Null(await client.GetTicketAsync(Settings(), "77"));
     }
 
+    [Theory]
+    [InlineData("""{"data":{"getTicketList":{}}}""")]
+    [InlineData("""{"data":{"getTicketList":{"tickets":null}}}""")]
+    [InlineData("""{"data":{"getTicketList":{"tickets":"unavailable"}}}""")]
+    public async Task GetTicket_Throws_WhenTicketListIsMissingOrInvalid(string responseBody)
+    {
+        var (client, handler) = Create();
+        handler.ResponseBody = responseBody;
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => client.GetTicketAsync(Settings(), "77"));
+    }
+
     [Fact]
     public async Task GetTicket_NeverReturnsADifferentTicket()
     {
@@ -252,6 +264,20 @@ public sealed class SuperOpsClientTests
         Assert.Equal(["High"], picklists.Priorities);
         Assert.Empty(picklists.Urgencies);
         Assert.Equal(["Email"], picklists.Categories);
+    }
+
+    [Fact]
+    public async Task Picklists_Throws_WhenEveryFieldIsNullAndGraphQlReturnsErrors()
+    {
+        var (client, handler) = Create();
+        handler.ResponseBody = """
+            {"data":{"getStatusList":null,"getPriorityList":null,"getUrgencyList":null,"getCategoryList":null},
+             "errors":[{"message":"picklists unavailable"}]}
+            """;
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetPicklistsAsync(Settings()));
+
+        Assert.Contains("picklists unavailable", exception.Message);
     }
 
     [Theory]

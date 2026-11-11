@@ -106,7 +106,7 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
         var list = data.GetProperty("getTicketList");
         if (!list.TryGetProperty("tickets", out var tickets) || tickets.ValueKind != JsonValueKind.Array)
         {
-            return null;
+            throw new InvalidDataException("SuperOps returned a ticket list without a tickets array.");
         }
 
         // The filter is an exact match, but check the id anyway: a loose match must never close someone else's ticket.
