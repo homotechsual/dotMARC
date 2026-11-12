@@ -1,0 +1,37 @@
+---
+slug: v0-10-1
+date: 2026-11-12T15:00:00.000Z
+title: "dotMARC v0.10.1: security updates and current packages"
+description: dotMARC moves to the latest versions of its packages, including fixes for two denial-of-service advisories in a cryptography library.
+authors: [mikey]
+tags: [release]
+---
+
+This release has no new features. It brings every package dotMARC depends on up to date, including fixes for two
+denial-of-service advisories, and it makes that a check at the start of every release from now on.
+
+{/* truncate */}
+
+## Security updates
+
+`System.Security.Cryptography.Pkcs` (pulled in by the mail, Microsoft sign-in and PDF libraries) had two
+denial-of-service advisories, one high and one moderate, in versions before 10.0.13. dotMARC now uses 10.0.15. We
+don't know of a way to reach the problem through dotMARC, but there is no reason to keep the vulnerable version.
+
+## Updated packages
+
+* **Email.** MailKit and MimeKit move to version 5. Sending mail works as before.
+* **Client report PDFs.** PDFsharp and MigraDoc move to 6.5, which is licensed under the AGPL like dotMARC and needs the
+  AGPL license declared before it will draw. dotMARC now does that when it builds a report. The reports look the same.
+* **Sign-in, Azure and the interface.** Microsoft Identity, the Azure resource and Key Vault libraries and MudBlazor
+  are on their latest versions.
+* **ASP.NET Core and Entity Framework Core** stay on the 10.0 line, now at 10.0.15. Their 11.0 releases need .NET 11,
+  and dotMARC runs on .NET 10, the long-term support release.
+
+Upgrading needs no action, and there are no database changes.
+
+## Packages are now checked before every release
+
+`node scripts/release.mjs deps` fails a release if a package has a known vulnerability or a direct package is behind
+its latest version, new major versions included. A package that can't take a new major yet is listed with the reason
+and reported every time. See [Releasing](/docs/releasing) for how it fits into cutting a release.
