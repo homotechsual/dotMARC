@@ -74,13 +74,17 @@
             "type": "boolean"
           },
           "domain": {
-            "nullable": true,
             "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
               {
                 "$ref": "#/components/schemas/ApiNamedRef"
               }
-            ],
-            "type": "object"
+            ]
           },
           "id": {
             "format": "int32",
@@ -244,13 +248,17 @@
             "type": "string"
           },
           "target": {
-            "nullable": true,
             "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
               {
                 "$ref": "#/components/schemas/ApiAuditTarget"
               }
-            ],
-            "type": "object"
+            ]
           }
         },
         "required": [
@@ -1292,13 +1300,17 @@
             "type": "string"
           },
           "nextPeriod": {
-            "nullable": true,
             "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
               {
                 "$ref": "#/components/schemas/ApiReportPeriod"
               }
-            ],
-            "type": "object"
+            ]
           },
           "recipients": {
             "items": {
@@ -4855,13 +4867,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "nullable": true,
                 "oneOf": [
+                  {
+                    "enum": [
+                      null
+                    ],
+                    "nullable": true
+                  },
                   {
                     "$ref": "#/components/schemas/ApiSendReportRequest"
                   }
-                ],
-                "type": "object"
+                ]
               }
             }
           }

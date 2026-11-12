@@ -10,23 +10,25 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Azure.ResourceManager.AppContainers" Version="1.5.0" />
+    <PackageReference Include="Azure.ResourceManager.AppContainers" Version="1.6.0" />
     <PackageReference Include="Azure.ResourceManager.Dns" Version="1.1.1" />
-    <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.11.1" />
-    <PackageReference Include="MailKit" Version="4.18.1" />
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <PackageReference Include="MudBlazor" Version="9.8.0" />
+    <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.12.0" />
+    <PackageReference Include="MailKit" Version="5.0.0" />
+    <!-- Pinned above the version MailKit, Identity.Web and PDFsharp pull in, which has known denial-of-service advisories. Drop once they catch up. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.15" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+    <PackageReference Include="MudBlazor" Version="9.12.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.87.0" />
-    <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.92.0" />
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.18.0" />
     <PackageReference Include="DmarcRua" Version="2.1.1" />
     <PackageReference Include="ExcelDataReader" Version="3.9.0" />
-    <PackageReference Include="PDFsharp-MigraDoc" Version="6.2.4" />
+    <PackageReference Include="PDFsharp-MigraDoc" Version="6.5.0" />
   </ItemGroup>
 
   <ItemGroup>

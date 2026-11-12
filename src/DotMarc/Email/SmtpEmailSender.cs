@@ -47,7 +47,7 @@ public sealed class SmtpEmailSender(SmtpConnection connection) : IEmailSender
                 await client.AuthenticateAsync(connection.Username, connection.Password ?? "", cancellationToken).ConfigureAwait(false);
             }
 
-            await client.SendAsync(mime, cancellationToken).ConfigureAwait(false);
+            await client.SendAsync(new MailKit.SendRequest(mime), cancellationToken).ConfigureAwait(false);
             await client.DisconnectAsync(quit: true, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException and not EmailSendException)
