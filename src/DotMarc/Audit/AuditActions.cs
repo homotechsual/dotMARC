@@ -40,6 +40,8 @@ public static class AuditActions
     public const string HaloSettingsSaved = "settings.halo.saved";
     public const string ConnectWiseSettingsSaved = "settings.connectwise.saved";
     public const string AutotaskSettingsSaved = "settings.autotask.saved";
+    public const string SuperOpsSettingsSaved = "settings.superops.saved";
+    public const string SuperOpsIntegrationTested = "superops.integration_tested";
     public const string NinjaOneSettingsSaved = "settings.ninjaone.saved";
     public const string NinjaOneConnected = "ninjaone.connected";
     public const string NinjaOneDisconnected = "ninjaone.disconnected";
@@ -108,6 +110,8 @@ public static class AuditActions
         (HaloSettingsSaved, "HaloPSA settings saved"),
         (ConnectWiseSettingsSaved, "ConnectWise settings saved"),
         (AutotaskSettingsSaved, "Autotask settings saved"),
+        (SuperOpsSettingsSaved, "SuperOps settings saved"),
+        (SuperOpsIntegrationTested, "SuperOps integration tested"),
         (NinjaOneSettingsSaved, "NinjaOne settings saved"),
         (NinjaOneConnected, "NinjaOne connected"),
         (NinjaOneDisconnected, "NinjaOne disconnected"),

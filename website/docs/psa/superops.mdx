@@ -1,0 +1,73 @@
+---
+title: SuperOps
+sidebar_position: 5
+description: Raise and resolve SuperOps tickets from dotMARC alerts, and resolve alerts when a tech resolves or closes the ticket.
+---
+
+# SuperOps
+
+dotMARC can open a SuperOps ticket when an alert fires, resolve it when the alert resolves, and resolve the alert when
+a tech resolves or closes the ticket in SuperOps. It can do this alongside HaloPSA, NinjaOne, ConnectWise and
+Autotask: see [PSA integration](../psa-integration.mdx) for how several PSAs work together.
+
+## 1. Create an API token
+
+In SuperOps, open **Settings > My Profile > API Token** and generate a token. Copy it when it's shown.
+
+Tickets are raised as the person who owns the token, so a dedicated technician account for dotMARC is the tidiest
+choice. That account needs permission to view clients and to create and update tickets.
+
+## 2. Find your subdomain and region
+
+- Your **subdomain** is the part before `.superops.ai` in the address you sign in at. For `contoso.superops.ai` it's
+  `contoso`.
+- Your **region** is the data centre your account is hosted in: **United States** or **Europe**.
+
+## 3. Connect dotMARC
+
+In dotMARC, open **Manage > PSA settings** and choose the **SuperOps** tab.
+
+1. Choose the **Region**, enter the **Subdomain** and paste the **API token**.
+2. Select **Save SuperOps settings**.
+3. dotMARC loads your SuperOps statuses, priorities, urgencies and categories as soon as the connection is saved.
+   (**Load options from SuperOps** reloads them if you change them in SuperOps.) Choose:
+   - the **New ticket status** (Open, unless you've renamed it)
+   - the **Closed status** dotMARC moves a ticket to when its alert resolves (Resolved, unless you've renamed it)
+   - optionally a **Priority** and **Urgency**
+   - a **Category**. It's optional in dotMARC, but many SuperOps accounts won't resolve a ticket that has no category,
+     so choose one if yours is among them.
+4. Type the **Request type** alert tickets are created with. It's Incident unless you change it, and it must match a
+   request type in your SuperOps exactly. SuperOps has no list of request types for dotMARC to load, so this one is
+   typed.
+5. Turn on **Enable SuperOps tickets** and save again.
+
+## 4. Link clients
+
+Tickets go to the SuperOps client linked to the domain's Group. On **Manage > Groups**, each Group has a
+**SuperOps client** column. A Domain can override its Groups' client on **Manage > Domains**.
+
+## 5. How resolving works
+
+When an alert resolves, dotMARC adds a private note to the ticket saying so, then moves the ticket to your closed
+status.
+
+dotMARC checks its open SuperOps tickets every few minutes (every 5 by default, set with the
+`Psa:PollIntervalMinutes` setting). A ticket a tech moves to your closed status, or to **Resolved** or **Closed**,
+resolves its alert at the next check. If resolving a ticket fails, dotMARC keeps trying at each check. A ticket deleted
+in SuperOps is no longer checked, and its alert stays open.
+
+## 6. Test the integration
+
+**Test the integration** on the SuperOps tab runs the whole lifecycle against your live SuperOps with the saved
+settings. It creates a clearly marked test ticket, reads it back as open, resolves it, and reads it back as resolved,
+which is exactly how dotMARC notices a tech's close. Real alerts aren't touched. If a step fails, it says what to check.
+
+## Troubleshooting
+
+- **SuperOps refused the API token.** Check the token is current, and that the subdomain and region match the address
+  you sign in at.
+- **Invalid status, request type, priority or category.** SuperOps matches these by name, so a value that doesn't exist
+  in your account is refused. Reload the options and choose again, and check the request type's spelling.
+- **A value is required for category.** Your SuperOps won't resolve a ticket without a category. Choose a **Category**
+  on the SuperOps tab. dotMARC applies it to new tickets, and when resolving an older ticket that has none.
+- **Tickets don't link to SuperOps.** dotMARC shows SuperOps ticket numbers without a link.

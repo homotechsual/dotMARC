@@ -7,9 +7,16 @@ namespace DotMarc.Tests.Psa;
 public sealed class PsaKindTests
 {
     [Fact]
-    public void PsasAreListedHaloNinjaConnectWiseAutotask()
+    public void PsasAreListedHaloNinjaConnectWiseAutotaskSuperOps()
     {
-        Assert.Equal([PsaKind.HaloPsa, PsaKind.NinjaOne, PsaKind.ConnectWise, PsaKind.Autotask], Enum.GetValues<PsaKind>());
+        Assert.Equal([PsaKind.HaloPsa, PsaKind.NinjaOne, PsaKind.ConnectWise, PsaKind.Autotask, PsaKind.SuperOps], Enum.GetValues<PsaKind>());
+    }
+
+    [Fact]
+    public void SuperOps_HasItsNameAndCompanyLabel()
+    {
+        Assert.Equal("SuperOps", PsaKind.SuperOps.DisplayName());
+        Assert.Equal("SuperOps client", PsaKind.SuperOps.CompanyLabel());
     }
 
     [Fact]

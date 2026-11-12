@@ -189,6 +189,7 @@ builder.Services.AddSingleton<DotMarc.Psa.NinjaOne.NinjaOneStateProtector>();
 builder.Services.AddHttpClient<DotMarc.Psa.NinjaOne.NinjaOneConnector>();
 builder.Services.AddSingleton<DotMarc.Psa.Autotask.AutotaskZoneCache>();
 builder.Services.AddHttpClient<DotMarc.Psa.Autotask.IAutotaskClient, DotMarc.Psa.Autotask.AutotaskClient>();
+builder.Services.AddHttpClient<DotMarc.Psa.SuperOps.ISuperOpsClient, DotMarc.Psa.SuperOps.SuperOpsClient>();
 // The demo instance gets a pretend PSA so visitors can see tickets raised and closed; a real install talks to the real ones.
 if (demoOptions.Enabled)
 {
@@ -196,6 +197,7 @@ if (demoOptions.Enabled)
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.NinjaOne, services.GetRequiredService<TimeProvider>()));
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.ConnectWise, services.GetRequiredService<TimeProvider>()));
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.Autotask, services.GetRequiredService<TimeProvider>()));
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider>(services => new DotMarc.Demo.DemoPsaProvider(DotMarc.Psa.PsaKind.SuperOps, services.GetRequiredService<TimeProvider>()));
 }
 else
 {
@@ -203,6 +205,7 @@ else
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.NinjaOne.NinjaOneProvider>();
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.ConnectWise.ConnectWiseProvider>();
     builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.Autotask.AutotaskProvider>();
+    builder.Services.AddSingleton<DotMarc.Psa.IPsaProvider, DotMarc.Psa.SuperOps.SuperOpsProvider>();
 }
 builder.Services.AddScoped<DotMarc.Psa.PsaDirectory>();
 

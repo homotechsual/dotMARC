@@ -14,6 +14,7 @@ public static class PsaImportColumns
         new(PsaKind.NinjaOne, ImportColumn.NinjaOneOrganisation, ImportNameKind.NinjaOneOrganisation),
         new(PsaKind.ConnectWise, ImportColumn.ConnectWiseCompany, ImportNameKind.ConnectWiseCompany),
         new(PsaKind.Autotask, ImportColumn.AutotaskCompany, ImportNameKind.AutotaskCompany),
+        new(PsaKind.SuperOps, ImportColumn.SuperOpsClient, ImportNameKind.SuperOpsClient),
     ];
 
     public static PsaImportColumn? ForNameKind(ImportNameKind kind) => All.FirstOrDefault(column => column.NameKind == kind);

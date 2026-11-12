@@ -6,10 +6,10 @@ public static class DomainImportSamples
 {
     private static readonly string[][] Rows =
     [
-        ["domain", "groups", "tags", "halo client", "monitored", "dkim selectors", "mta-sts mode", "mta-sts mx hosts", "mta-sts max age", "connectwise company", "autotask company"],
-        ["contoso.example", "Contoso", "primary", "Contoso Ltd", "yes", "selector1;selector2", "testing", "mail.contoso.example", "604800", "Contoso Limited", "Contoso Ltd"],
-        ["fabrikam.example", "Fabrikam;Europe", "", "", "yes", "", "", "", "", "", ""],
-        ["old.contoso.example", "Contoso", "-primary", "", "no", "", "off", "", "", "", ""],
+        ["domain", "groups", "tags", "halo client", "monitored", "dkim selectors", "mta-sts mode", "mta-sts mx hosts", "mta-sts max age", "connectwise company", "autotask company", "ninjaone organisation", "superops client"],
+        ["contoso.example", "Contoso", "primary", "Contoso Ltd", "yes", "selector1;selector2", "testing", "mail.contoso.example", "604800", "Contoso Limited", "Contoso Ltd", "Contoso", "Contoso Ltd"],
+        ["fabrikam.example", "Fabrikam;Europe", "", "", "yes", "", "", "", "", "", "", "", ""],
+        ["old.contoso.example", "Contoso", "-primary", "", "no", "", "off", "", "", "", "", "", ""],
     ];
 
     public static string Csv { get; } = string.Join("\r\n", Rows.Select(row => string.Join(',', row.Select(QuoteIfNeeded)))) + "\r\n";
