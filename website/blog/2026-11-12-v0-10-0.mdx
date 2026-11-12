@@ -1,0 +1,46 @@
+---
+slug: v0-10-0
+date: 2026-11-12T10:00:00.000Z
+title: "dotMARC v0.10.0: SuperOps tickets, domain links on alerts and lighter Cloudflare permissions"
+description: dotMARC can now raise and resolve SuperOps tickets from alerts, alerts link to their domain, and the Cloudflare DNS push token no longer needs Zone > Edit.
+authors: [mikey]
+tags: [release]
+---
+
+SuperOps joins HaloPSA, NinjaOne, ConnectWise and Autotask as a PSA dotMARC can raise tickets in. Alerts now link
+straight to the domain they are about, and the Cloudflare DNS push guide asks for less access than it used to.
+
+{/* truncate */}
+
+## SuperOps tickets
+
+dotMARC can open a SuperOps ticket when an alert fires, resolve it when the alert resolves, and resolve the alert when
+a tech resolves or closes the ticket in SuperOps. Like the other PSAs it can run alongside them, with each domain
+routed to the right client.
+
+* **Setup.** Choose the **SuperOps** tab under **Manage > PSA settings**, pick your region (United States or Europe),
+  enter your subdomain and paste an API token. dotMARC then loads your statuses, priorities, urgencies and categories
+  so you can choose the new and closed statuses and the defaults for new tickets. The full steps are in the
+  [SuperOps guide](/docs/psa/superops).
+* **Category.** Many SuperOps accounts won't resolve a ticket that has no category. dotMARC tries the plain change
+  first, so a category a tech chose is never overwritten, and only falls back to the category you configured when
+  SuperOps says one is missing. Choose a category in the settings if your account is one of those.
+* **Importing domains.** The domain import accepts a `superops client` column to match each domain to its SuperOps
+  client, and the sample file now shows the NinjaOne and SuperOps columns.
+* **Failures that explain themselves.** A refused API token, a slow or unreachable SuperOps, a response that isn't
+  from SuperOps at all, and picklists that couldn't be loaded each say what went wrong instead of looking like
+  success. A timeout counts as a failed request, so dotMARC retries it on the next check.
+
+The upgrade adds the SuperOps settings table automatically. Nothing changes for installs that don't turn SuperOps on.
+
+## Domain links on alerts
+
+Click an alert's domain name to open that domain's page. Open and resolved alerts both link. Alerts for a removed
+domain, or for an application-wide problem such as a PSA connection, have no link. The domain page still needs the
+`DomainsView` permission and access to that domain. See [Alerts](/docs/alerts).
+
+## Cloudflare DNS push needs less access
+
+The Cloudflare API token for DNS push no longer needs **Zone > Edit**. The token needs **DNS > Edit**, **DNS > Read**
+and **Zone > Read**, and the [DNS provider push guide](/docs/dns-provider-push) now says why each one is needed. If
+your existing token has **Zone > Edit**, it keeps working, and you can swap it for **Zone > Read** whenever suits you.
