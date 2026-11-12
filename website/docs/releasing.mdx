@@ -114,13 +114,22 @@ entries cannot be listed, or Canny rejects the entry.
    and not complete until the release exists, and the release job then marks them complete and links
    them. Anything that slipped should be moved to a later version (change its `version` in the JSON
    and run the sync), or it will simply be skipped and logged.
-2. **Prepare.** `node scripts/release.mjs prepare 0.7.0` bumps `Directory.Build.props` and creates
+2. **Bring the packages up to date.** Every release ships on the latest packages. Run
+   `node scripts/release.mjs deps` (`tag` runs it too and refuses to continue if it fails). It fails on any
+   vulnerable package and on any direct package reference that is behind its latest version, new major versions
+   included, and lists transitive packages that are behind. Bump the direct references, pin a transitive package
+   with its own `PackageReference` when its parent hasn't caught up (for example a security fix), then run the full
+   test suite. A direct package that can't take its latest major yet, because that major needs a newer target
+   framework, goes in `scripts/package-holds.json` with the reason: it is reported on every run without failing,
+   and fails again if it falls behind inside the held major. `--allow-outdated` skips the check for a hotfix and
+   should be rare.
+3. **Prepare.** `node scripts/release.mjs prepare 0.7.0` bumps `Directory.Build.props` and creates
    the release post. The post gets a `date` with the time as well as the day, because the Releases and
    Updates page sorts by date alone: two releases on the same day would otherwise list in the wrong order.
-3. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with
-   unrelated working tree changes, a missing or placeholder post, or an existing tag.
-4. **Push.** `git push origin main v0.7.0`. Everything from here is automatic.
-5. **Check the run.** In the `canny-changelog` job log, look for one `Linking "..."` line per shipped
+4. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with
+   unrelated working tree changes, a missing or placeholder post, an existing tag, or outdated or vulnerable packages.
+5. **Push.** `git push origin main v0.7.0`. Everything from here is automatic.
+6. **Check the run.** In the `canny-changelog` job log, look for one `Linking "..."` line per shipped
    idea and a final `Published entry ... linkedIdeas=N` line. A `Not linking "..."` line means an
    idea was tagged for this version but was not complete at the time.
 

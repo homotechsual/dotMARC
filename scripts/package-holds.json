@@ -1,0 +1,35 @@
+{
+  "//": "Direct packages held back, and why. An entry with a major holds the package on that major version; one with a version holds it on exactly that version. release.mjs deps reports these instead of failing. Remove an entry when the target framework moves and the package can be upgraded.",
+  "Microsoft.AspNetCore.DataProtection.EntityFrameworkCore": {
+    "major": 10,
+    "reason": "11.x needs net11.0 (dotMARC targets net10.0, long-term support)"
+  },
+  "Microsoft.AspNetCore.Mvc.Testing": {
+    "major": 10,
+    "reason": "11.x needs net11.0"
+  },
+  "Microsoft.AspNetCore.OpenApi": {
+    "major": 10,
+    "reason": "11.x needs net11.0"
+  },
+  "Microsoft.EntityFrameworkCore": {
+    "major": 10,
+    "reason": "11.x needs net11.0"
+  },
+  "Microsoft.EntityFrameworkCore.Design": {
+    "major": 10,
+    "reason": "11.x needs net11.0"
+  },
+  "Microsoft.EntityFrameworkCore.Relational": {
+    "major": 10,
+    "reason": "11.x needs net11.0"
+  },
+  "System.Security.Cryptography.Pkcs": {
+    "major": 10,
+    "reason": "Pinned for security fixes, versioned with the runtime: 11.x needs net11.0"
+  },
+  "System.Security.Cryptography.Xml": {
+    "major": 10,
+    "reason": "Pinned for security fixes, versioned with the runtime: 11.x needs net11.0"
+  }
+}

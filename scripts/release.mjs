@@ -47,6 +47,68 @@ function currentProjectVersion() {
   return match[1];
 }
 
+function dotnetPackages(args) {
+  const output = execFileSync('dotnet', ['list', 'dotMARC.sln', 'package', ...args, '--include-transitive', '--format', 'json'], {
+    cwd: repositoryRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore']
+  });
+  const packages = [];
+  for (const project of JSON.parse(output).projects ?? []) {
+    for (const framework of project.frameworks ?? []) {
+      for (const [kind, key] of [['top-level', 'topLevelPackages'], ['transitive', 'transitivePackages']]) {
+        for (const item of framework[key] ?? []) {
+          packages.push({kind, project: project.path.split(/[\/]/).pop(), ...item});
+        }
+      }
+    }
+  }
+  return packages;
+}
+
+// Every release ships on the latest packages, new major versions included. A direct package that can't take its latest
+// major yet (it needs a newer target framework, say) is listed in scripts/package-holds.json with the reason: it is
+// reported on every run but doesn't fail, and it still fails if it falls behind inside the held major. Vulnerable
+// packages fail the release. Transitive packages that are behind are listed, because they move when their parent does
+// (pin one with a direct PackageReference when it can't wait).
+function dependencies(allowOutdated = false) {
+  console.log('[release] Checking NuGet packages are on their latest versions...');
+  const holds = JSON.parse(readFileSync(join(repositoryRoot, 'scripts', 'package-holds.json'), 'utf8'));
+  const major = (version) => Number.parseInt(version.split('.')[0], 10);
+  const describe = (item) => `${item.id} ${item.resolvedVersion} (${item.project})`;
+  const vulnerable = dotnetPackages(['--vulnerable']);
+  const outdated = dotnetPackages(['--outdated']);
+  const behindWithinMajor = new Set(dotnetPackages(['--outdated', '--highest-minor']).map((item) => `${item.project}|${item.id}`));
+
+  const problems = vulnerable.map((item) => `${describe(item)} has a known vulnerability (${item.vulnerabilities.map((v) => v.severity).join(', ')})`);
+  const held = [];
+  for (const item of outdated.filter((candidate) => candidate.kind === 'top-level')) {
+    const hold = holds[item.id];
+    if (hold?.version === item.resolvedVersion) {
+      held.push(`${describe(item)} is held, latest is ${item.latestVersion}: ${hold.reason}`);
+    } else if (behindWithinMajor.has(`${item.project}|${item.id}`)) {
+      problems.push(`${describe(item)} is behind ${item.latestVersion}`);
+    } else if (hold && major(item.resolvedVersion) === hold.major) {
+      held.push(`${describe(item)} stays on ${hold.major}.x, latest is ${item.latestVersion}: ${hold.reason}`);
+    } else {
+      problems.push(`${describe(item)} is behind ${item.latestVersion} (a new major version: upgrade it, or add it to scripts/package-holds.json with the reason)`);
+    }
+  }
+
+  if (held.length) {
+    console.warn(`[release] ${held.length} direct package(s) held back:`);
+    for (const line of held) console.warn(`  ${line}`);
+  }
+  const outdatedTransitive = outdated.filter((item) => item.kind === 'transitive');
+  if (outdatedTransitive.length) {
+    console.warn(`[release] ${outdatedTransitive.length} transitive package(s) have newer versions:`);
+    for (const item of outdatedTransitive) console.warn(`  ${describe(item)} -> ${item.latestVersion}`);
+  }
+
+  if (problems.length && !allowOutdated) {
+    fail(`Update these before releasing (or pass --allow-outdated):\n  ${problems.join('\n  ')}`);
+  }
+  console.log(problems.length ? '[release] Continuing with outdated packages (--allow-outdated).' : '[release] Direct packages are up to date.');
+}
+
 function check(version, allowExistingTag = false) {
   const slug = slugFor(version);
   const projectVersion = currentProjectVersion();
@@ -105,11 +167,12 @@ function prepare(version) {
     console.log(`[release] Blog post already exists: ${blogPath}`);
   }
 
-  console.log(`[release] Edit the blog post, then run: node scripts/release.mjs tag ${version}`);
+  console.log(`[release] Update any outdated packages (node scripts/release.mjs deps), edit the blog post, then run: node scripts/release.mjs tag ${version}`);
 }
 
-function tag(version) {
+function tag(version, allowOutdated = false) {
   check(version);
+  dependencies(allowOutdated);
   const slug = slugFor(version);
   const blogFile = blogFilesFor(slug)[0];
   // Not run(): that trims the output, which strips the leading space of the first line
@@ -131,11 +194,15 @@ function tag(version) {
 }
 
 const [command, rawVersion, option] = process.argv.slice(2);
-if (!command || !rawVersion || !['prepare', 'check', 'tag'].includes(command)) {
-  fail('Usage: node scripts/release.mjs <prepare|check|tag> <version>');
+if (command === 'deps') {
+  dependencies(rawVersion === '--allow-outdated');
+  process.exit(0);
+}
+if (!command || !rawVersion || !['prepare', 'check', 'tag', 'deps'].includes(command)) {
+  fail('Usage: node scripts/release.mjs <prepare|check|tag> <version> | deps');
 }
 
 const version = normalizeVersion(rawVersion);
 if (command === 'prepare') prepare(version);
 if (command === 'check') check(version, option === '--allow-existing-tag');
-if (command === 'tag') tag(version);
+if (command === 'tag') tag(version, option === '--allow-outdated');
