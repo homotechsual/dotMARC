@@ -167,10 +167,17 @@ else
             _picklists = await SuperOpsClient.GetPicklistsAsync(await SuperOpsSettingsService.GetAsync(db));
             if (!quiet)
             {
-                Snackbar.Add("Loaded statuses, priorities, urgencies and categories from SuperOps.", Severity.Success);
+                if (_picklists.FailedLists is { Count: > 0 } failed)
+                {
+                    Snackbar.Add($"SuperOps didn't return its {string.Join(", ", failed)}. Check the API token's permissions.", Severity.Warning);
+                }
+                else
+                {
+                    Snackbar.Add("Loaded statuses, priorities, urgencies and categories from SuperOps.", Severity.Success);
+                }
             }
         }
-        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             Logger.LogWarning(exception, "Loading SuperOps ticket options failed");
             if (!quiet)

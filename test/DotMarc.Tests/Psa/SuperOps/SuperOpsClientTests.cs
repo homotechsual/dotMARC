@@ -28,6 +28,26 @@ public sealed class SuperOpsClientTests
 
     private static JsonElement Variables(string requestBody) => JsonDocument.Parse(requestBody).RootElement.GetProperty("variables").GetProperty("input");
 
+    private sealed class TimingOutHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+    }
+
+    [Fact]
+    public async Task ARequestTimeout_IsReportedAsAnHttpRequestException_ButCallerCancellationIsNot()
+    {
+        var secrets = new FakeSecretStore { Secrets = { [SuperOpsSettings.ApiTokenSecretKey] = "token-abc" } };
+        var client = new SuperOpsClient(new HttpClient(new TimingOutHandler()), secrets);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetPicklistsAsync(Settings()));
+        Assert.Contains("in time", exception.Message);
+
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetPicklistsAsync(Settings(), cancelled.Token));
+    }
+
     [Fact]
     public async Task EveryRequest_IsAPostToTheRegionsEndpoint_SignedInWithTheTokenAndSubdomain()
     {
@@ -113,7 +133,7 @@ public sealed class SuperOpsClientTests
         var (client, handler) = Create();
         handler.ResponseBody = """{"data":{"createTicket":null},"errors":[{"message":"Invalid requestType: Nonsense"}]}""";
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.CreateTicketAsync(Settings(), new PsaTicketRequest("9001", "contoso.com", "x", "t", "m")));
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.CreateTicketAsync(Settings(), new PsaTicketRequest("9001", "contoso.com", "x", "t", "m")));
 
         Assert.Contains("Invalid requestType: Nonsense", exception.Message);
     }
@@ -184,34 +204,46 @@ public sealed class SuperOpsClientTests
     }
 
     [Fact]
-    public async Task CloseTicket_AddsAPrivateNoteFirst_ThenMovesTheTicketToTheClosedStatus()
+    public async Task CloseTicket_MovesTheTicketToTheClosedStatus_ThenAddsAPrivateNote()
     {
         var (client, handler) = Create();
-        handler.ResponseBodies.Enqueue("""{"data":{"createTicketNote":{"noteId":"1"}}}""");
         handler.ResponseBodies.Enqueue("""{"data":{"updateTicket":{"ticketId":"77"}}}""");
+        handler.ResponseBodies.Enqueue("""{"data":{"createTicketNote":{"noteId":"1"}}}""");
 
         await client.CloseTicketAsync(Settings(), "77", "Alert resolved.\nAll clear.");
 
         Assert.Equal(2, handler.RequestBodies.Count);
-        Assert.Contains("createTicketNote", handler.RequestBodies[0]);
-        var note = Variables(handler.RequestBodies[0]);
+        Assert.Contains("updateTicket", handler.RequestBodies[0]);
+        var update = Variables(handler.RequestBodies[0]);
+        Assert.Equal("77", update.GetProperty("ticketId").GetString());
+        Assert.Equal("Resolved", update.GetProperty("status").GetString());
+
+        Assert.Contains("createTicketNote", handler.RequestBodies[1]);
+        var note = Variables(handler.RequestBodies[1]);
         Assert.Equal("77", note.GetProperty("ticket").GetProperty("ticketId").GetString());
         Assert.Equal("PRIVATE", note.GetProperty("privacyType").GetString());
         Assert.Equal("Alert resolved.<br/>All clear.", note.GetProperty("content").GetString());
-
-        Assert.Contains("updateTicket", handler.RequestBodies[1]);
-        var update = Variables(handler.RequestBodies[1]);
-        Assert.Equal("77", update.GetProperty("ticketId").GetString());
-        Assert.Equal("Resolved", update.GetProperty("status").GetString());
     }
 
     [Fact]
-    public async Task CloseTicket_WhenTheNoteFails_DoesNotChangeTheStatus()
+    public async Task CloseTicket_WhenTheNoteFails_StillCountsAsClosed()
     {
         var (client, handler) = Create();
-        handler.ResponseBody = """{"data":{"createTicketNote":null},"errors":[{"message":"Ticket not found"}]}""";
+        handler.ResponseBodies.Enqueue("""{"data":{"updateTicket":{"ticketId":"77"}}}""");
+        handler.ResponseBodies.Enqueue("""{"data":{"createTicketNote":null},"errors":[{"message":"Not allowed"}]}""");
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.CloseTicketAsync(Settings(), "77", "done"));
+        await client.CloseTicketAsync(Settings(), "77", "done");
+
+        Assert.Equal(2, handler.RequestBodies.Count);
+    }
+
+    [Fact]
+    public async Task CloseTicket_WhenTheStatusChangeFails_AddsNoNote()
+    {
+        var (client, handler) = Create();
+        handler.ResponseBody = """{"data":{"updateTicket":null},"errors":[{"message":"Ticket not found"}]}""";
+
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.CloseTicketAsync(Settings(), "77", "done"));
 
         Assert.Single(handler.Requests);
     }
@@ -223,30 +255,52 @@ public sealed class SuperOpsClientTests
     public async Task CloseTicket_WhenSuperOpsRequiresACategory_RetriesWithTheConfiguredOne()
     {
         var (client, handler) = Create();
-        handler.ResponseBodies.Enqueue("""{"data":{"createTicketNote":{"noteId":"1"}}}""");
         handler.ResponseBodies.Enqueue(CategoryRequired);
         handler.ResponseBodies.Enqueue("""{"data":{"updateTicket":{"ticketId":"77"}}}""");
+        handler.ResponseBodies.Enqueue("""{"data":{"createTicketNote":{"noteId":"1"}}}""");
 
         await client.CloseTicketAsync(Settings(settings => settings.Category = "General Help"), "77", "done");
 
         Assert.Equal(3, handler.RequestBodies.Count);
-        Assert.False(Variables(handler.RequestBodies[1]).TryGetProperty("category", out _)); // the plain change goes first
-        Assert.Equal("General Help", Variables(handler.RequestBodies[2]).GetProperty("category").GetString());
-        Assert.Equal("Resolved", Variables(handler.RequestBodies[2]).GetProperty("status").GetString());
+        Assert.False(Variables(handler.RequestBodies[0]).TryGetProperty("category", out _)); // the plain change goes first
+        Assert.Equal("General Help", Variables(handler.RequestBodies[1]).GetProperty("category").GetString());
+        Assert.Equal("Resolved", Variables(handler.RequestBodies[1]).GetProperty("status").GetString());
+        Assert.Contains("createTicketNote", handler.RequestBodies[2]);
     }
 
     [Fact]
     public async Task CloseTicket_WhenACategoryIsRequiredAndNoneIsConfigured_SaysToChooseOne()
     {
         var (client, handler) = Create();
-        handler.ResponseBodies.Enqueue("""{"data":{"createTicketNote":{"noteId":"1"}}}""");
-        handler.ResponseBodies.Enqueue(CategoryRequired);
+        handler.ResponseBody = CategoryRequired;
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.CloseTicketAsync(Settings(), "77", "done"));
+        var exception = await Assert.ThrowsAsync<SuperOpsApiException>(() => client.CloseTicketAsync(Settings(), "77", "done"));
 
         Assert.Contains("required for category", exception.Message);
         Assert.Contains("Choose a Category", exception.Message);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.Single(handler.RequestBodies); // no note is added while the close is failing
+    }
+
+    [Fact]
+    public async Task CloseTicket_AnErrorThatOnlyMentionsCategory_IsNotRetried()
+    {
+        var (client, handler) = Create();
+        handler.ResponseBody = """{"data":{"updateTicket":null},"errors":[{"message":"Invalid category value"}]}""";
+
+        await Assert.ThrowsAsync<SuperOpsApiException>(() => client.CloseTicketAsync(Settings(settings => settings.Category = "General Help"), "77", "done"));
+
+        Assert.Single(handler.RequestBodies);
+    }
+
+    [Fact]
+    public async Task ANonJsonAnswer_IsReportedAsAnHttpRequestException()
+    {
+        var (client, handler) = Create();
+        handler.ResponseBody = "<html>Sign in to the network</html>";
+
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.GetPicklistsAsync(Settings()));
+
+        Assert.Contains("isn't JSON", exception.Message);
     }
 
     [Fact]
@@ -264,6 +318,7 @@ public sealed class SuperOpsClientTests
         Assert.Equal(["High"], picklists.Priorities);
         Assert.Empty(picklists.Urgencies);
         Assert.Equal(["Email"], picklists.Categories);
+        Assert.Equal(["urgencies"], picklists.FailedLists);
     }
 
     [Fact]
@@ -275,7 +330,7 @@ public sealed class SuperOpsClientTests
              "errors":[{"message":"picklists unavailable"}]}
             """;
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetPicklistsAsync(Settings()));
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.GetPicklistsAsync(Settings()));
 
         Assert.Contains("picklists unavailable", exception.Message);
     }
@@ -289,7 +344,7 @@ public sealed class SuperOpsClientTests
         var (client, handler) = Create();
         handler.StatusCode = status;
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListCompaniesAsync(Settings()));
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.ListCompaniesAsync(Settings()));
 
         Assert.Contains(expected, exception.Message);
         Assert.DoesNotContain("token-abc", exception.Message);

@@ -14,9 +14,11 @@ public static class SuperOpsSettingsService
 
     public static async Task SaveAsync(DotMarcDbContext context, AuditActor actor, ISecretStore secretStore, SuperOpsSettings updated, string? newApiToken, CancellationToken cancellationToken = default)
     {
-        updated.Subdomain = NormalizeSubdomain(updated.Subdomain);
-        updated.Region = SuperOpsRegions.All.FirstOrDefault(region => string.Equals(region, updated.Region, StringComparison.OrdinalIgnoreCase))
+        // Check the region before touching anything, so a rejected save leaves the caller's object as it was.
+        var region = SuperOpsRegions.All.FirstOrDefault(known => string.Equals(known, updated.Region, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException("Choose the SuperOps region your account is in.", nameof(updated));
+        updated.Subdomain = NormalizeSubdomain(updated.Subdomain);
+        updated.Region = region;
         updated.RequestType = Trimmed(updated.RequestType);
         updated.NewStatus = Trimmed(updated.NewStatus);
         updated.ClosedStatus = Trimmed(updated.ClosedStatus);

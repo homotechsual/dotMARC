@@ -13,6 +13,7 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
 {
     private const int PageSize = 200;
     private const int MaxSubjectLength = 250;
+    private const int MaxClientPages = 500;
 
     public async Task<IReadOnlyList<PsaCompany>> ListCompaniesAsync(SuperOpsSettings settings, CancellationToken cancellationToken = default)
     {
@@ -25,18 +26,21 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
             }
             """;
         var companies = new List<PsaCompany>();
-        for (var page = 1; ; page++)
+        for (var page = 1; page <= MaxClientPages; page++)
         {
             var data = await ExecuteAsync(settings, query, new { input = new { page, pageSize = PageSize } }, "getClientList", cancellationToken).ConfigureAwait(false);
             var list = data.GetProperty("getClientList");
+            var pageIsEmpty = true;
             if (list.TryGetProperty("clients", out var clients) && clients.ValueKind == JsonValueKind.Array)
             {
+                pageIsEmpty = clients.GetArrayLength() == 0;
                 companies.AddRange(clients.EnumerateArray()
                     .Select(client => new PsaCompany(Text(client, "accountId") ?? string.Empty, Text(client, "name") ?? string.Empty))
                     .Where(company => company.Id.Length > 0 && company.Name.Length > 0));
             }
 
-            if (!(list.TryGetProperty("listInfo", out var info) && info.ValueKind == JsonValueKind.Object
+            // An empty page ends the loop too, so an API that keeps saying hasMore can't hold it forever.
+            if (pageIsEmpty || !(list.TryGetProperty("listInfo", out var info) && info.ValueKind == JsonValueKind.Object
                 && info.TryGetProperty("hasMore", out var hasMore) && hasMore.ValueKind == JsonValueKind.True))
             {
                 break;
@@ -59,7 +63,11 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
 
         // Any one list can fail on its own (an account without the feature), and the rest are still worth showing.
         var data = await ExecuteAsync(settings, query, null, null, cancellationToken).ConfigureAwait(false);
-        return new SuperOpsPicklists(Names(data, "getStatusList"), Names(data, "getPriorityList"), Names(data, "getUrgencyList"), Names(data, "getCategoryList"));
+        var failed = new[] { ("statuses", "getStatusList"), ("priorities", "getPriorityList"), ("urgencies", "getUrgencyList"), ("categories", "getCategoryList") }
+            .Where(list => !(data.TryGetProperty(list.Item2, out var value) && value.ValueKind == JsonValueKind.Array))
+            .Select(list => list.Item1)
+            .ToList();
+        return new SuperOpsPicklists(Names(data, "getStatusList"), Names(data, "getPriorityList"), Names(data, "getUrgencyList"), Names(data, "getCategoryList"), failed);
     }
 
     public async Task<string> CreateTicketAsync(SuperOpsSettings settings, PsaTicketRequest request, CancellationToken cancellationToken = default)
@@ -134,26 +142,33 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
             }
             """;
 
-        // The note first, so the ticket says why it closed even if the status change is refused.
-        var noteInput = new { ticket = new { ticketId }, content = ToHtml(note), privacyType = "PRIVATE" };
-        await ExecuteAsync(settings, noteQuery, new { input = noteInput }, "createTicketNote", cancellationToken).ConfigureAwait(false);
-
         // Some accounts won't resolve a ticket that has no category. Try the plain change first so a category a tech set
-        // is never overwritten, and fall back to the configured one only when SuperOps asks for it.
+        // is never overwritten, and fall back to the configured one only when SuperOps says the category is missing.
         var updateInput = new { ticketId, status = settings.ClosedStatus };
         try
         {
             await ExecuteAsync(settings, updateQuery, new { input = updateInput }, "updateTicket", cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException ex) when (ex.Message.Contains("category", StringComparison.OrdinalIgnoreCase))
+        catch (SuperOpsApiException ex) when (ex.IsMissingValueFor("category"))
         {
             if (string.IsNullOrWhiteSpace(settings.Category))
             {
-                throw new HttpRequestException($"{ex.Message} Choose a Category in the SuperOps settings so dotMARC can resolve tickets.", ex, ex.StatusCode);
+                throw new SuperOpsApiException($"{ex.Message} Choose a Category in the SuperOps settings so dotMARC can resolve tickets.", ex.StatusCode, ex.MissingAttributes);
             }
 
             var withCategory = new { ticketId, status = settings.ClosedStatus, category = settings.Category };
             await ExecuteAsync(settings, updateQuery, new { input = withCategory }, "updateTicket", cancellationToken).ConfigureAwait(false);
+        }
+
+        // The note comes after the status change, so a close that keeps failing and being retried doesn't pile up notes.
+        // It's a courtesy: the ticket is already closed, so a refused note doesn't fail the close.
+        try
+        {
+            var noteInput = new { ticket = new { ticketId }, content = ToHtml(note), privacyType = "PRIVATE" };
+            await ExecuteAsync(settings, noteQuery, new { input = noteInput }, "createTicketNote", cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
         }
     }
 
@@ -173,7 +188,18 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("CustomerSubDomain", subdomain);
 
-        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The HttpClient's own timeout, not the caller stopping: report it as a failed request so callers can retry.
+            throw new HttpRequestException("SuperOps didn't answer in time.", ex, HttpStatusCode.RequestTimeout);
+        }
+
+        using var _ = response;
         if (!response.IsSuccessStatusCode)
         {
             var status = response.StatusCode;
@@ -187,7 +213,17 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
             throw new HttpRequestException(advice, null, status);
         }
 
-        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false), cancellationToken: cancellationToken).ConfigureAwait(false);
+        JsonDocument document;
+        try
+        {
+            document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false), cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException ex)
+        {
+            throw new HttpRequestException("SuperOps answered with something that isn't JSON. Check the subdomain and region, and any proxy in front of dotMARC.", ex, response.StatusCode);
+        }
+
+        using var parsed = document;
         var root = document.RootElement;
         var data = root.TryGetProperty("data", out var dataElement) && dataElement.ValueKind == JsonValueKind.Object ? dataElement.Clone() : (JsonElement?)null;
         var hasRequired = requiredField is null
@@ -198,7 +234,34 @@ public sealed class SuperOpsClient(HttpClient httpClient, ISecretStore secretSto
             return data!.Value;
         }
 
-        throw new HttpRequestException(DescribeErrors(root), null, HttpStatusCode.BadRequest);
+        throw new SuperOpsApiException(DescribeErrors(root), HttpStatusCode.BadRequest, MissingAttributes(root));
+    }
+
+    /// <summary>The attributes SuperOps says are missing, from the mandatory_validation_failed client errors.</summary>
+    private static IReadOnlyList<string> MissingAttributes(JsonElement root)
+    {
+        var missing = new List<string>();
+        if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var error in errors.EnumerateArray())
+            {
+                if (error.TryGetProperty("extensions", out var extensions) && extensions.ValueKind == JsonValueKind.Object
+                    && extensions.TryGetProperty("clientError", out var clientErrors) && clientErrors.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var clientError in clientErrors.EnumerateArray())
+                    {
+                        if (Text(clientError, "code") == "mandatory_validation_failed"
+                            && clientError.TryGetProperty("param", out var param) && param.ValueKind == JsonValueKind.Object
+                            && param.TryGetProperty("attributes", out var attributes) && attributes.ValueKind == JsonValueKind.Array)
+                        {
+                            missing.AddRange(attributes.EnumerateArray().Where(a => a.ValueKind == JsonValueKind.String).Select(a => a.GetString()!));
+                        }
+                    }
+                }
+            }
+        }
+
+        return missing;
     }
 
     private static string DescribeErrors(JsonElement root)

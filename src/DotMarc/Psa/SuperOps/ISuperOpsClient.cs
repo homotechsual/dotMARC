@@ -20,4 +20,15 @@ public sealed record SuperOpsPicklists(
     IReadOnlyList<string> Statuses,
     IReadOnlyList<string> Priorities,
     IReadOnlyList<string> Urgencies,
-    IReadOnlyList<string> Categories);
+    IReadOnlyList<string> Categories,
+    IReadOnlyList<string>? FailedLists = null);
+
+/// <summary>SuperOps accepted the call but reported errors instead of the data. Carries the attributes it said were
+/// missing, so callers can react to those without reading the message text.</summary>
+public sealed class SuperOpsApiException(string message, System.Net.HttpStatusCode? statusCode, IReadOnlyList<string> missingAttributes)
+    : HttpRequestException(message, null, statusCode)
+{
+    public IReadOnlyList<string> MissingAttributes { get; } = missingAttributes;
+
+    public bool IsMissingValueFor(string attribute) => MissingAttributes.Contains(attribute, StringComparer.OrdinalIgnoreCase);
+}
