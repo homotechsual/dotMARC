@@ -5,9 +5,10 @@ import TabItem from '@theme/TabItem';
 
 Use the setup script, in [PowerShell](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.ps1)
 or [Bash](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh), to create both
-registrations, add their Graph permissions, and generate client secrets. Sign in to the intended tenant with
-Azure CLI first (`az login`). The script deliberately does not grant admin consent to the mailbox app until you
-have restricted its access using the Exchange steps below.
+registrations and generate client secrets. Sign in to the intended tenant with Azure CLI first (`az login`). Use
+its `-Rbac` / `--rbac` option, shown below: the mailbox app is then created without a Graph mail permission in Entra,
+because you give it access in Exchange Online, limited to one mailbox, using the steps below. The script never grants
+admin consent to the mailbox app.
 
 :::
 
@@ -28,7 +29,7 @@ When you are happy with it, unblock it and run it:
 
 ```powershell
 Unblock-File ./create-dotmarc-apps.ps1
-./create-dotmarc-apps.ps1 -DashboardRedirectUri https://dotmarc.example.com/signin-oidc
+./create-dotmarc-apps.ps1 -Rbac -DashboardRedirectUri https://dotmarc.example.com/signin-oidc
 ```
 
 `Unblock-File` removes the "downloaded from the internet" mark that Windows puts on files saved from a browser, which
@@ -39,7 +40,7 @@ PowerShell still says running scripts is disabled, allow it for this window only
 If you don't know the hostname yet (Azure Container Apps assigns it during deployment), leave out
 `-DashboardRedirectUri` and add the deployed URL ending in `/signin-oidc` to the dashboard app after
 deployment. Add `-IncludeMailSend` if you plan to send [client reports](/docs/client-reports) through
-Microsoft Graph.
+Microsoft Graph. Leave out `-Rbac` only if you are using an Application Access Policy (see the legacy section below).
 
 </TabItem>
 <TabItem value="bash" label="Bash">
@@ -53,16 +54,17 @@ curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/
 When you are happy with it, run it:
 
 ```bash
-bash create-dotmarc-apps.sh --dashboard-redirect-uri https://dotmarc.example.com/signin-oidc
+bash create-dotmarc-apps.sh --rbac --dashboard-redirect-uri https://dotmarc.example.com/signin-oidc
 ```
 
 If you don't know the hostname yet (Azure Container Apps assigns it during deployment), omit
 `--dashboard-redirect-uri` and add the deployed URL ending in `/signin-oidc` to the dashboard app
 after deployment. Add `--include-mail-send` if you plan to send [client reports](/docs/client-reports)
-through Microsoft Graph.
+through Microsoft Graph. Leave out `--rbac` only if you are using an Application Access Policy (see the legacy section below).
 
 </TabItem>
 </Tabs>
 
-Either script prints the two client IDs and newly-created secrets; copy the secrets when shown. Each run
+Either script prints the two client IDs and newly-created secrets; copy the secrets when shown. With the RBAC option
+it also prints the mailbox app's service principal object ID and the Exchange role to assign. Each run
 creates additional secrets for the reused app registrations.

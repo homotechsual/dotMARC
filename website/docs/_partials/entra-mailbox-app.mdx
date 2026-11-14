@@ -1,53 +1,125 @@
 import Checklist from '@site/src/components/Checklist';
 
 1. If setting up manually, **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
-2. If setting up manually, add Microsoft Graph **Application** permission `Mail.ReadWrite`. To send
-   [client reports](/docs/client-reports) through Graph, also add `Mail.Send`.
-   dotMARC marks each report it has read, which is why it needs `Mail.ReadWrite` rather than `Mail.Read`. If
-   permissions are missing, the dashboard's poll status says which, with a link to grant admin consent.
-3. If setting up manually, **Certificates & secrets** → create a client secret.
-4. Restrict this app's mailbox access via an Exchange **Application Access Policy before granting
-   admin consent**. The script adds the permission but intentionally does not grant consent first.
-   Exchange requires the policy scope to be a **security principal** (for example a mail-enabled security
-   group), not the mailbox itself. Create a dedicated group for the DMARC reports mailbox, add
-   that mailbox to the group, and then scope the policy to the group.
+2. If setting up manually, **Certificates & secrets** → create a client secret.
+3. Give the app access to the mailbox **inside Exchange Online**, limited to the DMARC reports mailbox, using
+   **RBAC for Applications** as described below. Do **not** add the Microsoft Graph `Mail.ReadWrite` permission in
+   Entra and grant it admin consent: a consent granted in Entra applies to **every** mailbox in your tenant, and it
+   adds to the Exchange grant instead of being limited by it.
 
-   These commands come from the **ExchangeOnlineManagement** PowerShell module
-   ([PowerShell Gallery](https://www.powershellgallery.com/packages/ExchangeOnlineManagement),
-   [Microsoft Learn](https://learn.microsoft.com/powershell/exchange/exchange-online-powershell-v2)). Check you have
-   that module, and not an older Exchange module, by installing or updating it first, in a PowerShell window you
-   can run as yourself (an administrator window is only needed for an all-users install):
+The setup script's `-Rbac` (PowerShell) or `--rbac` (Bash) option does the Entra side of this for you. It creates the
+app without a Graph mail permission, creates the app's service principal, and prints the two IDs and the Exchange role
+you need in the next section.
 
-   ```powershell
-   Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser
-   ```
+:::info[Why RBAC for Applications and not an Application Access Policy]
 
-   Then run the commands below, signed in with an account that is allowed to run them (Microsoft's
-   [permissions lookup](https://learn.microsoft.com/powershell/exchange/find-exchange-cmdlet-permissions) shows which
-   roles each cmdlet needs). Microsoft's
-   [Application Access Policies](https://learn.microsoft.com/exchange/permissions-exo/application-access-policies)
-   article covers the policy itself.
+Microsoft has replaced Application Access Policies with
+[RBAC for Applications in Exchange Online](https://learn.microsoft.com/exchange/permissions-exo/application-rbac) and
+says new setups shouldn't use access policies, because they will eventually need migrating. If you already have a
+policy in place, it keeps working, and the section at the end of this page covers it and how to move off it.
 
-   ```powershell
-   # Connect-ExchangeOnline and the cmdlets after it are from the ExchangeOnlineManagement module.
-   Connect-ExchangeOnline -Organization <your-tenant>
+:::
 
-   $group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
-   Add-DistributionGroupMember -Identity $group.Identity -Member "dmarc-reports@example.uk"
+#### Limit the app to the DMARC reports mailbox
 
-   New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId $group.ObjectId -AccessRight RestrictAccess -Description "dotMARC: restrict to DMARC reports mailbox only"
-   ```
+These commands come from the **ExchangeOnlineManagement** PowerShell module
+([PowerShell Gallery](https://www.powershellgallery.com/packages/ExchangeOnlineManagement),
+[Microsoft Learn](https://learn.microsoft.com/powershell/exchange/exchange-online-powershell-v2)). Check you have
+that module, and not an older Exchange module, by installing or updating it first. A normal window is enough
+(an administrator window is only needed for an all-users install):
 
-   If you already have the mail-enabled security group, use its `ObjectId` instead of the mailbox
-   address. Do not pass the mailbox address directly to `-PolicyScopeGroupId`.
+```powershell
+Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser
+```
 
-   After creating the policy, grant admin consent in **API permissions** or run the
-   `az ad app permission admin-consent --id <mailbox-client-id>` command printed by the script.
+You need to be a member of the **Organization Management** role group in Exchange Online, and to hold the
+**Exchange Administrator** role in Microsoft Entra, to assign these permissions. Microsoft's
+[RBAC for Applications](https://learn.microsoft.com/exchange/permissions-exo/application-rbac) article covers the
+detail. Then run the commands below, replacing the values in angle brackets:
+
+```powershell
+# Connect-ExchangeOnline and the cmdlets after it are from the ExchangeOnlineManagement module.
+Connect-ExchangeOnline -Organization <your-tenant>
+
+# 1. A mail-enabled security group that holds only the mailbox(es) dotMARC may use.
+$group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
+Add-DistributionGroupMember -Identity $group.Identity -Member "dmarc-reports@example.uk"
+
+# 2. A management scope covering the members of that group.
+$groupDn = (Get-Group -Identity $group.Identity).DistinguishedName
+New-ManagementScope -Name "dotMARC mailboxes" -RecipientRestrictionFilter "MemberOfGroup -eq '$groupDn'"
+
+# 3. Tell Exchange about the mailbox app. Use the IDs the setup script printed, or the ones on the app's page under
+#    Enterprise applications in Entra. The IDs on the App registrations page are different, don't use those.
+New-ServicePrincipal -AppId <client-id> -ObjectId <service-principal-object-id> -DisplayName "dotMARC mailbox"
+
+# 4. Let the app read mail and mark it as read, but only in that scope.
+New-ManagementRoleAssignment -App <service-principal-object-id> -Role "Application Mail.ReadWrite" -CustomResourceScope "dotMARC mailboxes"
+
+# 5. Check it. InScope should be True for the DMARC reports mailbox.
+Test-ServicePrincipalAuthorization -Identity <client-id> -Resource dmarc-reports@example.uk
+```
+
+If you already have a mail-enabled security group for this, use it in step 2 in place of the new one. Three things to
+know:
+
+* **Only direct members count.** A mailbox that is a member of a group nested inside this one is out of scope.
+* **Changes take time.** Microsoft says a change to an app's permissions can take between 30 minutes and 2 hours to
+  apply, depending on how recently the app was used. The test command in step 5 ignores that delay, so it can say
+  `True` before dotMARC can actually read the mailbox.
+* **Sending client reports needs a second role.** To send [client reports](/docs/client-reports) through Microsoft
+  Graph, also assign `Application Mail.Send` to the same app and scope, or assign `Application Mail Full Access`
+  (which covers both reading and sending) in step 4 instead of `Application Mail.ReadWrite`.
+
+Finally, make sure the app has **no** Microsoft Graph mail permission granted in Entra: in the Entra admin center, open
+the app under **Enterprise applications**, then **Permissions**, and check nothing for `Mail.*` is listed as granted.
+If something is, remove it, or the app keeps access to every mailbox and the Exchange scope achieves nothing.
+
+<details>
+<summary>Already using an Application Access Policy?</summary>
+
+An Application Access Policy still works, but Microsoft treats it as a legacy feature. It limits a permission you
+have granted in Entra (the Microsoft Graph application permission `Mail.ReadWrite`, with admin consent), instead of
+granting access in Exchange. Exchange requires the policy scope to be a **security principal** (for example a
+mail-enabled security group), not the mailbox itself. Create a dedicated group for the DMARC reports mailbox, add that
+mailbox to the group, and then scope the policy to the group. Add the Graph application permission and grant admin
+consent only **after** the policy exists:
+
+```powershell
+# From the ExchangeOnlineManagement module, as above.
+Connect-ExchangeOnline -Organization <your-tenant>
+
+$group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
+Add-DistributionGroupMember -Identity $group.Identity -Member "dmarc-reports@example.uk"
+
+New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId $group.ObjectId -AccessRight RestrictAccess -Description "dotMARC: restrict to DMARC reports mailbox only"
+```
+
+If you already have the mail-enabled security group, use its `ObjectId` instead of the mailbox address. Do not pass
+the mailbox address directly to `-PolicyScopeGroupId`. After creating the policy, grant admin consent in **API
+permissions** (or run the `az ad app permission admin-consent --id <mailbox-client-id>` command the setup script prints
+when you don't use `-Rbac`). Microsoft's
+[Application Access Policies](https://learn.microsoft.com/exchange/permissions-exo/application-access-policies)
+article covers the policy itself. If permissions are missing, the dashboard's poll status says which, with a link to
+grant admin consent.
+
+**Moving an existing install to RBAC for Applications.** Microsoft's guidance for reusing the policy's group lets
+you move over without interrupting dotMARC:
+
+1. Create a management scope that points at the policy's group (step 2 above, with that group).
+2. Create the service principal pointer (step 3 above).
+3. Assign the role with that scope (step 4 above).
+4. Run the test (step 5 above) and let the change take effect, which can take up to two hours.
+5. Remove the Microsoft Graph mail permission's consent in Entra (Enterprise applications, then Permissions).
+6. Remove the Application Access Policy (`Remove-ApplicationAccessPolicy`).
+
+</details>
 
 <Checklist id="getting-started-mailbox-app" items={[
-  "Registered the dotmarc-mailbox app registration",
-  "Added the Mail.ReadWrite Application permission",
-  "Created a client secret",
-  "Created a security group scoping the Application Access Policy to just the DMARC reports mailbox",
-  "Granted admin consent after restricting mailbox access",
+  "Registered the dotmarc-mailbox app registration and created a client secret",
+  "Created the app's service principal (the setup script's -Rbac option does this)",
+  "Created a security group and management scope covering only the DMARC reports mailbox",
+  "Assigned the Application Mail.ReadWrite role to the app, limited to that scope",
+  "Checked Test-ServicePrincipalAuthorization says InScope is True",
+  "Confirmed no Microsoft Graph mail permission is granted to the app in Entra",
 ]} />

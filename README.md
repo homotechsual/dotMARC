@@ -14,35 +14,23 @@ or [`scripts/entra/create-dotmarc-apps.sh`](scripts/entra/create-dotmarc-apps.sh
 `-DashboardRedirectUri` (PowerShell) or `--dashboard-redirect-uri` (Bash) with
 `https://<your-host>/signin-oidc` when the host is known, or add the redirect URI after deploying to
 Azure Container Apps. Add `-IncludeMailSend` or `--include-mail-send` if you plan to send client
-reports through Microsoft Graph. The script adds the Graph permissions but does not grant admin
-consent to the mailbox app; restrict mailbox access using the Exchange policy below first. Copy the
-secrets it prints, as they cannot be retrieved later.
+reports through Microsoft Graph. Add `-Rbac` (PowerShell) or `--rbac` (Bash) to set the mailbox app up for
+Exchange RBAC for Applications, which Microsoft recommends in place of Application Access Policies: the
+mailbox app then gets no Graph mail permission in Entra, because you grant access in Exchange Online,
+limited to one mailbox. The script never grants admin consent to the mailbox app. Copy the secrets it
+prints, as they cannot be retrieved later.
 
 ### 1. Mailbox access (app-only)
 
 1. **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
-2. **API permissions** → add Microsoft Graph **Application** permission `Mail.ReadWrite`.
-3. **Certificates & secrets** → create a client secret.
-4. Restrict this app's mailbox access via an Exchange **Application Access Policy**. Exchange
-   requires the policy scope to be a **security principal** (for example a mail-enabled security
-   group), not the mailbox itself. Create a dedicated group for the DMARC reports mailbox, add
-   that mailbox to the group, and then scope the policy to the group:
-
-   ```powershell
-   Connect-ExchangeOnline -Organization <your-tenant>
-
-   $group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
-   Add-DistributionGroupMember -Identity $group.Identity -Member "dmarc-reports@contoso.com"
-
-   New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId $group.ObjectId -AccessRight RestrictAccess -Description "dotMARC: restrict to DMARC reports mailbox only"
-   ```
-
-   If you already have the mail-enabled security group, use its `ObjectId` instead of the mailbox
-   address. Do not pass the mailbox address directly to `-PolicyScopeGroupId`.
-
-   After creating the policy, grant admin consent for `Mail.ReadWrite` in **API permissions**. If you
-   used the script, run the `az ad app permission admin-consent --id <mailbox-client-id>` command it
-   prints.
+2. **Certificates & secrets** → create a client secret.
+3. Give the app access to the DMARC reports mailbox **in Exchange Online**, limited to that one mailbox,
+   using **RBAC for Applications**. Do not add the Graph `Mail.ReadWrite` permission and grant it admin
+   consent in Entra: that applies to every mailbox in your tenant. The full steps (scope group, management
+   scope, service principal, `Application Mail.ReadWrite` role assignment, and how to test it) are in the
+   [deployment guides](https://dotmarc.app/docs/deploy-with-docker#mailbox-app-registration-app-only). These
+   commands come from the **ExchangeOnlineManagement** PowerShell module. If you already use an Application
+   Access Policy it keeps working, and the guide covers how to move off it.
 
 ### 2. Dashboard sign-in (delegated)
 
