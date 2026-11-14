@@ -4,16 +4,20 @@ description: Self-host dotMARC with Docker Compose - your own hardware, a home/o
 ---
 
 import Checklist from '@site/src/components/Checklist';
+import EntraScript from './_partials/entra-script.mdx';
+import EntraMailboxApp from './_partials/entra-mailbox-app.mdx';
+import EntraDashboardApp from './_partials/entra-dashboard-app.mdx';
 
 # Deploy with Docker
 
 This is the self-hosted path: you run dotMARC yourself, with PostgreSQL and (optionally) a Caddy
 reverse proxy for automatic HTTPS, on your own hardware, a home/office server, or a cloud VPS.
 Prefer a managed platform instead? See [Deploy to Azure](./deploy-to-azure.mdx). Both paths need
-the two Entra app registrations from [Getting Started](./getting-started.mdx) first.
+the two Entra app registrations, which are covered below.
 
 <Checklist id="deploy-with-docker" items={[
   "Docker installed and running",
+  "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)",
   "Chosen a hostname and started dotMARC + PostgreSQL (step 1)",
   "Pointed the domain's A record (or dynamic DNS) at the server (step 2a)",
   "Opened ports 80 and 443 to the server (step 2b)",
@@ -30,6 +34,22 @@ the two Entra app registrations from [Getting Started](./getting-started.mdx) fi
   the TLS certificate in step 2 both depend on it.
 - **Somewhere for dotMARC to run continuously** - a server or NAS on your home or office network, or
   a cloud VPS/VM. Both are covered below.
+
+## Microsoft Entra setup
+
+Create the two app registrations before you start. You need each one's client ID and a client secret,
+plus your tenant ID, for the `.env` file in step 1. The redirect URI for the dashboard app is
+`https://<your-hostname>/signin-oidc`, using the hostname you choose in step 2.
+
+<EntraScript />
+
+### Mailbox app registration (app-only)
+
+<EntraMailboxApp />
+
+### Dashboard app registration (delegated sign-in)
+
+<EntraDashboardApp />
 
 ## 1. Start dotMARC and PostgreSQL
 

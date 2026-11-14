@@ -41,7 +41,7 @@ reports:
 
 1. In the app registration's **API permissions**, add the Microsoft Graph **Application** permission `Mail.Send` and
    grant admin consent.
-2. The application access policy from [Getting started](./getting-started.mdx) already limits the app to the mailboxes in
+2. The application access policy from [the mailbox app setup](./deploy-with-docker.mdx#mailbox-app-registration-app-only) already limits the app to the mailboxes in
    its security group. To send from the DMARC reports mailbox, nothing more is needed. To send from another mailbox,
    such as `reports@your-msp.example`, add that mailbox to the same group:
 

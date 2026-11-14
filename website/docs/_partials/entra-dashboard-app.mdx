@@ -1,0 +1,24 @@
+import Checklist from '@site/src/components/Checklist';
+
+1. If setting up manually, **App registrations** → **New registration**, name it e.g. `dotmarc-dashboard`.
+2. Add an **Authentication** → **Web** platform redirect URI:
+   `https://<your-deployment-host>/signin-oidc`. On the same page, under **Implicit grant and
+   hybrid flows**, check **ID tokens** - Microsoft.Identity.Web's OIDC middleware requests an
+   `id_token` as part of its hybrid authorization-code flow, and without this box checked sign-in
+   fails at the Entra consent step (the redirect back to `/signin-oidc` never happens).
+3. If setting up manually, **Certificates & secrets** → create a client secret. Microsoft.Identity.Web wires this app up
+   via the standard confidential-client authorization-code flow, so the token exchange after
+   sign-in needs this secret even though the app itself is only used for interactive sign-in.
+4. No API permissions are needed beyond delegated `User.Read` (added by the script; it is also the
+   default when registering an app in the portal).
+5. If your tenant only lets administrators approve apps, open **API permissions** and select **Grant admin consent**.
+   Without it, people can't sign in: dotMARC shows "An administrator needs to approve dotMARC" with a link an Entra
+   administrator can use to approve it (error `AADSTS65001` or `consent_required`).
+
+<Checklist id="getting-started-dashboard-app" items={[
+  "Registered the dotmarc-dashboard app registration",
+  "Added the signin-oidc Web redirect URI",
+  "Checked \"ID tokens\" under Implicit grant and hybrid flows",
+  "Created a client secret",
+  "Granted admin consent, if your tenant requires it",
+]} />

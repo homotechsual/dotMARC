@@ -4,6 +4,9 @@ description: Deploy dotMARC to Azure Container Apps using the included Bicep tem
 ---
 
 import Checklist from '@site/src/components/Checklist';
+import EntraScript from './_partials/entra-script.mdx';
+import EntraMailboxApp from './_partials/entra-mailbox-app.mdx';
+import EntraDashboardApp from './_partials/entra-dashboard-app.mdx';
 
 # Deploy to Azure
 
@@ -23,8 +26,9 @@ you don't need to jump between pages. Allow about 30 minutes, and review the Azu
 
 ## Before you start
 
-**Create the two Entra app registrations.** Follow [Getting Started](./getting-started.mdx) first. You
-need both of these, and they are separate registrations:
+### Create the two Entra app registrations
+
+You need both, and they are separate registrations:
 
 | Registration | Used for | You will need |
 | --- | --- | --- |
@@ -32,9 +36,26 @@ need both of these, and they are separate registrations:
 | `dotmarc-dashboard` | Signing people in to the dotMARC dashboard | Its client ID and a client secret |
 
 Write the two client IDs, the two client secrets and your tenant ID somewhere safe. The IDs go into the
-deployment form and the secrets go into Key Vault in [step 5](#5-populate-key-vault).
+deployment form and the secrets go into Key Vault in [step 5](#5-populate-key-vault). Azure assigns the
+app's hostname during deployment, so you add the dashboard's redirect URI afterwards in
+[step 4](#4-register-the-deployed-hostname-as-an-oidc-redirect-uri).
 
-**Check your Azure permissions.** Two different things need permission, and they are easy to mix up:
+The script below uses **Bash**. In Azure Cloud Shell, run it in Bash, then switch the shell type to
+PowerShell for everything after it.
+
+<EntraScript />
+
+#### Mailbox app registration (app-only)
+
+<EntraMailboxApp />
+
+#### Dashboard app registration (delegated sign-in)
+
+<EntraDashboardApp />
+
+### Check your Azure permissions
+
+Two different things need permission, and they are easy to mix up:
 
 | Who | What they need | Why |
 | --- | --- | --- |
@@ -42,7 +63,9 @@ deployment form and the secrets go into Key Vault in [step 5](#5-populate-key-va
 | You, to fill Key Vault | **Key Vault Secrets Officer** on the new vault, which you grant yourself in step 5 | Owner does not include permission to write secrets. Without it Azure answers `Forbidden` for `Microsoft.KeyVault/vaults/secrets/setSecret/action` |
 | The Container App's managed identity | **Key Vault Secrets User** on the vault | Lets the app read its secrets. The template grants this for you |
 
-**Use PowerShell.** The commands on this page are PowerShell. In Azure Cloud Shell, switch the shell
+### Use PowerShell
+
+ The commands on this page are PowerShell. In Azure Cloud Shell, switch the shell
 type from **Bash** to **PowerShell** using the dropdown at the top left of the Cloud Shell window
 before you run anything. On your own computer, use PowerShell 7 with the
 [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed.

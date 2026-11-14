@@ -1,0 +1,21 @@
+:::tip[Looking for setup scripts?]
+
+Use [`create-dotmarc-apps.sh`](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh)
+to create both registrations, add their Graph permissions, and generate client secrets. Sign in to
+the intended tenant with Azure CLI first. The script deliberately does not grant admin consent to the
+mailbox app until you have restricted its access using the Exchange steps below.
+
+:::
+
+Run it in Azure Cloud Shell (Bash), or anywhere with Bash and a signed-in Azure CLI:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/entra/create-dotmarc-apps.sh
+bash create-dotmarc-apps.sh --dashboard-redirect-uri https://dotmarc.example.com/signin-oidc
+```
+
+If you don't know the hostname yet (Azure Container Apps assigns it during deployment), omit
+`--dashboard-redirect-uri` and add the deployed URL ending in `/signin-oidc` to the dashboard app
+after deployment. Add `--include-mail-send` if you plan to send [client reports](/docs/client-reports)
+through Microsoft Graph. The script prints the two client IDs and newly-created secrets; copy the
+secrets when shown. Each run creates additional secrets for the reused app registrations.

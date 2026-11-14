@@ -130,7 +130,7 @@ parameter for this.
 ## Azure DNS
 
 Register a *third*, separate Entra app registration (do not reuse the mailbox or dashboard app from
-[Getting Started](./getting-started.mdx)). Go to **App registrations** → **New registration**, set
+[your deployment's Entra setup](./getting-started.mdx#choose-how-to-run-it)). Go to **App registrations** → **New registration**, set
 **Supported account types** to the multitenant option (accounts in any organizational directory) -
 this flow lets each customer authorize a push into *their own* tenant, which is a different tenant
 than the one this app registration lives in, so it must not be restricted to a single tenant. Then
