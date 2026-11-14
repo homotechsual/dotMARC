@@ -10,9 +10,26 @@ import Checklist from '@site/src/components/Checklist';
    admin consent**. The script adds the permission but intentionally does not grant consent first.
    Exchange requires the policy scope to be a **security principal** (for example a mail-enabled security
    group), not the mailbox itself. Create a dedicated group for the DMARC reports mailbox, add
-   that mailbox to the group, and then scope the policy to the group:
+   that mailbox to the group, and then scope the policy to the group.
+
+   These commands come from the **ExchangeOnlineManagement** PowerShell module
+   ([PowerShell Gallery](https://www.powershellgallery.com/packages/ExchangeOnlineManagement),
+   [Microsoft Learn](https://learn.microsoft.com/powershell/exchange/exchange-online-powershell-v2)). Check you have
+   that module, and not an older Exchange module, by installing or updating it first, in a PowerShell window you
+   can run as yourself (an administrator window is only needed for an all-users install):
 
    ```powershell
+   Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser
+   ```
+
+   Then run the commands below, signed in with an account that is allowed to run them (Microsoft's
+   [permissions lookup](https://learn.microsoft.com/powershell/exchange/find-exchange-cmdlet-permissions) shows which
+   roles each cmdlet needs). Microsoft's
+   [Application Access Policies](https://learn.microsoft.com/exchange/permissions-exo/application-access-policies)
+   article covers the policy itself.
+
+   ```powershell
+   # Connect-ExchangeOnline and the cmdlets after it are from the ExchangeOnlineManagement module.
    Connect-ExchangeOnline -Organization <your-tenant>
 
    $group = New-DistributionGroup -Name "dotMARC DMARC Reports Scope" -Type Security -Alias dotmarc-dmarc-reports
