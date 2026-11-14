@@ -10,7 +10,8 @@ import EntraSetup from './_partials/entra-setup.mdx';
 
 This page takes you from nothing to a running dotMARC on Azure Container Apps, in order. Every value
 the deployment form asks for is explained in [step 2](#2-deploy), next to the button that opens it, so
-you don't need to jump between pages. Allow about 30 minutes, and review the Azure costs first.
+you don't need to jump between pages. Start with [what you'll need](#what-youll-need), including an Azure subscription
+with billing set up.
 
 <Checklist id="deploy-to-azure" items={[
   "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)",
@@ -21,6 +22,27 @@ you don't need to jump between pages. Allow about 30 minutes, and review the Azu
   "Populated the three Key Vault secrets, re-applied the secret references and restarted the revision (step 5)",
   "Confirmed the revision is Healthy and Running (step 6)",
 ]} />
+
+## What you'll need
+
+- **An Azure subscription with billing set up.** dotMARC runs on paid Azure services (a Container App, a
+  PostgreSQL Flexible Server, a Key Vault and a Log Analytics workspace), so the subscription needs a valid payment
+  method or an invoiced agreement behind it. Check the cost for your region in the
+  [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) before you deploy, and be aware that
+  some free-trial, sponsorship and student subscriptions restrict which services or regions you can use.
+- **Permission to create resources and role assignments** in that subscription: **Owner** on the resource group you
+  deploy into is enough. [Azure permissions and shell](#azure-permissions-and-shell) below explains the other
+  permissions involved.
+- **A region** that offers both Azure Container Apps and Azure Database for PostgreSQL Flexible Server.
+- **Microsoft Entra and Exchange Online access** to create the two app registrations, an administrator who can
+  grant them admin consent, and someone who can restrict the mailbox app to the DMARC reports mailbox in Exchange
+  Online. These can be different people. The [Microsoft Entra setup](#microsoft-entra-setup) below covers each step.
+- **A shared mailbox** to receive DMARC reports, in Microsoft 365 / Exchange Online.
+- **A way to run Azure CLI commands.** [Azure Cloud Shell](https://learn.microsoft.com/azure/cloud-shell/overview)
+  needs nothing installed, or use PowerShell 7 with the
+  [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) on your own computer.
+- **About 30 minutes.** Azure gives the app its own hostname. A custom domain is optional and can be added
+  afterwards.
 
 ## Microsoft Entra setup
 
@@ -37,7 +59,7 @@ PowerShell for the rest of this page (see "Use PowerShell" below).
 
 :::
 
-## Before you start
+## Azure permissions and shell
 
 ### Check your Azure permissions
 
