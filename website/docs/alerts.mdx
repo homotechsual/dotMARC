@@ -124,12 +124,17 @@ alert title.
 ### Slack
 
 Sent as a `POST` to a Slack incoming webhook, using Slack's Block Kit layout: a "dotMARC alert" header, the alert
-title, the domain and alert type side by side, then the message. To get a webhook URL:
+title, the domain and alert type side by side, then the message.
+
+<details>
+<summary>How to get a Slack webhook URL</summary>
 
 1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
 2. Under **Incoming Webhooks**, turn them on, then **Add New Webhook to Workspace** and pick the channel.
 3. Copy the URL (it starts `https://hooks.slack.com/services/`) into **Slack webhook URL**, switch Slack on, and use
    **Send test** to check it.
+
+</details>
 
 ### Generic webhook
 

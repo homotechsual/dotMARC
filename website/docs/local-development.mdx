@@ -82,13 +82,17 @@ The demo data is seeded from the UTC date, so a given day always produces the sa
 change from day to day. Expect every image to differ a little on each run, and only commit the ones that show
 something worth publishing.
 
-### In GitHub
+<details>
+<summary>In GitHub</summary>
 
 Run the **Update Screenshots** workflow from the Actions tab. It starts PostgreSQL and the demo, captures
 every image, and opens a pull request with the result. It needs the repository setting that lets Actions
 create pull requests (Settings, Actions, General).
 
-### On your machine
+</details>
+
+<details>
+<summary>On your machine</summary>
 
 Start PostgreSQL as in [Local database-first flow](#local-database-first-flow), then run the app in demo
 mode:
@@ -112,3 +116,5 @@ If Microsoft Edge is installed you can skip the browser download with `yarn scre
 `yarn screenshots --only dashboard-admin,sources-tab` captures just those pictures, and the top of
 `website/scripts/capture-screenshots.mjs` lists the other options (the address of the demo, the output folder,
 which domain the domain pages show, and the tallest an image can be).
+
+</details>

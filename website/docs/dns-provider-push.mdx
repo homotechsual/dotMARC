@@ -51,11 +51,16 @@ The editor counts the DNS lookups the record needs, following each include. Rece
 so a record over 10 can't be pushed. If the live record is already over 10, any edit that lowers the count can be,
 so you can work your way back under.
 
+<details>
+<summary>What the push changes in DNS</summary>
+
 The domain's apex usually holds other TXT records too, such as site verifications. The push changes only the SPF
 record and leaves the others alone. If someone changes SPF in the DNS provider after you open the editor, the push
 stops and asks you to reopen it.
 
 The ending for new records is set under **Manage → DNS push settings → DNS records** (`~all` by default).
+
+</details>
 
 ## DKIM records
 
@@ -70,10 +75,15 @@ a CNAME target or a TXT value with the key. Where to find them:
 | Proton Mail | Settings > Domain names, the domain's DKIM step. |
 | Fastmail | Filled in for you. |
 
+<details>
+<summary>How selectors are pre-filled</summary>
+
 Selectors that already have a record in DNS are filled in from it, whatever the mail platform. For a Microsoft 365
 domain with nothing published yet, each selector starts with the part of its target that follows from the domain
 (for `contoso.example`, `selector1-contoso-example._domainkey.`). The rest, your tenant's `onmicrosoft.com` name and a letter Microsoft assigns,
 can only come from Microsoft 365, and dotMARC won't save a target that stops at `._domainkey`.
+
+</details>
 
 Paste records as the console shows them: quotes and line breaks are tidied away. Once a selector has a record, the DKIM
 check also checks DNS matches it, and says so if a CNAME is in place but the mail platform hasn't published the key

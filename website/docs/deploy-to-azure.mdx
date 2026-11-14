@@ -160,6 +160,9 @@ az deployment group create `
 You can pass single values inline instead of editing the file, for example
 `--parameters postgresAdminPassword='<password>'`.
 
+<details>
+<summary>Where the portal's template comes from, and building it yourself</summary>
+
 The portal uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), compiled from
 `infra/main.bicep` during every website build. Bicep is the source of truth; the generated JSON is not
 checked in. Local website builds need the same Bicep compiler as CI (no Azure sign-in needed):
@@ -170,7 +173,10 @@ cd website
 yarn gen-azure-template
 ```
 
-### What gets created
+</details>
+
+<details>
+<summary>What gets created</summary>
 
 * A **Container Apps environment** (backed by a Log Analytics workspace) and a **Container App**
   running the published dotMARC image, with a system-assigned managed identity, sticky sessions
@@ -193,6 +199,8 @@ yarn gen-azure-template
   first attaching the app to the environment, and its own error
   (`LinkedAuthorizationFailed`/`403`) reads like a Container-App-scoped permission problem rather
   than pointing at the environment-scoped role that's actually missing it.
+
+</details>
 
 :::important[The deployment is not finished yet]
 
@@ -332,7 +340,8 @@ including you.
 
 :::
 
-### How the three layers of names line up
+<details>
+<summary>How the three layers of names line up</summary>
 
 The same secret has a different name at each layer. Don't rename the Key Vault secrets to match the
 environment variables:
@@ -345,6 +354,8 @@ environment variables:
 
 The double underscore maps to ASP.NET Core's configuration hierarchy and only applies to the
 environment variable. Key Vault secret names can't contain underscores.
+
+</details>
 
 ## 6. Check it's healthy
 
@@ -432,7 +443,8 @@ az containerapp revision list `
   --output table
 ```
 
-:::note[What version is actually running?]
+<details>
+<summary>What version is actually running?</summary>
 
 For an immutable release reference such as <code>ghcr.io/homotechsual/dotmarc:<LatestVersion /></code>, the tag identifies
 the version. If the configured image is `:latest`, Azure only reports `:latest` - that mutable tag
@@ -440,7 +452,7 @@ does not reveal which build was pulled. Check the version shown in dotMARC's foo
 deployment time with the image published by the relevant release. Prefer release tags for
 production so the deployed version and rollback target are unambiguous.
 
-:::
+</details>
 
 ### Update to a specific release (recommended)
 
@@ -561,6 +573,9 @@ az deployment group what-if `
   --parameters infra/main.parameters.json
 ```
 
+<details>
+<summary>If the what-if diff shows changes you don't want, apply just the one change by hand</summary>
+
 Read the diff carefully. A `~ Microsoft.App/containerApps/<name>` entry removing
 `properties.configuration.ingress.customDomains`, or a `~ Microsoft.DBforPostgreSQL/flexibleServers/<name>`
 entry removing `storage`/`authConfig` properties, means applying it would break your custom domain
@@ -592,6 +607,8 @@ MSYS's path conversion, `MissingSubscription` errors on `az role assignment crea
 usual symptom. Set `export MSYS_NO_PATHCONV=1` first.
 
 :::
+
+</details>
 
 Want to host MTA-STS policies for customer domains? See [MTA-STS: hosting infrastructure](./mta-sts.mdx#hosting-infrastructure-one-time)
 for the one-time `enableMtaStsHosting` setup - each domain you later enable also needs an extra

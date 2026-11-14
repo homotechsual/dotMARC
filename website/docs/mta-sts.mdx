@@ -88,6 +88,9 @@ authorizing via that provider's own consent screen with nothing stored, or shows
 explaining why it couldn't: the domain's provider wasn't recognized, or that provider's OAuth app
 isn't configured on this deployment.
 
+<details>
+<summary>Why the Azure hosting hostname is the generated azurecontainerapps.io one</summary>
+
 On the Azure deployment, that hosting hostname is the Container App's own generated
 `*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't
 a choice dotMARC makes: Azure's free managed certificates require the CNAME to point directly at
@@ -97,7 +100,10 @@ requirements](https://learn.microsoft.com/azure/container-apps/custom-domains-ma
 The self-hosted Caddy path doesn't have this restriction, since it isn't using Azure's managed
 certificates.
 
-### A note on scale
+</details>
+
+<details>
+<summary>A note on scale (Azure)</summary>
 
 Every domain you enable adds one custom domain, and one managed certificate, to the same shared
 Container App. Azure doesn't publish a hard limit on how many of either a single Container App (or
@@ -107,6 +113,8 @@ soft-bounded rather than capped: each certificate is issued and renewed independ
 domain count means more independent renewals to track, not a ceiling you hit. This isn't something
 to plan around for a typical list of domains; it'd only be worth revisiting if the enabled-domain
 count ran into the hundreds.
+
+</details>
 
 ### Mode
 

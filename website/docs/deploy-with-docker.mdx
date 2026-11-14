@@ -106,7 +106,8 @@ The internet needs a path to your server on port 80 (used briefly to prove you c
 when requesting a certificate) and port 443 (regular HTTPS traffic). How you open that path depends
 on where dotMARC is running:
 
-**Home or office server, behind a router:**
+<details>
+<summary>Home or office server, behind a router</summary>
 
 1. Open your router's admin page in a browser - commonly `http://192.168.1.1` or
    `http://192.168.0.1` (check the sticker on the router, or its manual, if neither works).
@@ -117,7 +118,10 @@ on where dotMARC is running:
    - External/WAN port `443` → Internal/LAN port `443`
 4. Save the changes - some routers need a restart to apply them.
 
-**Cloud VPS or virtual machine:**
+</details>
+
+<details>
+<summary>Cloud VPS or virtual machine</summary>
 
 Open inbound access to TCP ports 80 and 443 in whatever firewall your provider uses:
 
@@ -127,6 +131,8 @@ Open inbound access to TCP ports 80 and 443 in whatever firewall your provider u
 - **Azure VM**: add inbound port rules for 80 and 443 to the VM's **Network Security Group**
 - **DigitalOcean and most others**: look for **Firewall** in the control panel and add rules
   allowing TCP 80/443 in
+
+</details>
 
 ### 2c. Put Caddy in front of dotMARC
 
@@ -160,7 +166,8 @@ sign-in fails with AADSTS50011). Certificate issuance only succeeds once ports 8
 reachable from the internet (step 2b), since that's how Let's Encrypt confirms you control the
 domain.
 
-:::tip[Already running Caddy, nginx, or Traefik for something else on this machine?]
+<details>
+<summary>Already running Caddy, nginx, or Traefik for something else on this machine?</summary>
 
 Skip this file entirely and keep using the plain `docker-compose.yml` from step 1 (which only
 publishes port 8080, no TLS) - instead, point your *existing* reverse proxy at `app:8080` (if it's
@@ -168,7 +175,7 @@ on the same Docker network) or `localhost:8080` (if you publish that port). What
 needs to forward `X-Forwarded-For` and `X-Forwarded-Proto`. `Caddyfile.selfhosted` in this repo is
 still a useful reference for the exact config shape, even if you're not running it directly.
 
-:::
+</details>
 
 ### 2d. Check it worked
 

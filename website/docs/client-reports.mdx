@@ -72,11 +72,16 @@ reports:
 
 3. Choose **Microsoft Graph** and set the **From address** to that mailbox. It's prefilled with the reports mailbox.
 
+<details>
+<summary>Large reports and Graph's 4 MB request limit</summary>
+
 Reports are normally well under 1 MB and go in a single request. Graph caps a request at 4 MB, so a report larger than
 about 3 MB (only likely with a very large logo) is sent differently: dotMARC creates it as a draft in the sending mailbox,
 uploads the PDF in pieces, then sends it. Creating the draft uses the `Mail.ReadWrite` (Application) permission the
 mailbox app already needs for reading reports, so an install still on the older `Mail.Read` sends smaller reports but
 not large ones, with a message saying the permission is missing. Reports are limited to 25 MB whichever way they're sent.
+
+</details>
 
 ### SMTP
 

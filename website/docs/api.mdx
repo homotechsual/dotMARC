@@ -102,7 +102,8 @@ The list endpoints take filters as query parameters, so a script asks for just w
   space, the same way.
 - **A value dotMARC doesn't recognise** is a 400 that names the filter and lists the values it accepts.
 
-Some examples:
+<details>
+<summary>Filtering examples</summary>
 
 | To get | Ask for |
 | --- | --- |
@@ -111,6 +112,8 @@ Some examples:
 | Open SPF and DKIM alerts raised this week | `GET /api/v1/alerts?type=SpfRecordBroken,DkimRecordBroken&raisedAfter=2026-10-05` |
 | Everything that happened to one domain | `GET /api/v1/audit?domain=contoso.example` |
 | Sign-ins in September | `GET /api/v1/audit?kind=signIn&occurredAfter=2026-09-01&occurredBefore=2026-10-01` |
+
+</details>
 
 ### The audit log
 
@@ -173,6 +176,9 @@ last ran.
 Errors use the standard problem details format (`application/problem+json`), with a `title`, a `detail` saying what to
 do, and for invalid input an `errors` object naming each field.
 
+<details>
+<summary>Status codes</summary>
+
 | Status | Meaning |
 | --- | --- |
 | 400 | The request is invalid. `errors` says which field. |
@@ -182,6 +188,8 @@ do, and for invalid input an `errors` object naming each field.
 | 405 | The path exists but not with that method. The `Allow` header lists the ones it accepts. |
 | 409 | The domain already exists, or the alert can't be acknowledged. |
 | 429 | Too many requests this minute. Wait for `Retry-After`. |
+
+</details>
 
 ## Importing domains
 

@@ -11,14 +11,15 @@ The setup script's `-Rbac` (PowerShell) or `--rbac` (Bash) option does the Entra
 app without a Graph mail permission, creates the app's service principal, and prints the two IDs and the Exchange role
 you need in the next section.
 
-:::info[Why RBAC for Applications and not an Application Access Policy]
+<details>
+<summary>Why RBAC for Applications and not an Application Access Policy</summary>
 
 Microsoft has replaced Application Access Policies with
 [RBAC for Applications in Exchange Online](https://learn.microsoft.com/exchange/permissions-exo/application-rbac) and
 says new setups shouldn't use access policies, because they will eventually need migrating. If you already have a
 policy in place, it keeps working, and the section at the end of this page covers it and how to move off it.
 
-:::
+</details>
 
 #### Limit the app to the DMARC reports mailbox
 

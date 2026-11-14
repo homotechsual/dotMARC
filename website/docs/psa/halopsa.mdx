@@ -43,7 +43,12 @@ Everything else can stay off, including Can edit closed Tickets, Can change a Ti
 Tickets and Can Edit Advanced Ticket Details.
 
 Each row is needed for something dotMARC does: creating tickets, reading them back, and changing their
-status whoever they are assigned to. When a permission is missing, the error names the call that failed:
+status whoever they are assigned to.
+
+<details>
+<summary>If a permission is missing, what the errors mean</summary>
+
+When a permission is missing, the error names the call that failed:
 
 | What you see | What it usually means |
 | --- | --- |
@@ -51,6 +56,8 @@ status whoever they are assigned to. When a permission is missing, the error nam
 | `401 Unauthorized` or "Record not found" for `GET Tickets/...` or `POST Tickets` after a ticket was created | The agent can create a ticket but can't see it. A ticket dotMARC creates is unassigned unless you choose an agent, so the role needs to view unassigned tickets and tickets assigned to other agents. |
 | "Please assign this Ticket these before closing it" | The ticket has nobody assigned. See [Who tickets are assigned to](#who-tickets-are-assigned-to). |
 | The agent list is empty, or the message says Halo returned no agents | The role can't see agents. The list is optional: leave **Don't assign**, or widen the role. |
+
+</details>
 
 Halo may put a role's permissions into the access token it issues, and dotMARC reuses a token for about
 an hour. After changing the role, use **Clear cached sign-in** on the HaloPSA tab before testing again.
@@ -70,7 +77,8 @@ the secret only takes effect once it's persisted, so a URL copied before saving 
 This is what lets a ticket closed directly in Halo resolve the dotMARC alert straight away. dotMARC also checks its
 open Halo tickets every few minutes, so a webhook that goes missing only delays the resolution.
 
-### What the webhook needs to send
+<details>
+<summary>What the webhook needs to send</summary>
 
 Halo lets you choose the webhook's payload: a small object, the full object, the event alone, or a
 custom one. dotMARC accepts any of them, as long as the payload identifies the ticket:
@@ -83,6 +91,8 @@ custom one. dotMARC accepts any of them, as long as the payload identifies the t
 * If dotMARC can't find a ticket in the payload at all, the call is recorded under **Recent calls to the
   webhook** with the names of the fields Halo sent (never their values). Use that to pick a payload that
   includes the ticket's id, or a custom payload with the ticket's id and status.
+
+</details>
 
 Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vault) depends on your
 deployment, see [Deploy to Azure](../deploy-to-azure.mdx#optional-key-vault-backed-secret-storage) if

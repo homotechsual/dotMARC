@@ -58,7 +58,8 @@ first; the log lists what it would change.
 | `notify_voters` | Default off. Whether moving an idea to complete emails its voters. Leave it off if the changelog entry is going to notify them anyway. |
 | `author_id` | Only needed if the board has more than one Canny admin, so the script cannot pick the author itself. |
 
-What the sync does, and deliberately does not do:
+<details>
+<summary>What the sync does, and deliberately does not do</summary>
 
 - It matches ideas to existing posts by **title** (trimmed, case-insensitive). A match is never
   duplicated.
@@ -80,14 +81,18 @@ What the sync does, and deliberately does not do:
   complete idea whose version isn't released yet is created as `in progress`, not `complete`.
 - It is safe to re-run: a second run with no JSON changes makes no writes.
 
+</details>
+
 ## Changelog publishing and idea linking
 
 The `canny-changelog` job in `release.yml` runs once the images and GitHub release have succeeded. It
 only runs for a real tag push, never for a manual re-run of the workflow. It first runs the roadmap
 sync (the release now exists, so ideas finished in this version are marked `complete` and their line
 becomes "Released in"), then `website/scripts/publish-canny-changelog.mjs`. A failure in the sync step
-is reported but does not stop the changelog entry. For the tagged version the changelog script does
-the following:
+is reported but does not stop the changelog entry.
+
+<details>
+<summary>What the changelog script does for the tagged version</summary>
 
 1. **Finds the release post** in `website/blog/` by its `slug` (`v0.7.0` becomes `v0-7-0`), so the
    post must exist at the tagged commit. `release.mjs tag` guarantees that.
@@ -102,6 +107,8 @@ the following:
    status, because a tag is only a target and an idea that slipped must not be announced as shipped.
 5. **Creates the entry** as published, dated with the release post's filename date, with the
    matching ideas passed as `postIDs`. Notifications default on (`NOTIFY=false` turns them off).
+
+</details>
 
 Linking is a bonus, not a gate. If the idea lookup fails, the entry is published without links and
 a warning is logged. The job only fails outright if the post cannot be found or parsed, the existing
@@ -162,6 +169,9 @@ complete ideas tagged with that version.
 
 ## Known limitations
 
+<details>
+<summary>Show the known limitations</summary>
+
 - **Renaming an idea in Canny breaks the match.** The sync finds ideas by title, so if you rename
   one on the board, update its `title` in `canny-roadmap.json` too, or the next sync creates a
   duplicate.
@@ -176,3 +186,5 @@ complete ideas tagged with that version.
   checks GitHub for the release, so an idea can't read "Released in" or "Complete" ahead of it.
 - **Roadmap columns and public visibility of tags are Canny settings**, not something these scripts
   can change.
+
+</details>

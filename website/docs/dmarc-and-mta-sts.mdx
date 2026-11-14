@@ -57,6 +57,9 @@ one thing: RFC 7489 §7.1 calls the mechanism **external destination verificatio
 call it a third-party authorization record. dotMARC's health checklist just calls it the "DMARC
 authorization record" since that's what it does - authorizes a report destination.
 
+<details>
+<summary>Why this record exists, and why it matters for dotMARC</summary>
+
 **Why it exists:** anyone could put `rua=mailto:you@yourcompany.com` in *their* DMARC record,
 making every receiving mail server that enforces your domain's mail policy start emailing your
 mailbox aggregate reports about *their* domain. To stop that, the RFC requires the report
@@ -73,6 +76,8 @@ customers' domains. That mailbox's domain will almost always differ from the dom
 monitored - which means this record is required for essentially every domain you add, and without
 it, most receivers will simply decline to send that domain's reports to you at all, even though the
 domain's own `_dmarc` record looks perfectly correct.
+
+</details>
 
 If the mailbox's domain and the monitored domain are the same, dotMARC's check reports **Not
 applicable** and skips it entirely - the RFC doesn't require self-authorization. (dotMARC checks
