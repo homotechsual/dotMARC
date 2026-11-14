@@ -160,11 +160,17 @@ const config: Config = {
     ],
   ],
   themes: [
+    // Reads a guide one step at a time. A local copy for now, so it can be published once its settings settle.
+    './packages/docusaurus-theme-step-guide',
     'docusaurus-theme-openapi-docs',
     // Code blocks marked `reference` load a file from GitHub, so the docs show scripts as they are in the repo.
     'docusaurus-theme-github-codeblock',
   ],
   themeConfig: {
+    stepGuide: {
+      frontMatterKey: 'stepMode',
+      storageNamespace: 'dotmarc-docs',
+    },
     codeblock: {
       showGithubLink: true,
       githubLinkLabel: 'View on GitHub',

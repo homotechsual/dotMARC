@@ -14,12 +14,8 @@
   position: sticky;
   top: var(--ifm-navbar-height);
   z-index: 10;
-  /* The same colour as the page behind it, so the bar doesn't show up as a panel. */
-  background: #f7f8fa;
-}
-
-:global([data-theme='dark']) .barSticky {
-  background: #111827;
+  /* Set --step-guide-bar-background to your page's colour, so the stuck bar doesn't show up as a panel. */
+  background: var(--step-guide-bar-background, var(--ifm-background-surface-color));
 }
 
 .barRow {

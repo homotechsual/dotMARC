@@ -2,6 +2,10 @@
   "extends": "@docusaurus/tsconfig",
   "compilerOptions": {
     "baseUrl": ".",
+    "paths": {
+      "@site/*": ["./*"],
+      "@theme/StepGuide/*": ["./packages/docusaurus-theme-step-guide/theme/StepGuide/*"]
+    },
     "ignoreDeprecations": "6.0"
   }
 }
