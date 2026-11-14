@@ -242,7 +242,7 @@ resource mtaStsContainerAppRole 'Microsoft.Authorization/roleDefinitions@2022-04
   name: guid(containerApp.id, 'dotMARC MTA-STS Container App Role')
   properties: {
     roleName: 'dotMARC MTA-STS Container App Role (${baseName})'
-    description: 'Lets dotMARC bind mta-sts.<domain> custom domains to its own Container App.'
+    description: 'Lets dotMARC bind mta-sts subdomains as custom domains to its own Container App.'
     type: 'CustomRole'
     permissions: [
       {
