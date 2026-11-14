@@ -5,7 +5,6 @@
 .bar {
   margin-bottom: 1rem;
   padding: 0.5rem 0;
-  background: var(--ifm-background-surface-color);
 }
 
 /* In step mode the controls stay under the navbar, so where you are is always in view. */
@@ -13,7 +12,12 @@
   position: sticky;
   top: var(--ifm-navbar-height);
   z-index: 10;
-  border-bottom: 1px solid var(--ifm-toc-border-color);
+  /* The same colour as the page behind it, so the bar doesn't show up as a panel. */
+  background: #f7f8fa;
+}
+
+:global([data-theme='dark']) .barSticky {
+  background: #111827;
 }
 
 .barRow {
@@ -148,6 +152,31 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  /* A phone screen can't spare a stuck bar this tall: let it scroll away and keep Back and Next at the bottom. */
+  .barSticky {
+    position: static;
+  }
+
+  .switchWrap {
+    flex: 1 1 100%;
+  }
+
+  .modeSwitch {
+    display: flex;
+    width: 100%;
+  }
+
+  .modeButton {
+    flex: 1 1 0;
+  }
+
+  .jump {
+    flex-basis: 100%;
+    max-width: none;
+  }
 }
 
 @media (max-width: 480px) {
