@@ -1,7 +1,7 @@
 import {useThemeConfig} from '@docusaurus/theme-common';
 
-/** The theme's settings, from `themeConfig.stepGuide` with defaults filled in. */
-export interface StepGuideOptions {
+/** The theme's settings, from `themeConfig.waypoint` with defaults filled in. */
+export interface WaypointOptions {
   /** Docs with this front matter key set to true get the switch. */
   frontMatterKey: string;
   /** Heading levels that start a new step. */
@@ -24,15 +24,15 @@ export const DEFAULT_ARTICLE_SELECTOR = '.theme-doc-markdown';
 const DEFAULT_HEADING_LEVELS = [2, 3];
 const NO_WRAPPERS: string[] = [];
 
-export function useStepGuideOptions(): StepGuideOptions {
-  const configured = (useThemeConfig() as {stepGuide?: Partial<Omit<StepGuideOptions, 'articleSelector'>> & {
+export function useWaypointOptions(): WaypointOptions {
+  const configured = (useThemeConfig() as {waypoint?: Partial<Omit<WaypointOptions, 'articleSelector'>> & {
     articleSelector?: string | string[];
-  }}).stepGuide ?? {};
+  }}).waypoint ?? {};
   const article = configured.articleSelector;
   return {
-    frontMatterKey: configured.frontMatterKey ?? 'stepGuide',
+    frontMatterKey: configured.frontMatterKey ?? 'waypoint',
     headingLevels: configured.headingLevels ?? DEFAULT_HEADING_LEVELS,
-    storageNamespace: configured.storageNamespace ?? 'step-guide',
+    storageNamespace: configured.storageNamespace ?? 'waypoint',
     showIntroHint: configured.showIntroHint ?? true,
     articleSelector: Array.isArray(article) ? article.join(', ') : article || DEFAULT_ARTICLE_SELECTOR,
     wrapperSelectors: configured.wrapperSelectors ?? NO_WRAPPERS,

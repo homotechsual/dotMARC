@@ -50,8 +50,8 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
-      - name: Test the step guide theme
-        run: node --test packages/docusaurus-theme-step-guide/test/steps.test.mjs
+      - name: Test the Waypoint theme
+        run: node --test packages/docusaurus-theme-waypoint/test/steps.test.mjs
 
       - name: Install pinned Bicep compiler
         run: az bicep install --version v0.46.1

@@ -1,8 +1,8 @@
-// Run with: node --test packages/docusaurus-theme-step-guide/test/steps.test.mjs
+// Run with: node --test packages/docusaurus-theme-waypoint/test/steps.test.mjs
 // The page logic is plain TypeScript with no DOM imports, so Node can run it directly; the elements are small fakes.
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {buildSteps, findStepForHash, showEverything, showOnly} from '../theme/StepGuide/steps.ts';
+import {buildSteps, findStepForHash, showEverything, showOnly} from '../theme/Waypoint/steps.ts';
 
 function element(tagName, {id = '', text = '', hidden = false, className = '', children = []} = {}) {
   const node = {
@@ -12,7 +12,7 @@ function element(tagName, {id = '', text = '', hidden = false, className = '', c
     textContent: text,
     style: {display: ''},
     children,
-    hasAttribute: (name) => hidden && name === 'data-step-guide-hidden',
+    hasAttribute: (name) => hidden && name === 'data-waypoint-hidden',
     matches: (selector) => selector.split(',').some((part) => part.trim() === `.${className}`),
     contains: (other) => other === node || children.some((child) => child === other || child.contains?.(other)),
   };

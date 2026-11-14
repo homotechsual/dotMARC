@@ -1,5 +1,5 @@
 {
-  "name": "@homotechsual/docusaurus-theme-step-guide",
+  "name": "@homotechsual/docusaurus-theme-waypoint",
   "version": "0.0.0-local",
   "private": true,
   "description": "Read long Docusaurus guides one step at a time. Adds a Whole guide / One step at a time switch to docs that opt in.",

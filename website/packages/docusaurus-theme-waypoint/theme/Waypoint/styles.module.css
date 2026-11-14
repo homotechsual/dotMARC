@@ -14,8 +14,8 @@
   position: sticky;
   top: var(--ifm-navbar-height);
   z-index: 10;
-  /* Set --step-guide-bar-background to your page's colour, so the stuck bar doesn't show up as a panel. */
-  background: var(--step-guide-bar-background, var(--ifm-background-surface-color));
+  /* Set --waypoint-bar-background to your page's colour, so the stuck bar doesn't show up as a panel. */
+  background: var(--waypoint-bar-background, var(--ifm-background-surface-color));
 }
 
 .barRow {

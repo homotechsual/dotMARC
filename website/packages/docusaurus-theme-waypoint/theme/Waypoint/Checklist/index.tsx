@@ -1,8 +1,8 @@
 import React, {useEffect, useState} from 'react';
 import {translate} from '@docusaurus/Translate';
-import {useStepGuideOptions} from '../options';
+import {useWaypointOptions} from '../options';
 import {readStorage, writeStorage} from '../steps';
-import {HIDE_IN_STEPS_ATTRIBUTE, useStepGuideTasks} from '../tasks';
+import {HIDE_IN_STEPS_ATTRIBUTE, useWaypointTasks} from '../tasks';
 import styles from './styles.module.css';
 
 /** An item is plain text, or text plus the id of the heading of the step it belongs to. */
@@ -20,15 +20,15 @@ export interface ChecklistProps {
 
 const textOf = (item: ChecklistItem): string => (typeof item === 'string' ? item : item.text);
 
-/** A tick list whose ticks are saved in the reader's browser. In a step guide, when every item names the step it
+/** A tick list whose ticks are saved in the reader's browser. In a Waypoint guide, when every item names the step it
  * belongs to, the list is hidden in one-step-at-a-time mode and each item is ticked at the end of its own step
  * instead. The same ticks back both views. */
 export default function Checklist({id, items, onProgress}: ChecklistProps): React.ReactElement {
-  const {storageNamespace} = useStepGuideOptions();
+  const {storageNamespace} = useWaypointOptions();
   const storageKey = `${storageNamespace}-checklist:${id}`;
   const [checked, setChecked] = useState<boolean[]>(() => items.map(() => false));
   const [hydrated, setHydrated] = useState(false);
-  const stepTasks = useStepGuideTasks();
+  const stepTasks = useWaypointTasks();
   const everyItemHasAStep = items.length > 0 && items.every((item) => typeof item !== 'string');
 
   // Read the saved ticks after the first render, so the server's markup (all unticked) matches it.
@@ -90,7 +90,7 @@ export default function Checklist({id, items, onProgress}: ChecklistProps): Reac
       <div className={styles.header}>
         <span className={styles.progressText}>
           {translate(
-            {id: 'theme.stepGuide.checklist.progress', message: '{completed} of {total} complete'},
+            {id: 'theme.waypoint.checklist.progress', message: '{completed} of {total} complete'},
             {completed, total: items.length},
           )}
         </span>

@@ -1,6 +1,6 @@
-# docusaurus-theme-step-guide
+# Waypoint
 
-Lets readers switch a long Docusaurus guide to **one step at a time**: a *Whole guide / One step at a time* switch, a
+`@homotechsual/docusaurus-theme-waypoint` lets readers switch a long Docusaurus guide to **one step at a time**: a *Whole guide / One step at a time* switch, a
 progress bar, a jump menu, Back and Next buttons, and optional "done" ticks for each step. For readers who find a long
 page overwhelming.
 
@@ -16,13 +16,13 @@ Add the theme, and opt a doc in with front matter:
 
 ```ts
 // docusaurus.config.ts
-themes: ['@homotechsual/docusaurus-theme-step-guide'],
+themes: ['@homotechsual/docusaurus-theme-waypoint'],
 themeConfig: {
-  stepGuide: {
+  waypoint: {
     // All optional. These are the defaults.
-    frontMatterKey: 'stepGuide', // docs with `stepGuide: true` get the switch
+    frontMatterKey: 'waypoint', // docs with `waypoint: true` get the switch
     headingLevels: [2, 3], // heading levels that start a step
-    storageNamespace: 'step-guide', // prefix for what is saved in the reader's localStorage
+    storageNamespace: 'waypoint', // prefix for what is saved in the reader's localStorage
     showIntroHint: true, // the "New: read this one step at a time" callout for first-time visitors
     articleSelector: '.theme-doc-markdown', // where the guide's content lives (see "Different page structures")
     wrapperSelectors: [], // wrapper elements to look inside
@@ -32,7 +32,7 @@ themeConfig: {
 
 ```md
 ---
-stepGuide: true
+waypoint: true
 ---
 
 # My guide
@@ -54,10 +54,10 @@ The stuck progress bar should match your page background so it doesn't show up a
 
 ```css
 :root {
-  --step-guide-bar-background: #f7f8fa;
+  --waypoint-bar-background: #f7f8fa;
 }
 [data-theme='dark'] {
-  --step-guide-bar-background: #111827;
+  --waypoint-bar-background: #111827;
 }
 ```
 
@@ -73,7 +73,7 @@ structures:
   it were a direct child of the article, so you can keep wrapping content in your own components:
 
 ```ts
-stepGuide: {
+waypoint: {
   articleSelector: ['.theme-doc-markdown', '.my-extra-parent'],
   wrapperSelectors: ['.my-section', '.my-callout-group'],
 },
@@ -89,7 +89,7 @@ item the id of the heading it belongs to, and in step mode the list is replaced 
 step:
 
 ```mdx
-import Checklist from '@theme/StepGuide/Checklist';
+import Checklist from '@theme/Waypoint/Checklist';
 
 <Checklist
   id="install-guide"
@@ -111,9 +111,9 @@ import Checklist from '@theme/StepGuide/Checklist';
 A checklist component of your own can show its items one per step by registering them with the tasks hook:
 
 ```tsx
-import {useStepGuideTasks, HIDE_IN_STEPS_ATTRIBUTE} from '@theme/StepGuide/tasks';
+import {useWaypointTasks, HIDE_IN_STEPS_ATTRIBUTE} from '@theme/Waypoint/tasks';
 
-const registry = useStepGuideTasks(); // null outside a step guide
+const registry = useWaypointTasks(); // null outside a Waypoint guide
 
 useEffect(() => {
   registry?.register('my-checklist', [
@@ -131,7 +131,7 @@ in step mode, so keep the ids in step with your headings.
 
 ## Translations
 
-All visible text goes through Docusaurus' `translate()` with ids starting `theme.stepGuide.`. Run
+All visible text goes through Docusaurus' `translate()` with ids starting `theme.waypoint.`. Run
 `docusaurus write-translations` to get them.
 
 ## Limits
@@ -140,4 +140,4 @@ All visible text goes through Docusaurus' `translate()` with ids starting `theme
   wrapper named in `wrapperSelectors`. Headings inside anything else (tabs, details, an unlisted component) do not.
 - It relies on Docusaurus 3's `.theme-doc-markdown` article element.
 - Printing prints the current step. Switch to *Whole guide* first.
-- The page logic (`theme/StepGuide/steps.ts`) is tested with `node --test test/steps.test.mjs`.
+- The page logic (`theme/Waypoint/steps.ts`) is tested with `node --test test/steps.test.mjs`.

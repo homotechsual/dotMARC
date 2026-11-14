@@ -1,6 +1,6 @@
 import React from 'react';
 import Content from '@theme-init/DocItem/Content';
-import StepGuide from '../../StepGuide';
+import Waypoint from '../../Waypoint';
 
 type ContentProps = React.ComponentProps<typeof Content>;
 
@@ -8,8 +8,8 @@ type ContentProps = React.ComponentProps<typeof Content>;
  * straight through. */
 export default function ContentWrapper(props: ContentProps): React.ReactElement {
   return (
-    <StepGuide>
+    <Waypoint>
       <Content {...props} />
-    </StepGuide>
+    </Waypoint>
   );
 }

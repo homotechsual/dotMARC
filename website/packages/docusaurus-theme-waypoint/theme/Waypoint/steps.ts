@@ -1,4 +1,4 @@
-// The page logic of the step guide, kept free of React so it can be tested on its own.
+// The page logic of Waypoint, kept free of React so it can be tested on its own.
 
 /** What the controls need to know about one step. */
 export interface StepInfo {
@@ -15,7 +15,7 @@ export interface StepDom extends StepInfo {
   nodes: HTMLElement[];
 }
 
-const HIDE_IN_STEPS_ATTRIBUTE = 'data-step-guide-hidden';
+const HIDE_IN_STEPS_ATTRIBUTE = 'data-waypoint-hidden';
 
 /** The elements of a guide in reading order, looking inside any wrapper elements as if their children sat directly
  * in the article. A wrapper that holds headings can then still split the page into steps. */

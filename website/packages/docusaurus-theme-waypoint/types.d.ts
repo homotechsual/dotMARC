@@ -9,7 +9,7 @@ declare module '@theme-init/DocItem/Content' {
 }
 
 // The theme's own components, for sites that import them.
-declare module '@theme/StepGuide/Checklist' {
+declare module '@theme/Waypoint/Checklist' {
   import type {ReactElement} from 'react';
 
   export type ChecklistItem = string | {text: string; step: string};
@@ -21,16 +21,16 @@ declare module '@theme/StepGuide/Checklist' {
   export default function Checklist(props: ChecklistProps): ReactElement;
 }
 
-declare module '@theme/StepGuide/tasks' {
-  export interface StepGuideTask {
+declare module '@theme/Waypoint/tasks' {
+  export interface WaypointTask {
     stepId: string;
     label: string;
     checked: boolean;
     toggle: () => void;
   }
-  export interface StepGuideTaskRegistry {
-    register: (groupId: string, tasks: StepGuideTask[] | null) => void;
+  export interface WaypointTaskRegistry {
+    register: (groupId: string, tasks: WaypointTask[] | null) => void;
   }
-  export function useStepGuideTasks(): StepGuideTaskRegistry | null;
+  export function useWaypointTasks(): WaypointTaskRegistry | null;
   export const HIDE_IN_STEPS_ATTRIBUTE: string;
 }

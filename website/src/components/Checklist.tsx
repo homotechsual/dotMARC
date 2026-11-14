@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {useChecklistProgress} from './ChecklistProgressContext';
-import {HIDE_IN_STEPS_ATTRIBUTE, useStepGuideTasks} from '@theme/StepGuide/tasks';
+import {HIDE_IN_STEPS_ATTRIBUTE, useWaypointTasks} from '@theme/Waypoint/tasks';
 import styles from './Checklist.module.css';
 
 /** An item is plain text, or text plus the id of the heading of the step it belongs to. When every item names a step,
@@ -70,7 +70,7 @@ export default function Checklist({id, items}: ChecklistProps): React.ReactEleme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, completedCount, items.length, id]);
 
-  const stepRegistry = useStepGuideTasks();
+  const stepRegistry = useWaypointTasks();
   const allInSteps = items.length > 0 && items.every((item) => typeof item !== 'string');
 
   useEffect(() => {

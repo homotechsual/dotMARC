@@ -28,13 +28,13 @@
   --ifm-footer-background-color: #263141;
 }
 
-/* The step guide's stuck bar blends into the page when it matches the page colour. */
+/* Waypoint's stuck bar blends into the page when it matches the page colour. */
 :root {
-  --step-guide-bar-background: #f7f8fa;
+  --waypoint-bar-background: #f7f8fa;
 }
 
 [data-theme='dark'] {
-  --step-guide-bar-background: #111827;
+  --waypoint-bar-background: #111827;
   --ifm-color-primary: #ef8b86;
   --ifm-color-primary-dark: #e3594f;
   --ifm-color-primary-darker: #db473c;

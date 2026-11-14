@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useDoc} from '@docusaurus/plugin-content-docs/client';
 import {translate} from '@docusaurus/Translate';
 import styles from './styles.module.css';
-import {useStepGuideOptions} from './options';
+import {useWaypointOptions} from './options';
 import {
   buildSteps,
   findStepForHash,
@@ -13,7 +13,7 @@ import {
   type StepDom,
   type StepInfo,
 } from './steps';
-import {StepGuideTasksContext, type StepGuideTask, type StepGuideTaskRegistry} from './tasks';
+import {WaypointTasksContext, type WaypointTask, type WaypointTaskRegistry} from './tasks';
 
 type ViewMode = 'all' | 'steps';
 
@@ -21,9 +21,9 @@ type ViewMode = 'all' | 'steps';
  * anything for docs with the configured front matter key set to true. In step mode every heading at the configured
  * levels starts a new step, and the rest of the page is hidden until you get there, which suits readers who find a
  * long page overwhelming. */
-export default function StepGuide({children}: {children: React.ReactNode}): React.ReactElement {
+export default function Waypoint({children}: {children: React.ReactNode}): React.ReactElement {
   const {frontMatter, metadata} = useDoc();
-  const options = useStepGuideOptions();
+  const options = useWaypointOptions();
   const enabled = (frontMatter as Record<string, unknown>)[options.frontMatterKey] === true;
   const permalink = metadata.permalink;
 
@@ -38,9 +38,9 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
   const [current, setCurrent] = useState(0);
   const [announcement, setAnnouncement] = useState('');
   const [hintVisible, setHintVisible] = useState(false);
-  const [taskGroups, setTaskGroups] = useState<Record<string, StepGuideTask[]>>({});
+  const [taskGroups, setTaskGroups] = useState<Record<string, WaypointTask[]>>({});
 
-  const registry = useMemo<StepGuideTaskRegistry>(
+  const registry = useMemo<WaypointTaskRegistry>(
     () => ({
       register: (groupId, tasks) =>
         setTaskGroups((previous) => {
@@ -89,7 +89,7 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
       setAnnouncement(
         translate(
           {
-            id: 'theme.stepGuide.announcement',
+            id: 'theme.waypoint.announcement',
             message: 'Step {current} of {total}: {title}',
             description: 'Read out to screen reader users when the step changes',
           },
@@ -128,7 +128,7 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
       return undefined;
     }
     const overviewTitle = translate({
-      id: 'theme.stepGuide.overview',
+      id: 'theme.waypoint.overview',
       message: 'Overview',
       description: 'The name of the first step, which holds the introduction before the first heading',
     });
@@ -193,29 +193,29 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
   const percent = inSteps && last > 0 ? Math.round((current / last) * 100) : 0;
 
   const t = {
-    groupLabel: translate({id: 'theme.stepGuide.switchLabel', message: 'How to read this guide'}),
-    wholeGuide: translate({id: 'theme.stepGuide.wholeGuide', message: 'Whole guide'}),
-    oneStep: translate({id: 'theme.stepGuide.oneStepAtATime', message: 'One step at a time'}),
-    hintTitle: translate({id: 'theme.stepGuide.hint.title', message: 'New: read this one step at a time'}),
+    groupLabel: translate({id: 'theme.waypoint.switchLabel', message: 'How to read this guide'}),
+    wholeGuide: translate({id: 'theme.waypoint.wholeGuide', message: 'Whole guide'}),
+    oneStep: translate({id: 'theme.waypoint.oneStepAtATime', message: 'One step at a time'}),
+    hintTitle: translate({id: 'theme.waypoint.hint.title', message: 'New: read this one step at a time'}),
     hintText: translate({
-      id: 'theme.stepGuide.hint.text',
+      id: 'theme.waypoint.hint.text',
       message:
         'Long guide feeling like a lot? Switch to showing one step at a time, with a progress bar and Back and Next buttons.',
     }),
-    hintTry: translate({id: 'theme.stepGuide.hint.try', message: 'Try it'}),
-    hintDismiss: translate({id: 'theme.stepGuide.hint.dismiss', message: 'No thanks'}),
+    hintTry: translate({id: 'theme.waypoint.hint.try', message: 'Try it'}),
+    hintDismiss: translate({id: 'theme.waypoint.hint.dismiss', message: 'No thanks'}),
     count: translate(
-      {id: 'theme.stepGuide.count', message: 'Step {current} of {total}'},
+      {id: 'theme.waypoint.count', message: 'Step {current} of {total}'},
       {current: current + 1, total: steps.length},
     ),
-    jump: translate({id: 'theme.stepGuide.jump', message: 'Jump to a step'}),
-    navLabel: translate({id: 'theme.stepGuide.navLabel', message: 'Step navigation'}),
-    back: translate({id: 'theme.stepGuide.back', message: '← Back'}),
-    end: translate({id: 'theme.stepGuide.end', message: 'End of the guide'}),
+    jump: translate({id: 'theme.waypoint.jump', message: 'Jump to a step'}),
+    navLabel: translate({id: 'theme.waypoint.navLabel', message: 'Step navigation'}),
+    back: translate({id: 'theme.waypoint.back', message: '← Back'}),
+    end: translate({id: 'theme.waypoint.end', message: 'End of the guide'}),
   };
 
   return (
-    <StepGuideTasksContext.Provider value={registry}>
+    <WaypointTasksContext.Provider value={registry}>
       <div ref={rootRef} className={styles.root}>
         <div className={`${styles.bar} ${inSteps ? styles.barSticky : ''}`}>
           <div className={styles.barRow}>
@@ -288,7 +288,7 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
                   <label key={task.label} className={styles.doneLabel}>
                     <input type="checkbox" checked={task.checked} onChange={task.toggle} />
                     <span>
-                      {translate({id: 'theme.stepGuide.done', message: 'Done: {task}'}, {task: task.label})}
+                      {translate({id: 'theme.waypoint.done', message: 'Done: {task}'}, {task: task.label})}
                     </span>
                   </label>
                 ))}
@@ -309,7 +309,7 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
                 onClick={() => reveal(current + 1, {updateHash: true, scroll: true, focus: true})}>
                 {current === last
                   ? t.end
-                  : translate({id: 'theme.stepGuide.next', message: 'Next: {title} →'}, {title: labels[current + 1]})}
+                  : translate({id: 'theme.waypoint.next', message: 'Next: {title} →'}, {title: labels[current + 1]})}
               </button>
             </nav>
           </>
@@ -319,6 +319,6 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
           {announcement}
         </div>
       </div>
-    </StepGuideTasksContext.Provider>
+    </WaypointTasksContext.Provider>
   );
 }
