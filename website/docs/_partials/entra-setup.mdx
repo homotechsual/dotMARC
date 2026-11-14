@@ -1,0 +1,26 @@
+import EntraScript from './entra-script.mdx';
+import EntraMailboxApp from './entra-mailbox-app.mdx';
+import EntraDashboardApp from './entra-dashboard-app.mdx';
+
+dotMARC needs **two separate** Microsoft Entra app registrations. Do not reuse one for both purposes.
+
+| Registration | Used for | You will need |
+| --- | --- | --- |
+| `dotmarc-mailbox` | Reading the DMARC reports mailbox (app-only Microsoft Graph) | Its client ID and a client secret |
+| `dotmarc-dashboard` | Signing people in to the dotMARC dashboard | Its client ID and a client secret |
+
+Write down both client IDs, both client secrets and your tenant ID somewhere safe, because you enter them
+when you configure dotMARC. The dashboard's redirect URI is `https://<your-hostname>/signin-oidc`. If you
+don't know the hostname yet, add it to the dashboard registration after you deploy.
+
+### Create the apps with the script
+
+<EntraScript />
+
+### Mailbox app registration (app-only)
+
+<EntraMailboxApp />
+
+### Dashboard app registration (delegated sign-in)
+
+<EntraDashboardApp />

@@ -3,6 +3,7 @@ sidebar_position: 1
 description: What dotMARC needs, the configuration it reads, and how to choose between Docker and Azure.
 ---
 
+import Link from '@docusaurus/Link';
 import ThemedImage from '@theme/ThemedImage';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import ConfigReference from './_partials/config-reference.mdx';
@@ -16,8 +17,16 @@ want to run dotMARC first.
 
 ## Configure
 
-Everything dotMARC reads is set through configuration. Both deployment guides set these for you, and
-this table is the reference for what each value means.
+:::warning[This is a reference, not a setup guide]
+
+This table only explains what each setting means. It is not the place to set dotMARC up, and following it
+on its own will leave you with a half-configured install. All setup instructions, including creating the
+Entra app registrations and supplying these values, are in the deployment guides:
+[Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx).
+
+:::
+
+Everything dotMARC reads is set through configuration. Both deployment guides set these for you.
 
 <ConfigReference />
 
@@ -33,9 +42,14 @@ fits how you already operate:
 | Database | PostgreSQL container, your own volume/backups | Managed Azure Database for PostgreSQL Flexible Server |
 | Cost model | Whatever your own hardware/VPS costs | Pay-as-you-go Azure resources |
 
-Not sure? **Deploy with Docker** is the faster path to a first working instance - a single
-`docker compose` command gets you a complete stack, including HTTPS. **Deploy to Azure** trades a
+Not sure? [**Deploy with Docker**](./deploy-with-docker.mdx) is the faster path to a first working instance - a single
+`docker compose` command gets you a complete stack, including HTTPS. [**Deploy to Azure**](./deploy-to-azure.mdx) trades a
 bit more setup for infrastructure you don't have to maintain yourself.
+
+<div style={{display: 'flex', flexWrap: 'wrap', gap: '1rem', margin: '1.5rem 0'}}>
+  <Link className="button button--primary button--lg" to="/docs/deploy-with-docker">Deploy with Docker</Link>
+  <Link className="button button--primary button--lg" to="/docs/deploy-to-azure">Deploy to Azure</Link>
+</div>
 
 ## What you'll see
 

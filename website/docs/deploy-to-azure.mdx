@@ -4,9 +4,7 @@ description: Deploy dotMARC to Azure Container Apps using the included Bicep tem
 ---
 
 import Checklist from '@site/src/components/Checklist';
-import EntraScript from './_partials/entra-script.mdx';
-import EntraMailboxApp from './_partials/entra-mailbox-app.mdx';
-import EntraDashboardApp from './_partials/entra-dashboard-app.mdx';
+import EntraSetup from './_partials/entra-setup.mdx';
 
 # Deploy to Azure
 
@@ -15,7 +13,7 @@ the deployment form asks for is explained in [step 2](#2-deploy), next to the bu
 you don't need to jump between pages. Allow about 30 minutes, and review the Azure costs first.
 
 <Checklist id="deploy-to-azure" items={[
-  "Completed the two Entra app registrations (Before you start)",
+  "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)",
   "Chose the Azure subscription and resource group (step 1)",
   "Deployed through the portal button or az deployment group create (step 2)",
   "Found the resource names for this deployment (step 3)",
@@ -24,34 +22,22 @@ you don't need to jump between pages. Allow about 30 minutes, and review the Azu
   "Confirmed the revision is Healthy and Running (step 6)",
 ]} />
 
+## Microsoft Entra setup
+
+<EntraSetup />
+
+Azure assigns the app's hostname during deployment, so you add the dashboard's redirect URI afterwards, in
+[step 4](#4-register-the-deployed-hostname-as-an-oidc-redirect-uri). The client IDs go into the deployment form in
+[step 2](#2-deploy) and the client secrets go into Key Vault in [step 5](#5-populate-key-vault).
+
+:::note[Switching shells in Cloud Shell]
+
+The app registration script above uses **Bash**. In Azure Cloud Shell, run it in Bash, then switch the shell type to
+PowerShell for the rest of this page (see "Use PowerShell" below).
+
+:::
+
 ## Before you start
-
-### Create the two Entra app registrations
-
-You need both, and they are separate registrations:
-
-| Registration | Used for | You will need |
-| --- | --- | --- |
-| `dotmarc-mailbox` | Reading the DMARC reports mailbox (app-only Microsoft Graph) | Its client ID and a client secret |
-| `dotmarc-dashboard` | Signing people in to the dotMARC dashboard | Its client ID and a client secret |
-
-Write the two client IDs, the two client secrets and your tenant ID somewhere safe. The IDs go into the
-deployment form and the secrets go into Key Vault in [step 5](#5-populate-key-vault). Azure assigns the
-app's hostname during deployment, so you add the dashboard's redirect URI afterwards in
-[step 4](#4-register-the-deployed-hostname-as-an-oidc-redirect-uri).
-
-The script below uses **Bash**. In Azure Cloud Shell, run it in Bash, then switch the shell type to
-PowerShell for everything after it.
-
-<EntraScript />
-
-#### Mailbox app registration (app-only)
-
-<EntraMailboxApp />
-
-#### Dashboard app registration (delegated sign-in)
-
-<EntraDashboardApp />
 
 ### Check your Azure permissions
 
@@ -65,7 +51,7 @@ Two different things need permission, and they are easy to mix up:
 
 ### Use PowerShell
 
- The commands on this page are PowerShell. In Azure Cloud Shell, switch the shell
+The commands on this page are PowerShell. In Azure Cloud Shell, switch the shell
 type from **Bash** to **PowerShell** using the dropdown at the top left of the Cloud Shell window
 before you run anything. On your own computer, use PowerShell 7 with the
 [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed.
