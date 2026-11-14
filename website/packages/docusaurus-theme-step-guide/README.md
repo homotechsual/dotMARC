@@ -24,6 +24,8 @@ themeConfig: {
     headingLevels: [2, 3], // heading levels that start a step
     storageNamespace: 'step-guide', // prefix for what is saved in the reader's localStorage
     showIntroHint: true, // the "New: read this one step at a time" callout for first-time visitors
+    articleSelector: '.theme-doc-markdown', // where the guide's content lives (see "Different page structures")
+    wrapperSelectors: [], // wrapper elements to look inside
   },
 },
 ```
@@ -59,10 +61,54 @@ The stuck progress bar should match your page background so it doesn't show up a
 }
 ```
 
-## Per-step tasks
+## Different page structures
 
-A checklist component inside a guide can show each of its items at the end of its own step. Register them with the
-tasks hook:
+By default the theme looks at the children of Docusaurus' `.theme-doc-markdown` element. Two settings cover other
+structures:
+
+- `articleSelector` is a CSS selector (or a list, as an array or comma-separated) for the element or elements whose
+  children are the guide's content. Several matches are read as one guide, in page order. Use it for a custom doc
+  layout, or to add a second parent that holds part of the content.
+- `wrapperSelectors` lists wrapper elements to look inside. A heading in a matching wrapper starts a step just as if
+  it were a direct child of the article, so you can keep wrapping content in your own components:
+
+```ts
+stepGuide: {
+  articleSelector: ['.theme-doc-markdown', '.my-extra-parent'],
+  wrapperSelectors: ['.my-section', '.my-callout-group'],
+},
+```
+
+The wrappers themselves stay on screen, so one with its own border or padding can leave an empty box in the steps it
+has nothing in.
+
+## Ticks: the checklist component
+
+The theme includes a checklist whose ticks are saved in the reader's browser (under your `storageNamespace`). Give each
+item the id of the heading it belongs to, and in step mode the list is replaced by a "Done" tick at the end of each
+step:
+
+```mdx
+import Checklist from '@theme/StepGuide/Checklist';
+
+<Checklist
+  id="install-guide"
+  items={[
+    {text: 'Installed the CLI', step: 'install'},
+    {text: 'Signed in', step: 'sign-in'},
+  ]}
+/>
+```
+
+- Items can also be plain strings. A list only moves into the steps when **every** item names a step. Otherwise it
+  stays where you put it, in both views.
+- `id` is part of the saved key. Keep it unique and unchanged, or readers' ticks reset.
+- `onProgress(completed, total)` is called as ticks change, so you can feed your own page-wide progress display.
+- The whole-guide list and the per-step ticks share the same saved state.
+
+## Your own checklist
+
+A checklist component of your own can show its items one per step by registering them with the tasks hook:
 
 ```tsx
 import {useStepGuideTasks, HIDE_IN_STEPS_ATTRIBUTE} from '@theme/StepGuide/tasks';
@@ -90,8 +136,8 @@ All visible text goes through Docusaurus' `translate()` with ids starting `theme
 
 ## Limits
 
-- It works on the rendered page, so a heading only starts a step when it is a **direct child** of the article. Headings
-  inside a wrapper component, or inside tabs or details, do not.
+- It works on the rendered page, so a heading only starts a step when it is a direct child of the article or of a
+  wrapper named in `wrapperSelectors`. Headings inside anything else (tabs, details, an unlisted component) do not.
 - It relies on Docusaurus 3's `.theme-doc-markdown` article element.
 - Printing prints the current step. Switch to *Whole guide* first.
 - The page logic (`theme/StepGuide/steps.ts`) is tested with `node --test test/steps.test.mjs`.

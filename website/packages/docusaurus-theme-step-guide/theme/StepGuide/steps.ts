@@ -17,32 +17,56 @@ export interface StepDom extends StepInfo {
 
 const HIDE_IN_STEPS_ATTRIBUTE = 'data-step-guide-hidden';
 
-/** Splits a rendered article into steps: one per heading at a chosen level, plus an overview for whatever comes
- * before the first heading. The page title (h1) and any header stay on screen in every step. */
-export function buildSteps(
-  article: {children: ArrayLike<Element>},
-  headingLevels: number[],
-  overviewTitle: string,
-): StepDom[] {
+/** The elements of a guide in reading order, looking inside any wrapper elements as if their children sat directly
+ * in the article. A wrapper that holds headings can then still split the page into steps. */
+function* contentNodes(
+  children: ArrayLike<Element>,
+  isWrapper: ((node: Element) => boolean) | undefined,
+): Generator<HTMLElement> {
+  for (const node of Array.from(children)) {
+    if (isWrapper?.(node)) {
+      yield* contentNodes(node.children, isWrapper);
+    } else {
+      yield node as HTMLElement;
+    }
+  }
+}
+
+export interface BuildStepsOptions {
+  /** Heading levels that start a step, such as [2, 3]. */
+  headingLevels: number[];
+  /** The name of the first step, which holds whatever comes before the first heading. */
+  overviewTitle: string;
+  /** Says which elements are wrappers to look inside rather than content. */
+  isWrapper?: (node: Element) => boolean;
+}
+
+/** Splits rendered articles into steps: one per heading at a chosen level, plus an overview for whatever comes
+ * before the first heading. The page title (h1) and any header stay on screen in every step. Give several roots when
+ * the guide's content is spread over more than one element. */
+export function buildSteps(roots: Array<{children: ArrayLike<Element>}>, options: BuildStepsOptions): StepDom[] {
+  const {headingLevels, overviewTitle, isWrapper} = options;
   const topLevel = Math.min(...headingLevels);
   const tags = new Set(headingLevels.map((level) => `H${level}`));
   const steps: StepDom[] = [{id: null, title: overviewTitle, isSubStep: false, heading: null, nodes: []}];
-  for (const node of Array.from(article.children) as HTMLElement[]) {
-    const tag = node.tagName;
-    if (tag === 'H1' || tag === 'HEADER') {
-      continue;
+  for (const root of roots) {
+    for (const node of contentNodes(root.children, isWrapper)) {
+      const tag = node.tagName;
+      if (tag === 'H1' || tag === 'HEADER') {
+        continue;
+      }
+      if (tags.has(tag)) {
+        steps.push({
+          id: node.id || null,
+          title: (node.textContent ?? '').replace(/​/g, '').trim(),
+          isSubStep: Number(tag.slice(1)) > topLevel,
+          heading: node,
+          nodes: [node],
+        });
+        continue;
+      }
+      steps[steps.length - 1].nodes.push(node);
     }
-    if (tags.has(tag)) {
-      steps.push({
-        id: node.id || null,
-        title: (node.textContent ?? '').replace(/​/g, '').trim(),
-        isSubStep: Number(tag.slice(1)) > topLevel,
-        heading: node,
-        nodes: [node],
-      });
-      continue;
-    }
-    steps[steps.length - 1].nodes.push(node);
   }
   // A page that opens straight on a heading has no overview to show.
   return steps[0].nodes.length === 0 ? steps.slice(1) : steps;

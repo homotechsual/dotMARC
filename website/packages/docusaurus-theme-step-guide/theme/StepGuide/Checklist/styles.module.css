@@ -1,0 +1,66 @@
+.checklist {
+  margin: 1rem 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  background: var(--ifm-background-surface-color);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.progressText {
+  font-size: 0.85rem;
+  font-weight: var(--ifm-font-weight-bold);
+  color: var(--ifm-color-primary);
+  white-space: nowrap;
+}
+
+.progressBar {
+  flex: 1;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--ifm-color-emphasis-200);
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  background: var(--ifm-color-primary);
+  transition: width 0.2s ease;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  margin: 0.35rem 0;
+}
+
+.label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.checkbox {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.25rem;
+  accent-color: var(--ifm-color-primary);
+}
+
+.itemTextDone {
+  color: var(--ifm-color-emphasis-600);
+  text-decoration: line-through;
+}

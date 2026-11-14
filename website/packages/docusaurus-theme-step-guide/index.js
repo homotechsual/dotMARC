@@ -26,6 +26,10 @@ module.exports.validateThemeConfig = function validateThemeConfig({validate, the
       storageNamespace: Joi.string().default('step-guide'),
       // Show the dismissible "new" callout to readers who haven't used the switch yet.
       showIntroHint: Joi.boolean().default(true),
+      // The element(s) whose children are the guide's content: a CSS selector, a comma-separated list, or an array.
+      articleSelector: Joi.alternatives(Joi.string(), Joi.array().items(Joi.string()).min(1)).default('.theme-doc-markdown'),
+      // Wrapper elements to look inside, so headings in them still start steps.
+      wrapperSelectors: Joi.array().items(Joi.string()).default([]),
     }).default({}),
   });
   return validate(schema, themeConfig);

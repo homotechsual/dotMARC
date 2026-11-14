@@ -1,8 +1,8 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useDoc} from '@docusaurus/plugin-content-docs/client';
-import {useThemeConfig} from '@docusaurus/theme-common';
 import {translate} from '@docusaurus/Translate';
 import styles from './styles.module.css';
+import {useStepGuideOptions} from './options';
 import {
   buildSteps,
   findStepForHash,
@@ -17,30 +17,13 @@ import {StepGuideTasksContext, type StepGuideTask, type StepGuideTaskRegistry} f
 
 type ViewMode = 'all' | 'steps';
 
-interface StepGuideOptions {
-  frontMatterKey: string;
-  headingLevels: number[];
-  storageNamespace: string;
-  showIntroHint: boolean;
-}
-
-function useOptions(): StepGuideOptions {
-  const configured = (useThemeConfig() as {stepGuide?: Partial<StepGuideOptions>}).stepGuide ?? {};
-  return {
-    frontMatterKey: configured.frontMatterKey ?? 'stepGuide',
-    headingLevels: configured.headingLevels ?? [2, 3],
-    storageNamespace: configured.storageNamespace ?? 'step-guide',
-    showIntroHint: configured.showIntroHint ?? true,
-  };
-}
-
 /** Lets a guide be read all at once (the default) or one step at a time. Wraps a doc's content and only does
  * anything for docs with the configured front matter key set to true. In step mode every heading at the configured
  * levels starts a new step, and the rest of the page is hidden until you get there, which suits readers who find a
  * long page overwhelming. */
 export default function StepGuide({children}: {children: React.ReactNode}): React.ReactElement {
   const {frontMatter, metadata} = useDoc();
-  const options = useOptions();
+  const options = useStepGuideOptions();
   const enabled = (frontMatter as Record<string, unknown>)[options.frontMatterKey] === true;
   const permalink = metadata.permalink;
 
@@ -134,8 +117,8 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
 
   // Build or tear down the steps whenever the mode changes.
   useEffect(() => {
-    const article = rootRef.current?.querySelector<HTMLElement>('.theme-doc-markdown');
-    if (!enabled || !article) {
+    const articles = rootRef.current ? Array.from(rootRef.current.querySelectorAll<HTMLElement>(options.articleSelector)) : [];
+    if (!enabled || articles.length === 0) {
       return undefined;
     }
     if (mode === 'all') {
@@ -149,7 +132,12 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
       message: 'Overview',
       description: 'The name of the first step, which holds the introduction before the first heading',
     });
-    const dom = buildSteps(article, options.headingLevels, overviewTitle);
+    const wrapperSelector = options.wrapperSelectors.join(', ');
+    const dom = buildSteps(articles, {
+      headingLevels: options.headingLevels,
+      overviewTitle,
+      isWrapper: wrapperSelector ? (node) => node.matches(wrapperSelector) : undefined,
+    });
     stepsRef.current = dom;
     setSteps(dom.map(({id, title, isSubStep}) => ({id, title, isSubStep})));
 
@@ -162,7 +150,7 @@ export default function StepGuide({children}: {children: React.ReactNode}): Reac
     return () => {
       showEverything(stepsRef.current);
     };
-  }, [enabled, mode, stepKey, options.headingLevels, reveal]);
+  }, [enabled, mode, stepKey, options.headingLevels, options.articleSelector, options.wrapperSelectors, reveal]);
 
   // A link, or the table of contents, that points at a step which is hidden should take you there.
   useEffect(() => {
