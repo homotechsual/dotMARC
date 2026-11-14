@@ -5,6 +5,8 @@
 .bar {
   margin-bottom: 1rem;
   padding: 0.5rem 0;
+  /* Lay the controls out by the width of the article column, which the sidebars shrink, not by the window. */
+  container-type: inline-size;
 }
 
 /* In step mode the controls stay under the navbar, so where you are is always in view. */
@@ -101,14 +103,14 @@
 }
 
 .count {
+  margin-left: auto;
   font-size: 0.875rem;
   font-weight: var(--ifm-font-weight-semibold);
 }
 
 .jump {
-  flex: 1 1 12rem;
+  flex: 1 1 100%;
   min-width: 0;
-  max-width: 24rem;
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: var(--ifm-button-border-radius);
@@ -116,6 +118,18 @@
   color: var(--ifm-font-color-base);
   font: inherit;
   font-size: 0.875rem;
+}
+
+/* Enough room for everything on one row. */
+@container (min-width: 40rem) {
+  .count {
+    margin-left: 0;
+  }
+
+  .jump {
+    flex: 1 1 12rem;
+    max-width: 24rem;
+  }
 }
 
 .progress {
@@ -164,6 +178,10 @@
     flex: 1 1 100%;
   }
 
+  .count {
+    margin-left: 0;
+  }
+
   .modeSwitch {
     display: flex;
     width: 100%;
@@ -171,11 +189,6 @@
 
   .modeButton {
     flex: 1 1 0;
-  }
-
-  .jump {
-    flex-basis: 100%;
-    max-width: none;
   }
 }
 
