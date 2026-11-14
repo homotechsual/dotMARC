@@ -1,0 +1,46 @@
+---
+slug: v0-10-2
+date: 2026-11-14T12:00:00.000Z
+title: "dotMARC v0.10.2: a clearer Azure deployment guide"
+description: The Deploy to Azure guide is now one step-by-step page, with a fix for deployments that never finish starting.
+authors: [mikey]
+tags: [release]
+---
+
+This release has no changes to the app. It rewrites the Azure and Docker guides after feedback from a customer who
+deployed dotMARC to Azure, and fixes the setup step that left new Azure deployments stuck.
+
+{/* truncate */}
+
+## Azure deployments that never finished starting
+
+On a new Azure deployment the app could sit in **Activating** with a browser `stream timeout`, even though the Key Vault
+secrets existed and the app had permission to read them. Writing the secrets and restarting did not help. The Container
+App needs its three Key Vault secret references re-applied once the secrets have values. The guide now does that in
+step 5, and it works on a fresh deployment. The same command is the fix whenever you replace a secret in Key Vault later.
+
+## A guide you can follow in order
+
+* **One page, in order.** The Azure guide now runs from the Entra app registrations through to a healthy app, with the
+  Deploy to Azure button placed where you need it, after a field-by-field table of what each form value is and which app
+  registration it comes from.
+* **No guessing at names.** The commands find your Key Vault, Container App and database for you, so you no longer need to
+  know the deployment name (the portal calls it `CustomDeployment-` followed by letters, not `main`), and they stop with a
+  clear message if something is missing.
+* **Permissions explained.** You need Key Vault Secrets Officer to write secrets, and the app needs Key Vault Secrets
+  User to read them. Owner on the resource group is not enough to write secrets. The guide now says so before you hit
+  the `Forbidden` error.
+* **Subscription and shell.** There is a step to check you are in the right Azure subscription, and a reminder to
+  switch Cloud Shell from Bash to PowerShell.
+* **Troubleshooting.** A new section covers an app stuck in Activating, how to read the system log when console logs
+  don't exist yet, and the other errors people hit. A table lays out the three names each secret has (Key Vault,
+  Container App, environment variable) so nobody renames one to match another.
+
+The deployment form in the Azure portal now describes every field too.
+
+The Docker guide includes the Entra app registration steps in the same way, so neither path sends you to another page
+for setup. Getting Started is now where you choose a path and look up configuration values.
+
+MudBlazor, the interface library, also moves to its latest version, 9.13.0.
+
+Upgrading needs no action, and there are no database changes.
