@@ -15,13 +15,13 @@ Prefer a managed platform instead? See [Deploy to Azure](./deploy-to-azure.mdx).
 the two Entra app registrations, which are covered below.
 
 <Checklist id="deploy-with-docker" items={[
-  "Docker installed and running",
-  "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)",
-  "Chosen a hostname and started dotMARC + PostgreSQL (step 1)",
-  "Pointed the domain's A record (or dynamic DNS) at the server (step 2a)",
-  "Opened ports 80 and 443 to the server (step 2b)",
-  "Set DOTMARC_HOSTNAME and started docker-compose.selfhosted.yml, or wired up an existing reverse proxy (step 2c)",
-  "Confirmed the dashboard loads over HTTPS with a valid certificate (step 2d)",
+  {text: "Docker installed and running", step: "what-youll-need"},
+  {text: "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)", step: "dashboard-app-registration-delegated-sign-in"},
+  {text: "Chosen a hostname and started dotMARC + PostgreSQL (step 1)", step: "1-start-dotmarc-and-postgresql"},
+  {text: "Pointed the domain's A record (or dynamic DNS) at the server (step 2a)", step: "2a-point-your-domain-at-your-server"},
+  {text: "Opened ports 80 and 443 to the server (step 2b)", step: "2b-open-ports-80-and-443"},
+  {text: "Set DOTMARC_HOSTNAME and started docker-compose.selfhosted.yml, or wired up an existing reverse proxy (step 2c)", step: "2c-put-caddy-in-front-of-dotmarc"},
+  {text: "Confirmed the dashboard loads over HTTPS with a valid certificate (step 2d)", step: "2d-check-it-worked"},
 ]} />
 
 ## What you'll need

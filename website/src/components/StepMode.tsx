@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useDoc} from '@docusaurus/plugin-content-docs/client';
 import styles from './StepMode.module.css';
+import {StepChecklistContext, type StepChecklistEntry, type StepChecklistRegistry} from './StepChecklistContext';
 
 type ViewMode = 'all' | 'steps';
 
@@ -68,7 +69,9 @@ function buildSteps(article: HTMLElement): StepDom[] {
 function showOnly(steps: StepDom[], current: number): void {
   steps.forEach((step, index) => {
     for (const node of step.nodes) {
-      node.style.display = index === current ? '' : 'none';
+      // A checklist that has been split up per step is hidden here, and shown a step at a time instead.
+      const hide = index !== current || node.hasAttribute('data-step-checklist');
+      node.style.display = hide ? 'none' : '';
     }
   });
 }
@@ -112,6 +115,23 @@ export default function StepMode({children}: {children: React.ReactNode}): React
   const [current, setCurrent] = useState(0);
   const [announcement, setAnnouncement] = useState('');
   const [hintVisible, setHintVisible] = useState(false);
+  const [checklists, setChecklists] = useState<Record<string, StepChecklistEntry[]>>({});
+
+  const registry = useMemo<StepChecklistRegistry>(
+    () => ({
+      register: (checklistId, entries) =>
+        setChecklists((previous) => {
+          const next = {...previous};
+          if (entries) {
+            next[checklistId] = entries;
+          } else {
+            delete next[checklistId];
+          }
+          return next;
+        }),
+    }),
+    [],
+  );
 
   // Remember the reader's choice between visits.
   useEffect(() => {
@@ -215,11 +235,20 @@ export default function StepMode({children}: {children: React.ReactNode}): React
     return <>{children}</>;
   }
 
+  const entries = Object.values(checklists).flat();
+  const entriesFor = (stepId: string | null) => (stepId ? entries.filter((entry) => entry.stepId === stepId) : []);
+  const isDone = (stepId: string | null) => {
+    const forStep = entriesFor(stepId);
+    return forStep.length > 0 && forStep.every((entry) => entry.checked);
+  };
+  const currentEntries = entriesFor(steps[current]?.id ?? null);
+
   const inSteps = mode === 'steps' && steps.length > 0;
   const last = steps.length - 1;
   const percent = inSteps && last > 0 ? Math.round((current / last) * 100) : 0;
 
   return (
+    <StepChecklistContext.Provider value={registry}>
     <div ref={rootRef} className={styles.root}>
       <div className={`${styles.bar} ${inSteps ? styles.barSticky : ''}`}>
         <div className={styles.barRow}>
@@ -270,7 +299,7 @@ export default function StepMode({children}: {children: React.ReactNode}): React
                 onChange={(event) => reveal(Number(event.target.value), {updateHash: true, scroll: true, focus: true})}>
                 {steps.map((step, index) => (
                   <option key={step.id ?? 'overview'} value={index}>
-                    {step.isSubStep ? `   ${labels[index]}` : labels[index]}
+                    {`${isDone(step.id) ? '✓ ' : ''}${step.isSubStep ? '   ' : ''}${labels[index]}`}
                   </option>
                 ))}
               </select>
@@ -287,6 +316,17 @@ export default function StepMode({children}: {children: React.ReactNode}): React
       {children}
 
       {inSteps && (
+        <>
+        {currentEntries.length > 0 && (
+          <div className={styles.done}>
+            {currentEntries.map((entry) => (
+              <label key={entry.label} className={styles.doneLabel}>
+                <input type="checkbox" checked={entry.checked} onChange={entry.toggle} />
+                <span>Done: {entry.label}</span>
+              </label>
+            ))}
+          </div>
+        )}
         <nav className={styles.nav} aria-label="Step navigation">
           <button
             type="button"
@@ -303,11 +343,13 @@ export default function StepMode({children}: {children: React.ReactNode}): React
             {current === last ? 'End of the guide' : `Next: ${labels[current + 1]} →`}
           </button>
         </nav>
+        </>
       )}
 
       <div className={styles.srOnly} role="status" aria-live="polite">
         {announcement}
       </div>
     </div>
+    </StepChecklistContext.Provider>
   );
 }

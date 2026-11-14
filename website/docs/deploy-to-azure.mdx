@@ -16,13 +16,13 @@ you don't need to jump between pages. Start with [what you'll need](#what-youll-
 with billing set up.
 
 <Checklist id="deploy-to-azure" items={[
-  "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)",
-  "Chose the Azure subscription and resource group (step 1)",
-  "Deployed through the portal button or az deployment group create (step 2)",
-  "Found the resource names for this deployment (step 3)",
-  "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 4)",
-  "Populated the three Key Vault secrets, re-applied the secret references and restarted the revision (step 5)",
-  "Confirmed the revision is Healthy and Running (step 6)",
+  {text: "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)", step: "dashboard-app-registration-delegated-sign-in"},
+  {text: "Chose the Azure subscription and resource group (step 1)", step: "1-choose-the-subscription-and-resource-group"},
+  {text: "Deployed through the portal button or az deployment group create (step 2)", step: "or-deploy-with-the-command-line"},
+  {text: "Found the resource names for this deployment (step 3)", step: "3-find-the-resources-this-deployment-created"},
+  {text: "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 4)", step: "4-register-the-deployed-hostname-as-an-oidc-redirect-uri"},
+  {text: "Populated the three Key Vault secrets, re-applied the secret references and restarted the revision (step 5)", step: "5c-re-apply-the-secret-references-and-restart"},
+  {text: "Confirmed the revision is Healthy and Running (step 6)", step: "6-check-its-healthy"},
 ]} />
 
 ## What you'll need

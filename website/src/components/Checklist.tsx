@@ -1,12 +1,19 @@
 import React, {useEffect, useState} from 'react';
 import {useChecklistProgress} from './ChecklistProgressContext';
+import {useStepChecklistRegistry} from './StepChecklistContext';
 import styles from './Checklist.module.css';
+
+/** An item is plain text, or text plus the id of the heading of the step it belongs to. When every item names a step,
+ * a guide's step-by-step mode hides this list and shows each item at the end of its own step instead. */
+export type ChecklistItem = string | {text: string; step: string};
+
+const textOf = (item: ChecklistItem): string => (typeof item === 'string' ? item : item.text);
 
 export interface ChecklistProps {
   /** Stable id for this checklist - used as its localStorage key, so keep it unique per page and
    * unchanged once published (renaming it resets every reader's progress on that checklist). */
   id: string;
-  items: string[];
+  items: ChecklistItem[];
 }
 
 /** A per-reader progress tracker for a setup procedure - "X of Y complete", persisted in the
@@ -63,8 +70,29 @@ export default function Checklist({id, items}: ChecklistProps): React.ReactEleme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, completedCount, items.length, id]);
 
+  const stepRegistry = useStepChecklistRegistry();
+  const allInSteps = items.length > 0 && items.every((item) => typeof item !== 'string');
+
+  useEffect(() => {
+    if (!stepRegistry || !allInSteps || !hydrated) {
+      return undefined;
+    }
+    stepRegistry.register(
+      id,
+      items.map((item, index) => ({
+        stepId: (item as {step: string}).step,
+        label: textOf(item),
+        checked: checked[index],
+        toggle: () => toggle(index),
+      })),
+    );
+    return () => stepRegistry.register(id, null);
+    // `toggle` closes over `checked`, so it is refreshed whenever `checked` is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepRegistry, allInSteps, hydrated, checked, id]);
+
   return (
-    <div className={styles.checklist}>
+    <div className={styles.checklist} data-step-checklist={allInSteps && stepRegistry ? '' : undefined}>
       <div className={styles.header}>
         <span className={styles.progressText}>
           {completedCount} of {items.length} complete
@@ -85,7 +113,7 @@ export default function Checklist({id, items}: ChecklistProps): React.ReactEleme
                 onChange={() => toggle(index)}
               />
               <span className={checked[index] && hydrated ? styles.itemTextDone : styles.itemText}>
-                {item}
+                {textOf(item)}
               </span>
             </label>
           </li>
