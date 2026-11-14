@@ -141,25 +141,45 @@ than the one this app registration lives in, so it must not be restricted to a s
 delegated **Azure Service Management** → `user_impersonation` permission.
 
 :::tip[Set it up with a script]
-The `create-azure-dns-app` script does all of the above and prints the client ID and secret to enter in dotMARC. Run
-it in Azure Cloud Shell, or anywhere with a signed-in Azure CLI, giving it your dotMARC host:
+The `create-azure-dns-app` script does all of the above and prints the client ID and secret to enter in dotMARC. It
+makes changes in your tenant, so **download it and read it before you run it**. You can run it in Azure Cloud Shell, or
+anywhere with a signed-in Azure CLI:
 
 <Tabs groupId="shell" queryString="shell">
 <TabItem value="powershell" label="PowerShell" default>
 
+Download the script, then open it and check what it does:
+
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/create-azure-dns-app.ps1 -OutFile create-azure-dns-app.ps1
+```
+
+When you are happy with it, unblock it and run it with your dotMARC host:
+
+```powershell
+Unblock-File ./create-azure-dns-app.ps1
 ./create-azure-dns-app.ps1 dotmarc.contoso.example
 ```
 
-If PowerShell refuses to run the downloaded script, run `Unblock-File ./create-azure-dns-app.ps1` first. `-Name` changes
-the app's name, and `-SecretYears` how long the secret lasts (2 years by default).
+`Unblock-File` removes the "downloaded from the internet" mark that Windows puts on files saved from a browser, which
+PowerShell's default `RemoteSigned` policy would otherwise refuse to run. Only run it once you have read the script. If
+PowerShell still says running scripts is disabled, allow it for this window only with
+`Set-ExecutionPolicy -Scope Process RemoteSigned`.
+
+`-Name` changes the app's name, and `-SecretYears` how long the secret lasts (2 years by default).
 
 </TabItem>
 <TabItem value="bash" label="Bash">
 
+Download the script, then open it and check what it does:
+
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/create-azure-dns-app.sh
+```
+
+When you are happy with it, run it with your dotMARC host:
+
+```bash
 bash create-azure-dns-app.sh dotmarc.contoso.example
 ```
 
@@ -221,23 +241,42 @@ lead time before relying on this provider for a customer outside your own test-u
 :::tip[Get started with a script]
 The `prepare-google-cloud-dns` script enables both APIs in your project, then prints the redirect URI, the two scopes
 and a direct console link for each remaining step. gcloud can't create this kind of OAuth client, so the consent screen
-and client are still made in the console. Run it in Google Cloud Shell, or anywhere with a signed-in gcloud CLI:
+and client are still made in the console. It enables APIs in your project, so **download it and read it before you run
+it**. You can run it in Google Cloud Shell, or anywhere with a signed-in gcloud CLI:
 
 <Tabs groupId="shell" queryString="shell">
 <TabItem value="powershell" label="PowerShell" default>
 
+Download the script, then open it and check what it does:
+
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/prepare-google-cloud-dns.ps1 -OutFile prepare-google-cloud-dns.ps1
+```
+
+When you are happy with it, unblock it and run it with your dotMARC host and project:
+
+```powershell
+Unblock-File ./prepare-google-cloud-dns.ps1
 ./prepare-google-cloud-dns.ps1 dotmarc.contoso.example your-project-id
 ```
 
-If PowerShell refuses to run the downloaded script, run `Unblock-File ./prepare-google-cloud-dns.ps1` first.
+`Unblock-File` removes the "downloaded from the internet" mark that Windows puts on files saved from a browser, which
+PowerShell's default `RemoteSigned` policy would otherwise refuse to run. Only run it once you have read the script. If
+PowerShell still says running scripts is disabled, allow it for this window only with
+`Set-ExecutionPolicy -Scope Process RemoteSigned`.
 
 </TabItem>
 <TabItem value="bash" label="Bash">
 
+Download the script, then open it and check what it does:
+
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/prepare-google-cloud-dns.sh
+```
+
+When you are happy with it, run it with your dotMARC host and project:
+
+```bash
 bash prepare-google-cloud-dns.sh dotmarc.contoso.example your-project-id
 ```
 

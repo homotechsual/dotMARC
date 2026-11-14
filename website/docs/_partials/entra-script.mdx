@@ -11,27 +11,48 @@ have restricted its access using the Exchange steps below.
 
 :::
 
-Run it in Azure Cloud Shell, or anywhere with the Azure CLI signed in. Choose the version for your shell:
+You can run it in Azure Cloud Shell, or anywhere with the Azure CLI signed in. It creates app registrations and
+secrets in your tenant, so **download it and read it before you run it**. It is short, and it only calls `az`.
+Choose the version for your shell:
 
 <Tabs groupId="shell" queryString="shell">
 <TabItem value="powershell" label="PowerShell" default>
 
+Download the script, then open it and check what it does:
+
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/entra/create-dotmarc-apps.ps1 -OutFile create-dotmarc-apps.ps1
+```
+
+When you are happy with it, unblock it and run it:
+
+```powershell
+Unblock-File ./create-dotmarc-apps.ps1
 ./create-dotmarc-apps.ps1 -DashboardRedirectUri https://dotmarc.example.com/signin-oidc
 ```
+
+`Unblock-File` removes the "downloaded from the internet" mark that Windows puts on files saved from a browser, which
+PowerShell's default `RemoteSigned` policy would otherwise refuse to run. Only run it once you have read the script. If
+PowerShell still says running scripts is disabled, allow it for this window only with
+`Set-ExecutionPolicy -Scope Process RemoteSigned`.
 
 If you don't know the hostname yet (Azure Container Apps assigns it during deployment), leave out
 `-DashboardRedirectUri` and add the deployed URL ending in `/signin-oidc` to the dashboard app after
 deployment. Add `-IncludeMailSend` if you plan to send [client reports](/docs/client-reports) through
-Microsoft Graph. If PowerShell refuses to run the downloaded script, run
-`Unblock-File ./create-dotmarc-apps.ps1` first, or `Set-ExecutionPolicy -Scope Process RemoteSigned`.
+Microsoft Graph.
 
 </TabItem>
 <TabItem value="bash" label="Bash">
 
+Download the script, then open it and check what it does:
+
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/entra/create-dotmarc-apps.sh
+```
+
+When you are happy with it, run it:
+
+```bash
 bash create-dotmarc-apps.sh --dashboard-redirect-uri https://dotmarc.example.com/signin-oidc
 ```
 
