@@ -119,15 +119,17 @@ where to find the value and which app registration it belongs to.
 | `graphTlsrptMailboxAddress` | Optional separate mailbox for TLS reports. Leave blank to use the one above | Your Exchange Online mailbox |
 | `entraIdTenantId` | Your tenant ID again, a GUID. Normally the same value as `graphTenantId` | Same Overview page |
 | `entraIdClientId` | The **dashboard** app registration's Application (client) ID, a GUID. Not the mailbox one | Microsoft Entra, App registrations, `dotmarc-dashboard`, Overview |
-| `initialAdminEmails` | Comma-separated email addresses of the people who should be Admins, such as `you@contoso.com` | Your own sign-in email |
+| `initialAdminEmails` | **Required.** Comma-separated email addresses of the people who should be Admins, such as `you@contoso.com` | Your own sign-in email |
 | `postgresAdminPassword` | A new strong password for the database. Note it down, step 5 needs it | You choose it |
 | `postgresAdminUsername` | Database administrator name. The default `dotmarc` is fine | Leave as is |
 | `containerImage` | The image to run. Use `ghcr.io/homotechsual/dotmarc:latest` or a release tag | Leave as is |
 
-:::danger[Don't leave initialAdminEmails blank]
+:::danger[initialAdminEmails is required]
 
-Without it nobody can sign in to a fresh installation. Use the same email address you will sign in
-with. The setting only takes effect on the very first start, and is safe to leave afterwards.
+Without it nobody can sign in to a fresh installation, so the form won't submit with it empty. Use the same email
+address you will sign in with. The setting only takes effect on the very first start, but the form asks for it every
+time, including when you redeploy over an existing deployment. The portal fills in most fields from the previous
+deployment but not this one, so check it before you deploy.
 
 :::
 

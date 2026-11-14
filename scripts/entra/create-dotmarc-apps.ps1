@@ -184,6 +184,9 @@ Write-Host @"
 dotMARC app registrations are ready in tenant $tenantId.
 Copy both client secrets now; they can't be shown again. Running this script again creates additional secrets.
 
+Tenant ID (Graph:TenantId and EntraId:TenantId, the same value for both):
+  Tenant ID:     $tenantId
+
 Mailbox app (Graph:ClientId / Graph:ClientSecret):
   Client ID:     $mailboxAppId
   Client secret: $mailboxSecret
@@ -191,6 +194,9 @@ Mailbox app (Graph:ClientId / Graph:ClientSecret):
 Dashboard app (EntraId:ClientId / EntraId:ClientSecret):
   Client ID:     $dashboardAppId
   Client secret: $dashboardSecret
+
+In the Azure deployment form these are graphClientId, entraIdClientId, and graphTenantId and entraIdTenantId (the
+tenant ID, entered twice).
 "@
 
 if ($DashboardRedirectUri) {

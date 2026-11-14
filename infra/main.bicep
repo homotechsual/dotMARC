@@ -32,8 +32,10 @@ param entraIdTenantId string
 @description('DASHBOARD app registration (the one named dotmarc-dashboard, delegated sign-in): its Application (client) ID, a GUID. This is a different app registration from the mailbox one.')
 param entraIdClientId string
 
-@description('Comma-separated list of email addresses granted the Admin role the first time the app starts with no existing access grants. Not secret — just email addresses. Only takes effect on that first startup; safe to leave set afterwards.')
-param initialAdminEmails string = ''
+// Required on purpose (no default, and at least one character): left blank, nobody can sign in to a fresh install.
+@minLength(1)
+@description('REQUIRED. Comma-separated list of email addresses granted the Admin role the first time the app starts with no existing access grants, such as you@contoso.com. Not secret, just email addresses. Only takes effect on that first startup, but the form needs a value every time. Without one nobody can sign in.')
+param initialAdminEmails string
 
 // Before re-running this template against a resource group that's already deployed (e.g. to
 // flip this flag on later), run `az deployment group what-if` first and read the diff — this

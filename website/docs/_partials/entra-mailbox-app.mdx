@@ -1,4 +1,6 @@
 import Checklist from '@site/src/components/Checklist';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 1. If setting up manually, **App registrations** → **New registration**, name it e.g. `dotmarc-mailbox`.
 2. If setting up manually, **Certificates & secrets** → create a client secret.
@@ -54,10 +56,46 @@ New-ManagementScope -Name "dotMARC mailboxes" -RecipientRestrictionFilter "Membe
 #    Enterprise applications in Entra. The IDs on the App registrations page are different, don't use those.
 New-ServicePrincipal -AppId <client-id> -ObjectId <service-principal-object-id> -DisplayName "dotMARC mailbox"
 
+```
+
+Then give the app a role, limited to that scope. Choose one of these:
+
+<Tabs groupId="mailbox-role">
+<TabItem value="readwrite" label="Mail.ReadWrite (read only)" default>
+
+The app can read the mailbox and mark reports as read, and nothing else. This is all dotMARC needs to collect reports.
+You can add sending later (see the next tab).
+
+```powershell
 # 4. Let the app read mail and mark it as read, but only in that scope.
 New-ManagementRoleAssignment -App <service-principal-object-id> -Role "Application Mail.ReadWrite" -CustomResourceScope "dotMARC mailboxes"
+```
 
-# 5. Check it. InScope should be True for the DMARC reports mailbox.
+To send [client reports](/docs/client-reports) through Microsoft Graph later, add `Application Mail.Send` for the same app
+and scope with a second assignment:
+
+```powershell
+New-ManagementRoleAssignment -App <service-principal-object-id> -Role "Application Mail.Send" -CustomResourceScope "dotMARC mailboxes"
+```
+
+</TabItem>
+<TabItem value="fullaccess" label="Mail Full Access (read and send)">
+
+One role that covers reading, marking as read and sending, so [client reports](/docs/client-reports) can be sent through
+Microsoft Graph from the same mailboxes. Use it instead of `Application Mail.ReadWrite`, not as well.
+
+```powershell
+# 4. Let the app read, mark as read and send mail, but only in that scope.
+New-ManagementRoleAssignment -App <service-principal-object-id> -Role "Application Mail Full Access" -CustomResourceScope "dotMARC mailboxes"
+```
+
+</TabItem>
+</Tabs>
+
+Then check it. `InScope` should be `True` for the DMARC reports mailbox:
+
+```powershell
+# 5. Check it.
 Test-ServicePrincipalAuthorization -Identity <client-id> -Resource dmarc-reports@example.uk
 ```
 
@@ -68,9 +106,8 @@ know:
 * **Changes take time.** Microsoft says a change to an app's permissions can take between 30 minutes and 2 hours to
   apply, depending on how recently the app was used. The test command in step 5 ignores that delay, so it can say
   `True` before dotMARC can actually read the mailbox.
-* **Sending client reports needs a second role.** To send [client reports](/docs/client-reports) through Microsoft
-  Graph, also assign `Application Mail.Send` to the same app and scope, or assign `Application Mail Full Access`
-  (which covers both reading and sending) in step 4 instead of `Application Mail.ReadWrite`.
+* **Sending client reports needs a send role.** `Application Mail.ReadWrite` alone can't send, so choose the Full Access
+  tab in step 4, or add `Application Mail.Send` as a second assignment.
 
 Finally, make sure the app has **no** Microsoft Graph mail permission granted in Entra: in the Entra admin center, open
 the app under **Enterprise applications**, then **Permissions**, and check nothing for `Mail.*` is listed as granted.
@@ -120,7 +157,7 @@ you move over without interrupting dotMARC:
   "Registered the dotmarc-mailbox app registration and created a client secret",
   "Created the app's service principal (the setup script's -Rbac option does this)",
   "Created a security group and management scope covering only the DMARC reports mailbox",
-  "Assigned the Application Mail.ReadWrite role to the app, limited to that scope",
+  "Assigned the Application Mail.ReadWrite (or Application Mail Full Access) role to the app, limited to that scope",
   "Checked Test-ServicePrincipalAuthorization says InScope is True",
   "Confirmed no Microsoft Graph mail permission is granted to the app in Entra",
 ]} />

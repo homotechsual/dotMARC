@@ -12,6 +12,7 @@
     "graphTlsrptMailboxAddress": { "value": "" },
     "entraIdTenantId": { "value": "REPLACE_ME" },
     "entraIdClientId": { "value": "REPLACE_ME" },
+    "initialAdminEmails": { "value": "REPLACE_ME" },
     "enableKeyVaultWrite": { "value": false }
   }
 }

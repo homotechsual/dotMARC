@@ -185,6 +185,9 @@ cat <<EOF
 dotMARC app registrations are ready in tenant $tenant_id.
 Copy both client secrets now; they can't be shown again. Running this script again creates additional secrets.
 
+Tenant ID (Graph:TenantId and EntraId:TenantId, the same value for both):
+  Tenant ID:     $tenant_id
+
 Mailbox app (Graph:ClientId / Graph:ClientSecret):
   Client ID:     $mailbox_app_id
   Client secret: $mailbox_secret
@@ -192,6 +195,9 @@ Mailbox app (Graph:ClientId / Graph:ClientSecret):
 Dashboard app (EntraId:ClientId / EntraId:ClientSecret):
   Client ID:     $dashboard_app_id
   Client secret: $dashboard_secret
+
+In the Azure deployment form these are graphClientId, entraIdClientId, and graphTenantId and entraIdTenantId (the
+tenant ID, entered twice).
 EOF
 
 if [[ -n "$dashboard_redirect_uri" ]]; then
