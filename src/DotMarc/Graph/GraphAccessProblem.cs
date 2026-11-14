@@ -37,18 +37,24 @@ public static class GraphAccessProblem
         var roles = RolesIn(accessToken);
         var canRead = roles?.Any(role => role is "Mail.Read" or ReadWrite) ?? false;
         var policy = $"Microsoft Graph refused access to the mailbox {mailbox} ({graphErrorCode ?? ((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture)}). "
-            + "An Exchange application access policy probably leaves this mailbox out: check the policy's group contains it, and that the mailbox address is right.";
+            + "An Exchange application access policy or an RBAC for Applications scope probably leaves this mailbox out: check the policy's or scope's group contains it, and that the mailbox address is right.";
 
         if (roles is null)
         {
             return $"Microsoft Graph refused access to the mailbox {mailbox}. Either dotMARC's mail app registration has no Mail.ReadWrite "
-                + $"application permission with admin consent, or an Exchange application access policy leaves this mailbox out.{consent}";
+                + $"application permission with admin consent (or an Exchange RBAC for Applications assignment), or an Exchange application access policy or RBAC scope leaves this mailbox out.{consent}";
         }
 
         if (!canRead)
         {
-            return "dotMARC's mail app registration has no Microsoft Graph mail permission, or it hasn't been given admin consent. "
-                + $"In Entra, open the app's API permissions, add the {ReadWrite} application permission, and select Grant admin consent.{consent}";
+            // An app scoped only through Exchange RBAC for Applications has no consented permission in Entra, so its token
+            // looks the same as an app nobody has granted anything to. Say both, and warn against the fix that would
+            // quietly widen an RBAC-scoped app to every mailbox.
+            return "dotMARC's mail app registration has no Microsoft Graph mail permission consented in Entra. "
+                + $"If you scope it with Exchange RBAC for Applications, {mailbox} is outside its role assignment's scope, or the assignment hasn't taken effect yet (it can take up to two hours): "
+                + $"check with Test-ServicePrincipalAuthorization -Identity {clientId} -Resource {mailbox}. "
+                + $"Otherwise, in Entra open the app's API permissions, add the {ReadWrite} application permission, and select Grant admin consent.{consent} "
+                + "Don't grant admin consent if you use RBAC for Applications: an Entra grant isn't limited to one mailbox.";
         }
 
         if (isWrite && !roles!.Contains(ReadWrite))
@@ -60,8 +66,19 @@ public static class GraphAccessProblem
         return policy;
     }
 
-    /// <summary>Whether the token lets dotMARC mark messages read, or null when the token can't be read.</summary>
-    public static bool? CanMarkRead(string accessToken) => RolesIn(accessToken)?.Contains(ReadWrite);
+    /// <summary>Whether the token lets dotMARC mark messages read, or null when that can't be told from the token: it
+    /// can't be read, or it carries no mail permission at all, which is what an app scoped only through Exchange RBAC for
+    /// Applications looks like (that grant is made in Exchange and never appears in the token).</summary>
+    public static bool? CanMarkRead(string accessToken)
+    {
+        var roles = RolesIn(accessToken);
+        if (roles is null || !roles.Any(role => role.StartsWith("Mail.", StringComparison.Ordinal)))
+        {
+            return null;
+        }
+
+        return roles.Contains(ReadWrite);
+    }
 
     /// <summary>The roles in an app-only token, or null when the token can't be read.</summary>
     private static IReadOnlyList<string>? RolesIn(string accessToken)

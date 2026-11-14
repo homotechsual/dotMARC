@@ -124,6 +124,16 @@ public sealed class GraphMailboxAccessTests
     }
 
     [Fact]
+    public async Task CheckingAccess_WithNoMailRolesInTheToken_DoesNotClaimReportsCantBeMarkedRead()
+    {
+        // An app scoped through Exchange RBAC for Applications has no roles in its token, so what it may do can't be told.
+        var (client, _, handler) = Create();
+        handler.ResponseBody = """{"unreadItemCount":4}""";
+
+        Assert.Equal(new MailboxAccess("dmarc-reports@example.com", 4, null), await client.CheckAccessAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task CheckingAccess_WithoutConsent_ExplainsIt()
     {
         var (client, _, handler) = Create();

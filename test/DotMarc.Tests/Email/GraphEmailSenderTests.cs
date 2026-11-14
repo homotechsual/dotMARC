@@ -182,5 +182,6 @@ public sealed class GraphEmailSenderTests
 
         Assert.Contains("Access is denied", exception.Message);
         Assert.Contains("Mail.Send", exception.Message);
+        Assert.Contains("RBAC for Applications", exception.Message);
     }
 }

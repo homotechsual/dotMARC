@@ -174,7 +174,7 @@ public sealed class GraphEmailSender(HttpClient http, IGraphTokenProvider tokenP
                 ? $" Exchange Online's application access policy is refusing this app access to {mailbox}. Check with Test-ApplicationAccessPolicy -Identity {mailbox} -AppId <dotMARC's app client id>: if it says Granted, Graph hasn't picked up the change yet, which can take an hour or more, so try again later; if Denied, add {mailbox} directly to the policy's scope group."
                 : forbiddenHint.Length > 0
                     ? forbiddenHint
-                    : " Check the app registration has the Mail.Send application permission with admin consent, and that it may send as this mailbox.";
+                    : " Check the app has Mail.Send, either as an application permission with admin consent in Entra or through an Exchange RBAC for Applications assignment (Application Mail.Send or Application Mail Full Access), and that it may send as this mailbox.";
         throw new EmailSendException($"Microsoft Graph refused the message ({(int)response.StatusCode}): {graphMessage}{hint}");
     }
 

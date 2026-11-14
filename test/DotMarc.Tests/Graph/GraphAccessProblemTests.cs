@@ -33,6 +33,43 @@ public sealed class GraphAccessProblemTests
     }
 
     [Fact]
+    public void ATokenWithNoMailPermission_AlsoPointsAtExchangeRbacScope_AndWarnsAgainstConsentForRbacApps()
+    {
+        // An app scoped only through Exchange RBAC for Applications carries no roles, so this is also what it looks like.
+        var message = Describe(HttpStatusCode.Forbidden, TokenWithRoles(), "ErrorAccessDenied");
+
+        Assert.NotNull(message);
+        Assert.Contains("RBAC for Applications", message);
+        Assert.Contains($"Test-ServicePrincipalAuthorization -Identity client-id -Resource {Mailbox}", message);
+        Assert.Contains("Don't grant admin consent if you use RBAC for Applications", message);
+    }
+
+    [Fact]
+    public void WithTheRightPermission_AnAccessDenial_AlsoMentionsAnRbacScope()
+    {
+        var message = Describe(HttpStatusCode.Forbidden, TokenWithRoles("Mail.ReadWrite"), "ErrorAccessDenied");
+
+        Assert.NotNull(message);
+        Assert.Contains("RBAC for Applications scope", message);
+    }
+
+    [Theory]
+    [InlineData(new string[0], null)]
+    [InlineData(new[] { "Mail.Read" }, false)]
+    [InlineData(new[] { "Mail.ReadWrite" }, true)]
+    [InlineData(new[] { "Mail.Read", "Mail.ReadWrite" }, true)]
+    public void CanMarkRead_ReadsTheTokensMailRoles_AndIsUnknownWhenThereAreNone(string[] roles, bool? expected)
+    {
+        Assert.Equal(expected, GraphAccessProblem.CanMarkRead(TokenWithRoles(roles)));
+    }
+
+    [Fact]
+    public void CanMarkRead_IsUnknown_ForATokenThatCantBeRead()
+    {
+        Assert.Null(GraphAccessProblem.CanMarkRead("not-a-jwt"));
+    }
+
+    [Fact]
     public void ATokenWithReadOnly_CantMarkMessagesRead()
     {
         var message = Describe(HttpStatusCode.Forbidden, TokenWithRoles("Mail.Read"), "ErrorAccessDenied", isWrite: true);
