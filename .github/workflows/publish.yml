@@ -12,8 +12,42 @@ env:
   DOCKERHUB_IMAGE: homotechsual/dotmarc
 
 jobs:
-  build-and-push:
+  # A commit that carries a v*.*.* tag is built and published by the Release workflow, which also sets `edge`,
+  # so building it again here would only repeat the same work.
+  check:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.tag.outputs.release }}
+    steps:
+      - name: Check whether this commit is a tagged release
+        id: tag
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$MANUAL" = "true" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # ls-remote lists each annotated tag twice: the tag object, and the commit it points at (the ^{} line).
+          # Matching the commit sha against the start of any line therefore finds both kinds of tag.
+          TAGS="$(git ls-remote --tags "https://github.com/${GITHUB_REPOSITORY}.git" 'refs/tags/v*')"
+          if grep -q "^$SHA" <<< "$TAGS"; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "$SHA is a tagged release; the Release workflow publishes it."
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-push:
+    needs: check
+    if: ${{ needs.check.outputs.release != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

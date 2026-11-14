@@ -43,7 +43,8 @@ jobs:
         run: dotnet test dotMARC.sln -c Release --no-build
 
   publish-images:
-    needs: test
+    # Builds alongside the tests rather than after them. It only pushes the commit-sha tag: the version tags and
+    # `latest` are applied by the promote job below, once the tests have passed.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -127,10 +128,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.images.outputs.ghcr }}:${{ steps.version.outputs.version }}
-            ${{ steps.images.outputs.ghcr }}:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}
-            ${{ steps.images.outputs.ghcr }}:${{ steps.version.outputs.major }}
-            ${{ steps.images.outputs.ghcr }}:latest
             ${{ steps.images.outputs.ghcr }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -152,34 +149,75 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.images.outputs.dockerhub }}:${{ steps.version.outputs.version }}
+            ${{ steps.images.outputs.dockerhub }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create Docker Hub release alias tags
-        if: ${{ steps.images.outputs.dockerhub_enabled == 'true' }}
-        env:
-          REPO: ${{ steps.images.outputs.dockerhub }}
-          VERSION: ${{ steps.version.outputs.version }}
-          MAJOR: ${{ steps.version.outputs.major }}
-          MINOR: ${{ steps.version.outputs.minor }}
+  # Gives the image that was just built (and tested, by the job above) its release tags. Tagging is a registry
+  # operation on an existing manifest, so this takes seconds and nothing is rebuilt.
+  promote:
+    name: Tag the release image
+    needs: [test, publish-images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.publish-images.outputs.version }}
+      GHCR_IMAGE: ${{ needs.publish-images.outputs.ghcr_image }}
+      DOCKERHUB_IMAGE_NAME: ${{ needs.publish-images.outputs.dockerhub_image }}
+      DOCKERHUB_ENABLED: ${{ needs.publish-images.outputs.dockerhub_enabled }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: ${{ needs.publish-images.outputs.dockerhub_enabled == 'true' }}
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Apply release tags
         run: |
           set -euo pipefail
 
-          SOURCE="${REPO}:${VERSION}"
-          docker buildx imagetools create -t "${REPO}:${MAJOR}.${MINOR}" "$SOURCE"
-          docker buildx imagetools create -t "${REPO}:${MAJOR}" "$SOURCE"
-          docker buildx imagetools create -t "${REPO}:latest" "$SOURCE"
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+
+          # `edge` is also set here because the Publish workflow skips commits that carry a release tag.
+          TAGS=("$VERSION" "$MAJOR.$MINOR" "$MAJOR" "latest" "edge")
+
+          tag_image() {
+            local repo="$1"
+            for tag in "${TAGS[@]}"; do
+              docker buildx imagetools create -t "${repo}:${tag}" "${repo}:${GITHUB_SHA}"
+            done
+          }
+
+          tag_image "$GHCR_IMAGE"
+          if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            tag_image "$DOCKERHUB_IMAGE_NAME"
+          fi
 
       - name: Verify Docker Hub semver tags
-        if: ${{ steps.images.outputs.dockerhub_enabled == 'true' }}
+        if: ${{ needs.publish-images.outputs.dockerhub_enabled == 'true' }}
         env:
-          REPO: ${{ steps.images.outputs.dockerhub }}
-          VERSION: ${{ steps.version.outputs.version }}
-          MAJOR: ${{ steps.version.outputs.major }}
-          MINOR: ${{ steps.version.outputs.minor }}
+          REPO: ${{ needs.publish-images.outputs.dockerhub_image }}
         run: |
           set -euo pipefail
+
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
 
           REPO_PATH="${REPO%/*}/${REPO#*/}"
           REQUIRED_TAGS=("$VERSION" "$MAJOR.$MINOR" "$MAJOR" "latest")
@@ -207,7 +245,7 @@ jobs:
           exit 1
 
   release:
-    needs: publish-images
+    needs: [publish-images, promote]
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     permissions:
