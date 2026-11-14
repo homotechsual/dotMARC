@@ -1,0 +1,58 @@
+---
+slug: v0-10-3
+date: 2026-11-14T18:00:00.000Z
+title: "dotMARC v0.10.3: scope the mailbox app with RBAC for Applications"
+description: dotMARC now recognises a mailbox app scoped with Exchange RBAC for Applications, and the setup guides and scripts cover it, with PowerShell versions throughout.
+authors: [mikey]
+tags: [release]
+---
+
+Microsoft has replaced Application Access Policies with RBAC for Applications in Exchange Online, and says new setups
+shouldn't use access policies. This release teaches dotMARC to work well with the new way, and updates the setup guides
+and scripts to match.
+
+{/* truncate */}
+
+## Limiting the mailbox app with RBAC for Applications
+
+With RBAC for Applications you give the mailbox app access inside Exchange Online, limited to the DMARC reports mailbox,
+and you don't grant it a Microsoft Graph mail permission in Entra at all. That matters: a permission granted in Entra
+applies to every mailbox in your tenant, and it adds to the Exchange grant instead of being limited by it.
+
+* **dotMARC recognises it.** An app set up this way has no mail permission in its sign-in token, because the grant is
+  made in Exchange. Before, dotMARC read that as "no admin consent" and told you to grant it, which would have undone the
+  scoping. It now explains the Exchange RBAC case and warns against granting consent, and **Check mailbox access** no
+  longer claims it can't mark reports as read.
+* **The guides cover it.** The mailbox setup now leads with the RBAC steps (a group, a management scope, the app's service
+  principal and a role assignment, then a test). They name the **ExchangeOnlineManagement** PowerShell module and link it.
+  The Application Access Policy steps are kept in a collapsed section, with Microsoft's route for moving an existing
+  install over without interruption.
+* **The setup scripts have an option for it.** `-Rbac` in PowerShell, or `--rbac` in Bash, creates the mailbox app without
+  a Graph mail permission, creates its service principal, and prints the IDs and the Exchange role to use. It never prints
+  an admin-consent command for the mailbox app.
+
+An existing install on an access policy keeps working with no changes. Moving to RBAC is recommended, and the
+[Deploy with Docker](/docs/deploy-with-docker#mailbox-app-registration-app-only) and
+[Deploy to Azure](/docs/deploy-to-azure#microsoft-entra-setup) guides walk through it.
+
+## PowerShell versions of the setup scripts
+
+The app registration script, and the two DNS push setup scripts, now have PowerShell versions that work on Windows,
+macOS and Linux. The docs show PowerShell and Bash in tabs that remember your choice, and the API examples gain
+`Invoke-RestMethod` equivalents, because `curl` in Windows PowerShell is an alias for something different. The script
+steps now download first, tell you to read the script, and only then show how to unblock and run it.
+
+## A clearer Azure guide
+
+* The Azure guide has a **What you'll need** section, including a subscription with billing set up.
+* The update section takes your own resource group, subscription and versions and produces the variables for you, and finds
+  the Container App itself, so it no longer assumes a resource group name or a deployment called `main`.
+* The Entra app registration steps now come from one shared section, so the Docker and Azure guides can't drift apart.
+  Getting Started is now a chooser with buttons to each guide, and its configuration table says it is a reference only.
+
+## Faster image builds
+
+The arm64 image is now cross-compiled instead of built under emulation, a release no longer builds its image twice, and
+the release tags are applied once the tests pass instead of the build waiting for them.
+
+Upgrading needs no action, and there are no database changes.
