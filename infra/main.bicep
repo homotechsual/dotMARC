@@ -14,16 +14,22 @@ param postgresAdminUsername string = 'dotmarc'
 @description('PostgreSQL administrator password.')
 param postgresAdminPassword string
 
-@description('Non-secret Graph app-only config.')
+@description('MAILBOX app registration (the one named dotmarc-mailbox, app-only Microsoft Graph): its Application (client) ID, a GUID such as 00000000-0000-0000-0000-000000000000. Find it on the app registration\'s Overview page in Microsoft Entra.')
 param graphClientId string
+
+@description('Your Microsoft Entra tenant (directory) ID, a GUID. Used by the MAILBOX app registration (dotmarc-mailbox). Find it on the app registration\'s Overview page.')
 param graphTenantId string
+
+@description('The shared mailbox that receives DMARC aggregate reports, e.g. dmarc@contoso.com. The MAILBOX app registration (dotmarc-mailbox) must be scoped to read it.')
 param graphMailboxAddress string
 
-@description('Optional separate mailbox for receiving SMTP TLS Reporting aggregate reports.')
+@description('Optional separate mailbox for receiving SMTP TLS Reporting aggregate reports. Leave blank to use the main mailbox.')
 param graphTlsrptMailboxAddress string = ''
 
-@description('Non-secret dashboard sign-in config.')
+@description('Your Microsoft Entra tenant (directory) ID, a GUID. Used by the DASHBOARD app registration (dotmarc-dashboard) for sign-in. Usually the same value as graphTenantId.')
 param entraIdTenantId string
+
+@description('DASHBOARD app registration (the one named dotmarc-dashboard, delegated sign-in): its Application (client) ID, a GUID. This is a different app registration from the mailbox one.')
 param entraIdClientId string
 
 @description('Comma-separated list of email addresses granted the Admin role the first time the app starts with no existing access grants. Not secret — just email addresses. Only takes effect on that first startup; safe to leave set afterwards.')
@@ -337,10 +343,13 @@ resource keyVaultWriteRoleAssignment 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
-// These three secrets are provisioned empty. The app cannot function until they're set — see the
-// README's "Deploy to Azure" section for the az keyvault secret set commands run after deployment.
-// The container app's secrets above reference them by versionless URL, so setting a new value
-// takes effect without redeploying the template.
+// These three secrets are provisioned empty. The app cannot function until they're set — see
+// deploy-to-azure.mdx's "Populate Key Vault" step for the commands run after deployment.
+// The container app's secrets above reference them by versionless URL, but the container app
+// resolves those references when it creates the revision (and the identity holding the read role
+// only exists once the app does), so after setting the values the references must be re-applied
+// with `az containerapp secret set` and the revision restarted. A restart on its own leaves the
+// revision stuck in Activating (KEDAScalerFailed). The docs script does all of this.
 resource graphClientSecretRef 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
   parent: keyVault
   name: 'Graph-ClientSecret'

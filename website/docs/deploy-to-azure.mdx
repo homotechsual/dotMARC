@@ -7,36 +7,136 @@ import Checklist from '@site/src/components/Checklist';
 
 # Deploy to Azure
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fdotmarc.app%2Fazuredeploy.json)
+This page takes you from nothing to a running dotMARC on Azure Container Apps, in order. Every value
+the deployment form asks for is explained in [step 2](#2-deploy), next to the button that opens it, so
+you don't need to jump between pages. Allow about 30 minutes, and review the Azure costs first.
 
-Use the button to open Azure's deployment form instead of running the CLI commands in steps 1 and 2.
-Complete the [two Entra app registrations](./getting-started.mdx) first, then choose a subscription,
-a **new resource group**, and a region supporting Container Apps and PostgreSQL Flexible Server.
-You need permission to create resources and role assignments (for example, Owner on the resource group).
-Review the Azure costs before deploying.
+<Checklist id="deploy-to-azure" items={[
+  "Completed the two Entra app registrations (Before you start)",
+  "Chose the Azure subscription and resource group (step 1)",
+  "Deployed through the portal button or az deployment group create (step 2)",
+  "Found the resource names for this deployment (step 3)",
+  "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 4)",
+  "Populated the three Key Vault secrets, re-applied the secret references and restarted the revision (step 5)",
+  "Confirmed the revision is Healthy and Running (step 6)",
+]} />
 
-Enter the app client/tenant IDs, reports mailbox, a PostgreSQL administrator password, and
-**initialAdminEmails** in the form. Do not leave the initial administrator emails blank: without
-them, nobody can access a fresh installation. The other options have the same defaults as the
-Bicep deployment below.
+## Before you start
 
-:::important[Finish setup after deployment]
+**Create the two Entra app registrations.** Follow [Getting Started](./getting-started.mdx) first. You
+need both of these, and they are separate registrations:
 
-The button provisions infrastructure, not the Entra registrations or a ready-to-use sign-in.
-After deployment, complete **steps 3 and 4 below**: register the dashboard redirect URI and populate
-Key Vault. Find the resource names and URLs on the portal deployment's **Outputs** tab. The CLI
-examples assume a deployment named `main`; replace `--name main` with your portal deployment name
-if you use those commands.
+| Registration | Used for | You will need |
+| --- | --- | --- |
+| `dotmarc-mailbox` | Reading the DMARC reports mailbox (app-only Microsoft Graph) | Its client ID and a client secret |
+| `dotmarc-dashboard` | Signing people in to the dotMARC dashboard | Its client ID and a client secret |
+
+Write the two client IDs, the two client secrets and your tenant ID somewhere safe. The IDs go into the
+deployment form and the secrets go into Key Vault in [step 5](#5-populate-key-vault).
+
+**Check your Azure permissions.** Two different things need permission, and they are easy to mix up:
+
+| Who | What they need | Why |
+| --- | --- | --- |
+| You, to deploy | **Owner** on the resource group (or Contributor plus User Access Administrator) | The template creates resources and role assignments |
+| You, to fill Key Vault | **Key Vault Secrets Officer** on the new vault, which you grant yourself in step 5 | Owner does not include permission to write secrets. Without it Azure answers `Forbidden` for `Microsoft.KeyVault/vaults/secrets/setSecret/action` |
+| The Container App's managed identity | **Key Vault Secrets User** on the vault | Lets the app read its secrets. The template grants this for you |
+
+**Use PowerShell.** The commands on this page are PowerShell. In Azure Cloud Shell, switch the shell
+type from **Bash** to **PowerShell** using the dropdown at the top left of the Cloud Shell window
+before you run anything. On your own computer, use PowerShell 7 with the
+[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed.
+
+:::note[Replace the values in angle brackets]
+
+Anything written like `<this>` is specific to you and must be replaced. Every other name in the
+commands (the resource group variable aside) is found for you by the commands themselves, so you don't
+need to know the deployment name, the Key Vault name or the Container App name in advance.
 
 :::
 
-The portal uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), compiled from
-`infra/main.bicep` into `website/static/azuredeploy.json` during every website build. Bicep remains
-the source of truth; the generated JSON is not checked in. Infrastructure changes trigger the website
-CI and publishing workflows automatically.
+## 1. Choose the subscription and resource group
 
-Local website builds and the development server need Azure CLI and the same Bicep compiler as CI.
-No Azure sign-in is needed to compile the template:
+Azure Cloud Shell and the Azure CLI each have a *current* subscription, and it is often not the one you
+intend to deploy into. Resources in another subscription are invisible, which looks like "not found".
+Check which one is selected, and select the right one:
+
+```powershell
+az account list --query "[].{Name:name,Id:id,Selected:isDefault}" --output table
+az account set --subscription '<subscription-id>'
+az account show --query "{Name:name,Id:id}" --output table
+```
+
+Pick a **new resource group** name and a region that supports Container Apps and PostgreSQL Flexible
+Server (for example `uksouth`). The portal form creates the group for you; for the CLI, create it now:
+
+```powershell
+$RG = '<your-resource-group>'
+az group create --name $RG --location uksouth
+```
+
+Remember the name you chose, you will use it in every later step.
+
+## 2. Deploy
+
+### Fill in the deployment form
+
+Whether you use the portal button or the command line, these are the values to supply. Each row says
+where to find the value and which app registration it belongs to.
+
+| Field | What to enter | Where to find it |
+| --- | --- | --- |
+| `graphClientId` | The **mailbox** app registration's Application (client) ID, a GUID | Microsoft Entra, App registrations, `dotmarc-mailbox`, Overview |
+| `graphTenantId` | Your tenant (directory) ID, a GUID | Same Overview page, Directory (tenant) ID |
+| `graphMailboxAddress` | The shared mailbox receiving DMARC reports, such as `dmarc@contoso.com` | Your Exchange Online mailbox |
+| `graphTlsrptMailboxAddress` | Optional separate mailbox for TLS reports. Leave blank to use the one above | Your Exchange Online mailbox |
+| `entraIdTenantId` | Your tenant ID again, a GUID. Normally the same value as `graphTenantId` | Same Overview page |
+| `entraIdClientId` | The **dashboard** app registration's Application (client) ID, a GUID. Not the mailbox one | Microsoft Entra, App registrations, `dotmarc-dashboard`, Overview |
+| `initialAdminEmails` | Comma-separated email addresses of the people who should be Admins, such as `you@contoso.com` | Your own sign-in email |
+| `postgresAdminPassword` | A new strong password for the database. Note it down, step 5 needs it | You choose it |
+| `postgresAdminUsername` | Database administrator name. The default `dotmarc` is fine | Leave as is |
+| `containerImage` | The image to run. Use `ghcr.io/homotechsual/dotmarc:latest` or a release tag | Leave as is |
+
+:::danger[Don't leave initialAdminEmails blank]
+
+Without it nobody can sign in to a fresh installation. Use the same email address you will sign in
+with. The setting only takes effect on the very first start, and is safe to leave afterwards.
+
+:::
+
+The client **secrets** are deliberately not part of the form. They would end up in deployment history,
+so you put them in Key Vault yourself in step 5.
+
+### Deploy with the portal button
+
+Sign in to the Azure portal with the same account and subscription you chose in step 1, then:
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fdotmarc.app%2Fazuredeploy.json)
+
+Choose the subscription, the resource group you created (or create a new one), a region, then fill in
+the fields from the table above. The portal names the deployment `CustomDeployment-<something>`, not
+`main`. You don't need to remember it, step 3 finds it for you.
+
+### Or deploy with the command line
+
+Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders using the table above. As
+checked in the file contains placeholders only and is **not meant to be deployed as is**. Then, with
+`$RG` set as in step 1:
+
+```powershell
+az deployment group create `
+  --resource-group $RG `
+  --name main `
+  --template-file infra/main.bicep `
+  --parameters infra/main.parameters.json
+```
+
+You can pass single values inline instead of editing the file, for example
+`--parameters postgresAdminPassword='<password>'`.
+
+The portal uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), compiled from
+`infra/main.bicep` during every website build. Bicep is the source of truth; the generated JSON is not
+checked in. Local website builds need the same Bicep compiler as CI (no Azure sign-in needed):
 
 ```powershell
 az bicep install --version v0.46.1
@@ -44,9 +144,7 @@ cd website
 yarn gen-azure-template
 ```
 
-`yarn build` and `yarn start` run this generation step automatically.
-
-`infra/main.bicep` provisions everything needed to run dotMARC on Azure:
+### What gets created
 
 * A **Container Apps environment** (backed by a Log Analytics workspace) and a **Container App**
   running the published dotMARC image, with a system-assigned managed identity, sticky sessions
@@ -70,43 +168,42 @@ yarn gen-azure-template
   (`LinkedAuthorizationFailed`/`403`) reads like a Container-App-scoped permission problem rather
   than pointing at the environment-scoped role that's actually missing it.
 
-Before deploying, complete the two Entra app registrations described in
-[Getting Started](./getting-started.mdx), the Bicep template takes the same non-secret client
-IDs/tenant IDs as deployment parameters, and the client secrets are set into Key Vault after
-deployment (see below).
+:::important[The deployment is not finished yet]
 
-<Checklist id="deploy-to-azure" items={[
-  "Completed the two Entra app registrations (Getting Started)",
-  "Filled in the portal form, infra/main.parameters.json, or --parameters overrides (step 1)",
-  "Deployed through the portal button or az deployment group create (step 2)",
-  "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 3)",
-  "Populated the three Key Vault secrets and restarted the revision (step 4)",
-]} />
+The button provisions infrastructure only. The app cannot start properly until you complete steps 4 and
+5: register the redirect URI and put the secrets in Key Vault. Until then the site may show a timeout.
+That is expected.
 
-## 1. Fill in the parameters
+:::
 
-Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders, as checked in, the
-file contains placeholder values only and is **not meant to be deployed as-is**. At minimum, set
-`postgresAdminPassword`, `graphClientId`, `graphTenantId`, `graphMailboxAddress`,
-`entraIdTenantId`, and `entraIdClientId`. For `containerImage`, use the GHCR image published by
-CI/CD, `ghcr.io/homotechsual/dotmarc:latest`, or a specific version tag from a release, rather
-than building your own.
+## 3. Find the resources this deployment created
 
-Alternatively, leave the file untouched and pass overrides inline with `--parameters key=value` on
-the command below.
-
-## 2. Deploy
+You may not know your deployment's name (the portal calls it `CustomDeployment-<something>`), and you
+don't need it. This finds everything by looking at what is in the resource group, and stops with a
+clear message if anything is missing. Run it in the same PowerShell session as the later steps, with
+`$RG` set to your resource group:
 
 ```powershell
-$RG = 'your-dotmarc-resourcegroup'
-az group create --name $RG --location uksouth
-az deployment group create `
-  --resource-group $RG `
-  --template-file infra/main.bicep `
-  --parameters infra/main.parameters.json
+function Get-Required($What, $Value) {
+  if (-not $Value) {
+    throw "Couldn't find $What in resource group '$RG'. Check the subscription (step 1) and that the deployment finished: az deployment group list --resource-group '$RG' --query ""[].{Name:name,State:properties.provisioningState}"" -o table"
+  }
+  $Value
+}
+
+$KV      = Get-Required 'the Key Vault'           (az keyvault list --resource-group $RG --query "[0].name" -o tsv)
+$KV_ID   = Get-Required 'the Key Vault id'        (az keyvault show --name $KV --resource-group $RG --query id -o tsv)
+$APP     = Get-Required 'the Container App'       (az containerapp list --resource-group $RG --query "[0].name" -o tsv)
+$PG_FQDN = Get-Required 'the PostgreSQL server'   (az postgres flexible-server list --resource-group $RG --query "[0].fullyQualifiedDomainName" -o tsv)
+$APP_URL = Get-Required 'the Container App URL'   ('https://' + (az containerapp show --resource-group $RG --name $APP --query properties.configuration.ingress.fqdn -o tsv))
+
+"Key Vault: $KV`nContainer App: $APP`nPostgreSQL: $PG_FQDN`nURL: $APP_URL"
 ```
 
-## 3. Register the deployed hostname as an OIDC redirect URI
+If you would rather use the deployment itself, the same values are on its **Outputs** tab in the portal.
+
+
+## 4. Register the deployed hostname as an OIDC redirect URI
 
 :::tip[Custom Domain]
 
@@ -115,55 +212,163 @@ If you're configuring a custom domain in the Azure Portal for your container app
 :::
 
 The Container App's hostname isn't known until after deployment (Container Apps assigns its FQDN
-from the environment's own DNS suffix), so the redirect URI registered in the dashboard sign-in app
-registration during one-time setup can't be filled in ahead of time. Read the deployed URL from the
-template's `containerAppUrl` output:
+from the environment's own DNS suffix), so the redirect URI in the dashboard sign-in app registration
+can't be filled in ahead of time. Print the value to add:
 
 ```powershell
-az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppUrl.value -o tsv
+"$APP_URL/signin-oidc"
 ```
 
 Then, in the `dotmarc-dashboard` app registration's **Authentication** blade, add a **Web**
-platform redirect URI of `<that URL>/signin-oidc` (alongside or replacing the placeholder one
-added during one-time setup). Sign-in will fail with AADSTS50011 until this is done.
+platform redirect URI of that value (alongside or replacing the placeholder one added during
+one-time setup). Sign-in will fail with AADSTS50011 until this is done.
 
-## 4. Populate the Key Vault secrets
+## 5. Populate Key Vault
 
-The template deliberately provisions three Key Vault secrets: `Graph-ClientSecret`,
-`EntraId-ClientSecret`, and `ConnectionStrings-DotMarc` with empty values, rather than accepting secret
+The template deliberately provisions three Key Vault secrets (`Graph-ClientSecret`,
+`EntraId-ClientSecret` and `ConnectionStrings-DotMarc`) with empty values, rather than accepting secret
 material as deployment parameters (which would put it on the command line or in a parameters
-file). Until these are set, the app can't sign in or reach Postgres. Populate them directly:
+file). Until they are set, the app can't sign in or reach Postgres.
+
+There are four parts: give yourself permission, write the secrets, re-apply the Container App's
+references to them, then restart. **Do all four.** Writing the secrets and restarting alone is not
+enough, see the note after the script.
+
+### 5a. Give yourself permission to write secrets
+
+Owner on the resource group does not include permission to write Key Vault secrets. Grant yourself
+**Key Vault Secrets Officer** on the vault:
 
 ```powershell
-$RG = 'dotmarc-rg'
-$KV = az deployment group show --resource-group $RG --name main --query properties.outputs.keyVaultName.value -o tsv
-$PG_FQDN = az deployment group show --resource-group $RG --name main --query properties.outputs.postgresServerFqdn.value -o tsv
+$ME = az ad signed-in-user show --query id -o tsv
+az role assignment create `
+  --assignee-object-id $ME `
+  --assignee-principal-type User `
+  --role "Key Vault Secrets Officer" `
+  --scope $KV_ID
+```
 
-az keyvault secret set --vault-name $KV --name Graph-ClientSecret --value "<graph app client secret>"
-az keyvault secret set --vault-name $KV --name EntraId-ClientSecret --value "<entra id app client secret>"
+Azure can take a few minutes to apply the new role. If the next command answers `Forbidden`, wait two
+or three minutes and run it again.
+
+### 5b. Write the three secrets
+
+Substitute the `dotmarc-mailbox` and `dotmarc-dashboard` client secrets you created during setup, and
+the database user name and password from the form:
+
+```powershell
+az keyvault secret set --vault-name $KV --name Graph-ClientSecret --value '<mailbox app client secret>'
+az keyvault secret set --vault-name $KV --name EntraId-ClientSecret --value '<dashboard app client secret>'
 az keyvault secret set --vault-name $KV --name ConnectionStrings-DotMarc `
   --value "Host=$PG_FQDN;Database=dotmarc;Username=<postgresAdminUsername>;Password=<postgresAdminPassword>;Ssl Mode=Require"
+```
 
-$APP = az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppName.value -o tsv
+Use single quotes around the client secrets so PowerShell doesn't treat characters such as `$` in them
+specially.
+
+### 5c. Re-apply the secret references and restart
+
+In practice the Container App resolves its Key Vault references when the revision is created, which happens before you
+have written them. Setting new values in Key Vault does **not** make a running revision pick them up,
+and restarting it doesn't either. Re-apply all three references together (Azure validates the whole
+configuration, so setting one on its own fails with `SecretRef 'entraid-client-secret' ... not found`),
+then restart:
+
+```powershell
+$VAULT = "https://$KV.vault.azure.net/secrets"
+az containerapp secret set `
+  --resource-group $RG `
+  --name $APP `
+  --secrets `
+  "graph-client-secret=keyvaultref:$VAULT/Graph-ClientSecret,identityref:system" `
+  "entraid-client-secret=keyvaultref:$VAULT/EntraId-ClientSecret,identityref:system" `
+  "connectionstrings-dotmarc=keyvaultref:$VAULT/ConnectionStrings-DotMarc,identityref:system"
+
 $REVISION = az containerapp show --resource-group $RG --name $APP --query properties.latestRevisionName -o tsv
 az containerapp revision restart --resource-group $RG --name $APP --revision $REVISION
 ```
 
-Substitute the two Entra app registration client secrets created in the one-time setup steps
-above, and the `postgresAdminUsername`/`postgresAdminPassword` values used in step 1. The
-container app's secrets reference these by versionless Key Vault URL, so
-`az containerapp revision restart` forces it to re-fetch them immediately rather than waiting for
-their normal refresh cycle.
+:::note[Why all three, every time]
+
+Without this step a new deployment can sit with the revision in **Activating**, with no replicas
+running and a browser `stream timeout`. The system log then shows `KEDAScalerFailed ... error resolving
+secret name graph-client-secret`, even though the secrets exist and the managed identity has the right
+role. See [Troubleshooting](#troubleshooting). Use the same re-apply command whenever you replace a secret value in
+Key Vault later (for example when a client secret expires).
+
+:::
 
 :::danger[Don't forget InitialAdmins\_\_Emails]
 
-Set `InitialAdmins__Emails` (see [Getting Started](./getting-started.mdx#configure)) before this
-deployment's first startup, without it, the tightened authorization policy locks out every user,
+Set `InitialAdmins__Emails` (the `initialAdminEmails` form field, see [Getting Started](./getting-started.mdx#configure)) before this
+deployment's first startup. Without it the tightened authorization policy locks out every user,
 including you.
 
 :::
 
-### Optional: Key Vault-backed secret storage
+### How the three layers of names line up
+
+The same secret has a different name at each layer. Don't rename the Key Vault secrets to match the
+environment variables:
+
+| Layer | Graph secret | Dashboard secret | Database connection |
+| --- | --- | --- | --- |
+| Key Vault secret (single hyphen) | `Graph-ClientSecret` | `EntraId-ClientSecret` | `ConnectionStrings-DotMarc` |
+| Container App secret reference (lowercase) | `graph-client-secret` | `entraid-client-secret` | `connectionstrings-dotmarc` |
+| Environment variable in the app (double underscore) | `Graph__ClientSecret` | `EntraId__ClientSecret` | `ConnectionStrings__DotMarc` |
+
+The double underscore maps to ASP.NET Core's configuration hierarchy and only applies to the
+environment variable. Key Vault secret names can't contain underscores.
+
+## 6. Check it's healthy
+
+Don't treat the deployment as complete until the active revision reports **Healthy** and **Running**:
+
+```powershell
+az containerapp revision list `
+  --resource-group $RG `
+  --name $APP `
+  --query "[].{Revision:name,Active:properties.active,Health:properties.healthState,Running:properties.runningState,Replicas:properties.replicas}" `
+  --output table
+```
+
+A healthy revision shows `Healthy` and `Running` (or `RunningAtMaxScale`, which just means it is at the
+configured replica count). It can take a minute or two after the restart. Then open `$APP_URL`, sign in,
+and check **Poll status** for a successful first cycle.
+
+### Troubleshooting
+
+**The site shows `stream timeout`, or the revision stays on `Activating` with health `None`.** The
+container never started. Console logs don't exist yet (`az containerapp logs show` answers `Could not
+find container`), so read the **system** log:
+
+```powershell
+az containerapp logs show --resource-group $RG --name $APP --type system --tail 50 --follow false
+```
+
+* `KEDAScalerFailed` or `error resolving secret name ...`: the Key Vault secret references didn't
+  resolve. Do [step 5c](#5c-re-apply-the-secret-references-and-restart) again (all three references, then
+  restart). If it still fails, check the Container App's identity really has `Key Vault Secrets User`
+  on the vault (Access control (IAM) on the Key Vault, then Role assignments) and that all three
+  secrets are enabled and not empty.
+* `ContainerAppSecretRefNotFound`: you set one reference on its own. Set all three together, as in
+  step 5c.
+
+**`Forbidden` ... `setSecret/action` when writing a secret.** You don't have **Key Vault Secrets
+Officer** yet. Do [step 5a](#5a-give-yourself-permission-to-write-secrets) and wait a few minutes.
+
+**`DeploymentNotFound` or an empty value from one of the discovery commands.** Wrong subscription or
+resource group. Repeat [step 1](#1-choose-the-subscription-and-resource-group). To see what is deployed
+in the group you chose:
+
+```powershell
+az deployment group list --resource-group $RG --query "[].{Name:name,State:properties.provisioningState}" --output table
+```
+
+**`argument --vault-name: expected one argument`.** `$KV` is empty because step 3 found nothing. Fix the
+subscription or resource group and run step 3 again.
+
+## Optional: Key Vault-backed secret storage
 
 By default, runtime-editable secrets (the HaloPSA API client secret, Cloudflare/Azure DNS push
 OAuth client secrets - anything configured through an in-app settings page rather than a deployment
@@ -174,7 +379,7 @@ managed identity a narrowly-scoped write role on the vault (see `infra/main.bice
 `Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app
 writes each secret itself the first time you save it from the relevant settings page.
 
-## 5. Update or redeploy dotMARC
+## 7. Update or redeploy dotMARC
 
 This is the Azure part of [Update or redeploy dotMARC](./updating.mdx), which also covers what to check before
 and after an update.
@@ -308,7 +513,7 @@ only safe when the older release remains compatible with the current schema. A d
 only ever recorded `:latest` also has no reliable historical image target; choose the previous
 release tag explicitly.
 
-## 6. Re-running the template later (e.g. to turn on MTA-STS hosting)
+## 8. Re-running the template later (e.g. to turn on MTA-STS hosting)
 
 `enableMtaStsHosting` is off by default, so enabling it (or making any other change) usually means
 re-running `az deployment group create` against a resource group that's no longer in exactly the
