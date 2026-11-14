@@ -5,6 +5,7 @@ description: Deploy dotMARC to Azure Container Apps using the included Bicep tem
 
 import Checklist from '@site/src/components/Checklist';
 import EntraSetup from './_partials/entra-setup.mdx';
+import AzureDetails from '@site/src/components/AzureDetails';
 
 # Deploy to Azure
 
@@ -52,13 +53,6 @@ Azure assigns the app's hostname during deployment, so you add the dashboard's r
 [step 4](#4-register-the-deployed-hostname-as-an-oidc-redirect-uri). The client IDs go into the deployment form in
 [step 2](#2-deploy) and the client secrets go into Key Vault in [step 5](#5-populate-key-vault).
 
-:::note[Switching shells in Cloud Shell]
-
-The app registration script above uses **Bash**. In Azure Cloud Shell, run it in Bash, then switch the shell type to
-PowerShell for the rest of this page (see "Use PowerShell" below).
-
-:::
-
 ## Azure permissions and shell
 
 ### Check your Azure permissions
@@ -73,9 +67,10 @@ Two different things need permission, and they are easy to mix up:
 
 ### Use PowerShell
 
-The commands on this page are PowerShell. In Azure Cloud Shell, switch the shell
-type from **Bash** to **PowerShell** using the dropdown at the top left of the Cloud Shell window
-before you run anything. On your own computer, use PowerShell 7 with the
+The commands on this page are PowerShell, including the app registration script above (which also has a Bash
+version if you prefer it). In Azure Cloud Shell, switch the shell type from **Bash** to **PowerShell** using
+the dropdown at the top left of the Cloud Shell window before you run the commands below. On your own computer
+(Windows, macOS or Linux), use PowerShell 7 with the
 [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed.
 
 :::note[Replace the values in angle brackets]
@@ -415,13 +410,15 @@ writes each secret itself the first time you save it from the relevant settings 
 This is the Azure part of [Update or redeploy dotMARC](./updating.mdx), which also covers what to check before
 and after an update.
 
+Enter your details to get the variables the commands on this page use. Nothing is sent anywhere, and the
+resource group and subscription are remembered in this browser.
+
+<AzureDetails />
+
 Container Apps stores the image reference in a **revision**. Check the image configured on the
 currently active app, then list its revision history:
 
 ```powershell
-$RG = 'dotmarc-rg'
-$APP = az deployment group show --resource-group $RG --name main --query properties.outputs.containerAppName.value -o tsv
-
 az containerapp show `
   --resource-group $RG `
   --name $APP `
@@ -451,7 +448,6 @@ Use an immutable release tag. `az containerapp update` creates a new revision an
 template uses single-revision mode, moves traffic to it after it becomes ready:
 
 ```powershell
-$VERSION = '<release-version>'
 $IMAGE = "ghcr.io/homotechsual/dotmarc:$VERSION"
 $REVISION_SUFFIX = "release-$(Get-Date -Format yyyyMMddHHmmss)"
 
@@ -525,10 +521,10 @@ status** for a successful post-deployment cycle.
 
 ### Roll back
 
-Create another revision using the previous immutable release tag:
+Create another revision using the previous immutable release tag. Fill in **Version to roll back to** in your
+details above so `$PREVIOUS_VERSION` is set:
 
 ```powershell
-$PREVIOUS_VERSION = '<previous-release-version>'
 $IMAGE = "ghcr.io/homotechsual/dotmarc:$PREVIOUS_VERSION"
 $REVISION_SUFFIX = "rollback-$(Get-Date -Format yyyyMMddHHmmss)"
 
