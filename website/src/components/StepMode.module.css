@@ -1,0 +1,161 @@
+.root {
+  scroll-margin-top: calc(var(--ifm-navbar-height) + 0.5rem);
+}
+
+.bar {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+  background: var(--ifm-background-surface-color);
+}
+
+/* In step mode the controls stay under the navbar, so where you are is always in view. */
+.barSticky {
+  position: sticky;
+  top: var(--ifm-navbar-height);
+  z-index: 10;
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+}
+
+.barRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.switchWrap {
+  position: relative;
+}
+
+/* A small callout under the switch, with an arrow pointing up at it. It sits above the page content. */
+.hint {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  left: 0;
+  z-index: 20;
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--ifm-color-primary);
+  border-radius: var(--ifm-global-radius);
+  background: var(--ifm-background-surface-color);
+  box-shadow: var(--ifm-global-shadow-md);
+}
+
+.hint::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 2rem;
+  width: 12px;
+  height: 12px;
+  border-top: 1px solid var(--ifm-color-primary);
+  border-left: 1px solid var(--ifm-color-primary);
+  background: var(--ifm-background-surface-color);
+  transform: rotate(45deg);
+}
+
+.hintTitle {
+  margin: 0 0 0.25rem;
+  font-weight: var(--ifm-font-weight-bold);
+}
+
+.hintText {
+  margin: 0 0 0.6rem;
+  font-size: 0.875rem;
+}
+
+.hintActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modeSwitch {
+  display: inline-flex;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-button-border-radius);
+  overflow: hidden;
+}
+
+.modeButton {
+  padding: 0.35rem 0.8rem;
+  border: 0;
+  background: transparent;
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.modeButton + .modeButton {
+  border-left: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.modeButtonActive {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white, #fff);
+}
+
+.count {
+  font-size: 0.875rem;
+  font-weight: var(--ifm-font-weight-semibold);
+}
+
+.jump {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 24rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-button-border-radius);
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.progress {
+  height: 4px;
+  margin-top: 0.5rem;
+  border-radius: 2px;
+  background: var(--ifm-color-emphasis-200);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--ifm-color-primary);
+  transition: width 0.2s ease;
+}
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 2rem 0 1rem;
+}
+
+.nav button {
+  max-width: 70%;
+  white-space: normal;
+  text-align: left;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .nav {
+    flex-direction: column-reverse;
+  }
+
+  .nav button {
+    max-width: none;
+  }
+}
