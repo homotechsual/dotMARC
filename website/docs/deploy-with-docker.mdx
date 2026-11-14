@@ -122,6 +122,7 @@ on where dotMARC is running:
 Open inbound access to TCP ports 80 and 443 in whatever firewall your provider uses:
 
 - **Plain Linux firewall** (`ufw`): `sudo ufw allow 80,443/tcp`
+- **Windows Firewall**, in an elevated PowerShell: `New-NetFirewallRule -DisplayName 'dotMARC web' -Direction Inbound -Protocol TCP -LocalPort 80,443 -Action Allow`
 - **AWS**: add inbound rules for TCP 80 and 443 to the instance's **Security Group**
 - **Azure VM**: add inbound port rules for 80 and 443 to the VM's **Network Security Group**
 - **DigitalOcean and most others**: look for **Firewall** in the control panel and add rules

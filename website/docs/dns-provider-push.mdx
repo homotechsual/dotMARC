@@ -6,6 +6,8 @@ description: Let dotMARC push DNS records straight to Cloudflare, Azure DNS, or 
 import Checklist from '@site/src/components/Checklist';
 import ThemedImage from '@theme/ThemedImage';
 import useBaseUrl from '@docusaurus/useBaseUrl';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # DNS Provider Push
 
@@ -139,25 +141,56 @@ than the one this app registration lives in, so it must not be restricted to a s
 delegated **Azure Service Management** → `user_impersonation` permission.
 
 :::tip[Set it up with a script]
-`create-azure-dns-app.sh` does all of the above and prints the client ID and secret to enter in dotMARC. Run it in
-Azure Cloud Shell (Bash), or anywhere with bash and a signed-in Azure CLI, giving it your dotMARC host:
+The `create-azure-dns-app` script does all of the above and prints the client ID and secret to enter in dotMARC. Run
+it in Azure Cloud Shell, or anywhere with a signed-in Azure CLI, giving it your dotMARC host:
+
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/create-azure-dns-app.ps1 -OutFile create-azure-dns-app.ps1
+./create-azure-dns-app.ps1 dotmarc.contoso.example
+```
+
+If PowerShell refuses to run the downloaded script, run `Unblock-File ./create-azure-dns-app.ps1` first. `-Name` changes
+the app's name, and `-SecretYears` how long the secret lasts (2 years by default).
+
+</TabItem>
+<TabItem value="bash" label="Bash">
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/create-azure-dns-app.sh
 bash create-azure-dns-app.sh dotmarc.contoso.example
 ```
 
+`--name` changes the app's name, and `--secret-years` how long the secret lasts (2 years by default).
+
+</TabItem>
+</Tabs>
+
 Running it again reuses the app rather than creating another, adding the redirect URI if it's missing and issuing a
-new secret alongside the old one. `--name` changes the app's name, and `--secret-years` how long the secret lasts
-(2 years by default).
+new secret alongside the old one.
 :::
 
 <details>
 <summary>The script</summary>
 
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell reference title="create-azure-dns-app.ps1"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/create-azure-dns-app.ps1
+```
+
+</TabItem>
+<TabItem value="bash" label="Bash">
+
 ```bash reference title="create-azure-dns-app.sh"
 https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/create-azure-dns-app.sh
 ```
+
+</TabItem>
+</Tabs>
 
 </details>
 
@@ -186,22 +219,51 @@ one-time review in Google Cloud Console that can take several days to turn aroun
 lead time before relying on this provider for a customer outside your own test-user allowlist.
 
 :::tip[Get started with a script]
-`prepare-google-cloud-dns.sh` enables both APIs in your project, then prints the redirect URI, the two scopes and a
-direct console link for each remaining step. gcloud can't create this kind of OAuth client, so the consent screen and
-client are still made in the console. Run it in Google Cloud Shell, or anywhere with bash and a signed-in gcloud CLI:
+The `prepare-google-cloud-dns` script enables both APIs in your project, then prints the redirect URI, the two scopes
+and a direct console link for each remaining step. gcloud can't create this kind of OAuth client, so the consent screen
+and client are still made in the console. Run it in Google Cloud Shell, or anywhere with a signed-in gcloud CLI:
+
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/prepare-google-cloud-dns.ps1 -OutFile prepare-google-cloud-dns.ps1
+./prepare-google-cloud-dns.ps1 dotmarc.contoso.example your-project-id
+```
+
+If PowerShell refuses to run the downloaded script, run `Unblock-File ./prepare-google-cloud-dns.ps1` first.
+
+</TabItem>
+<TabItem value="bash" label="Bash">
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/dns-push/prepare-google-cloud-dns.sh
 bash prepare-google-cloud-dns.sh dotmarc.contoso.example your-project-id
 ```
+
+</TabItem>
+</Tabs>
 :::
 
 <details>
 <summary>The script</summary>
 
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell reference title="prepare-google-cloud-dns.ps1"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/prepare-google-cloud-dns.ps1
+```
+
+</TabItem>
+<TabItem value="bash" label="Bash">
+
 ```bash reference title="prepare-google-cloud-dns.sh"
 https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/prepare-google-cloud-dns.sh
 ```
+
+</TabItem>
+</Tabs>
 
 </details>
 

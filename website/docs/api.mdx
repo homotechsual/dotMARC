@@ -3,6 +3,8 @@ description: Use dotMARC from scripts and other tools with an API key.
 ---
 
 import Link from '@docusaurus/Link';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # API
 
@@ -35,10 +37,24 @@ days), and select **Create key**. Copy the key straight away: dotMARC keeps only
 
 Send the key as a bearer token:
 
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell
+Invoke-RestMethod https://dotmarc.example.com/api/v1/domains `
+  -Headers @{ Authorization = 'Bearer dmk_...' }
+```
+
+</TabItem>
+<TabItem value="bash" label="Bash">
+
 ```bash
 curl https://dotmarc.example.com/api/v1/domains \
   -H "Authorization: Bearer dmk_..."
 ```
+
+</TabItem>
+</Tabs>
 
 A missing, expired or revoked key gets `401`. A key whose role lacks the permission an endpoint needs gets `403`. The
 API ignores browser sign-ins: it only accepts keys.
@@ -48,9 +64,24 @@ API ignores browser sign-ins: it only accepts keys.
 Anywhere a path takes a domain, such as `/api/v1/domains/{domain}`, you can give its id or its name, so a script that
 knows the name doesn't need to look up the id first:
 
-```bash
-curl https://dotmarc.example.com/api/v1/domains/contoso.example   -H "Authorization: Bearer dmk_..."
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell
+Invoke-RestMethod https://dotmarc.example.com/api/v1/domains/contoso.example `
+  -Headers @{ Authorization = 'Bearer dmk_...' }
 ```
+
+</TabItem>
+<TabItem value="bash" label="Bash">
+
+```bash
+curl https://dotmarc.example.com/api/v1/domains/contoso.example \
+  -H "Authorization: Bearer dmk_..."
+```
+
+</TabItem>
+</Tabs>
 
 Names match however they're written: any case, with or without a trailing dot. A domain name can never be all digits,
 so a number is always read as an id.
@@ -95,17 +126,33 @@ and their alerts, never sign-ins, settings or access changes.
   received. Add `/{id}/raw` to one report's address for the original file, exactly as the receiver sent it.
 - **The dashboard's figures:** `GET /api/v1/summary` gives the headline numbers over every domain the key can see.
 - **Client reports:** `GET /api/v1/groups/{group}/report?period=month&of=2026-09-15` downloads a group's report as a
-  PDF, and `POST /api/v1/groups/{group}/report/send` sends one now, as the Reports dialog does. For example:
-
-  ```bash
-  curl -H "Authorization: Bearer dmk_..." -o report.pdf \
-    "https://dotmarc.contoso.example/api/v1/groups/3/report?period=quarter&of=2026-07-01"
-  ```
-
+  PDF, and `POST /api/v1/groups/{group}/report/send` sends one now, as the Reports dialog does. There is an example
+  of the download below.
 - **Parse failures:** `GET /api/v1/parse-failures` lists report emails dotMARC couldn't read, for a key with the
   DomainsEdit permission that isn't limited to groups.
 - **PSA tickets:** each alert lists its tickets, and `hasOpenTicket=false` finds alerts without an open ticket: ones no
   ticket has been raised for, and ones whose tickets are all closed.
+
+To download a group's quarterly client report as a PDF:
+
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell
+Invoke-WebRequest 'https://dotmarc.contoso.example/api/v1/groups/3/report?period=quarter&of=2026-07-01' `
+  -Headers @{ Authorization = 'Bearer dmk_...' } -OutFile report.pdf
+```
+
+</TabItem>
+<TabItem value="bash" label="Bash">
+
+```bash
+curl -H "Authorization: Bearer dmk_..." -o report.pdf \
+  "https://dotmarc.contoso.example/api/v1/groups/3/report?period=quarter&of=2026-07-01"
+```
+
+</TabItem>
+</Tabs>
 
 ## Keys limited to groups
 
