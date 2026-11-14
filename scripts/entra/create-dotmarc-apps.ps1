@@ -115,7 +115,9 @@ function New-OrExistingApp {
 function Add-GraphPermission {
     param([string]$AppId, [string]$PermissionId, [string]$PermissionType)
 
-    $query = "length(requiredResourceAccess[?resourceAppId=='$graphAppId'].resourceAccess[?id=='$PermissionId'])"
+    # The space before the closing parenthesis matters: it makes PowerShell quote the argument. az is a .cmd file on
+    # Windows, and cmd.exe misreads an unquoted argument containing parentheses (it fails with "-o was unexpected").
+    $query = "length(requiredResourceAccess[?resourceAppId=='$graphAppId'].resourceAccess[?id=='$PermissionId'] )"
     $existingCount = Invoke-Az ad app show --id $AppId --query $query -o tsv
     if ($existingCount -eq '0') {
         Invoke-Az ad app permission add --id $AppId --api $graphAppId --api-permissions "$PermissionId=$PermissionType" --output none | Out-Null
@@ -154,7 +156,8 @@ if ($Rbac) {
     # An earlier run without -Rbac leaves the mail permission declared on the app. Declared is harmless until someone
     # grants admin consent, but that grant is org-wide and would undo the RBAC scoping, so make it visible.
     foreach ($permissionId in $mailReadWriteId, $mailSendId) {
-        $declaredQuery = "length(requiredResourceAccess[?resourceAppId=='$graphAppId'].resourceAccess[?id=='$permissionId'])"
+        # Spaced so PowerShell quotes the argument (see Add-GraphPermission).
+        $declaredQuery = "length(requiredResourceAccess[?resourceAppId=='$graphAppId'].resourceAccess[?id=='$permissionId'] )"
         if ((Invoke-Az ad app show --id $mailboxAppId --query $declaredQuery -o tsv) -ne '0') {
             Write-Warning "The mailbox app still declares a Microsoft Graph mail permission from an earlier run. Remove it under API permissions in Entra, and check admin consent was never granted for it, or the app keeps access to every mailbox."
             break
