@@ -14,11 +14,20 @@ An https:// URI ending in /signin-oidc to add to the dashboard app. Leave it out
 .PARAMETER IncludeMailSend
 Also grants the mailbox app the Mail.Send permission, for sending client reports through Microsoft Graph.
 
+.PARAMETER Rbac
+Prepare the mailbox app for Exchange RBAC for Applications, which Microsoft recommends in place of Application Access
+Policies. It skips the Microsoft Graph mail permission in Entra, creates the app's service principal (Exchange needs
+one) and prints the IDs the Exchange commands use. Never grant admin consent to the mailbox app when you use this: an
+Entra grant is not limited to one mailbox, so it would undo the scoping.
+
 .PARAMETER SecretYears
 How many years the new client secrets last. Defaults to 2.
 
 .EXAMPLE
 ./create-dotmarc-apps.ps1 -DashboardRedirectUri https://dotmarc.example.com/signin-oidc
+
+.EXAMPLE
+./create-dotmarc-apps.ps1 -Rbac -DashboardRedirectUri https://dotmarc.example.com/signin-oidc
 #>
 [CmdletBinding()]
 param(
@@ -26,6 +35,8 @@ param(
     [string]$DashboardRedirectUri = '',
 
     [switch]$IncludeMailSend,
+
+    [switch]$Rbac,
 
     [ValidateRange(1, 100)]
     [int]$SecretYears = 2
@@ -128,13 +139,39 @@ $mailboxAppId = New-OrExistingApp -DisplayName 'dotmarc-mailbox'
 $dashboardAppId = New-OrExistingApp -DisplayName 'dotmarc-dashboard'
 
 Invoke-Az ad app update --id $mailboxAppId --sign-in-audience AzureADMyOrg --output none | Out-Null
-Add-GraphPermission -AppId $mailboxAppId -PermissionId $mailReadWriteId -PermissionType Role
-if ($IncludeMailSend) {
-    Add-GraphPermission -AppId $mailboxAppId -PermissionId $mailSendId -PermissionType Role
+if (-not $Rbac) {
+    Add-GraphPermission -AppId $mailboxAppId -PermissionId $mailReadWriteId -PermissionType Role
+    if ($IncludeMailSend) {
+        Add-GraphPermission -AppId $mailboxAppId -PermissionId $mailSendId -PermissionType Role
+    }
 }
 Invoke-Az ad app update --id $dashboardAppId --sign-in-audience AzureADMyOrg --enable-id-token-issuance true --output none | Out-Null
 Add-DashboardRedirectUri -AppId $dashboardAppId
 Add-GraphPermission -AppId $dashboardAppId -PermissionId $userReadId -PermissionType Scope
+
+$mailboxServicePrincipalId = ''
+if ($Rbac) {
+    # An earlier run without -Rbac leaves the mail permission declared on the app. Declared is harmless until someone
+    # grants admin consent, but that grant is org-wide and would undo the RBAC scoping, so make it visible.
+    foreach ($permissionId in $mailReadWriteId, $mailSendId) {
+        $declaredQuery = "length(requiredResourceAccess[?resourceAppId=='$graphAppId'].resourceAccess[?id=='$permissionId'])"
+        if ((Invoke-Az ad app show --id $mailboxAppId --query $declaredQuery -o tsv) -ne '0') {
+            Write-Warning "The mailbox app still declares a Microsoft Graph mail permission from an earlier run. Remove it under API permissions in Entra, and check admin consent was never granted for it, or the app keeps access to every mailbox."
+            break
+        }
+    }
+
+    # Exchange's RBAC for Applications points at the app's service principal, which an app registration doesn't have
+    # until something creates it (admin consent normally would, and must not be used here).
+    $mailboxServicePrincipalId = Invoke-Az ad sp list --filter "appId eq '$mailboxAppId'" --query '[0].id' -o tsv
+    if (-not $mailboxServicePrincipalId) {
+        $mailboxServicePrincipalId = Invoke-Az ad sp create --id $mailboxAppId --query id -o tsv
+        Write-Host "Created the service principal for '$mailboxAppId' ($mailboxServicePrincipalId)."
+    }
+    else {
+        Write-Host "Reusing the service principal for '$mailboxAppId' ($mailboxServicePrincipalId)."
+    }
+}
 
 $mailboxSecret = Invoke-Az ad app credential reset --id $mailboxAppId --append --display-name dotMARC --years $SecretYears --query password -o tsv
 $dashboardSecret = Invoke-Az ad app credential reset --id $dashboardAppId --append --display-name dotMARC --years $SecretYears --query password -o tsv
@@ -163,18 +200,40 @@ For Azure Container Apps, its hostname is only known after deployment.
 '@
 }
 
-$mailPermissions = 'Mail.ReadWrite'
-if ($IncludeMailSend) {
-    $mailPermissions += ' and Mail.Send'
+if ($Rbac) {
+    $exchangeRole = if ($IncludeMailSend) { 'Application Mail Full Access' } else { 'Application Mail.ReadWrite' }
+    Write-Host @"
+
+The mailbox app has NO Microsoft Graph permission in Entra, on purpose: you give it access inside Exchange Online
+with RBAC for Applications, limited to the DMARC reports mailbox. Do NOT grant admin consent to the mailbox app,
+because an Entra grant is not limited to one mailbox and would undo the scoping.
+
+Follow the RBAC for Applications steps in the dotMARC deployment guide. You will need:
+
+  Application (client) ID:        $mailboxAppId
+  Service principal object ID:    $mailboxServicePrincipalId
+  Exchange application role:      $exchangeRole
+"@
+}
+else {
+    $mailPermissions = 'Mail.ReadWrite'
+    if ($IncludeMailSend) {
+        $mailPermissions += ' and Mail.Send'
+    }
+
+    Write-Host @"
+
+The mailbox app has Microsoft Graph application permission(s): $mailPermissions.
+Do not grant its admin consent until you have restricted it to the intended mailbox in Exchange Online, using
+the steps in the dotMARC deployment guide. Microsoft recommends RBAC for Applications for this; run this script
+again with -Rbac to set the app up for it instead. If you restrict it with an Application Access Policy, grant
+consent afterwards with:
+
+  az ad app permission admin-consent --id $mailboxAppId
+"@
 }
 
 Write-Host @"
-
-The mailbox app has Microsoft Graph application permission(s): $mailPermissions.
-Do not grant its admin consent until you have restricted it to the intended mailbox using the
-Exchange Application Access Policy steps in the dotMARC deployment guide. Then grant consent with:
-
-  az ad app permission admin-consent --id $mailboxAppId
 
 The dashboard app has the delegated User.Read permission. If your tenant requires administrator
 approval for sign-in, grant consent with:
