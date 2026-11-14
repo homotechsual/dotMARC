@@ -9,9 +9,11 @@ for the full design.
 dotMARC needs **two separate** Entra app registrations: do not reuse one for both purposes:
 
 To create both registrations and their client secrets with Azure CLI, sign in to the intended tenant
-and run [`scripts/entra/create-dotmarc-apps.sh`](scripts/entra/create-dotmarc-apps.sh) in Bash. Pass
-`--dashboard-redirect-uri https://<your-host>/signin-oidc` when the host is known, or add the redirect
-URI after deploying to Azure Container Apps. Add `--include-mail-send` if you plan to send client
+and run [`scripts/entra/create-dotmarc-apps.ps1`](scripts/entra/create-dotmarc-apps.ps1) in PowerShell
+or [`scripts/entra/create-dotmarc-apps.sh`](scripts/entra/create-dotmarc-apps.sh) in Bash. Pass
+`-DashboardRedirectUri` (PowerShell) or `--dashboard-redirect-uri` (Bash) with
+`https://<your-host>/signin-oidc` when the host is known, or add the redirect URI after deploying to
+Azure Container Apps. Add `-IncludeMailSend` or `--include-mail-send` if you plan to send client
 reports through Microsoft Graph. The script adds the Graph permissions but does not grant admin
 consent to the mailbox app; restrict mailbox access using the Exchange policy below first. Copy the
 secrets it prints, as they cannot be retrieved later.

@@ -1,13 +1,34 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 :::tip[Looking for setup scripts?]
 
-Use [`create-dotmarc-apps.sh`](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh)
-to create both registrations, add their Graph permissions, and generate client secrets. Sign in to
-the intended tenant with Azure CLI first. The script deliberately does not grant admin consent to the
-mailbox app until you have restricted its access using the Exchange steps below.
+Use the setup script, in [PowerShell](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.ps1)
+or [Bash](https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh), to create both
+registrations, add their Graph permissions, and generate client secrets. Sign in to the intended tenant with
+Azure CLI first (`az login`). The script deliberately does not grant admin consent to the mailbox app until you
+have restricted its access using the Exchange steps below.
 
 :::
 
-Run it in Azure Cloud Shell (Bash), or anywhere with Bash and a signed-in Azure CLI:
+Run it in Azure Cloud Shell, or anywhere with the Azure CLI signed in. Choose the version for your shell:
+
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/entra/create-dotmarc-apps.ps1 -OutFile create-dotmarc-apps.ps1
+./create-dotmarc-apps.ps1 -DashboardRedirectUri https://dotmarc.example.com/signin-oidc
+```
+
+If you don't know the hostname yet (Azure Container Apps assigns it during deployment), leave out
+`-DashboardRedirectUri` and add the deployed URL ending in `/signin-oidc` to the dashboard app after
+deployment. Add `-IncludeMailSend` if you plan to send [client reports](/docs/client-reports) through
+Microsoft Graph. If PowerShell refuses to run the downloaded script, run
+`Unblock-File ./create-dotmarc-apps.ps1` first, or `Set-ExecutionPolicy -Scope Process RemoteSigned`.
+
+</TabItem>
+<TabItem value="bash" label="Bash">
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/entra/create-dotmarc-apps.sh
@@ -17,5 +38,10 @@ bash create-dotmarc-apps.sh --dashboard-redirect-uri https://dotmarc.example.com
 If you don't know the hostname yet (Azure Container Apps assigns it during deployment), omit
 `--dashboard-redirect-uri` and add the deployed URL ending in `/signin-oidc` to the dashboard app
 after deployment. Add `--include-mail-send` if you plan to send [client reports](/docs/client-reports)
-through Microsoft Graph. The script prints the two client IDs and newly-created secrets; copy the
-secrets when shown. Each run creates additional secrets for the reused app registrations.
+through Microsoft Graph.
+
+</TabItem>
+</Tabs>
+
+Either script prints the two client IDs and newly-created secrets; copy the secrets when shown. Each run
+creates additional secrets for the reused app registrations.
