@@ -2939,9 +2939,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@homotechsual/docusaurus-theme-waypoint@npm:^1.0.1":
-  version: 1.0.1
-  resolution: "@homotechsual/docusaurus-theme-waypoint@npm:1.0.1"
+"@homotechsual/docusaurus-theme-waypoint@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@homotechsual/docusaurus-theme-waypoint@npm:1.1.0"
   peerDependencies:
     "@docusaurus/core": ">=3.0.0 <4.0.0"
     "@docusaurus/plugin-content-docs": ">=3.0.0 <4.0.0"
@@ -2950,7 +2950,7 @@ __metadata:
     "@mdx-js/react": ">=3.0.0 <4.0.0"
     react: ^18.0.0 || ^19.0.0
     react-dom: ^18.0.0 || ^19.0.0
-  checksum: 10c0/1f3dede4dc777008f9ec05c0d861770541a967705982e6e92360fa885c738f9b6250f280df1a9bc23ebb4d3832c95700487fe1f6d34a8927cba0803722227ec1
+  checksum: 10c0/6e8fa0cb4e6d3d89808156d9f9100781f3e53fb98f03acf8c48b2a581f727dc5305cf78634958c60449b4090da6e7a28c78c770d707e27d5324be2d346be7c4a
   languageName: node
   linkType: hard
 
@@ -7386,7 +7386,7 @@ __metadata:
     "@homotechsual/docusaurus-og": "npm:1.0.0-alpha.133-homotechsual.1"
     "@homotechsual/docusaurus-plugin-faqs": "npm:^1.0.2"
     "@homotechsual/docusaurus-plugin-plausible": "npm:^1.1.1"
-    "@homotechsual/docusaurus-theme-waypoint": "npm:^1.0.1"
+    "@homotechsual/docusaurus-theme-waypoint": "npm:^1.1.0"
     "@mdx-js/react": "npm:^3.1.1"
     "@tailwindcss/postcss": "npm:^4.3.3"
     "@types/react": "npm:^19.3.0"

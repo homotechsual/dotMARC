@@ -169,6 +169,8 @@ const config: Config = {
   themeConfig: {
     waypoint: {
       frontMatterKey: 'stepMode',
+      // Only H2s are steps; H3s are parts of their step, not steps of their own.
+      headingLevels: [2],
       storageNamespace: 'dotmarc-docs',
     },
     codeblock: {
