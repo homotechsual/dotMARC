@@ -176,6 +176,36 @@ body::before {
   }
 }
 
+/* The Sponsor link in the navbar: a heart that beats on hover, as on homotechsual.dev. */
+.sponsorship-link {
+  display: flex;
+  align-items: center;
+}
+
+.sponsorship-link::before {
+  content: '';
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: 0.5rem;
+  background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSIjYzk2MTk4IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik02LjczNiA0QzQuNjU3IDQgMi41IDUuODggMi41IDguNTE0YzAgMy4xMDcgMi4zMjQgNS45NiA0Ljg2MSA4LjEyYTI5LjY2IDI5LjY2IDAgMDA0LjU2NiAzLjE3NWwuMDczLjA0MS4wNzMtLjA0Yy4yNzEtLjE1My42NjEtLjM4IDEuMTMtLjY3NC45NC0uNTg4IDIuMTktMS40NDEgMy40MzYtMi41MDIgMi41MzctMi4xNiA0Ljg2MS01LjAxMyA0Ljg2MS04LjEyQzIxLjUgNS44OCAxOS4zNDMgNCAxNy4yNjQgNGMtMi4xMDYgMC0zLjgwMSAxLjM4OS00LjU1MyAzLjY0M2EuNzUuNzUgMCAwMS0xLjQyMiAwQzEwLjUzNyA1LjM4OSA4Ljg0MSA0IDYuNzM2IDR6TTEyIDIwLjcwM2wuMzQzLjY2N2EuNzUuNzUgMCAwMS0uNjg2IDBsLjM0My0uNjY3ek0xIDguNTEzQzEgNS4wNTMgMy44MjkgMi41IDYuNzM2IDIuNSA5LjAzIDIuNSAxMC44ODEgMy43MjYgMTIgNS42MDUgMTMuMTIgMy43MjYgMTQuOTcgMi41IDE3LjI2NCAyLjUgMjAuMTcgMi41IDIzIDUuMDUyIDIzIDguNTE0YzAgMy44MTgtMi44MDEgNy4wNi01LjM4OSA5LjI2MmEzMS4xNDYgMzEuMTQ2IDAgMDEtNS4yMzMgMy41NzZsLS4wMjUuMDEzLS4wMDcuMDAzLS4wMDIuMDAxLS4zNDQtLjY2Ni0uMzQzLjY2Ny0uMDAzLS4wMDItLjAwNy0uMDAzLS4wMjUtLjAxM0EyOS4zMDggMjkuMzA4IDAgMDExMCAyMC40MDhhMzEuMTQ3IDMxLjE0NyAwIDAxLTMuNjExLTIuNjMyQzMuOCAxNS41NzMgMSAxMi4zMzIgMSA4LjUxNHoiLz48L3N2Zz4=") 0 0 / contain no-repeat;
+}
+
+.sponsorship-link:hover {
+  color: #c96198;
+}
+
+.sponsorship-link:hover::before {
+  animation: heart 2000ms infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sponsorship-link:hover::before {
+    animation: none;
+  }
+}
+
 /* API Method selection styling */
 
 .api-method > .menu__link,

@@ -198,6 +198,7 @@ const config: Config = {
           href: 'https://github.com/sponsors/homotechsual',
           label: 'Sponsor',
           position: 'right',
+          className: 'sponsorship-link',
         },
         {
           to: 'https://github.com/homotechsual/dotMARC',
