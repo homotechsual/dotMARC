@@ -42,10 +42,11 @@ param initialAdminEmails string
 // template's `containerApp.ingress` and `postgresServer` resources declare those objects in
 // full, so a redeploy replaces a custom domain bound after the original deployment (Portal or
 // `az containerapp hostname add`) or Postgres storage/auth settings changed since, not just
-// merges into them. See deploy-to-azure.mdx's "Re-running the template later" section for the
-// what-if walkthrough and a by-hand fallback (the exact `az role definition create` /
-// `az containerapp update --set-env-vars` calls) that applies just this flag's effects without
-// touching anything else.
+// merges into them. For an installation that is already running, don't re-run this template
+// just to turn this on: scripts/azure/enable-mta-sts-hosting.ps1 (which deploys
+// mta-sts-hosting.bicep, built from the same role names as below, and sets the environment
+// variables) applies only this flag's effects. See deploy-to-azure.mdx's "Turn on MTA-STS hosting
+// for an existing install" section, which also has the what-if walkthrough for a full redeploy.
 @description('Enable MTA-STS policy hosting (see getting-started.mdx). Grants the container app a narrowly-scoped custom RBAC role to manage its own custom domains and managed certificates — off by default, since it widens the managed identity beyond Key Vault Secrets User.')
 param enableMtaStsHosting bool = false
 

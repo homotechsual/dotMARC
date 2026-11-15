@@ -28,9 +28,21 @@ needs, permanently, whether or not you ever turn the feature on. If you're using
 proxy instead, add the `on_demand_tls`/`:443` blocks from `Caddyfile.selfhosted` to your own Caddy
 config - or the equivalent on-demand-certificate feature if you're not using Caddy.
 
-**On [Azure](./deploy-to-azure.mdx):** redeploy the Bicep template with `enableMtaStsHosting` set
-to `true` - this grants the Container App the extra permissions it needs to manage its own custom
-domains and certificates.
+**On [Azure](./deploy-to-azure.mdx):** the Container App needs extra permissions to manage its own
+custom domains and certificates. On a new deployment, set `enableMtaStsHosting` to `true` in the
+template. On one that's already running, use the targeted script in
+[step 8 of the Azure guide](./deploy-to-azure.mdx#8-turn-on-mta-sts-hosting-for-an-existing-install),
+which changes nothing else.
+
+:::danger[On Azure, rebuilding dotMARC can change the hosting hostname]
+
+Customers' CNAMEs point at the Container App's generated `azurecontainerapps.io` hostname, and that
+changes if the Container Apps environment (or the whole resource group) is deleted and recreated.
+Every hosted domain's records then need updating. See the warning in
+[step 8 of the Azure guide](./deploy-to-azure.mdx#8-turn-on-mta-sts-hosting-for-an-existing-install)
+for what to note beforehand and what to do afterwards.
+
+:::
 
 Either way, set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to -
 typically this deployment's own hostname (its `*.azurecontainerapps.io` hostname on Azure - see the
@@ -39,7 +51,7 @@ note further down on why).
 <Checklist id="mta-sts-hosting-infrastructure" items={[
   "Set MtaSts__HostingHostname",
   "Docker: using docker-compose.selfhosted.yml, or added the on_demand_tls blocks to an existing reverse proxy",
-  "Azure: redeployed with enableMtaStsHosting set to true",
+  "Azure: enabled hosting (enableMtaStsHosting on a new deployment, or the script in step 8 of the Azure guide)",
 ]} />
 
 ## Enabling a domain
@@ -152,6 +164,12 @@ controls.
 | Waiting for certificate | DNS resolved; a TLS certificate is being issued. Usually resolves within a few minutes. On Azure, the detail says so while Azure is still issuing it. |
 | Active | The policy is live and serving correctly. |
 | Failed | Something regressed after being Active, or provisioning failed. Check the detail message on the domain's MTA-STS tab. |
+
+When a domain stops working, the detail message first says whether its CNAME still points at this deployment. If it
+now points somewhere else (typically the old hostname after the deployment was rebuilt on Azure), or has gone, the
+message names where it points and what to change it to, instead of just saying the policy stopped being served. Fix
+the record (**Push DNS Records** does it where your DNS provider is supported) and the domain should recover on its next
+check, with no need to disable and re-enable it.
 
 A domain re-checks automatically on a schedule (faster while onboarding, slower once Active). The refresh button
 beside **Policy hosting status** checks it straight away. Give it a few minutes after a DNS change before assuming

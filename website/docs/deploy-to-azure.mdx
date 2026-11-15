@@ -16,12 +16,12 @@ you don't need to jump between pages. Start with [what you'll need](#what-youll-
 with billing set up.
 
 <Checklist id="deploy-to-azure" items={[
-  {text: "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)", step: "dashboard-app-registration-delegated-sign-in"},
+  {text: "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)", step: "microsoft-entra-setup"},
   {text: "Chose the Azure subscription and resource group (step 1)", step: "1-choose-the-subscription-and-resource-group"},
-  {text: "Deployed through the portal button or az deployment group create (step 2)", step: "or-deploy-with-the-command-line"},
+  {text: "Deployed through the portal button or az deployment group create (step 2)", step: "2-deploy"},
   {text: "Found the resource names for this deployment (step 3)", step: "3-find-the-resources-this-deployment-created"},
   {text: "Registered the deployed hostname as the dashboard app's OIDC redirect URI (step 4)", step: "4-register-the-deployed-hostname-as-an-oidc-redirect-uri"},
-  {text: "Populated the three Key Vault secrets, re-applied the secret references and restarted the revision (step 5)", step: "5c-re-apply-the-secret-references-and-restart"},
+  {text: "Populated the three Key Vault secrets, re-applied the secret references and restarted the revision (step 5)", step: "5-populate-key-vault"},
   {text: "Confirmed the revision is Healthy and Running (step 6)", step: "6-check-its-healthy"},
 ]} />
 
@@ -561,19 +561,130 @@ only safe when the older release remains compatible with the current schema. A d
 only ever recorded `:latest` also has no reliable historical image target; choose the previous
 release tag explicitly.
 
-## 8. Re-running the template later (e.g. to turn on MTA-STS hosting)
+## 8. Turn on MTA-STS hosting for an existing install
 
-`enableMtaStsHosting` is off by default, so enabling it (or making any other change) usually means
-re-running `az deployment group create` against a resource group that's no longer in exactly the
-state the template describes: you've likely since bound a custom domain to the Container App
-(through the Portal, or `az containerapp hostname add`), and Azure may have changed Postgres
-storage/tier/Entra-auth settings that aren't declared in `main.bicep` at all. ARM deployments only
-touch what's declared, but for a property Bicep explicitly declares as a whole object (this
-template's `ingress` block, or `flexibleServers`' `storage`/`authConfig`), a redeploy replaces that
+Hosting [MTA-STS policies](./mta-sts.mdx) for your domains has two stages, and this step is the first:
+
+1. **In Azure (this step).** Give dotMARC the two narrow permissions it needs to manage its own custom domains and
+   certificates, and tell it its hosting hostname. You do this once per deployment.
+2. **In dotMARC.** Enable MTA-STS for each domain and push its DNS records. See
+   [MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain).
+
+:::danger[If you tear down or redeploy dotMARC on Azure, the hostname can change and every MTA-STS record breaks]
+
+Customers' `mta-sts.<domain>` CNAME records point at the Container App's generated hostname
+(`<app>.<code>.<region>.azurecontainerapps.io`). The `<code>` part belongs to the **Container Apps environment**. Delete
+and recreate the environment (or the whole resource group) and you get a **new hostname**, even with the same names and
+region. The `asuid.mta-sts.<domain>` ownership TXT records are also tied to the environment, so their values change too.
+
+Every domain you host then needs its records updated, because the old CNAMEs point at a hostname that no longer serves
+dotMARC. Until they are updated, policies stop being served for those domains, and a CNAME left behind is a record
+pointing at a name you don't own any more. Deleting only the Container App keeps the hostname, but its custom domain
+bindings and certificates are lost until dotMARC re-creates them.
+
+**Before you tear anything down,** note the hosting hostname (the script below prints it), and list the domains with
+MTA-STS enabled. **After you redeploy,** run the script in this step again, then update the records for every hosted
+domain (a domain's **MTA-STS** tab shows the new target, and **Push DNS Records** updates it where dotMARC supports
+your DNS provider). You can't avoid this with your own custom domain in front: Azure's free managed certificates
+require the CNAME to point directly at the generated hostname.
+
+:::
+
+### Can I reuse the Azure Portal deployment?
+
+You can, but it isn't the easiest route. The template has the `enableMtaStsHosting` and `mtaStsHostingHostname`
+parameters, so redeploying it with `enableMtaStsHosting` set to `true` and the same values you used before does work.
+But a redeploy re-applies **everything** the template declares (PostgreSQL, the Container App, its ingress, Key Vault
+references), which can undo changes you made after the first deployment, and can trigger the Key Vault problem
+described in [step 5c](#5c-re-apply-the-secret-references-and-restart). The script here changes only what MTA-STS needs.
+
+### Run the script
+
+Use Azure Cloud Shell with the **PowerShell** shell type (see [Use PowerShell](#use-powershell)), signed in to the
+subscription that holds dotMARC. You need **Owner** on the resource group. Replace `<your-resource-group>`:
+
+```powershell
+$RG = '<your-resource-group>'
+Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/azure/enable-mta-sts-hosting.ps1 -OutFile enable-mta-sts-hosting.ps1
+
+# See what it would do first. This changes nothing.
+./enable-mta-sts-hosting.ps1 -ResourceGroup $RG -PreviewOnly
+
+# Then do it.
+./enable-mta-sts-hosting.ps1 -ResourceGroup $RG
+```
+
+If you didn't deploy with the default name, add `-Name <your-app-name>`. The script:
+
+1. Checks the subscription, resource group, Container App and its managed identity, and shows the current revision's
+   health.
+2. Creates the two custom roles and assigns them to the app's managed identity
+   ([`infra/mta-sts-hosting.bicep`](https://github.com/homotechsual/dotMARC/blob/main/infra/mta-sts-hosting.bicep)).
+   Nothing else is touched. The roles get the same names the full template would give them, so a later full redeploy
+   adopts them instead of clashing.
+3. Sets the `MtaSts__*` environment variables, including `MtaSts__HostingHostname`, which defaults to the app's own
+   hostname. This creates a new revision.
+4. Waits for that revision to be healthy, and prints the hostname customers' CNAMEs must point at.
+
+It is safe to run again. It doesn't write any DNS records or touch your domains: that is stage 2, inside dotMARC.
+
+<details>
+<summary>If the new revision can't read its secrets</summary>
+
+Creating a revision can fail with `Unable to get value using Managed identity System for secret ...`, even though the
+identity, the secrets and the Key Vault role are all fine. The script spots this, re-applies the Key Vault references
+and tries once more. If you are doing it by hand, or the script gives up, this is the same fix as
+[step 5c](#5c-re-apply-the-secret-references-and-restart): re-apply all three references together, restart the latest
+revision, then repeat the change that failed.
+
+</details>
+
+<details>
+<summary>Doing it without the script (Bash or any shell)</summary>
+
+The script is PowerShell only. In another shell, the same two changes are:
+
+```bash
+RG='<your-resource-group>'
+APP='dotmarc'
+SUBSCRIPTION=$(az account show --query id -o tsv)
+ENVIRONMENT=$(az containerapp show -g "$RG" -n "$APP" --query 'properties.managedEnvironmentId' -o tsv | awk -F/ '{print $NF}')
+HOSTNAME=$(az containerapp show -g "$RG" -n "$APP" --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+# 1. The two roles and their assignments (download mta-sts-hosting.bicep from the repository's infra folder first).
+az deployment group create -g "$RG" --template-file mta-sts-hosting.bicep \
+  --parameters baseName="$APP" containerAppName="$APP" environmentName="$ENVIRONMENT"
+
+# 2. The environment variables. This creates a new revision.
+az containerapp update -g "$RG" -n "$APP" --set-env-vars \
+  "MtaSts__HostingHostname=$HOSTNAME" "MtaSts__Provisioner=Azure" \
+  "MtaSts__AzureSubscriptionId=$SUBSCRIPTION" "MtaSts__AzureResourceGroupName=$RG" \
+  "MtaSts__AzureContainerAppName=$APP" "MtaSts__AzureManagedEnvironmentName=$ENVIRONMENT"
+```
+
+Then check the revision is healthy before you change any DNS records:
+
+```bash
+az containerapp revision list -g "$RG" -n "$APP" --output table
+```
+
+If you run these from Git Bash on Windows, set `export MSYS_NO_PATHCONV=1` first, or any argument starting with `/` is
+turned into a Windows path.
+
+</details>
+
+<details>
+<summary>Re-running the whole template later</summary>
+
+`enableMtaStsHosting` is off by default, so enabling it through the template (or making any other change) means
+re-running `az deployment group create` against a resource group that's no longer in exactly the state the template
+describes: you've likely since bound a custom domain to the Container App (through the Portal, or
+`az containerapp hostname add`), and Azure may have changed Postgres storage, tier or Entra-auth settings that aren't
+declared in `main.bicep` at all. ARM deployments only touch what's declared, but for a property Bicep declares as a
+whole object (this template's `ingress` block, or `flexibleServers`' `storage`/`authConfig`), a redeploy replaces that
 whole object with what the template says, silently dropping anything set outside it.
 
-**Always run `--what-if` before the real deployment** once a resource group has any post-deploy
-customization:
+**Always run `--what-if` before the real deployment** once a resource group has any post-deploy customization:
 
 ```powershell
 az deployment group what-if `
@@ -582,44 +693,30 @@ az deployment group what-if `
   --parameters infra/main.parameters.json
 ```
 
-<details>
-<summary>If the what-if diff shows changes you don't want, apply just the one change by hand</summary>
-
 Read the diff carefully. A `~ Microsoft.App/containerApps/<name>` entry removing
-`properties.configuration.ingress.customDomains`, or a `~ Microsoft.DBforPostgreSQL/flexibleServers/<name>`
-entry removing `storage`/`authConfig` properties, means applying it would break your custom domain
-or reset database settings you configured after the original deployment. Don't proceed if you see
-that; either update the template's parameters/resources to match current state first, or apply just
-the specific change you actually need by hand instead of the whole template:
+`properties.configuration.ingress.customDomains`, or a `~ Microsoft.DBforPostgreSQL/flexibleServers/<name>` entry
+removing `storage`/`authConfig` properties, means applying it would break your custom domain or reset database
+settings you configured after the original deployment. Don't proceed if you see that. Either update the template's
+parameters to match the current state first, or use the script above, which applies only the MTA-STS changes.
 
-```powershell
-# The two custom roles enableMtaStsHosting would have created, applied directly instead of via
-# a full template redeploy. See the roleDefinition resources in main.bicep for the exact
-# actions/description each one needs.
-az role definition create --role-definition <role JSON, one per role>
-az role assignment create --assignee-object-id <container app's principalId> `
-  --assignee-principal-type ServicePrincipal --role <role id> --scope <container app or environment resource id>
+Keep the real values in your parameters file: the sample's `REPLACE_ME` placeholders must be replaced, the PostgreSQL
+administrator password has to be supplied again (Azure doesn't return it from deployment history), and
+`initialAdminEmails` is required every time. Save `enableMtaStsHosting` as `true` and the real
+`mtaStsHostingHostname` so later deployments keep them.
 
-# The env vars enableMtaStsHosting's parameters would have set, merged onto the existing
-# container without touching anything else (existing env vars are left alone):
-az containerapp update --name $APP --resource-group $RG --set-env-vars `
-  "MtaSts__HostingHostname=<container app FQDN>" "MtaSts__Provisioner=Azure" `
-  "MtaSts__AzureSubscriptionId=<subscription id>" "MtaSts__AzureResourceGroupName=$RG" `
-  "MtaSts__AzureContainerAppName=$APP" "MtaSts__AzureManagedEnvironmentName=<environment name>"
-```
-
-:::tip[Git Bash]
-
-If you're running these `az` commands from Git Bash on Windows rather than PowerShell, any
-argument starting with `/` (every Azure resource ID) gets silently mangled into a Windows path by
-MSYS's path conversion, `MissingSubscription` errors on `az role assignment create` are the
-usual symptom. Set `export MSYS_NO_PATHCONV=1` first.
-
-:::
+If you created the two roles by hand with `az role definition create` rather than with the script, they have random IDs
+instead of the ones the template expects, and a full redeploy with `enableMtaStsHosting` on will fail because a role
+with that name already exists. Delete the hand-made roles first, or use the script, which creates them the way the
+template does.
 
 </details>
 
-Want to host MTA-STS policies for customer domains? See [MTA-STS: hosting infrastructure](./mta-sts.mdx#hosting-infrastructure-one-time)
-for the one-time `enableMtaStsHosting` setup - each domain you later enable also needs an extra
-domain-ownership TXT record Container Apps requires that a self-hosted deployment doesn't, covered
-in [MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain).
+<Checklist id="deploy-to-azure-mta-sts" items={[
+  "Ran the script with -PreviewOnly and read what it would change",
+  "Ran the script and saw the new revision become healthy",
+  "Noted the hosting hostname it printed, in case the deployment is ever rebuilt",
+]} />
+
+Next, enable MTA-STS for a domain inside dotMARC: see
+[MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain). Each domain also needs the extra Azure domain-ownership TXT
+record, which dotMARC shows you there.
