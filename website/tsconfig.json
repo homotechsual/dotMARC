@@ -7,5 +7,6 @@
       "@theme/Waypoint/*": ["./node_modules/@homotechsual/docusaurus-theme-waypoint/theme/Waypoint/*"]
     },
     "ignoreDeprecations": "6.0"
-  }
+  },
+  "exclude": ["build", "node_modules"]
 }
