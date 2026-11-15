@@ -4,7 +4,7 @@
     "baseUrl": ".",
     "paths": {
       "@site/*": ["./*"],
-      "@theme/Waypoint/*": ["./packages/docusaurus-theme-waypoint/theme/Waypoint/*"]
+      "@theme/Waypoint/*": ["./node_modules/@homotechsual/docusaurus-theme-waypoint/theme/Waypoint/*"]
     },
     "ignoreDeprecations": "6.0"
   }

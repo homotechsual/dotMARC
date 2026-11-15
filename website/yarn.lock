@@ -2939,6 +2939,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@homotechsual/docusaurus-theme-waypoint@npm:^1.0.1":
+  version: 1.0.1
+  resolution: "@homotechsual/docusaurus-theme-waypoint@npm:1.0.1"
+  peerDependencies:
+    "@docusaurus/core": ">=3.0.0 <4.0.0"
+    "@docusaurus/plugin-content-docs": ">=3.0.0 <4.0.0"
+    "@docusaurus/theme-common": ">=3.0.0 <4.0.0"
+    "@docusaurus/utils-validation": ">=3.0.0 <4.0.0"
+    "@mdx-js/react": ">=3.0.0 <4.0.0"
+    react: ^18.0.0 || ^19.0.0
+    react-dom: ^18.0.0 || ^19.0.0
+  checksum: 10c0/1f3dede4dc777008f9ec05c0d861770541a967705982e6e92360fa885c738f9b6250f280df1a9bc23ebb4d3832c95700487fe1f6d34a8927cba0803722227ec1
+  languageName: node
+  linkType: hard
+
 "@hookform/error-message@npm:^2.0.1":
   version: 2.0.1
   resolution: "@hookform/error-message@npm:2.0.1"
@@ -7361,13 +7376,17 @@ __metadata:
     "@docusaurus/faster": "npm:3.10.2"
     "@docusaurus/module-type-aliases": "npm:3.10.2"
     "@docusaurus/plugin-client-redirects": "npm:3.10.2"
+    "@docusaurus/plugin-content-docs": "npm:3.10.2"
     "@docusaurus/preset-classic": "npm:3.10.2"
+    "@docusaurus/theme-common": "npm:3.10.2"
     "@docusaurus/tsconfig": "npm:3.10.2"
     "@docusaurus/types": "npm:3.10.2"
+    "@docusaurus/utils-validation": "npm:3.10.2"
     "@fontsource/inter": "npm:^5.3.0"
     "@homotechsual/docusaurus-og": "npm:1.0.0-alpha.133-homotechsual.1"
     "@homotechsual/docusaurus-plugin-faqs": "npm:^1.0.2"
     "@homotechsual/docusaurus-plugin-plausible": "npm:^1.1.1"
+    "@homotechsual/docusaurus-theme-waypoint": "npm:^1.0.1"
     "@mdx-js/react": "npm:^3.1.1"
     "@tailwindcss/postcss": "npm:^4.3.3"
     "@types/react": "npm:^19.3.0"
