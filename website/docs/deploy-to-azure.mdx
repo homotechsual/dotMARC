@@ -56,6 +56,9 @@ Azure assigns the app's hostname during deployment, so you add the dashboard's r
 
 ## Azure permissions and shell
 
+Before you deploy, check you have the right permissions in Azure and that you are working in PowerShell. The next two
+parts cover each.
+
 ### Check your Azure permissions
 
 Two different things need permission, and they are easy to mix up:
@@ -105,6 +108,9 @@ az group create --name $RG --location uksouth
 Remember the name you chose, you will use it in every later step.
 
 ## 2. Deploy
+
+This step has three parts: the values the deployment form asks for, then one of two ways to run the deployment, the
+portal button or the command line. Use whichever you prefer, not both.
 
 ### Fill in the deployment form
 
