@@ -161,6 +161,89 @@ public sealed class MtaStsCheckCycleTests : IAsyncLifetime
         Assert.Contains("Provisioning failed", domain.MtaStsCheckDetail);
     }
 
+    private async Task<Domain> RunCheckAsync(
+        MtaStsStatus status, FakeMtaStsDnsVerifier dnsVerifier, FakeMtaStsServingVerifier servingVerifier, FakeMtaStsHostProvisioner provisioner, string hostingHostname = HostingHostname)
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain
+        {
+            Name = "contoso.io",
+            FirstSeenUtc = DateTimeOffset.UtcNow,
+            MtaStsEnabled = true,
+            MtaStsStatus = status,
+            MtaStsCheckedUtc = DateTimeOffset.UtcNow.AddHours(-25)
+        });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        await service.RunMtaStsCheckCycleAsync(context, dnsVerifier, servingVerifier, provisioner, hostingHostname, CancellationToken.None);
+        return context.Domains.Single();
+    }
+
+    [Fact]
+    public async Task RunMtaStsCheckCycleAsync_SaysTheCnamePointsElsewhere_WhenAnActiveDomainStopsServing()
+    {
+        var dnsVerifier = new FakeMtaStsDnsVerifier { Result = MtaStsDnsVerificationResult.PointsElsewhere, CurrentTarget = "old.region.azurecontainerapps.io" };
+        var domain = await RunCheckAsync(MtaStsStatus.Active, dnsVerifier, new FakeMtaStsServingVerifier { IsServing = false }, new FakeMtaStsHostProvisioner(), "new.region.azurecontainerapps.io");
+
+        Assert.Equal(MtaStsStatus.Failed, domain.MtaStsStatus);
+        Assert.Contains("points at old.region.azurecontainerapps.io, not at new.region.azurecontainerapps.io", domain.MtaStsCheckDetail);
+        Assert.Contains("asuid", domain.MtaStsCheckDetail);
+        Assert.DoesNotContain("stopped serving", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
+    public async Task RunMtaStsCheckCycleAsync_SaysTheCnameIsMissing_WhenAnActiveDomainStopsServingAndHasNoCname()
+    {
+        var dnsVerifier = new FakeMtaStsDnsVerifier { Result = MtaStsDnsVerificationResult.NotFound };
+        var domain = await RunCheckAsync(MtaStsStatus.Active, dnsVerifier, new FakeMtaStsServingVerifier { IsServing = false }, new FakeMtaStsHostProvisioner());
+
+        Assert.Equal(MtaStsStatus.Failed, domain.MtaStsStatus);
+        Assert.Contains("has no CNAME record", domain.MtaStsCheckDetail);
+        Assert.DoesNotContain("asuid", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
+    public async Task RunMtaStsCheckCycleAsync_ExplainsTheMovedCname_InsteadOfAProvisioningError()
+    {
+        var dnsVerifier = new FakeMtaStsDnsVerifier { Result = MtaStsDnsVerificationResult.PointsElsewhere, CurrentTarget = "old.example.net" };
+        var domain = await RunCheckAsync(MtaStsStatus.Failed, dnsVerifier, new FakeMtaStsServingVerifier(), new FakeMtaStsHostProvisioner { ShouldThrowOnEnsure = true });
+
+        Assert.Equal(MtaStsStatus.Failed, domain.MtaStsStatus);
+        Assert.Contains("points at old.example.net", domain.MtaStsCheckDetail);
+        Assert.DoesNotContain("Provisioning failed", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
+    public async Task RunMtaStsCheckCycleAsync_GoesBackToPendingDns_WhenTheCnameMovesWhileWaitingForACertificate()
+    {
+        var dnsVerifier = new FakeMtaStsDnsVerifier { Result = MtaStsDnsVerificationResult.PointsElsewhere, CurrentTarget = "old.example.net" };
+        var domain = await RunCheckAsync(MtaStsStatus.PendingCertificate, dnsVerifier, new FakeMtaStsServingVerifier { IsServing = false }, new FakeMtaStsHostProvisioner());
+
+        Assert.Equal(MtaStsStatus.PendingDns, domain.MtaStsStatus);
+        Assert.Contains("points at old.example.net", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
+    public async Task RunMtaStsCheckCycleAsync_KeepsTheGenericMessage_WhenTheCnameLookupFails()
+    {
+        var dnsVerifier = new FakeMtaStsDnsVerifier { ShouldThrowOnVerify = true };
+        var domain = await RunCheckAsync(MtaStsStatus.Active, dnsVerifier, new FakeMtaStsServingVerifier { IsServing = false }, new FakeMtaStsHostProvisioner());
+
+        Assert.Equal(MtaStsStatus.Failed, domain.MtaStsStatus);
+        Assert.Contains("stopped serving", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
+    public async Task RunMtaStsCheckCycleAsync_DoesNotLookUpTheCname_WhenAnActiveDomainIsServingFine()
+    {
+        var dnsVerifier = new FakeMtaStsDnsVerifier { Result = MtaStsDnsVerificationResult.PointsElsewhere };
+        var domain = await RunCheckAsync(MtaStsStatus.Active, dnsVerifier, new FakeMtaStsServingVerifier { IsServing = true }, new FakeMtaStsHostProvisioner());
+
+        Assert.Equal(MtaStsStatus.Active, domain.MtaStsStatus);
+        Assert.Empty(dnsVerifier.VerifiedDomains);
+    }
+
     [Fact]
     public async Task RunMtaStsCheckCycleAsync_WaitsForTheCertificate_WhileAzureIsStillIssuingIt()
     {

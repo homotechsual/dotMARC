@@ -16,7 +16,7 @@ public sealed class MtaStsDnsVerifier : IMtaStsDnsVerifier
 
     public MtaStsDnsVerifier(HttpClient http) => _http = http;
 
-    public async Task<MtaStsDnsVerificationResult> VerifyAsync(string domainName, string expectedHostingHostname, CancellationToken cancellationToken)
+    public async Task<MtaStsDnsVerification> VerifyAsync(string domainName, string expectedHostingHostname, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString($"mta-sts.{domainName}")}&type=CNAME");
         request.Headers.Accept.ParseAdd("application/dns-json");
@@ -28,7 +28,7 @@ public sealed class MtaStsDnsVerifier : IMtaStsDnsVerifier
         var cnameAnswers = parsed.Answer?.Where(a => a.Type == 5).ToList() ?? [];
         if (cnameAnswers.Count == 0)
         {
-            return MtaStsDnsVerificationResult.NotFound;
+            return new MtaStsDnsVerification(MtaStsDnsVerificationResult.NotFound);
         }
 
         // A canonical DNS name in the response carries a trailing dot (e.g. "dotmarc.app."); the
@@ -37,7 +37,9 @@ public sealed class MtaStsDnsVerifier : IMtaStsDnsVerifier
         var pointsHere = cnameAnswers.Any(a =>
             string.Equals(a.Data.TrimEnd('.'), expectedHostingHostname.TrimEnd('.'), StringComparison.OrdinalIgnoreCase));
 
-        return pointsHere ? MtaStsDnsVerificationResult.Resolved : MtaStsDnsVerificationResult.PointsElsewhere;
+        return pointsHere
+            ? new MtaStsDnsVerification(MtaStsDnsVerificationResult.Resolved, expectedHostingHostname.TrimEnd('.'))
+            : new MtaStsDnsVerification(MtaStsDnsVerificationResult.PointsElsewhere, cnameAnswers[0].Data.TrimEnd('.'));
     }
 
     private sealed record DnsOverHttpsResponse(

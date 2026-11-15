@@ -2,5 +2,5 @@ namespace DotMarc.MtaSts;
 
 public interface IMtaStsDnsVerifier
 {
-    Task<MtaStsDnsVerificationResult> VerifyAsync(string domainName, string expectedHostingHostname, CancellationToken cancellationToken);
+    Task<MtaStsDnsVerification> VerifyAsync(string domainName, string expectedHostingHostname, CancellationToken cancellationToken);
 }

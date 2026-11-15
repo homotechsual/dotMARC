@@ -1206,7 +1206,7 @@ public sealed class PollingService : BackgroundService
     {
         if (domain.MtaStsStatus == MtaStsStatus.PendingDns)
         {
-            var dnsResult = await dnsVerifier.VerifyAsync(domain.Name, hostingHostname, cancellationToken).ConfigureAwait(false);
+            var dnsResult = (await dnsVerifier.VerifyAsync(domain.Name, hostingHostname, cancellationToken).ConfigureAwait(false)).Result;
             switch (dnsResult)
             {
                 case MtaStsDnsVerificationResult.Resolved:
@@ -1243,7 +1243,8 @@ public sealed class PollingService : BackgroundService
         catch (Exception ex)
         {
             domain.MtaStsStatus = MtaStsStatus.Failed;
-            domain.MtaStsCheckDetail = $"Provisioning failed: {ex.Message}";
+            domain.MtaStsCheckDetail = await DescribeMovedCnameAsync(domain, dnsVerifier, hostingHostname, cancellationToken).ConfigureAwait(false)
+                ?? $"Provisioning failed: {ex.Message}";
             domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
             return;
         }
@@ -1256,19 +1257,69 @@ public sealed class PollingService : BackgroundService
             domain.MtaStsStatus = MtaStsStatus.Active;
             domain.MtaStsCheckDetail = null;
         }
-        else if (domain.MtaStsStatus == MtaStsStatus.Active)
+        else
         {
-            // Was working, isn't now - a regression, not an onboarding wait state.
-            domain.MtaStsStatus = MtaStsStatus.Failed;
-            domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} stopped serving the expected policy.";
-        }
-        else if (domain.MtaStsStatus != MtaStsStatus.Failed)
-        {
-            domain.MtaStsStatus = MtaStsStatus.PendingCertificate;
-            domain.MtaStsCheckDetail = "Waiting for the certificate to be issued.";
+            // Not serving. The most useful thing to say is whether the CNAME still points here: after a
+            // deployment is rebuilt its hostname can change, and every customer's record is then stale.
+            var movedCname = await DescribeMovedCnameAsync(domain, dnsVerifier, hostingHostname, cancellationToken).ConfigureAwait(false);
+            if (domain.MtaStsStatus == MtaStsStatus.Active)
+            {
+                // Was working, isn't now - a regression, not an onboarding wait state.
+                domain.MtaStsStatus = MtaStsStatus.Failed;
+                domain.MtaStsCheckDetail = movedCname ?? $"mta-sts.{domain.Name} stopped serving the expected policy.";
+            }
+            else if (domain.MtaStsStatus == MtaStsStatus.Failed)
+            {
+                domain.MtaStsCheckDetail = movedCname ?? domain.MtaStsCheckDetail;
+            }
+            else if (movedCname is not null)
+            {
+                // Waiting for a certificate, but the CNAME has gone: back to waiting for DNS.
+                domain.MtaStsStatus = MtaStsStatus.PendingDns;
+                domain.MtaStsCheckDetail = movedCname;
+            }
+            else
+            {
+                domain.MtaStsStatus = MtaStsStatus.PendingCertificate;
+                domain.MtaStsCheckDetail = "Waiting for the certificate to be issued.";
+            }
         }
 
         domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Explains a failed check when the domain's mta-sts CNAME no longer points at this
+    /// deployment: it was removed, or it points somewhere else (typically the old hostname after the
+    /// deployment was rebuilt). Returns null when the CNAME is fine or when the lookup itself
+    /// failed, so a transient DNS problem never replaces a real status with a guess.</summary>
+    internal static async Task<string?> DescribeMovedCnameAsync(
+        Domain domain,
+        IMtaStsDnsVerifier dnsVerifier,
+        string hostingHostname,
+        CancellationToken cancellationToken)
+    {
+        MtaStsDnsVerification verification;
+        try
+        {
+            verification = await dnsVerifier.VerifyAsync(domain.Name, hostingHostname, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+
+        var azureNote = hostingHostname.EndsWith(".azurecontainerapps.io", StringComparison.OrdinalIgnoreCase)
+            ? " (and the asuid ownership TXT record on Azure)"
+            : "";
+        return verification.Result switch
+        {
+            MtaStsDnsVerificationResult.PointsElsewhere =>
+                $"mta-sts.{domain.Name} points at {verification.CurrentTarget}, not at {hostingHostname}. " +
+                $"If dotMARC was redeployed its hostname may have changed. Update the CNAME{azureNote}; Push DNS Records does it where your DNS provider is supported.",
+            MtaStsDnsVerificationResult.NotFound =>
+                $"mta-sts.{domain.Name} has no CNAME record. Add one pointing at {hostingHostname}; Push DNS Records does it where your DNS provider is supported.",
+            _ => null
+        };
     }
 
     /// <summary>Writes one PollCycle row for a cycle that actually ran (never for one skipped due

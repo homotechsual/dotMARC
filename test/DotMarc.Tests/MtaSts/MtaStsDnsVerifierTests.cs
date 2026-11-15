@@ -21,7 +21,7 @@ public class MtaStsDnsVerifierTests
 
         var result = await verifier.VerifyAsync("contoso.io", "mta-sts.dotmarc.app", CancellationToken.None);
 
-        Assert.Equal(MtaStsDnsVerificationResult.NotFound, result);
+        Assert.Equal(MtaStsDnsVerificationResult.NotFound, result.Result);
         Assert.Contains("mta-sts.contoso.io", handler.Requests[0].RequestUri!.ToString());
         Assert.Contains("type=CNAME", handler.Requests[0].RequestUri!.ToString());
     }
@@ -36,7 +36,7 @@ public class MtaStsDnsVerifierTests
 
         var result = await verifier.VerifyAsync("contoso.io", "mta-sts.dotmarc.app", CancellationToken.None);
 
-        Assert.Equal(MtaStsDnsVerificationResult.Resolved, result);
+        Assert.Equal(MtaStsDnsVerificationResult.Resolved, result.Result);
     }
 
     [Fact]
@@ -49,7 +49,9 @@ public class MtaStsDnsVerifierTests
 
         var result = await verifier.VerifyAsync("contoso.io", "mta-sts.dotmarc.app", CancellationToken.None);
 
-        Assert.Equal(MtaStsDnsVerificationResult.PointsElsewhere, result);
+        Assert.Equal(MtaStsDnsVerificationResult.PointsElsewhere, result.Result);
+        // The live target is reported without its trailing dot, so a check can say where the record points now.
+        Assert.Equal("somewhere-else.example.com", result.CurrentTarget);
     }
 
     [Fact]
@@ -62,6 +64,6 @@ public class MtaStsDnsVerifierTests
 
         var result = await verifier.VerifyAsync("contoso.io", "mta-sts.dotmarc.app.", CancellationToken.None);
 
-        Assert.Equal(MtaStsDnsVerificationResult.Resolved, result);
+        Assert.Equal(MtaStsDnsVerificationResult.Resolved, result.Result);
     }
 }
