@@ -2542,7 +2542,9 @@
                   "Ok",
                   "MissingOwnRecord",
                   "Misconfigured",
-                  "MissingAuthorizationRecord"
+                  "MissingAuthorizationRecord",
+                  "OtherReportAddresses",
+                  "TooManyReportAddresses"
                 ],
                 "type": "string"
               },

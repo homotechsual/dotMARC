@@ -124,7 +124,8 @@ else
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAsync" title="Recheck now" />
                                 }
-                                @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured)
+                                @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured
+                                    or DmarcCheckStatus.OtherReportAddresses or DmarcCheckStatus.TooManyReportAddresses)
                                 {
                                     @if (_isPushingDmarcRecord)
                                     {

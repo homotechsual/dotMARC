@@ -14,5 +14,16 @@ public enum DmarcCheckStatus
     Ok,
     MissingOwnRecord,
     Misconfigured,
-    MissingAuthorizationRecord
+    MissingAuthorizationRecord,
+
+    /// <summary>The record's rua= includes dotMARC's mailbox and also other addresses, within
+    /// <see cref="DotMarc.Dns.DmarcDnsChecker.MaxReportAddresses"/> in total (typically a second tool being
+    /// trialled alongside dotMARC). Healthy: shown as information and never alerts, but a DNS push is still
+    /// offered so the other address can be removed.</summary>
+    OtherReportAddresses,
+
+    /// <summary>The record's rua= includes dotMARC's mailbox but lists more addresses than
+    /// <see cref="DotMarc.Dns.DmarcDnsChecker.MaxReportAddresses"/>. Receivers may only send reports to
+    /// the first few, so reports can stop reaching dotMARC. Counts as a fault and alerts.</summary>
+    TooManyReportAddresses
 }

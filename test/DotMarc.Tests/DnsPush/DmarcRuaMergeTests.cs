@@ -15,6 +15,14 @@ public sealed class DmarcRuaMergeTests
     }
 
     [Fact]
+    public void TryMerge_DropsOtherRuaAddresses_WhenTheMailboxIsAlreadyListedBesideThem()
+    {
+        var result = DmarcRuaMerge.TryMerge("v=DMARC1; p=reject; rua=mailto:other@example.com,mailto:correct@mjco.uk; pct=50", "correct@mjco.uk");
+
+        Assert.Equal("v=DMARC1; p=reject; rua=mailto:correct@mjco.uk; pct=50", result);
+    }
+
+    [Fact]
     public void TryMerge_AppendsRuaTag_WhenNoneExists()
     {
         var result = DmarcRuaMerge.TryMerge("v=DMARC1; p=quarantine", "correct@mjco.uk");

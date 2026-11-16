@@ -41,8 +41,36 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
                 policy);
         }
 
+        // dotMARC's mailbox is in rua=. Any other addresses beside it are information while there are few, and a
+        // fault once there are more than MaxReportAddresses: receivers are allowed to cap how many report
+        // addresses they send to (RFC 7489 section 6.2), and some only honour the first couple.
+        var distinctAddresses = ruaAddresses.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var otherAddresses = distinctAddresses
+            .Where(a => !string.Equals(a, mailboxAddress, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (distinctAddresses.Count > MaxReportAddresses)
+        {
+            return new DmarcCheckResult(DmarcCheckStatus.TooManyReportAddresses,
+                $"_dmarc.{domainName}'s rua= lists {distinctAddresses.Count} addresses ({string.Join(", ", distinctAddresses)}). "
+                + $"Some receivers only send reports to the first {MaxReportAddresses}, so reports may not reach {mailboxAddress}. "
+                + $"Keep {mailboxAddress} and at most {MaxReportAddresses - 1} other address.",
+                policy);
+        }
+
+        if (otherAddresses.Count > 0)
+        {
+            return new DmarcCheckResult(DmarcCheckStatus.OtherReportAddresses,
+                $"_dmarc.{domainName}'s rua= also sends reports to {string.Join(", ", otherAddresses)}. "
+                + "That is fine while you compare tools. Push the record to drop it when you are ready.",
+                policy);
+        }
+
         return new DmarcCheckResult(DmarcCheckStatus.Ok, null, policy);
     }
+
+    /// <summary>The most rua= addresses a record can list before reports may stop reaching all of them. Receivers
+    /// may cap the count (RFC 7489 section 6.2) and some only send to the first two. dotMARC's own address counts.</summary>
+    public const int MaxReportAddresses = 2;
 
     /// <summary>RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being
     /// monitored (the normal MSP shape), that mailbox's domain must publish this record proving it

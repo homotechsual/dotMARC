@@ -66,6 +66,7 @@ public static class ClientReportNextSteps
             case DmarcCheckStatus.MissingOwnRecord: yield return $"Publish a DMARC record for {name}."; break;
             case DmarcCheckStatus.Misconfigured: yield return $"Fix the DMARC record for {name}. Receivers may ignore it as it is."; break;
             case DmarcCheckStatus.MissingAuthorizationRecord: yield return reportingStep; break;
+            case DmarcCheckStatus.TooManyReportAddresses: yield return $"The DMARC record for {name} lists too many report addresses. Cut it to two or fewer so reports reach your reporting mailbox."; break;
         }
 
         if (domain.DmarcAuthorizationCheckStatus == DmarcAuthorizationCheckStatus.Missing) yield return reportingStep;

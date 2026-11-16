@@ -113,7 +113,7 @@ public class DmarcDnsCheckerTests
     }
 
     [Fact]
-    public async Task CheckAsync_MatchesRuaAddress_AmongMultipleCommaSeparatedAddresses()
+    public async Task CheckAsync_ReturnsOtherReportAddresses_WhenOneOtherAddressSitsBesideTheMailbox()
     {
         var (checker, handler) = CreateChecker();
         handler.ResponseBody = """
@@ -122,7 +122,63 @@ public class DmarcDnsCheckerTests
 
         var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
 
+        Assert.Equal(DmarcCheckStatus.OtherReportAddresses, result.Status);
+        Assert.Contains("other@example.com", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsOtherReportAddresses_WhenTheMailboxIsNotTheFirstAddress()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk,mailto:other@example.com\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.OtherReportAddresses, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsTooManyReportAddresses_WhenMoreThanTwoAddressesAreListed()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:a@example.com,mailto:b@example.com,mailto:rua.dmarc@mjco.uk\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.TooManyReportAddresses, result.Status);
+        Assert.Contains("3 addresses", result.Detail);
+        Assert.Contains("rua.dmarc@mjco.uk", result.Detail);
+        Assert.Equal(DmarcPolicyLevel.Quarantine, result.Policy!.Policy);
+    }
+
+    [Fact]
+    public async Task CheckAsync_CountsTheSameAddressOnce_EvenIfItIsListedTwice()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk,mailto:RUA.dmarc@mjco.uk!10m\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
         Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckAsync_StaysMisconfigured_WhenSeveralAddressesDoNotIncludeTheMailbox()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=quarantine; rua=mailto:a@example.com,mailto:b@example.com,mailto:c@example.com\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Misconfigured, result.Status);
     }
 
     [Fact]

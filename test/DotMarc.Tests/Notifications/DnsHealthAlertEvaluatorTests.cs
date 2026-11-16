@@ -66,6 +66,8 @@ public sealed class DnsHealthAlertEvaluatorTests
     [InlineData(DnsHealthItems.Dmarc, "MissingOwnRecord", DnsCheckHealth.Failing)]
     [InlineData(DnsHealthItems.Dmarc, "Misconfigured", DnsCheckHealth.Failing)]
     [InlineData(DnsHealthItems.Dmarc, "MissingAuthorizationRecord", DnsCheckHealth.Failing)]
+    [InlineData(DnsHealthItems.Dmarc, "OtherReportAddresses", DnsCheckHealth.Passing)]
+    [InlineData(DnsHealthItems.Dmarc, "TooManyReportAddresses", DnsCheckHealth.Failing)]
     [InlineData(DnsHealthItems.Dmarc, "NotChecked", DnsCheckHealth.Ignored)]
     [InlineData(DnsHealthItems.DmarcAuthorization, "Ok", DnsCheckHealth.Passing)]
     [InlineData(DnsHealthItems.DmarcAuthorization, "Missing", DnsCheckHealth.Failing)]

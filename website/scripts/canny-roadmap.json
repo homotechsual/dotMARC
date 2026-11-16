@@ -256,5 +256,14 @@
       "Halo will not close a ticket that nobody is assigned to, so tickets dotMARC opened could not be closed again when their alert resolved.",
       "Alert settings now has an Assign new tickets to setting. Pick an agent, or leave it on Do not assign if Halo assigns tickets itself through round robin, a rule or the ticket type default. The PSA docs also list the API agent permissions known to work, and there is a button to clear the cached Halo sign-in after changing them."
     ]
+  },
+  {
+    "title": "Multiple RUA Email Address Handling",
+    "version": "v0.11.0",
+    "status": "complete",
+    "details": [
+      "The DMARC check showed a plain tick whenever dotMARC's mailbox was anywhere in rua=, however many other addresses sat beside it. That hid a real risk, because receivers may only send reports to the first couple of addresses, and it gave no way to drop a second address once a trial of another tool was over.",
+      "The DMARC record check now reads every rua= address. dotMARC's mailbox beside one other address shows as OK, other rua: information that never raises an alert. dotMARC's mailbox beside two or more others shows as Too many rua addresses and does alert. Push via your DNS provider stays available in both cases, so you can rewrite rua= to dotMARC's mailbox alone when you are ready, after confirming the change."
+    ]
   }
 ]

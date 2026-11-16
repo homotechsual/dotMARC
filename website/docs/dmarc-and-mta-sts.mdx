@@ -50,6 +50,26 @@ v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@example.uk
 dotMARC's **DMARC record** check confirms a record exists, starts with `v=DMARC1`, and that its
 `rua=` matches the configured mailbox - not just that a DMARC record exists at all.
 
+### More than one `rua=` address
+
+A record can list several report addresses, separated by commas. That is useful while you trial dotMARC beside
+another DMARC tool, so dotMARC reads the list rather than only the first address:
+
+| What `rua=` lists | Status | Alerts? |
+| --- | --- | --- |
+| Only dotMARC's mailbox | OK | No |
+| dotMARC's mailbox and one other address | OK, other rua (information) | No |
+| dotMARC's mailbox and two or more others | Too many rua addresses | Yes |
+| Addresses that don't include dotMARC's mailbox | Misconfigured | Yes |
+
+Two is the limit because receivers may cap how many report addresses they send to
+([RFC 7489 §6.2](https://www.rfc-editor.org/rfc/rfc7489#section-6.2)), and some only honour the first couple. With
+more than two, reports can stop reaching dotMARC for some senders without anything looking broken.
+
+**Push via your DNS provider** stays available for the information and too-many statuses. It rewrites `rua=` to dotMARC's
+mailbox only and keeps every other tag, and shows you the change to confirm first. Use it when you finish the trial and
+want the other address gone.
+
 ## The DMARC authorization record
 
 This is the one that doesn't turn up much when you search for it, because it's not really called

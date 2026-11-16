@@ -11,6 +11,9 @@ public static class DmarcStatusPresentation
     public static Color GetColor(DmarcCheckStatus status) => status switch
     {
         DmarcCheckStatus.Ok or DmarcCheckStatus.MissingAuthorizationRecord => Color.Success,
+        // Information, not a fault: dotMARC's mailbox is there, alongside one other address.
+        DmarcCheckStatus.OtherReportAddresses => Color.Info,
+        DmarcCheckStatus.TooManyReportAddresses => Color.Warning,
         DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured => Color.Error,
         _ => Color.Default
     };
@@ -18,10 +21,17 @@ public static class DmarcStatusPresentation
     public static string GetLabel(DmarcCheckStatus status) => status switch
     {
         DmarcCheckStatus.Ok or DmarcCheckStatus.MissingAuthorizationRecord => "OK",
+        DmarcCheckStatus.OtherReportAddresses => "OK, other rua",
+        DmarcCheckStatus.TooManyReportAddresses => "Too many rua addresses",
         DmarcCheckStatus.MissingOwnRecord => "No DMARC record",
         DmarcCheckStatus.Misconfigured => "Misconfigured",
         _ => "Not checked yet"
     };
+
+    /// <summary>True when the own record points reports at dotMARC's mailbox without a fault, so only the
+    /// authorization record can still hold the combined status back.</summary>
+    private static bool OwnRecordIsFine(DmarcCheckStatus status) =>
+        status is DmarcCheckStatus.Ok or DmarcCheckStatus.OtherReportAddresses;
 
     /// <summary>Combines the two independent DMARC checks into one chip's worth of color/label - 
     /// used only by Dashboard.razor's single DMARC cell, which (per the design spec's Non-goals)
@@ -34,19 +44,19 @@ public static class DmarcStatusPresentation
     /// page.</summary>
     public static Color GetColor(DmarcCheckStatus status, DmarcAuthorizationCheckStatus authorizationStatus)
     {
-        if (status != DmarcCheckStatus.Ok)
+        if (!OwnRecordIsFine(status))
         {
             return GetColor(status);
         }
-        return authorizationStatus == DmarcAuthorizationCheckStatus.Missing ? Color.Warning : Color.Success;
+        return authorizationStatus == DmarcAuthorizationCheckStatus.Missing ? Color.Warning : GetColor(status);
     }
 
     public static string GetLabel(DmarcCheckStatus status, DmarcAuthorizationCheckStatus authorizationStatus)
     {
-        if (status != DmarcCheckStatus.Ok)
+        if (!OwnRecordIsFine(status))
         {
             return GetLabel(status);
         }
-        return authorizationStatus == DmarcAuthorizationCheckStatus.Missing ? "Missing authorization" : "OK";
+        return authorizationStatus == DmarcAuthorizationCheckStatus.Missing ? "Missing authorization" : GetLabel(status);
     }
 }

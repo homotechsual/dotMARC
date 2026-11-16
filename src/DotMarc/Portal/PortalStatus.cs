@@ -38,7 +38,8 @@ public static class PortalStatus
     /// yet, not configured, or not applicable aren't failures.</summary>
     public static IEnumerable<string> FailingChecks(Domain domain)
     {
-        if (domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured or DmarcCheckStatus.MissingAuthorizationRecord)
+        if (domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured or DmarcCheckStatus.MissingAuthorizationRecord
+            or DmarcCheckStatus.TooManyReportAddresses)
             yield return $"DMARC: {DmarcStatusPresentation.GetLabel(domain.DmarcCheckStatus)}";
         if (domain.DmarcAuthorizationCheckStatus == DmarcAuthorizationCheckStatus.Missing)
             yield return $"DMARC reporting: {DmarcAuthorizationStatusPresentation.GetLabel(domain.DmarcAuthorizationCheckStatus)}";

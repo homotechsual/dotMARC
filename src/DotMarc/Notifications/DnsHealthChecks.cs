@@ -30,7 +30,8 @@ public static class DnsHealthChecks
         new(DnsHealthItems.Dmarc, AlertTypes.DmarcRecordBroken, "DMARC record",
             domain => domain.DmarcCheckStatus switch
             {
-                DmarcCheckStatus.Ok => DnsCheckHealth.Passing,
+                // Another rua address beside dotMARC's own (within the limit) is information, not a fault.
+                DmarcCheckStatus.Ok or DmarcCheckStatus.OtherReportAddresses => DnsCheckHealth.Passing,
                 DmarcCheckStatus.NotChecked => DnsCheckHealth.Ignored,
                 _ => DnsCheckHealth.Failing
             },
