@@ -29,7 +29,7 @@
     "@homotechsual/docusaurus-og": "1.0.0",
     "@homotechsual/docusaurus-plugin-faqs": "^1.0.2",
     "@homotechsual/docusaurus-plugin-plausible": "^1.1.1",
-    "@homotechsual/docusaurus-theme-waypoint": "^1.1.0",
+    "@homotechsual/docusaurus-theme-waypoint": "^1.1.1",
     "@mdx-js/react": "^3.1.1",
     "@tailwindcss/postcss": "^4.3.5",
     "autoprefixer": "^10.6.2",
