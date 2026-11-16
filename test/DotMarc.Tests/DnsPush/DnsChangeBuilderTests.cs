@@ -22,7 +22,7 @@ public sealed class DnsChangeBuilderTests
     [Fact]
     public async Task Dmarc_CreatesARecord_WhenThereIsNone()
     {
-        var plan = await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph()).BuildAsync(Request(), CancellationToken.None);
+        var plan = await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None);
 
         var change = Assert.Single(plan.Changes);
         Assert.Equal((DnsRecordChangeKind.Create, "TXT", "_dmarc.contoso.com", "v=DMARC1; p=none; rua=mailto:rua@dotmarc.example"),
@@ -34,9 +34,33 @@ public sealed class DnsChangeBuilderTests
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=reject; rua=mailto:old@example.com", null) };
 
-        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph()).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
 
-        Assert.Equal((DnsRecordChangeKind.Merge, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example"), (change.Kind, change.DesiredValue));
+        Assert.Equal((DnsRecordChangeKind.Merge, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com"), (change.Kind, change.DesiredValue));
+    }
+
+    [Fact]
+    public async Task Dmarc_WritesTheMailboxAlone_WhenKeepingOthersIsOff()
+    {
+        var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=reject; rua=mailto:old@example.com", null) };
+        var settings = new FakeDnsRecordSettingsReader { Settings = new() { KeepOtherRuaAddresses = false } };
+
+        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), settings).BuildAsync(Request(), CancellationToken.None)).Changes);
+
+        Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example", change.DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_AddsTheConfiguredAdditionalAddress_ToANewAndAMergedRecord()
+    {
+        var settings = new FakeDnsRecordSettingsReader { Settings = new() { AdditionalRuaAddress = "second@tool.example" } };
+
+        var created = Assert.Single((await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), settings).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=reject; rua=mailto:old@example.com", null) };
+        var merged = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), settings).BuildAsync(Request(), CancellationToken.None)).Changes);
+
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example,mailto:second@tool.example", created.DesiredValue);
+        Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:second@tool.example", merged.DesiredValue);
     }
 
     [Fact]
@@ -44,7 +68,7 @@ public sealed class DnsChangeBuilderTests
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=none", "contoso.dmarc-service.example") };
 
-        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph()).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
 
         Assert.Equal((DnsRecordChangeKind.Replace, "CNAME"), (change.Kind, change.ExistingRecordType));
     }
@@ -54,7 +78,7 @@ public sealed class DnsChangeBuilderTests
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("not dmarc", null) };
 
-        Assert.Equal("unmergeable", (await new DmarcChangeBuilder(lookup, Graph()).BuildAsync(Request(), CancellationToken.None)).Refusal);
+        Assert.Equal("unmergeable", (await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None)).Refusal);
     }
 
     [Fact]
@@ -116,7 +140,7 @@ public sealed class DnsChangeBuilderTests
     [Fact]
     public void Find_LooksBuildersUpByTarget()
     {
-        IDnsChangeBuilder[] builders = [new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph()), new TlsrptChangeBuilder(new FakeTlsrptTxtLookup(), Graph())];
+        IDnsChangeBuilder[] builders = [new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), new FakeDnsRecordSettingsReader()), new TlsrptChangeBuilder(new FakeTlsrptTxtLookup(), Graph())];
 
         Assert.IsType<TlsrptChangeBuilder>(builders.Find("tlsrpt"));
         Assert.Null(builders.Find("nope"));

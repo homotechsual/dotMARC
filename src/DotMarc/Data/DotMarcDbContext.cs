@@ -364,6 +364,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<DnsRecordSettings>(entity =>
         {
             entity.Property(settings => settings.SpfAllQualifier).HasConversion<string>().HasMaxLength(10);
+            entity.Property(settings => settings.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
         });
 
         modelBuilder.Entity<NotificationSettings>(entity =>

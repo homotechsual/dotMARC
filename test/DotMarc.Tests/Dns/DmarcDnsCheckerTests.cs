@@ -127,6 +127,21 @@ public class DmarcDnsCheckerTests
     }
 
     [Fact]
+    public async Task CheckAsync_ReturnsMisconfigured_WhenAnAddressLacksTheMailtoScheme()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC1; p=reject; rua=mailto:rua.dmarc@mjco.uk,0329c347d460.a@dmarcinput.com; ruf=mailto:0329c347d460.f@dmarcinput.com; sp=reject; fo=1\""}]}
+            """;
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Misconfigured, result.Status);
+        Assert.Contains("0329c347d460.a@dmarcinput.com", result.Detail);
+        Assert.Contains("mailto:", result.Detail);
+    }
+
+    [Fact]
     public async Task CheckAsync_ReturnsOtherReportAddresses_WhenTheMailboxIsNotTheFirstAddress()
     {
         var (checker, handler) = CreateChecker();

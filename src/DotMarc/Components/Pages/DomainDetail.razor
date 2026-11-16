@@ -888,14 +888,21 @@ else
             // create-style value, matching what the server actually pushes for this case - merging
             // the third party's own policy content in wouldn't make sense once their delegation is
             // being replaced entirely.
+            DnsRecordSettings recordSettings;
+            await using (var settingsDb = await DbFactory.CreateDbContextAsync())
+            {
+                recordSettings = await DnsRecordSettingsService.GetAsync(settingsDb);
+            }
+
             string proposed;
             if (existing.DelegatedToCname is not null || existing.DirectValue is null)
             {
-                proposed = $"v=DMARC1; p=none; rua=mailto:{GraphOptions.Value.MailboxAddress}";
+                proposed = $"v=DMARC1; p=none; {DmarcRuaMerge.RuaTag(GraphOptions.Value.MailboxAddress, recordSettings.AdditionalRuaAddress)}";
             }
             else
             {
-                var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, GraphOptions.Value.MailboxAddress);
+                var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, GraphOptions.Value.MailboxAddress,
+                    recordSettings.AdditionalRuaAddress, recordSettings.KeepOtherRuaAddresses);
                 if (merged is null)
                 {
                     Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);

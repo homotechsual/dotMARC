@@ -18,7 +18,7 @@ namespace DotMarc.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1178,6 +1178,13 @@ namespace DotMarc.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AdditionalRuaAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<bool>("KeepOtherRuaAddresses")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SpfAllQualifier")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -1191,6 +1198,7 @@ namespace DotMarc.Migrations
                         new
                         {
                             Id = 1,
+                            KeepOtherRuaAddresses = true,
                             SpfAllQualifier = "SoftFail"
                         });
                 });

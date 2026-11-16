@@ -31,7 +31,20 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
         }
 
         var policy = DmarcPolicyTags.Parse(ownRecord);
-        var ruaAddresses = ParseRuaAddresses(ownRecord);
+        var ruaEntries = DmarcRua.Parse(ownRecord);
+
+        // RFC 7489 section 6.2: rua= is a list of URIs, so every address needs its mailto: scheme. Receivers
+        // skip an entry without one, so a bare address is a report destination that silently receives nothing.
+        var withoutScheme = ruaEntries.Where(e => !e.HasMailtoScheme).Select(e => e.Address).ToList();
+        if (withoutScheme.Count > 0)
+        {
+            return new DmarcCheckResult(DmarcCheckStatus.Misconfigured,
+                $"_dmarc.{domainName}'s rua= has {string.Join(", ", withoutScheme)} without the mailto: prefix. "
+                + "Every rua= address must start with mailto:, and receivers ignore any that does not.",
+                policy);
+        }
+
+        var ruaAddresses = ruaEntries.Select(e => e.Address).ToList();
         if (!ruaAddresses.Any(a => string.Equals(a, mailboxAddress, StringComparison.OrdinalIgnoreCase)))
         {
             return new DmarcCheckResult(DmarcCheckStatus.Misconfigured,
@@ -61,7 +74,8 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
         {
             return new DmarcCheckResult(DmarcCheckStatus.OtherReportAddresses,
                 $"_dmarc.{domainName}'s rua= also sends reports to {string.Join(", ", otherAddresses)}. "
-                + "That is fine while you compare tools. Push the record to drop it when you are ready.",
+                + "That is fine while you compare tools, and a DNS push keeps it by default. "
+                + "To drop it, turn off \"Keep other rua addresses\" in the DNS push settings and push the record.",
                 policy);
         }
 
@@ -123,28 +137,6 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
         // or "\"first part\" \"second part\"" for a long one. Splitting on `" "` between quoted
         // segments and stripping the outer quotes from what's left reconstructs the original value.
         return string.Join("", answer.Data.Split("\" \"")).Trim('"');
-    }
-
-    private static List<string> ParseRuaAddresses(string record)
-    {
-        var ruaTag = record.Split(';')
-            .Select(part => part.Trim())
-            .FirstOrDefault(part => part.StartsWith("rua=", StringComparison.OrdinalIgnoreCase));
-
-        if (ruaTag is null)
-        {
-            return [];
-        }
-
-        return ruaTag["rua=".Length..]
-            .Split(',')
-            .Select(uri => uri.Trim())
-            .Where(uri => uri.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
-            .Select(uri => uri["mailto:".Length..])
-            // RFC 7489 §6.3 permits a "!<size>" max-report-size suffix on each URI (e.g.
-            // "!10m"); strip it so the address compares equal to the configured mailbox address.
-            .Select(address => address.Split('!')[0])
-            .ToList();
     }
 
     private sealed record DnsOverHttpsResponse(

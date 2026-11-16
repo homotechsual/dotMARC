@@ -251,6 +251,7 @@ builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequ
 builder.Services.AddHttpClient<DotMarc.DnsPush.GoogleCloudDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.GoogleCloudDnsPushProvider>());
 
+builder.Services.AddSingleton<DotMarc.DnsPush.IDnsRecordSettingsReader, DotMarc.DnsPush.DnsRecordSettingsReader>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.MtaStsChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcAuthorizationChangeBuilder>();

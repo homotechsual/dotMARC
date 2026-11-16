@@ -47,8 +47,8 @@ public sealed class DnsRecordSettingsServiceTests : IAsyncLifetime
     {
         await using (var context = CreateContext())
         {
-            await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.Fail);
-            await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.Fail);
+            await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.Fail, true, null);
+            await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.Fail, true, null);
         }
 
         await using var verify = CreateContext();
@@ -56,5 +56,62 @@ public sealed class DnsRecordSettingsServiceTests : IAsyncLifetime
         var entry = await verify.AuditEntries.SingleAsync();
         Assert.Equal(AuditActions.DnsRecordSettingsSaved, entry.Action);
         Assert.Contains(new AuditFieldChange("Ending for new SPF records", "~all", "-all"), entry.Changes);
+    }
+
+    [Fact]
+    public async Task AFreshDatabase_KeepsOtherRuaAddresses_AndHasNoAdditionalAddress()
+    {
+        await using var context = CreateContext();
+
+        var settings = await DnsRecordSettingsService.GetAsync(context);
+
+        Assert.True(settings.KeepOtherRuaAddresses);
+        Assert.Null(settings.AdditionalRuaAddress);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SavesTheRuaSettings_TrimmingTheAddress_AndAuditsThem()
+    {
+        await using (var context = CreateContext())
+        {
+            Assert.True(await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.SoftFail, false, "  second@tool.example "));
+        }
+
+        await using var verify = CreateContext();
+        var settings = await DnsRecordSettingsService.GetAsync(verify);
+        Assert.False(settings.KeepOtherRuaAddresses);
+        Assert.Equal("second@tool.example", settings.AdditionalRuaAddress);
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Contains(new AuditFieldChange("Keep other rua addresses on DMARC push", "yes", "no"), entry.Changes);
+        Assert.Contains(new AuditFieldChange("Additional rua address", "none", "second@tool.example"), entry.Changes);
+    }
+
+    [Theory]
+    [InlineData("mailto:a@example.com")]
+    [InlineData("a@example.com,b@example.com")]
+    [InlineData("not an address")]
+    [InlineData("a@example.com!10m")]
+    public async Task SaveAsync_RejectsAnAdditionalAddressThatWouldBreakTheRuaList_ChangingNothing(string address)
+    {
+        await using var context = CreateContext();
+
+        Assert.False(await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.Fail, false, address));
+
+        await using var verify = CreateContext();
+        var settings = await DnsRecordSettingsService.GetAsync(verify);
+        Assert.Equal((SpfAllQualifier.SoftFail, true, null), (settings.SpfAllQualifier, settings.KeepOtherRuaAddresses, settings.AdditionalRuaAddress));
+        Assert.Empty(await verify.AuditEntries.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveAsync_ClearsTheAdditionalAddress_WhenSavedBlank()
+    {
+        await using var context = CreateContext();
+        await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.SoftFail, true, "second@tool.example");
+
+        await DnsRecordSettingsService.SaveAsync(context, TestActors.Admin, SpfAllQualifier.SoftFail, true, "  ");
+
+        await using var verify = CreateContext();
+        Assert.Null((await DnsRecordSettingsService.GetAsync(verify)).AdditionalRuaAddress);
     }
 }

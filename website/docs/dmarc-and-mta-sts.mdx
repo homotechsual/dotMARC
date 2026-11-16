@@ -61,14 +61,30 @@ another DMARC tool, so dotMARC reads the list rather than only the first address
 | dotMARC's mailbox and one other address | OK, other rua (information) | No |
 | dotMARC's mailbox and two or more others | Too many rua addresses | Yes |
 | Addresses that don't include dotMARC's mailbox | Misconfigured | Yes |
+| Any address without the `mailto:` prefix | Misconfigured | Yes |
 
 Two is the limit because receivers may cap how many report addresses they send to
 ([RFC 7489 §6.2](https://www.rfc-editor.org/rfc/rfc7489#section-6.2)), and some only honour the first couple. With
 more than two, reports can stop reaching dotMARC for some senders without anything looking broken.
 
-**Push via your DNS provider** stays available for the information and too-many statuses. It rewrites `rua=` to dotMARC's
-mailbox only and keeps every other tag, and shows you the change to confirm first. Use it when you finish the trial and
-want the other address gone.
+Every address needs its `mailto:` prefix, because `rua=` is a list of URIs. `rua=mailto:a@example.com,b@example.com` is
+wrong: receivers skip `b@example.com`, so that destination quietly receives nothing. dotMARC reports the record as
+Misconfigured and names the address.
+
+**Push via your DNS provider** stays available for the information, too-many and misconfigured statuses. It shows you the
+change to confirm first, keeps every other tag, and writes `rua=` as dotMARC's mailbox first, then:
+
+1. the **additional rua address**, if an admin has set one,
+2. then any other addresses already in the record, in their original order, adding a missing `mailto:`,
+
+up to the limit of two addresses in total. Two settings in the **DNS records** section of the DNS push settings page control this:
+
+* **Keep other rua addresses when pushing** (on by default). Turn it off and a push writes dotMARC's mailbox, plus the
+  additional address if there is one, and nothing else. Use that when you finish a trial and want the other address
+  gone.
+* **Additional rua address**. A second destination added to every DMARC record dotMARC pushes, for example to keep
+  sending reports to another tool. If its domain differs from the domain being monitored, that domain must publish an
+  authorization record (see below) or receivers won't send reports to it.
 
 ## The DMARC authorization record
 
