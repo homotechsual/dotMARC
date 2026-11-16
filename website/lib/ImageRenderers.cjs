@@ -1,44 +1,34 @@
 const React = require('react');
-const {readFileSync, existsSync} = require('fs');
+const {readFileSync} = require('fs');
 const {join} = require('path');
-
-const BACKGROUND_MIME_TYPES = {
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-};
 
 const WIDTH = 1200;
 const HEIGHT = 630;
 
-function loadFont(...candidates) {
-  for (const filePath of candidates) {
-    try {
-      return readFileSync(filePath);
-    } catch {
-      // Try next path.
-    }
-  }
+// Flat navy, the same ink as the site's dark surfaces, with a coral bar for the accent. No gradients.
+const INK = '#1b2432';
+const CORAL = '#ff9a92';
 
-  throw new Error(`Unable to load Inter font. Tried: ${candidates.join(', ')}`);
+function loadFont(packageName, file) {
+  const filePath = join(process.cwd(), 'node_modules', '@fontsource', packageName, 'files', file);
+  try {
+    return readFileSync(filePath);
+  } catch {
+    throw new Error(`Unable to load font ${file}. Tried: ${filePath}`);
+  }
 }
 
-const inter400 = loadFont(
-  join(process.cwd(), 'node_modules', '@fontsource', 'inter', 'files', 'inter-latin-400-normal.woff'),
-);
-const inter600 = loadFont(
-  join(process.cwd(), 'node_modules', '@fontsource', 'inter', 'files', 'inter-latin-600-normal.woff'),
-);
-const inter900 = loadFont(
-  join(process.cwd(), 'node_modules', '@fontsource', 'inter', 'files', 'inter-latin-900-normal.woff'),
-);
+const plex400 = loadFont('ibm-plex-sans', 'ibm-plex-sans-latin-400-normal.woff');
+const plex600 = loadFont('ibm-plex-sans', 'ibm-plex-sans-latin-600-normal.woff');
+const plexMono400 = loadFont('ibm-plex-mono', 'ibm-plex-mono-latin-400-normal.woff');
 
 const baseOptions = {
   width: WIDTH,
   height: HEIGHT,
   fonts: [
-    {name: 'Inter', data: inter400, weight: 400, style: 'normal'},
-    {name: 'Inter', data: inter600, weight: 600, style: 'normal'},
-    {name: 'Inter', data: inter900, weight: 900, style: 'normal'},
+    {name: 'IBM Plex Sans', data: plex400, weight: 400, style: 'normal'},
+    {name: 'IBM Plex Sans', data: plex600, weight: 600, style: 'normal'},
+    {name: 'IBM Plex Mono', data: plexMono400, weight: 400, style: 'normal'},
   ],
 };
 
@@ -63,60 +53,57 @@ function clampText(text, max = 220) {
   return `${normalized.slice(0, max - 1).trimEnd()}...`;
 }
 
-function toDataUrl(filePath, mime) {
-  try {
-    const content = readFileSync(filePath);
-    return `data:${mime};base64,${content.toString('base64')}`;
-  } catch {
-    return undefined;
-  }
-}
-
-function backgroundDataUrl(name) {
-  const dir = join(process.cwd(), 'static', 'img', 'og-backgrounds');
-  for (const [ext, mime] of Object.entries(BACKGROUND_MIME_TYPES)) {
-    const filePath = join(dir, `${name}${ext}`);
-    if (existsSync(filePath)) {
-      return toDataUrl(filePath, mime);
-    }
-  }
-  return undefined;
-}
-
-function root(backgroundImage, content) {
+// The shared layout: a coral bar down the left edge, the section name, the title and description, and the site name.
+function card(section, title, description, aside) {
   return div(
     {
       display: 'flex',
       width: WIDTH,
       height: HEIGHT,
-      fontFamily: 'Inter',
-      position: 'relative',
-      overflow: 'hidden',
+      background: INK,
+      fontFamily: 'IBM Plex Sans',
+      color: '#eef1f5',
     },
-    backgroundImage
-      ? h('img', {
-          src: backgroundImage,
-          alt: '',
-          style: {position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover'},
-        })
-      : null,
-    content,
-  );
-}
-
-function badge(text, background, color) {
-  return div(
-    {
-      display: 'flex',
-      alignSelf: 'flex-start',
-      padding: '8px 14px',
-      borderRadius: 999,
-      background,
-      color,
-      fontSize: 22,
-      fontWeight: 700,
-    },
-    text,
+    div({display: 'flex', width: 14, height: HEIGHT, background: CORAL}),
+    div(
+      {
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        flex: 1,
+        padding: '56px 64px',
+        boxSizing: 'border-box',
+      },
+      div(
+        {display: 'flex', flexDirection: 'column', gap: 18},
+        div({display: 'flex', fontSize: 28, color: '#a9b5c4'}, section),
+        div(
+          {
+            display: 'flex',
+            maxWidth: aside ? 640 : 1000,
+            fontSize: aside ? 54 : 64,
+            lineHeight: 1.1,
+            fontWeight: 600,
+            letterSpacing: -1,
+          },
+          title,
+        ),
+        description
+          ? div(
+              {
+                display: 'flex',
+                maxWidth: aside ? 640 : 980,
+                fontSize: aside ? 25 : 29,
+                lineHeight: 1.35,
+                color: '#a9b5c4',
+              },
+              description,
+            )
+          : null,
+      ),
+      div({display: 'flex', fontSize: 30, fontWeight: 600, color: CORAL}, 'dotMARC'),
+    ),
+    aside,
   );
 }
 
@@ -124,33 +111,11 @@ const docs = data => {
   const title = clampText(data.metadata.title, 90);
   const description = clampText(data.metadata.description, 180);
 
-  return [
-    root(
-      backgroundDataUrl('docs-gradient'),
-      div(
-        {
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          width: '100%',
-          height: '100%',
-          padding: 54,
-          boxSizing: 'border-box',
-        },
-        div(
-          {display: 'flex', flexDirection: 'column', gap: 14},
-          badge('Docs', 'rgba(255,255,255,0.14)', '#fcfcfc'),
-          div({display: 'flex', fontSize: 62, lineHeight: 1.04, fontWeight: 900, letterSpacing: -1.1, color: '#fcfcfc'}, title),
-          description
-            ? div({display: 'flex', maxWidth: 980, fontSize: 29, lineHeight: 1.24, color: '#c7d0dc'}, description)
-            : null,
-        ),
-        div({display: 'flex', fontSize: 28, fontWeight: 700, color: '#fad0cc'}, 'dotMARC'),
-      ),
-    ),
-    baseOptions,
-  ];
+  return [card('Docs', title, description), baseOptions];
 };
+
+// The home page and other pages show the DMARC record that every client domain publishes, as on the home page.
+const recordLine = (text, color) => div({display: 'flex', whiteSpace: 'pre', color: color || '#d6dde7'}, text);
 
 const pages = data => {
   // Docusaurus appends " | dotMARC" to the <title> tag automatically (see
@@ -158,42 +123,31 @@ const pages = data => {
   // stays as the clean page title rather than repeating the site name.
   const rawTitle = (data.metadata.title || 'dotMARC').replace(/\s*\|\s*dotMARC\s*$/, '');
   const title = clampText(rawTitle, 90);
-  const description = clampText(data.metadata.description, 180);
+  const record = div(
+    {
+      display: 'flex',
+      flexDirection: 'column',
+      alignSelf: 'center',
+      marginRight: 56,
+      padding: '28px 30px',
+      width: 400,
+      background: '#0f151e',
+      borderRadius: 6,
+      fontFamily: 'IBM Plex Mono',
+      fontSize: 19,
+      lineHeight: 1.55,
+    },
+    recordLine('_dmarc.aurora-retail.example', '#ffffff'),
+    recordLine('  v=DMARC1; p=quarantine;'),
+    recordLine('  rua=mailto:dmarc@msp.example', CORAL),
+    div({display: 'flex', height: 16}),
+    recordLine('_dmarc.cobalt-freight.example', '#ffffff'),
+    recordLine('  v=DMARC1; p=reject;'),
+    recordLine('  rua=mailto:dmarc@msp.example', CORAL),
+  );
 
-  return [
-    root(
-      backgroundDataUrl('pages-gradient'),
-      div(
-        {
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          width: '100%',
-          height: '100%',
-          padding: 54,
-          boxSizing: 'border-box',
-        },
-        div(
-          {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 14,
-            maxWidth: 700,
-            background: 'rgba(11,15,20,0.66)',
-            borderRadius: 20,
-            padding: '22px 26px',
-          },
-          badge('dotMARC', 'rgba(255,255,255,0.14)', '#fcfcfc'),
-          div({display: 'flex', fontSize: 60, lineHeight: 1.05, fontWeight: 900, letterSpacing: -1.1, color: '#fcfcfc'}, title),
-          description
-            ? div({display: 'flex', fontSize: 27, lineHeight: 1.28, color: '#c7d0dc'}, description)
-            : null,
-        ),
-        div({display: 'flex', fontSize: 28, color: '#ef8b86', fontWeight: 800}, 'dotmarc.app'),
-      ),
-    ),
-    baseOptions,
-  ];
+  // The record takes a third of the card, so the title carries it alone: a cut-off description would read badly.
+  return [card('', title, '', record), baseOptions];
 };
 
 const blog = data => {
@@ -203,32 +157,7 @@ const blog = data => {
   const title = clampText(isPost ? metadata.title : 'dotMARC Releases and Updates', 90);
   const description = clampText(isPost ? metadata.description : 'Release notes and announcements from dotMARC.', 170);
 
-  return [
-    root(
-      backgroundDataUrl('blog-gradient'),
-      div(
-        {
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          width: '100%',
-          height: '100%',
-          padding: 54,
-          boxSizing: 'border-box',
-        },
-        div(
-          {display: 'flex', flexDirection: 'column', gap: 14},
-          badge('Releases and Updates', 'rgba(255,255,255,0.16)', '#fcfcfc'),
-          div({display: 'flex', fontSize: 62, lineHeight: 1.04, fontWeight: 900, letterSpacing: -1.1, color: '#fcfcfc'}, title),
-          description
-            ? div({display: 'flex', maxWidth: 1000, fontSize: 29, lineHeight: 1.22, color: '#fbe4e2'}, description)
-            : null,
-        ),
-        div({display: 'flex', fontSize: 28, fontWeight: 700, color: '#fcfcfc'}, 'dotMARC'),
-      ),
-    ),
-    baseOptions,
-  ];
+  return [card('Releases and Updates', title, description), baseOptions];
 };
 
 module.exports = {docs, pages, blog};

@@ -177,7 +177,6 @@ const config: Config = {
       showGithubLink: true,
       githubLinkLabel: 'View on GitHub',
     },
-    image: 'img/og-backgrounds/pages-gradient.svg',
     colorMode: {
       respectPrefersColorScheme: true,
     },
@@ -195,7 +194,7 @@ const config: Config = {
         {to: '/faqs', label: 'FAQs', position: 'left'},
         {to: '/releases-updates', label: 'Releases and Updates', position: 'left'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
-        {to: '/feedback', label: 'Feedback & Feature Requests', position: 'left'},
+        {to: '/feedback', label: 'Feedback', position: 'left'},
         {
           href: 'https://github.com/sponsors/homotechsual',
           html: '<span class="navbar__action-label">Sponsor</span>',

@@ -2867,6 +2867,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/ibm-plex-mono@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/ibm-plex-mono@npm:5.3.0"
+  checksum: 10c0/4aaf5a3c9efc7c32de4fa46ff3187ac63720904beab825f331ac01800038899761da23270f09d3fb5cff22f7cdc366904834854e2107229ad60833bba71c223d
+  languageName: node
+  linkType: hard
+
+"@fontsource/ibm-plex-sans@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/ibm-plex-sans@npm:5.3.0"
+  checksum: 10c0/8e4c7a849e8167c8de1905282a62ff312a4266e364e3c436fa6d89d650bbb30b3386157ae31af3783e00f85fa64fd7e26bee7ca232db7d22fdc082f6b531edb5
+  languageName: node
+  linkType: hard
+
 "@fontsource/inter@npm:^5.3.0":
   version: 5.3.0
   resolution: "@fontsource/inter@npm:5.3.0"
@@ -7406,6 +7420,8 @@ __metadata:
     "@docusaurus/tsconfig": "npm:3.10.2"
     "@docusaurus/types": "npm:3.10.2"
     "@docusaurus/utils-validation": "npm:3.10.2"
+    "@fontsource/ibm-plex-mono": "npm:^5.3.0"
+    "@fontsource/ibm-plex-sans": "npm:^5.3.0"
     "@fontsource/inter": "npm:^5.3.0"
     "@homotechsual/docusaurus-og": "npm:1.0.0"
     "@homotechsual/docusaurus-plugin-faqs": "npm:^1.0.2"
@@ -7424,6 +7440,7 @@ __metadata:
     prism-react-renderer: "npm:^2.4.1"
     react: "npm:^19.3.1"
     react-dom: "npm:^19.3.1"
+    simple-icons: "npm:^16.38.0"
     tailwindcss: "npm:^4.3.5"
     typescript: "npm:~6.0.3"
   languageName: unknown
@@ -13950,6 +13967,13 @@ __metadata:
   version: 3.0.7
   resolution: "signal-exit@npm:3.0.7"
   checksum: 10c0/25d272fa73e146048565e08f3309d5b942c1979a6f4a58a8c59d5fa299728e9c2fcd1a759ec870863b1fd38653670240cd420dad2ad9330c71f36608a6a1c912
+  languageName: node
+  linkType: hard
+
+"simple-icons@npm:^16.38.0":
+  version: 16.38.0
+  resolution: "simple-icons@npm:16.38.0"
+  checksum: 10c0/d272463f33ca5ef64d09cf0d01fb7f7e19d6701b1824b1089d812f577ac63996171c59be5501592b33a0e5c24a196ceaf562195b0648a2d1661f2d4f091dc4b1
   languageName: node
   linkType: hard
 
