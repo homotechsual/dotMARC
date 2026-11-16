@@ -1,0 +1,75 @@
+@* src/DotMarc/Components/Dialogs/DnsPushReviewDialog.razor *@
+@using DotMarc.DnsPush
+<MudDialog>
+    <TitleContent>Review DNS changes</TitleContent>
+    <DialogContent>
+        @if (Review.NothingToChange)
+        {
+            <MudAlert Severity="Severity.Info">DNS already holds everything dotMARC would write, so there is nothing to push.</MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="mb-2">
+                dotMARC will add the following DNS records@(Review.ZoneName is null ? "" : " to ")@if (Review.ZoneName is not null){<b>@Review.ZoneName</b>}:
+            </MudText>
+            @RecordTable(Review.Additions)
+
+            @if (Review.Removals.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-4 mb-2">
+                    Review the existing records below before continuing. Applying these changes removes them, and anything that depends on them may stop working.
+                </MudAlert>
+                @RecordTable(Review.Removals)
+            }
+
+            @if (Review.LostDelegations.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4">
+                    @foreach (var delegation in Review.LostDelegations)
+                    {
+                        <div><code>@delegation.Name</code> is a CNAME delegated to <code>@delegation.Content</code>, likely a third-party service managing it.</div>
+                    }
+                    DNS doesn't allow a CNAME to sit beside any other record, so continuing ends that delegation. dotMARC can't restore it afterwards.
+                </MudAlert>
+            }
+
+            <MudText Typo="Typo.body2" Class="mt-4">Next you'll sign in to your DNS provider to apply them.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@(Review.NothingToChange ? "Close" : "Cancel")</MudButton>
+        @if (!Review.NothingToChange)
+        {
+            <MudButton Color="@(Review.Removals.Count > 0 ? Color.Warning : Color.Primary)" Variant="Variant.Filled" OnClick="Confirm">
+                @(Review.Removals.Count > 0 ? "Replace and continue" : "Continue")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public DnsPushReview Review { get; set; } = default!;
+
+    private static RenderFragment RecordTable(IReadOnlyList<DnsReviewRecord> records) => __builder =>
+    {
+        <MudSimpleTable Dense="true" Hover="false" Bordered="true" Style="overflow-x:auto">
+            <thead>
+                <tr><th>Type</th><th>Name</th><th>Content</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var record in records)
+                {
+                    <tr>
+                        <td><b>@record.Type</b></td>
+                        <td style="word-break:break-all">@record.Name</td>
+                        <td style="font-family:monospace; word-break:break-all">@record.Content</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    };
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -54,9 +54,8 @@ public sealed class DmarcAuthorizationChangeBuilder(
 
         // No structured tags to preserve here (unlike DMARC/TLSRPT's rua= merge) - an
         // authorization record's only job is to exist with v=DMARC1, so an unexpected
-        // existing value is simply overwritten once the confirm dialog (shown for any
-        // existing-differs-from-proposed case, per DnsRecordPushDecision.NeedsConfirmation)
-        // has been accepted.
+        // existing value is simply overwritten once the person has accepted the review screen
+        // (DnsPushReview), which lists the record being replaced.
         return DnsChangePlan.Of(new DnsRecordChange(DnsRecordChangeKind.Merge, "TXT", authorizationName, proposed, existing.DirectValue, mailboxZone));
     }
 }

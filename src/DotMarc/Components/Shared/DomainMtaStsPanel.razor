@@ -12,11 +12,11 @@
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IOptions<MtaStsOptions> MtaStsOptions
 @inject IMxHostsLookup MxHostsLookup
-@inject IMtaStsCnameLookup MtaStsCnameLookup
 @inject IMtaStsHostProvisioner MtaStsHostProvisioner
 @inject IMtaStsDnsVerifier MtaStsDnsVerifier
 @inject IMtaStsServingVerifier MtaStsServingVerifier
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
+@inject IEnumerable<IDnsChangeBuilder> ChangeBuilders
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -306,10 +306,10 @@
                 return;
             }
 
-            string? existing;
+            DnsChangePlan plan;
             try
             {
-                existing = await MtaStsCnameLookup.LookupAsync(Domain.Name, CancellationToken.None);
+                plan = await ChangeBuilders.Find("mta-sts")!.BuildAsync(new DnsPushRequest(Domain, pushProvider.ProviderKey, Domain.DnsZone ?? Domain.Name, null), CancellationToken.None);
             }
             catch (Exception)
             {
@@ -317,24 +317,15 @@
                 return;
             }
 
-            var existingForComparison = existing is not null && string.Equals(existing, hostingHostname, StringComparison.OrdinalIgnoreCase)
-                ? hostingHostname
-                : existing;
-            if (DnsRecordPushDecision.NeedsConfirmation(existingForComparison, delegatedToCname: null, hostingHostname))
+            if (plan.Refusal is not null)
             {
-                var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
-                {
-                    { x => x.RecordDescription, "MTA-STS CNAME" },
-                    { x => x.RecordName, $"mta-sts.{Domain.Name}" },
-                    { x => x.ExistingValue, existing ?? "" },
-                    { x => x.ProposedValue, hostingHostname }
-                };
-                var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push MTA-STS CNAME", parameters);
-                var result = await dialogRef.Result;
-                if (result is null || result.Canceled)
-                {
-                    return;
-                }
+                Snackbar.Add($"Couldn't work out what to push for {Domain.Name}. Try again.", Severity.Warning);
+                return;
+            }
+
+            if (!await DialogService.ConfirmDnsPushAsync(plan))
+            {
+                return;
             }
 
             await OpenDnsPushPopup(pushProvider.ProviderKey, Domain.Id, "mta-sts");

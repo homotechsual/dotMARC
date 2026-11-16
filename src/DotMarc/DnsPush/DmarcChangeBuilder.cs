@@ -20,9 +20,8 @@ public sealed class DmarcChangeBuilder(IDmarcTxtLookup dmarcTxtLookup, IOptions<
         {
             // The record is a CNAME delegated to a third party - DNS doesn't allow a CNAME to
             // coexist with any other record type at the same name, so there's no in-place merge
-            // here, only delete-then-create. The confirm dialog makes this explicit before the
-            // user ever reaches this endpoint (DnsRecordPushDecision.NeedsConfirmation always
-            // returns true when DelegatedToCname is set).
+            // here, only delete-then-create. The review screen (DnsPushReview) makes this explicit
+            // before the user ever reaches this endpoint, and flags the lost delegation.
             return DnsChangePlan.Of(new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", $"_dmarc.{domainName}", $"v=DMARC1; p=none; {ruaTag}", existing.DelegatedToCname, request.DomainZone!, ExistingRecordType: "CNAME"));
         }
 

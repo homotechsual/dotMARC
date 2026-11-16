@@ -23,9 +23,6 @@
 @inject ILogger<DomainDetail> Logger
 @inject IDnsProviderDetector DnsProviderDetector
 @inject IEnumerable<IDnsPushProvider> DnsPushProviders
-@inject IDmarcTxtLookup DmarcTxtLookup
-@inject ITlsrptTxtLookup TlsrptTxtLookup
-@inject IDmarcAuthorizationTxtLookup DmarcAuthorizationTxtLookup
 @inject IDmarcDnsChecker DmarcDnsChecker
 @inject ITlsrptDnsChecker TlsrptDnsChecker
 @inject ISpfDnsChecker SpfDnsChecker
@@ -873,60 +870,9 @@ else
                 return;
             }
 
-            DnsRecordLookupResult existing;
-            try
+            if (!await ReviewPushAsync("dmarc", pushProvider.ProviderKey, $"Failed to look up {DomainName}'s current DMARC record. Try again."))
             {
-                existing = await DmarcTxtLookup.LookupAsync(DomainName, CancellationToken.None);
-            }
-            catch (Exception)
-            {
-                Snackbar.Add($"Failed to look up {DomainName}'s current DMARC record. Try again.", Severity.Error);
                 return;
-            }
-
-            // A CNAME-delegated record (existing.DelegatedToCname set) always gets a fresh
-            // create-style value, matching what the server actually pushes for this case - merging
-            // the third party's own policy content in wouldn't make sense once their delegation is
-            // being replaced entirely.
-            DnsRecordSettings recordSettings;
-            await using (var settingsDb = await DbFactory.CreateDbContextAsync())
-            {
-                recordSettings = await DnsRecordSettingsService.GetAsync(settingsDb);
-            }
-
-            string proposed;
-            if (existing.DelegatedToCname is not null || existing.DirectValue is null)
-            {
-                proposed = $"v=DMARC1; p=none; {DmarcRuaMerge.RuaTag(GraphOptions.Value.MailboxAddress, recordSettings.AdditionalRuaAddress)}";
-            }
-            else
-            {
-                var merged = DmarcRuaMerge.TryMerge(existing.DirectValue, GraphOptions.Value.MailboxAddress,
-                    recordSettings.AdditionalRuaAddress, recordSettings.KeepOtherRuaAddresses);
-                if (merged is null)
-                {
-                    Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
-                    return;
-                }
-                proposed = merged;
-            }
-
-            if (DnsRecordPushDecision.NeedsConfirmation(existing.DirectValue, existing.DelegatedToCname, proposed))
-            {
-                var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
-                {
-                    { x => x.RecordDescription, "DMARC record" },
-                    { x => x.RecordName, $"_dmarc.{DomainName}" },
-                    { x => x.ExistingValue, existing.DirectValue ?? "" },
-                    { x => x.ProposedValue, proposed },
-                    { x => x.DelegatedToCname, existing.DelegatedToCname }
-                };
-                var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC record", parameters);
-                var result = await dialogRef.Result;
-                if (result is null || result.Canceled)
-                {
-                    return;
-                }
             }
 
             await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "dmarc");
@@ -960,35 +906,9 @@ else
                 return;
             }
 
-            var authorizationName = $"{DomainName}._report._dmarc.{mailboxDomain}";
-            DnsRecordLookupResult existing;
-            try
+            if (!await ReviewPushAsync("dmarc-auth", pushProvider.ProviderKey, $"Failed to look up {DomainName}'s DMARC authorization record. Try again."))
             {
-                existing = await DmarcAuthorizationTxtLookup.LookupAsync(authorizationName, CancellationToken.None);
-            }
-            catch (Exception)
-            {
-                Snackbar.Add($"Failed to look up {DomainName}'s DMARC authorization record. Try again.", Severity.Error);
                 return;
-            }
-
-            const string proposed = "v=DMARC1;";
-            if (DnsRecordPushDecision.NeedsConfirmation(existing.DirectValue, existing.DelegatedToCname, proposed))
-            {
-                var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
-                {
-                    { x => x.RecordDescription, "DMARC authorization record" },
-                    { x => x.RecordName, authorizationName },
-                    { x => x.ExistingValue, existing.DirectValue ?? "" },
-                    { x => x.ProposedValue, proposed },
-                    { x => x.DelegatedToCname, existing.DelegatedToCname }
-                };
-                var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push DMARC authorization record", parameters);
-                var result = await dialogRef.Result;
-                if (result is null || result.Canceled)
-                {
-                    return;
-                }
             }
 
             await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "dmarc-auth");
@@ -1011,61 +931,48 @@ else
             return;
         }
 
-        DnsRecordLookupResult existing;
-        try
-        {
-            existing = await TlsrptTxtLookup.LookupAsync(DomainName, CancellationToken.None);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add($"Failed to look up {DomainName}'s current TLS reporting record. Try again.", Severity.Error);
-            return;
-        }
-
-        var mailbox = GraphOptions.Value.TlsrptMailboxAddress;
-        if (string.IsNullOrWhiteSpace(mailbox))
+        if (string.IsNullOrWhiteSpace(GraphOptions.Value.TlsrptMailboxAddress))
         {
             Snackbar.Add("TLS reporting isn't configured on this deployment.", Severity.Warning);
             return;
         }
 
-        // See PushDmarcRecordAsync's equivalent comment: a CNAME-delegated record always gets a
-        // fresh create-style value, matching what the server actually pushes for this case.
-        string proposed;
-        if (existing.DelegatedToCname is not null || existing.DirectValue is null)
+        if (!await ReviewPushAsync("tlsrpt", pushProvider.ProviderKey, $"Failed to look up {DomainName}'s current TLS reporting record. Try again."))
         {
-            proposed = $"v=TLSRPTv1; rua=mailto:{mailbox}";
-        }
-        else
-        {
-            var merged = TlsrptRuaMerge.TryMerge(existing.DirectValue, mailbox);
-            if (merged is null)
-            {
-                Snackbar.Add("Couldn't safely compute a fix for this record - it needs a manual look.", Severity.Warning);
-                return;
-            }
-            proposed = merged;
-        }
-
-        if (DnsRecordPushDecision.NeedsConfirmation(existing.DirectValue, existing.DelegatedToCname, proposed))
-        {
-            var parameters = new DialogParameters<ConfirmDnsRecordPushDialog>
-            {
-                { x => x.RecordDescription, "TLS reporting record" },
-                { x => x.RecordName, $"_smtp._tls.{DomainName}" },
-                { x => x.ExistingValue, existing.DirectValue ?? "" },
-                { x => x.ProposedValue, proposed },
-                { x => x.DelegatedToCname, existing.DelegatedToCname }
-            };
-            var dialogRef = await DialogService.ShowAsync<ConfirmDnsRecordPushDialog>("Push TLS reporting record", parameters);
-            var result = await dialogRef.Result;
-            if (result is null || result.Canceled)
-            {
-                return;
-            }
+            return;
         }
 
         await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain!.Id, "tlsrpt");
+    }
+
+    /// <summary>Works out what a push to <paramref name="target"/> would change, the same way the server will once the
+    /// person has signed in to their DNS provider, and shows it for review. True when they choose to continue.</summary>
+    private async Task<bool> ReviewPushAsync(string target, string providerKey, string lookupFailedMessage)
+    {
+        DnsChangePlan plan;
+        try
+        {
+            plan = await ChangeBuilders.Find(target)!.BuildAsync(new DnsPushRequest(_domain!, providerKey, _domain!.DnsZone ?? DomainName, null), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(lookupFailedMessage, Severity.Error);
+            return false;
+        }
+
+        if (plan.Refusal is not null)
+        {
+            Snackbar.Add(plan.Refusal switch
+            {
+                "unmergeable" => "Couldn't safely compute a fix for this record - it needs a manual look.",
+                "nothing-to-push" => "DNS already matches what dotMARC would write, so there's nothing to push.",
+                "zone-not-found" => "That DNS provider doesn't host this zone, so dotMARC can't push the record there.",
+                _ => lookupFailedMessage,
+            }, plan.Refusal == "nothing-to-push" ? Severity.Info : Severity.Warning);
+            return false;
+        }
+
+        return await DialogService.ConfirmDnsPushAsync(plan);
     }
 
     /// <summary>Runs PollingService's own per-domain DMARC check on demand, outside its ~24h
@@ -1375,34 +1282,9 @@ else
             return;
         }
 
-        DnsChangePlan plan;
-        try
+        if (!await ReviewPushAsync("dkim", pushProvider.ProviderKey, $"Failed to look up {DomainName}'s current DKIM records. Try again."))
         {
-            plan = await ChangeBuilders.Find("dkim")!.BuildAsync(new DnsPushRequest(_domain, pushProvider.ProviderKey, _domain.DnsZone ?? DomainName, null), CancellationToken.None);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add($"Failed to look up {DomainName}'s current DKIM records. Try again.", Severity.Error);
             return;
-        }
-
-        if (plan.Refusal == "nothing-to-push")
-        {
-            Snackbar.Add("DNS already matches the stored DKIM records, so there's nothing to push.", Severity.Info);
-            return;
-        }
-
-        var overwritten = plan.Changes.Where(change => change.Kind != DnsRecordChangeKind.Create).ToList();
-        if (overwritten.Count > 0)
-        {
-            var lines = string.Join("<br>", overwritten.Select(change =>
-                System.Net.WebUtility.HtmlEncode($"{change.Name}: {change.ExistingRecordType ?? change.RecordType} {change.ExistingValue} → {change.RecordType} {change.DesiredValue}")));
-            var confirmed = await DialogService.ShowMessageBoxAsync("Push DKIM records",
-                (MarkupString)$"These records will be overwritten:<br>{lines}", yesText: "Push", cancelText: "Cancel");
-            if (confirmed != true)
-            {
-                return;
-            }
         }
 
         await OpenDnsPushPopupAsync(pushProvider.ProviderKey, _domain.Id, "dkim");
