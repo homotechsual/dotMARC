@@ -1,0 +1,55 @@
+---
+slug: v0-11-1
+date: 2026-11-16T16:43:45.716Z
+title: "dotMARC v0.11.1: keep several rua addresses, and a DKIM column on the dashboard"
+description: A rua address without mailto is now flagged because receivers ignore it, the DMARC push can keep other report addresses or add one for every domain, and the dashboard table shows DKIM status.
+authors: [mikey]
+tags: [release]
+---
+
+A small follow-up to v0.11.0. It catches a `rua=` mistake the last release missed, lets the DMARC push keep more than
+one report destination, and adds DKIM to the dashboard table.
+
+{/* truncate */}
+
+## A rua address without `mailto:` is flagged
+
+`rua=` is a list of URIs, so every address needs its `mailto:` prefix. A record such as
+`rua=mailto:reports@yourmsp.example,other@tool.example` is wrong: receivers skip `other@tool.example`, so that
+destination quietly receives nothing. v0.11.0 ignored the entry and showed a plain OK.
+
+The DMARC check now reports **Misconfigured** for any address missing its prefix, and the detail names the address. It
+alerts like any other misconfigured record, and the DNS push can fix it.
+
+## The DMARC push can keep several destinations
+
+The push used to replace `rua=` with dotMARC's mailbox alone, so it could not be used while you still wanted another
+tool to receive reports. It now writes dotMARC's mailbox first, then:
+
+1. the **additional rua address**, if you set one,
+2. then the other addresses already in the record, in their original order, with any missing `mailto:` added,
+
+up to the two a record can reliably list. The confirm step shows the exact record before anything is written. Two settings
+in the **DNS records** section of the DNS push settings page control this:
+
+* **Keep other rua addresses when pushing** is on by default. Turn it off and a push writes dotMARC's mailbox, plus the
+  additional address if there is one, and nothing else. Use that when you finish a trial and want the other address gone.
+* **Additional rua address** is a second destination added to every DMARC record dotMARC pushes, for example to keep
+  sending reports to another tool. If its domain differs from the domain being monitored, that domain has to publish an
+  authorization record or receivers won't send reports to it.
+
+The [DMARC and MTA-STS](/docs/dmarc-and-mta-sts) page has the details.
+
+## Smaller changes
+
+* **DKIM on the dashboard.** The domain table has a DKIM column beside SPF, with the same filter and sorting.
+* **Clearer Azure update steps.** The guide now names its two steps, setting your variables and then running the update,
+  reminds each update command which variables it needs, and tucks the "what is running now" commands into an optional
+  section.
+
+## Upgrading
+
+Upgrading needs no action. There is one small database migration, which adds the two new DNS record settings and runs by
+itself when the new version starts. The behaviour change to know about is that a DMARC push now keeps other report
+addresses already in a record, up to two in total. Before, it removed them. To get the old behaviour back, turn off
+**Keep other rua addresses when pushing**.
