@@ -71,7 +71,7 @@ export default function AzureDetails(): React.ReactElement {
 
   return (
     <div className={styles.panel}>
-      <p className={styles.title}>Your details</p>
+      <p className={styles.title}>Step 1: your details</p>
       <div className={styles.fields}>
         <label className={styles.field}>
           <span>Resource group</span>
@@ -111,8 +111,9 @@ export default function AzureDetails(): React.ReactElement {
         </label>
       </div>
       <p className={styles.hint}>
-        Run this first in PowerShell. Every command below uses these variables. The Container App is found
-        from the resource group, so you don't need its name or the deployment name.
+        Run this first, in the PowerShell window you will use for the rest of the update. It sets the variables
+        every command below uses, and they stay set until you close the window. The Container App is found from
+        the resource group, so you don't need its name or the deployment name.
       </p>
       <CodeBlock language="powershell">{buildAzureVariables({...details, version})}</CodeBlock>
     </div>

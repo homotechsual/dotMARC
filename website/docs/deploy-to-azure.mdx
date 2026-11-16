@@ -430,10 +430,20 @@ writes each secret itself the first time you save it from the relevant settings 
 This is the Azure part of [Update or redeploy dotMARC](./updating.mdx), which also covers what to check before
 and after an update.
 
-Enter your details to get the variables the commands on this page use. Nothing is sent anywhere, and the
-resource group and subscription are remembered in this browser.
+Updating is two steps, run in the same PowerShell window:
+
+1. **Set your variables.** Fill in the form below and run the block it gives you. It sets `$RG`, `$APP` and
+   `$VERSION` for that window, so you only do this once per sitting. Nothing is sent anywhere, and the resource group
+   and subscription are remembered in this browser.
+2. **Run the update.** Pick the update command that matches how your app is configured (a release tag, `:latest`, or
+   Bicep) and run it. Each one uses the variables from step 1.
 
 <AzureDetails />
+
+<details>
+<summary>See what is running now (optional)</summary>
+
+You don't need this to update. Use it to check which image is deployed or to look back at earlier revisions.
 
 Container Apps stores the image reference in a **revision**. Check the image configured on the
 currently active app, then list its revision history:
@@ -452,9 +462,6 @@ az containerapp revision list `
   --output table
 ```
 
-<details>
-<summary>What version is actually running?</summary>
-
 For an immutable release reference such as <code>ghcr.io/homotechsual/dotmarc:<LatestVersion /></code>, the tag identifies
 the version. If the configured image is `:latest`, Azure only reports `:latest` - that mutable tag
 does not reveal which build was pulled. Check the version shown in dotMARC's footer, or compare the
@@ -469,6 +476,7 @@ Use an immutable release tag. `az containerapp update` creates a new revision an
 template uses single-revision mode, moves traffic to it after it becomes ready:
 
 ```powershell
+# Step 2. Needs the variables from step 1 ($RG, $APP, $VERSION) in this window.
 $IMAGE = "ghcr.io/homotechsual/dotmarc:$VERSION"
 $REVISION_SUFFIX = "release-$(Get-Date -Format yyyyMMddHHmmss)"
 
@@ -492,6 +500,7 @@ If the configured image string remains exactly the same, force a new revision by
 revision suffix:
 
 ```powershell
+# Step 2. Needs the variables from step 1 ($RG, $APP) in this window.
 $IMAGE = 'ghcr.io/homotechsual/dotmarc:latest'
 $REVISION_SUFFIX = "latest-$(Get-Date -Format yyyyMMddHHmmss)"
 
@@ -546,6 +555,7 @@ Create another revision using the previous immutable release tag. Fill in **Vers
 details above so `$PREVIOUS_VERSION` is set:
 
 ```powershell
+# Needs the variables from step 1 ($RG, $APP, $PREVIOUS_VERSION) in this window.
 $IMAGE = "ghcr.io/homotechsual/dotmarc:$PREVIOUS_VERSION"
 $REVISION_SUFFIX = "rollback-$(Get-Date -Format yyyyMMddHHmmss)"
 
