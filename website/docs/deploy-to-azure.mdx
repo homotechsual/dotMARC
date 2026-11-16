@@ -601,11 +601,25 @@ described in [step 5c](#5c-re-apply-the-secret-references-and-restart). The scri
 ### Run the script
 
 Use Azure Cloud Shell with the **PowerShell** shell type (see [Use PowerShell](#use-powershell)), signed in to the
-subscription that holds dotMARC. You need **Owner** on the resource group. Replace `<your-resource-group>`:
+subscription that holds dotMARC. You need **Owner** on the resource group.
+
+This script creates role definitions and role assignments and changes your Container App, so **download it and read it
+before you run it**. It is a plain PowerShell script that only calls `az`, and the full text is also under
+[The script](#the-script-and-its-template) below if you would rather read it here first.
+
+Download the script and the Bicep template it deploys, side by side. Downloading the template yourself means the script
+doesn't fetch anything else when it runs:
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/azure/enable-mta-sts-hosting.ps1 -OutFile enable-mta-sts-hosting.ps1
+Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/infra/mta-sts-hosting.bicep -OutFile mta-sts-hosting.bicep
+```
+
+Open both files and check what they do (in Cloud Shell, use `code enable-mta-sts-hosting.ps1` or `cat`). When you are
+happy with them, replace `<your-resource-group>` and run the script, previewing first:
 
 ```powershell
 $RG = '<your-resource-group>'
-Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/azure/enable-mta-sts-hosting.ps1 -OutFile enable-mta-sts-hosting.ps1
 
 # See what it would do first. This changes nothing.
 ./enable-mta-sts-hosting.ps1 -ResourceGroup $RG -PreviewOnly
@@ -613,6 +627,10 @@ Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/sc
 # Then do it.
 ./enable-mta-sts-hosting.ps1 -ResourceGroup $RG
 ```
+
+On Windows PowerShell, run `Unblock-File ./enable-mta-sts-hosting.ps1` first. It removes the "downloaded from the
+internet" mark that PowerShell's default `RemoteSigned` policy would otherwise refuse to run, so only do it once you have
+read the script. Cloud Shell doesn't need it.
 
 If you didn't deploy with the default name, add `-Name <your-app-name>`. The script:
 
@@ -627,6 +645,23 @@ If you didn't deploy with the default name, add `-Name <your-app-name>`. The scr
 4. Waits for that revision to be healthy, and prints the hostname customers' CNAMEs must point at.
 
 It is safe to run again. It doesn't write any DNS records or touch your domains: that is stage 2, inside dotMARC.
+
+<details id="the-script-and-its-template">
+<summary>The script and its template</summary>
+
+The script, `enable-mta-sts-hosting.ps1`, as it is in the repository:
+
+```powershell reference title="enable-mta-sts-hosting.ps1"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/azure/enable-mta-sts-hosting.ps1
+```
+
+The template it deploys, `mta-sts-hosting.bicep`. It only declares the two custom roles and their assignments:
+
+```bicep reference title="mta-sts-hosting.bicep"
+https://github.com/homotechsual/dotMARC/blob/main/infra/mta-sts-hosting.bicep
+```
+
+</details>
 
 <details>
 <summary>If the new revision can't read its secrets</summary>
@@ -651,7 +686,8 @@ SUBSCRIPTION=$(az account show --query id -o tsv)
 ENVIRONMENT=$(az containerapp show -g "$RG" -n "$APP" --query 'properties.managedEnvironmentId' -o tsv | awk -F/ '{print $NF}')
 HOSTNAME=$(az containerapp show -g "$RG" -n "$APP" --query 'properties.configuration.ingress.fqdn' -o tsv)
 
-# 1. The two roles and their assignments (download mta-sts-hosting.bicep from the repository's infra folder first).
+# 1. The two roles and their assignments. Download mta-sts-hosting.bicep first and read it (shown under
+#    "The script and its template" above); it only declares those roles and assignments.
 az deployment group create -g "$RG" --template-file mta-sts-hosting.bicep \
   --parameters baseName="$APP" containerAppName="$APP" environmentName="$ENVIRONMENT"
 

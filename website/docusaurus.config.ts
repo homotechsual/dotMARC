@@ -252,6 +252,7 @@ const config: Config = {
         "powershell",
         "json",
         "bash",
+        "bicep",
         "dart",
         "objectivec",
         "r",

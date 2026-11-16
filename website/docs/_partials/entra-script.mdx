@@ -65,6 +65,28 @@ through Microsoft Graph. Leave out `--rbac` only if you are using an Application
 </TabItem>
 </Tabs>
 
+<details>
+<summary>The script</summary>
+
+<Tabs groupId="shell" queryString="shell">
+<TabItem value="powershell" label="PowerShell" default>
+
+```powershell reference title="create-dotmarc-apps.ps1"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.ps1
+```
+
+</TabItem>
+<TabItem value="bash" label="Bash">
+
+```bash reference title="create-dotmarc-apps.sh"
+https://github.com/homotechsual/dotMARC/blob/main/scripts/entra/create-dotmarc-apps.sh
+```
+
+</TabItem>
+</Tabs>
+
+</details>
+
 Either script prints your tenant ID, the two client IDs and the newly-created secrets; copy the secrets when shown. With the RBAC option
 it also prints the mailbox app's service principal object ID and the Exchange role to assign. Each run
 creates additional secrets for the reused app registrations.
