@@ -115,11 +115,12 @@ else
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.PassRate ?? -1)">Pass rate (30d)</MudTableSortLabel></MudTh>
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
                 <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
-                <MudTh colspan="2" Style="text-align:center">DNS Status</MudTh>
+                <MudTh colspan="3" Style="text-align:center">DNS Status</MudTh>
             </tr>
             <tr>
                 <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus))">DMARC</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus))">MTA-STS</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DkimStatusPresentation.GetLabel(r.DkimCheckStatus))">DKIM</MudTableSortLabel></MudTh>
             </tr>
             @if (_showFilters)
             {
@@ -159,6 +160,14 @@ else
                         }
                     </MudSelect>
                 </MudTh>
+                <MudTh>
+                    <MudSelect T="string" Value="_dkimFilter" ValueChanged="@(v => _dkimFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                        @foreach (var label in _rows.Select(r => DkimStatusPresentation.GetLabel(r.DkimCheckStatus)).Distinct().OrderBy(l => l))
+                        {
+                            <MudSelectItem T="string" Value="label">@label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTh>
             </tr>
             }
         </HeaderContent>
@@ -190,6 +199,9 @@ else
             </MudTd>
             <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
                 <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(context.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(context.MtaStsStatus)</MudChip>
+            </MudTd>
+            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                <MudChip T="string" Color="@DkimStatusPresentation.GetColor(context.DkimCheckStatus)" Size="Size.Small">@DkimStatusPresentation.GetLabel(context.DkimCheckStatus)</MudChip>
             </MudTd>
         </RowTemplate>
     </MudTable>
@@ -336,6 +348,7 @@ else
     private bool? _monitoredFilter;
     private string? _dmarcFilter;
     private string? _mtaStsFilter;
+    private string? _dkimFilter;
     private bool _showFilters;
 
     private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
@@ -371,6 +384,10 @@ else
             return false;
         }
         if (_mtaStsFilter is not null && MtaStsStatusPresentation.GetLabel(row.MtaStsStatus) != _mtaStsFilter)
+        {
+            return false;
+        }
+        if (_dkimFilter is not null && DkimStatusPresentation.GetLabel(row.DkimCheckStatus) != _dkimFilter)
         {
             return false;
         }

@@ -52,6 +52,20 @@ public class DashboardSummaryTests
         Assert.Empty(rows);
     }
 
+    [Theory]
+    [InlineData(DkimCheckStatus.Ok)]
+    [InlineData(DkimCheckStatus.Missing)]
+    [InlineData(DkimCheckStatus.NotConfigured)]
+    public void Build_CarriesEachDomainsDkimStatusIntoItsRow(DkimCheckStatus dkimStatus)
+    {
+        var domain = DomainWith("contoso.io", isMonitored: true, DateTimeOffset.UtcNow);
+        domain.DkimCheckStatus = dkimStatus;
+
+        var (_, rows) = DashboardSummary.Build([domain], parseFailureCount: 0);
+
+        Assert.Equal(dkimStatus, Assert.Single(rows).DkimCheckStatus);
+    }
+
     [Fact]
     public void Build_MarksDomainOk_WhenPassRateAtOrAbove95Percent()
     {
