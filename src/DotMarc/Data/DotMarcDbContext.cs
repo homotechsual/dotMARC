@@ -29,6 +29,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
+    public DbSet<UserDashboardPreference> UserDashboardPreferences => Set<UserDashboardPreference>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
     public DbSet<IpRange> IpRanges => Set<IpRange>();
@@ -244,6 +245,12 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
                     (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
                     c => c.Aggregate(0, (hash, p) => HashCode.Combine(hash, p)),
                     c => c.ToList()));
+        });
+
+        modelBuilder.Entity<UserDashboardPreference>(entity =>
+        {
+            entity.HasIndex(p => p.UserKey).IsUnique();
+            entity.Property(p => p.UserKey).HasMaxLength(UserDashboardPreference.MaxUserKeyLength);
         });
 
         modelBuilder.Entity<UserAccess>(entity =>

@@ -101,110 +101,41 @@ else
         </MudPaper>
     }
 
-    <MudTable Items="_rows" Hover="true" T="DashboardDomainRow" CustomHeader="true" Filter="RowMatchesFilters">
-        @* The filters apply to every column, so the toggle sits above the table rather than inside one column's heading. *@
-        <ToolBarContent>
-            <MudSpacer />
-            <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                       OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
-        </ToolBarContent>
-        <HeaderContent>
-            <tr>
-                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Name)">Domain</MudTableSortLabel></MudTh>
-                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Status)">Report Status</MudTableSortLabel></MudTh>
-                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.PassRate ?? -1)">Pass rate (30d)</MudTableSortLabel></MudTh>
-                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
-                <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
-                <MudTh colspan="3" Style="text-align:center">DNS Status</MudTh>
-            </tr>
-            <tr>
-                <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus))">DMARC</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus))">MTA-STS</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DkimStatusPresentation.GetLabel(r.DkimCheckStatus))">DKIM</MudTableSortLabel></MudTh>
-            </tr>
-            @if (_showFilters)
+    <div class="d-flex align-center mb-2">
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary">
+            <MudButton Variant="@(_groupedView ? Variant.Outlined : Variant.Filled)" StartIcon="@Icons.Material.Filled.TableRows" OnClick="@(() => _groupedView = false)">All domains</MudButton>
+            <MudButton Variant="@(_groupedView ? Variant.Filled : Variant.Outlined)" StartIcon="@Icons.Material.Filled.AccountTree" OnClick="@(() => _groupedView = true)">By group</MudButton>
+        </MudButtonGroup>
+        <MudSpacer />
+        @if (_userKey is not null)
+        {
+            <MudTooltip Text="Next time you open the Dashboard it starts with this view, these Group and Tag filters and these column filters." Arrow="true">
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveDefaultAsync">Save as my default</MudButton>
+            </MudTooltip>
+            @if (_hasSavedDefault)
             {
-            <tr>
-                <MudTh><MudTextField T="string" @bind-Value="_domainFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                <MudTh>
-                    <MudSelect T="string" Value="_statusFilter" ValueChanged="@(v => _statusFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        @foreach (var status in _rows.Select(r => r.Status).Distinct().OrderBy(s => s))
-                        {
-                            <MudSelectItem T="string" Value="status">@status</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudTh>
-                <MudTh>
-                    <MudNumericField T="double?" @bind-Value="_minPassRatePercentFilter" Placeholder="Min %" Margin="Margin.Dense" Min="0" Max="100" />
-                </MudTh>
-                <MudTh><MudTextField T="string" @bind-Value="_lastReportFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                <MudTh>
-                    <MudSelect T="bool?" Value="_monitoredFilter" ValueChanged="@(v => _monitoredFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
-                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
-                    </MudSelect>
-                </MudTh>
-                <MudTh>
-                    <MudSelect T="string" Value="_dmarcFilter" ValueChanged="@(v => _dmarcFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        @foreach (var label in _rows.Select(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus)).Distinct().OrderBy(l => l))
-                        {
-                            <MudSelectItem T="string" Value="label">@label</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudTh>
-                <MudTh>
-                    <MudSelect T="string" Value="_mtaStsFilter" ValueChanged="@(v => _mtaStsFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        @foreach (var label in _rows.Select(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus)).Distinct().OrderBy(l => l))
-                        {
-                            <MudSelectItem T="string" Value="label">@label</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudTh>
-                <MudTh>
-                    <MudSelect T="string" Value="_dkimFilter" ValueChanged="@(v => _dkimFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                        @foreach (var label in _rows.Select(r => DkimStatusPresentation.GetLabel(r.DkimCheckStatus)).Distinct().OrderBy(l => l))
-                        {
-                            <MudSelectItem T="string" Value="label">@label</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudTh>
-            </tr>
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ClearDefaultAsync">Clear my default</MudButton>
             }
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
-                @context.Name
-                @if (context.SpfCheckStatus == SpfCheckStatus.NullSpf)
-                {
-                    <MudTooltip Text="This domain publishes a null SPF record (no authorized senders). For parked domains like this, DMARC's p=reject is the recommended policy." Arrow="true">
-                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">Null-routed</MudChip>
-                    </MudTooltip>
-                }
-            </MudTd>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer"><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
-            <MudTd>
-                <AuthorizeView Policy="DomainsEdit" Context="authState">
-                    <Authorized>
-                        <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => ToggleMonitoredAsync(context, v))" Color="Color.Primary" />
-                    </Authorized>
-                    <NotAuthorized>
-                        @(context.IsMonitored ? "Yes" : "No")
-                    </NotAuthorized>
-                </AuthorizeView>
-            </MudTd>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
-                <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)</MudChip>
-            </MudTd>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
-                <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(context.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(context.MtaStsStatus)</MudChip>
-            </MudTd>
-            <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
-                <MudChip T="string" Color="@DkimStatusPresentation.GetColor(context.DkimCheckStatus)" Size="Size.Small">@DkimStatusPresentation.GetLabel(context.DkimCheckStatus)</MudChip>
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+        }
+    </div>
+
+    @if (!_groupedView)
+    {
+        @DomainTable(_rows)
+    }
+    else if (_groupedTables.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">No domains to show.</MudAlert>
+    }
+    else
+    {
+        @foreach (var group in _groupedTables)
+        {
+            <div class="mb-4">
+                @DomainTable(group.Rows, group.GroupName ?? "No group")
+            </div>
+        }
+    }
 
     <MudPaper Class="pa-4 mt-4" Elevation="1">
         <MudText Typo="Typo.subtitle1" Class="mb-2">Polling status</MudText>
@@ -293,6 +224,118 @@ else
 }
 
 @code {
+    private RenderFragment DomainTable(IReadOnlyList<DashboardDomainRow> items, string? title = null) => __builder =>
+    {
+        <MudTable Items="items" Hover="true" T="DashboardDomainRow" CustomHeader="true" Filter="RowMatchesFilters">
+            @* The filters apply to every column, so the toggle sits above the table rather than inside one column's heading. *@
+            <ToolBarContent>
+                @if (title is not null)
+            {
+                <MudText Typo="Typo.h6">@title <MudText Typo="Typo.caption" Inline="true" Class="mud-text-secondary">(@items.Count)</MudText></MudText>
+            }
+            <MudSpacer />
+                <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
+                           OnClick="@(() => _showFilters = !_showFilters)">@(_showFilters ? "Hide filters" : "Filters")</MudButton>
+            </ToolBarContent>
+            <HeaderContent>
+                <tr>
+                    <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Name)">Domain</MudTableSortLabel></MudTh>
+                    <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.Status)">Report Status</MudTableSortLabel></MudTh>
+                    <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.PassRate ?? -1)">Pass rate (30d)</MudTableSortLabel></MudTh>
+                    <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
+                    <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
+                    <MudTh colspan="3" Style="text-align:center">DNS Status</MudTh>
+                </tr>
+                <tr>
+                    <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus))">DMARC</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus))">MTA-STS</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => DkimStatusPresentation.GetLabel(r.DkimCheckStatus))">DKIM</MudTableSortLabel></MudTh>
+                </tr>
+                @if (_showFilters)
+                {
+                <tr>
+                    <MudTh><MudTextField T="string" @bind-Value="_domainFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                    <MudTh>
+                        <MudSelect T="string" Value="_statusFilter" ValueChanged="@(v => _statusFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var status in _rows.Select(r => r.Status).Distinct().OrderBy(s => s))
+                            {
+                                <MudSelectItem T="string" Value="status">@status</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh>
+                        <MudNumericField T="double?" @bind-Value="_minPassRatePercentFilter" Placeholder="Min %" Margin="Margin.Dense" Min="0" Max="100" />
+                    </MudTh>
+                    <MudTh><MudTextField T="string" @bind-Value="_lastReportFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
+                    <MudTh>
+                        <MudSelect T="bool?" Value="_monitoredFilter" ValueChanged="@(v => _monitoredFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
+                            <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh>
+                        <MudSelect T="string" Value="_dmarcFilter" ValueChanged="@(v => _dmarcFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var label in _rows.Select(r => DmarcStatusPresentation.GetLabel(r.DmarcCheckStatus, r.DmarcAuthorizationCheckStatus)).Distinct().OrderBy(l => l))
+                            {
+                                <MudSelectItem T="string" Value="label">@label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh>
+                        <MudSelect T="string" Value="_mtaStsFilter" ValueChanged="@(v => _mtaStsFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var label in _rows.Select(r => MtaStsStatusPresentation.GetLabel(r.MtaStsStatus)).Distinct().OrderBy(l => l))
+                            {
+                                <MudSelectItem T="string" Value="label">@label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh>
+                        <MudSelect T="string" Value="_dkimFilter" ValueChanged="@(v => _dkimFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            @foreach (var label in _rows.Select(r => DkimStatusPresentation.GetLabel(r.DkimCheckStatus)).Distinct().OrderBy(l => l))
+                            {
+                                <MudSelectItem T="string" Value="label">@label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTh>
+                </tr>
+                }
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                    @context.Name
+                    @if (context.SpfCheckStatus == SpfCheckStatus.NullSpf)
+                    {
+                        <MudTooltip Text="This domain publishes a null SPF record (no authorized senders). For parked domains like this, DMARC's p=reject is the recommended policy." Arrow="true">
+                            <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">Null-routed</MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer"><MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip></MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.PassRate is { } rate ? rate.ToString("P1") : "—")</MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">@(context.LastReportReceivedUtc is { } last ? last.ToString("g") : "never")</MudTd>
+                <MudTd>
+                    <AuthorizeView Policy="DomainsEdit" Context="authState">
+                        <Authorized>
+                            <MudSwitch T="bool" Value="context.IsMonitored" ValueChanged="@(v => ToggleMonitoredAsync(context, v))" Color="Color.Primary" />
+                        </Authorized>
+                        <NotAuthorized>
+                            @(context.IsMonitored ? "Yes" : "No")
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                    <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)</MudChip>
+                </MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                    <MudChip T="string" Color="@MtaStsStatusPresentation.GetColor(context.MtaStsStatus)" Size="Size.Small">@MtaStsStatusPresentation.GetLabel(context.MtaStsStatus)</MudChip>
+                </MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                    <MudChip T="string" Color="@DkimStatusPresentation.GetColor(context.DkimCheckStatus)" Size="Size.Small">@DkimStatusPresentation.GetLabel(context.DkimCheckStatus)</MudChip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    };
+
     private bool _checkingMailbox;
     private bool _pollingNow;
     private IReadOnlyList<DotMarc.Graph.MailboxCheckResult> _mailboxChecks = [];
@@ -350,6 +393,8 @@ else
     private string? _mtaStsFilter;
     private string? _dkimFilter;
     private bool _showFilters;
+    private bool _groupedView;
+    private IReadOnlyList<DashboardDomainGroup> _groupedTables = [];
 
     private bool IsFilterActive => _selectedGroupId is not null || _selectedTagId is not null;
 
@@ -394,14 +439,79 @@ else
         return true;
     }
 
+    private string? _userKey;
+    private bool _hasSavedDefault;
+
     protected override async Task OnInitializedAsync()
     {
+        _userKey = DashboardPreferencesStore.UserKeyOf(await AuditActorAccessor.GetAsync());
+        if (_userKey is not null)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (await DashboardPreferencesStore.GetAsync(db, _userKey) is { } saved)
+            {
+                ApplyPreferences(saved);
+                _hasSavedDefault = true;
+            }
+        }
+
         await LoadAsync();
 
         if (RendererInfo.IsInteractive)
         {
             ShowDnsPushResultToast();
         }
+    }
+
+    private DashboardPreferences CurrentPreferences() => new(
+        _groupedView, _selectedGroupId, _selectedTagId, _showFilters, _statusFilter, _minPassRatePercentFilter, _monitoredFilter, _dmarcFilter, _mtaStsFilter, _dkimFilter);
+
+    private void ApplyPreferences(DashboardPreferences preferences)
+    {
+        _groupedView = preferences.GroupedView;
+        _selectedGroupId = preferences.GroupId;
+        _selectedTagId = preferences.TagId;
+        _showFilters = preferences.ShowFilters;
+        _statusFilter = preferences.Status;
+        _minPassRatePercentFilter = preferences.MinPassRatePercent;
+        _monitoredFilter = preferences.Monitored;
+        _dmarcFilter = preferences.Dmarc;
+        _mtaStsFilter = preferences.MtaSts;
+        _dkimFilter = preferences.Dkim;
+    }
+
+    private async Task SaveDefaultAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DashboardPreferencesStore.SaveAsync(db, _userKey!, CurrentPreferences());
+            _hasSavedDefault = true;
+            Snackbar.Add("Saved. The Dashboard will open like this for you from now on.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Couldn't save your default. Try again.", Severity.Error);
+        }
+    }
+
+    private async Task ClearDefaultAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await DashboardPreferencesStore.ClearAsync(db, _userKey!);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Couldn't clear your default. Try again.", Severity.Error);
+            return;
+        }
+
+        _hasSavedDefault = false;
+        ApplyPreferences(new DashboardPreferences());
+        await LoadAsync();
+        Snackbar.Add("Default cleared. The Dashboard will open with every domain.", Severity.Info);
     }
 
     private void ShowDnsPushResultToast()
@@ -436,6 +546,16 @@ else
         }
         _allTags = await db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
 
+        // A saved default can name a Group or Tag that has since been deleted, or a Group this person can no longer see.
+        if (_selectedTagId is { } savedTag && _allTags.All(t => t.Id != savedTag))
+        {
+            _selectedTagId = null;
+        }
+        if (_selectedGroupId is { } savedGroup && _allGroups.All(g => g.Id != savedGroup))
+        {
+            _selectedGroupId = _scopedGroupIds?[0];
+        }
+
         var cutoff = DomainStatistics.GetWindowCutoffUtc();
         var query = db.Domains
             .AsNoTracking()
@@ -448,6 +568,7 @@ else
             // Two sibling collections under each record (override reasons and auth details) would
             // otherwise be joined into one result, multiplying rows and repeating every report's
             // RawXml on each of them.
+            .Include(d => d.Groups)
             .AsSplitQuery()
             .AsQueryable();
 
@@ -465,6 +586,12 @@ else
         var parseFailureCount = await db.ParseFailures.CountAsync();
 
         (_summary, _rows) = DashboardSummary.Build(domains, parseFailureCount);
+
+        var visibleGroups = (_selectedGroupId is { } onlyGroup ? _allGroups.Where(g => g.Id == onlyGroup) : _allGroups).Select(g => (g.Id, g.Name)).ToList();
+        _groupedTables = DashboardGrouping.Group(
+            _rows,
+            domains.ToDictionary(d => d.Id, d => (IReadOnlyList<int>)d.Groups.Select(g => g.Id).ToList()),
+            visibleGroups);
 
         _lastPoll = await db.PollCycles
             .AsNoTracking()
