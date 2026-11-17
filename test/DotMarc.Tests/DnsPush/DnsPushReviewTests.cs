@@ -112,4 +112,28 @@ public sealed class DnsPushReviewTests
         Assert.True(review.NothingToChange);
         Assert.Null(review.ZoneName);
     }
+
+    [Theory]
+    [InlineData("contoso.com", "_dmarc.contoso.com", "_dmarc")]
+    [InlineData("contoso.com", "contoso.com", "@")]
+    [InlineData("contoso.com.", "_DMARC.Contoso.com.", "_DMARC")]
+    [InlineData("contoso.com", "selector1._domainkey.contoso.com", "selector1._domainkey")]
+    [InlineData("contoso.com", "contoso.com.evil.net", "contoso.com.evil.net")]
+    [InlineData("contoso.com", "_dmarc.fabrikam.com", "_dmarc.fabrikam.com")]
+    [InlineData(null, "_dmarc.contoso.com", "_dmarc.contoso.com")]
+    public void HostWithinZone_IsRelativeToTheZone_WhenTheNameIsInsideIt(string? zone, string name, string expected) =>
+        Assert.Equal(expected, DnsPushReview.HostWithinZone(zone, name));
+
+    [Fact]
+    public void ToClipboardText_ListsTypeNameAndValue_TabSeparated_OnePerLine()
+    {
+        var text = DnsPushReview.ToClipboardText([
+            new DnsReviewRecord("TXT", "_dmarc.contoso.com", "v=DMARC1; p=none"),
+            new DnsReviewRecord("CNAME", "mta-sts.contoso.com", "host.example.net"),
+        ]);
+
+        Assert.Equal(
+            $"TXT	_dmarc.contoso.com	v=DMARC1; p=none{Environment.NewLine}CNAME	mta-sts.contoso.com	host.example.net",
+            text);
+    }
 }

@@ -74,6 +74,31 @@ public sealed record DnsPushReview(
         return new DnsPushReview(plan.Changes.Select(change => change.ZoneName).FirstOrDefault(), additions, removals, lostDelegations);
     }
 
+    /// <summary>The record name as most DNS providers' "Host" or "Name" box wants it: relative to the zone, with "@" for the
+    /// zone's own apex. Returns <paramref name="name"/> unchanged when it is not inside <paramref name="zoneName"/>.</summary>
+    public static string HostWithinZone(string? zoneName, string name)
+    {
+        if (string.IsNullOrWhiteSpace(zoneName))
+        {
+            return name;
+        }
+
+        var zone = zoneName.TrimEnd('.');
+        var fullName = name.TrimEnd('.');
+        if (string.Equals(fullName, zone, StringComparison.OrdinalIgnoreCase))
+        {
+            return "@";
+        }
+
+        return fullName.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)
+            ? fullName[..^(zone.Length + 1)]
+            : name;
+    }
+
+    /// <summary>The records as tab-separated lines (type, name, value), for pasting into a ticket or a spreadsheet.</summary>
+    public static string ToClipboardText(IEnumerable<DnsReviewRecord> records) =>
+        string.Join(Environment.NewLine, records.Select(record => $"{record.Type}\t{record.Name}\t{record.Content}"));
+
     private static bool SameValue(string recordType, string? existing, string desired) =>
         existing is not null && string.Equals(existing, desired, recordType == "CNAME" ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }

@@ -1,5 +1,6 @@
 @* src/DotMarc/Components/Dialogs/DnsPushReviewDialog.razor *@
 @using DotMarc.DnsPush
+@using DotMarc.Components.Shared
 <MudDialog>
     <TitleContent>Review DNS changes</TitleContent>
     <DialogContent>
@@ -51,23 +52,9 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter, EditorRequired] public DnsPushReview Review { get; set; } = default!;
 
-    private static RenderFragment RecordTable(IReadOnlyList<DnsReviewRecord> records) => __builder =>
+    private RenderFragment RecordTable(IReadOnlyList<DnsReviewRecord> records) => __builder =>
     {
-        <MudSimpleTable Dense="true" Hover="false" Bordered="true" Style="overflow-x:auto">
-            <thead>
-                <tr><th>Type</th><th>Name</th><th>Content</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var record in records)
-                {
-                    <tr>
-                        <td><b>@record.Type</b></td>
-                        <td style="word-break:break-all">@record.Name</td>
-                        <td style="font-family:monospace; word-break:break-all">@record.Content</td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
+        <DnsRecordsTable Records="records" ZoneName="Review.ZoneName" ShowCopyAll="false" />
     };
 
     private void Confirm() => MudDialog.Close(DialogResult.Ok(true));

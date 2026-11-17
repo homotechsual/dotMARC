@@ -16,4 +16,14 @@ public static class DnsPushReviewDialogExtensions
         var result = await dialog.Result;
         return result is { Canceled: false } && !review.NothingToChange;
     }
+
+    /// <summary>For when dotMARC can't push (no DNS provider connected for the zone): lists the records the person has to add
+    /// themselves, in a table with copy buttons. <paramref name="reason"/> says why, as a sentence ending in a full stop.</summary>
+    public static async Task ShowManualDnsRecordsAsync(this IDialogService dialogService, DnsChangePlan plan, string reason)
+    {
+        var dialog = await dialogService.ShowAsync<ManualDnsRecordsDialog>("Add these DNS records",
+            new DialogParameters<ManualDnsRecordsDialog> { { x => x.Review, DnsPushReview.From(plan) }, { x => x.Reason, reason } },
+            new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true });
+        await dialog.Result;
+    }
 }

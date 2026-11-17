@@ -1,0 +1,53 @@
+@* src/DotMarc/Components/Dialogs/ManualDnsRecordsDialog.razor *@
+@using DotMarc.DnsPush
+@using DotMarc.Components.Shared
+<MudDialog>
+    <TitleContent>Add these DNS records</TitleContent>
+    <DialogContent>
+        @if (Review.NothingToChange)
+        {
+            <MudAlert Severity="Severity.Info">DNS already holds everything dotMARC would write, so there is nothing to add.</MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="mb-2">
+                @Reason
+                Add @(Review.Additions.Count == 1 ? "this record" : "these records")@(Review.ZoneName is null ? "" : " to ")@if (Review.ZoneName is not null){<b>@Review.ZoneName</b>} where you manage DNS:
+            </MudText>
+            <DnsRecordsTable Records="Review.Additions" ZoneName="Review.ZoneName" />
+
+            @if (Review.Removals.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-4 mb-2">
+                    Remove @(Review.Removals.Count == 1 ? "this existing record" : "these existing records") first, or the new @(Review.Additions.Count == 1 ? "one" : "ones") will clash with @(Review.Removals.Count == 1 ? "it" : "them").
+                </MudAlert>
+                <DnsRecordsTable Records="Review.Removals" ZoneName="Review.ZoneName" ShowCopyAll="false" />
+            }
+
+            @if (Review.LostDelegations.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4">
+                    @foreach (var delegation in Review.LostDelegations)
+                    {
+                        <div><code>@delegation.Name</code> is a CNAME delegated to <code>@delegation.Content</code>, likely a third-party service managing it.</div>
+                    }
+                    DNS doesn't allow a CNAME to sit beside any other record, so adding the new record ends that delegation.
+                </MudAlert>
+            }
+
+            <MudText Typo="Typo.body2" Class="mt-4">DNS changes can take a few minutes to show up. dotMARC picks them up on its next check.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Close">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public DnsPushReview Review { get; set; } = default!;
+    /// <summary>Why dotMARC can't push this itself, as a sentence ending in a full stop.</summary>
+    [Parameter] public string Reason { get; set; } = "";
+
+    private void Close() => MudDialog.Close();
+}

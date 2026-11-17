@@ -298,18 +298,16 @@
 
             var providerKey = Domain.DnsProvider.ToProviderKey();
             var pushProvider = await DnsPushProviders.FindConfiguredAsync(providerKey);
-            if (pushProvider is null)
+            if (pushProvider is null && Domain.DnsProvider == DetectedDnsProvider.NotChecked)
             {
-                Snackbar.Add(Domain.DnsProvider == DetectedDnsProvider.NotChecked
-                    ? "This domain's DNS provider hasn't been checked yet - try the recheck button on the Overview tab, then push again."
-                    : $"Couldn't find a configured DNS push option for {Domain.Name} - add the CNAME manually.", Severity.Warning);
+                Snackbar.Add("This domain's DNS provider hasn't been checked yet - try the recheck button on the Overview tab, then push again.", Severity.Warning);
                 return;
             }
 
             DnsChangePlan plan;
             try
             {
-                plan = await ChangeBuilders.Find("mta-sts")!.BuildAsync(new DnsPushRequest(Domain, pushProvider.ProviderKey, Domain.DnsZone ?? Domain.Name, null), CancellationToken.None);
+                plan = await ChangeBuilders.Find("mta-sts")!.BuildAsync(new DnsPushRequest(Domain, pushProvider?.ProviderKey ?? providerKey ?? string.Empty, Domain.DnsZone ?? Domain.Name, null), CancellationToken.None);
             }
             catch (Exception)
             {
@@ -320,6 +318,12 @@
             if (plan.Refusal is not null)
             {
                 Snackbar.Add($"Couldn't work out what to push for {Domain.Name}. Try again.", Severity.Warning);
+                return;
+            }
+
+            if (pushProvider is null)
+            {
+                await DialogService.ShowManualDnsRecordsAsync(plan, "dotMARC can't push to this DNS provider because no push option is set up for it.");
                 return;
             }
 

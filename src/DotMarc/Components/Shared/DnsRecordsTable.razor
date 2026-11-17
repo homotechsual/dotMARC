@@ -1,0 +1,83 @@
+@* src/DotMarc/Components/Shared/DnsRecordsTable.razor *@
+@using DotMarc.DnsPush
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<MudSimpleTable Dense="false" Hover="false" Bordered="true" Style="overflow-x:auto">
+    <thead>
+        <tr>
+            <th style="width:1%; white-space:nowrap">Type</th>
+            <th>Name</th>
+            <th>Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var record in Records)
+        {
+            var host = DnsPushReview.HostWithinZone(ZoneName, record.Name);
+            <tr>
+                <td style="white-space:nowrap; vertical-align:top"><b>@record.Type</b></td>
+                <td style="vertical-align:top">
+                    <div class="d-flex align-start">
+                        <code style="word-break:break-all">@record.Name</code>
+                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy name" aria-label="Copy name"
+                                       OnClick="() => CopyAsync(record.Name, CopyKind.Name)" />
+                    </div>
+                    @if (host != record.Name)
+                    {
+                        <div class="d-flex align-center">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Host only: <code>@host</code></MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy host only" aria-label="Copy host only"
+                                           OnClick="() => CopyAsync(host, CopyKind.Host)" />
+                        </div>
+                    }
+                </td>
+                <td style="vertical-align:top">
+                    <div class="d-flex align-start">
+                        <code style="word-break:break-all">@record.Content</code>
+                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy value" aria-label="Copy value"
+                                       OnClick="() => CopyAsync(record.Content, CopyKind.Value)" />
+                    </div>
+                </td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+@if (ShowCopyAll && Records.Count > 0)
+{
+    <MudButton Class="mt-2" Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy"
+               OnClick="() => CopyAsync(DnsPushReview.ToClipboardText(Records), CopyKind.All)">
+        Copy @(Records.Count == 1 ? "record" : "all records")
+    </MudButton>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<DnsReviewRecord> Records { get; set; } = [];
+    /// <summary>The zone the records live in. When set, a copyable "host only" form of each name is shown too, because most DNS providers want the name relative to the zone.</summary>
+    [Parameter] public string? ZoneName { get; set; }
+    [Parameter] public bool ShowCopyAll { get; set; } = true;
+
+    private enum CopyKind { Name, Host, Value, All }
+
+    private async Task CopyAsync(string text, CopyKind what)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        }
+        catch (JSException)
+        {
+            // The clipboard API needs a secure context (HTTPS or localhost) and can be refused by the browser.
+            Snackbar.Add("Couldn't copy automatically. Select the text and copy it manually.", Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add(what switch
+        {
+            CopyKind.Name => "Name copied.",
+            CopyKind.Host => "Host copied.",
+            CopyKind.Value => "Value copied.",
+            _ => "Records copied.",
+        }, Severity.Success);
+    }
+}
