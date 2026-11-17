@@ -1169,7 +1169,7 @@ public sealed class PollingService : BackgroundService
             {
                 try
                 {
-                    await RunSingleMtaStsCheckAsync(domain, dnsVerifier, servingVerifier, hostProvisioner, hostingHostname, cancellationToken).ConfigureAwait(false);
+                    await RunSingleMtaStsCheckAsync(domain, dnsVerifier, servingVerifier, hostProvisioner, hostingHostname, cancellationToken, _logger).ConfigureAwait(false);
                     anyUpdated = true;
                 }
                 catch (Exception ex)
@@ -1202,7 +1202,8 @@ public sealed class PollingService : BackgroundService
         IMtaStsServingVerifier servingVerifier,
         IMtaStsHostProvisioner hostProvisioner,
         string hostingHostname,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILogger? logger = null)
     {
         if (domain.MtaStsStatus == MtaStsStatus.PendingDns)
         {
@@ -1214,10 +1215,10 @@ public sealed class PollingService : BackgroundService
                     domain.MtaStsCheckDetail = null;
                     break;
                 case MtaStsDnsVerificationResult.PointsElsewhere:
-                    domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} resolves, but not to {hostingHostname} - check the CNAME's target.";
+                    domain.MtaStsCheckDetail = $"mta-sts.{domain.Name} resolves, but not to {hostingHostname}. Change its CNAME to point at {hostingHostname}; Push DNS Records does it where your DNS provider is supported.";
                     break;
                 default:
-                    domain.MtaStsCheckDetail = $"Waiting for mta-sts.{domain.Name} to resolve to {hostingHostname}.";
+                    domain.MtaStsCheckDetail = $"Waiting for mta-sts.{domain.Name} to resolve to {hostingHostname}. Add that CNAME at your DNS provider if you have not; Push DNS Records does it where supported. DNS changes can take a few minutes to appear.";
                     break;
             }
 
@@ -1242,9 +1243,11 @@ public sealed class PollingService : BackgroundService
         }
         catch (Exception ex)
         {
+            // The person sees the short reason and what to do; the full exception (Azure's request ID included) is for the log.
+            logger?.LogWarning(ex, "MTA-STS provisioning failed for {Domain}.", domain.Name);
             domain.MtaStsStatus = MtaStsStatus.Failed;
             domain.MtaStsCheckDetail = await DescribeMovedCnameAsync(domain, dnsVerifier, hostingHostname, cancellationToken).ConfigureAwait(false)
-                ?? $"Provisioning failed: {ex.Message}";
+                ?? $"Provisioning failed: {MtaStsProvisioningError.Describe(ex, $"mta-sts.{domain.Name}")}";
             domain.MtaStsCheckedUtc = DateTimeOffset.UtcNow;
             return;
         }
@@ -1266,7 +1269,7 @@ public sealed class PollingService : BackgroundService
             {
                 // Was working, isn't now - a regression, not an onboarding wait state.
                 domain.MtaStsStatus = MtaStsStatus.Failed;
-                domain.MtaStsCheckDetail = movedCname ?? $"mta-sts.{domain.Name} stopped serving the expected policy.";
+                domain.MtaStsCheckDetail = movedCname ?? $"mta-sts.{domain.Name} stopped serving the expected policy. Check that dotMARC is running and its certificate is still valid; the CNAME still points here, so that is not the cause. dotMARC keeps checking and clears this once the policy is served again.";
             }
             else if (domain.MtaStsStatus == MtaStsStatus.Failed)
             {
@@ -1281,7 +1284,7 @@ public sealed class PollingService : BackgroundService
             else
             {
                 domain.MtaStsStatus = MtaStsStatus.PendingCertificate;
-                domain.MtaStsCheckDetail = "Waiting for the certificate to be issued.";
+                domain.MtaStsCheckDetail = "Waiting for the certificate to be issued. Nothing to do: this usually takes a few minutes and dotMARC checks again automatically.";
             }
         }
 

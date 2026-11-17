@@ -268,6 +268,31 @@ public sealed class MtaStsCheckCycleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RunMtaStsCheckCycleAsync_ShowsAzuresReason_WithoutItsStatusHeadersAndBody_WhenProvisioningFails()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain
+        {
+            Name = "contoso.io",
+            FirstSeenUtc = DateTimeOffset.UtcNow,
+            MtaStsEnabled = true,
+            MtaStsStatus = MtaStsStatus.PendingCertificate
+        });
+        await context.SaveChangesAsync();
+
+        var azureError = new Azure.RequestFailedException(409,
+            "Cannot create managed certificate 'x' for subject name 'mta-sts.contoso.io'. Status: 409 (Conflict) ErrorCode: Other Content: {\"error\":{}} Headers: Cache-Control: no-cache");
+        var provisioner = new FakeMtaStsHostProvisioner { ExceptionOnEnsure = azureError };
+        var service = CreateService(context);
+        await service.RunMtaStsCheckCycleAsync(context, new FakeMtaStsDnsVerifier(), new FakeMtaStsServingVerifier(), provisioner, HostingHostname, CancellationToken.None);
+
+        var domain = context.Domains.Single();
+        Assert.Equal(MtaStsStatus.Failed, domain.MtaStsStatus);
+        Assert.StartsWith("Provisioning failed: Azure rejected the request: Cannot create managed certificate 'x' for subject name 'mta-sts.contoso.io'.", domain.MtaStsCheckDetail);
+        Assert.DoesNotContain("Headers", domain.MtaStsCheckDetail);
+    }
+
+    [Fact]
     public async Task RunMtaStsCheckCycleAsync_SkipsAnActiveDomainCheckedRecently_ButRechecksAPendingOneAtTheSameAge()
     {
         using var context = CreateContext();

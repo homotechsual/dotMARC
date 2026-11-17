@@ -151,6 +151,15 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
             return ReadyOrThrow(existing.Data, existing.Id, hostname);
         }
 
+        // Azure allows one managed certificate operation per subject name in an environment. If a certificate for this
+        // hostname already exists under another name (made by hand in the portal, or by an earlier binding), use it
+        // rather than create a second one that Azure would refuse.
+        var sameSubject = await FindCertificateForSubjectAsync(certificates, hostname, cancellationToken).ConfigureAwait(false);
+        if (sameSubject is not null)
+        {
+            return ReadyOrThrow(sameSubject.Data, sameSubject.Id, hostname);
+        }
+
         var certificateData = new ContainerAppManagedCertificateData(environment.Value.Data.Location)
         {
             Properties = new ManagedCertificateProperties
@@ -160,8 +169,44 @@ public sealed class AzureMtaStsHostProvisioner : IMtaStsHostProvisioner
             }
         };
 
-        var created = await certificates.CreateOrUpdateAsync(WaitUntil.Completed, certificateName, certificateData, cancellationToken).ConfigureAwait(false);
-        return ReadyOrThrow(created.Value.Data, created.Value.Id, hostname);
+        try
+        {
+            var created = await certificates.CreateOrUpdateAsync(WaitUntil.Completed, certificateName, certificateData, cancellationToken).ConfigureAwait(false);
+            return ReadyOrThrow(created.Value.Data, created.Value.Id, hostname);
+        }
+        catch (RequestFailedException ex) when (string.Equals(ex.ErrorCode, "ExistingManagedCertificateOperationInProgress", StringComparison.Ordinal))
+        {
+            // Another certificate for this hostname is mid-issue, so wait for it; the next check picks it up.
+            throw new MtaStsCertificatePendingException(hostname, ex);
+        }
+    }
+
+    /// <summary>Any managed certificate in the environment for <paramref name="hostname"/>, whatever it is named. One that
+    /// has been issued wins over one still pending, and a failed one is ignored.</summary>
+    private static async Task<ContainerAppManagedCertificateResource?> FindCertificateForSubjectAsync(
+        ContainerAppManagedCertificateCollection certificates, string hostname, CancellationToken cancellationToken)
+    {
+        ContainerAppManagedCertificateResource? pending = null;
+        await foreach (var certificate in certificates.GetAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!string.Equals(certificate.Data.Properties?.SubjectName, hostname, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var state = certificate.Data.Properties?.ProvisioningState;
+            if (state == ContainerAppCertificateProvisioningState.Succeeded)
+            {
+                return certificate;
+            }
+
+            if (state == ContainerAppCertificateProvisioningState.Pending || state is null)
+            {
+                pending ??= certificate;
+            }
+        }
+
+        return pending;
     }
 
     /// <summary>A managed certificate can only be bound once Azure has issued it. While it's still pending, say so (the
