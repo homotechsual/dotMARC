@@ -147,8 +147,32 @@ service, and the other IPs show "same as the service". A source in the Not match
 service, so you decide on its IPs.
 
 Changing decisions needs the **SenderReview** permission, which the Admin role has. Custom roles can be
-given it on the Access page. Anyone who can see the domain can see the decisions. Baseline and
-per-group decisions, which let you set an answer once for many domains, come in a later release.
+given it on the Access page. Anyone who can see the domain can see the decisions.
+
+#### Set an answer once for many domains
+
+You don't have to decide the same sender on every domain. Decisions can be made at three levels, and the
+most specific one wins:
+
+1. **The domain's own decision**, on the service or on a single IP. It overrides everything below.
+2. **The group's defaults**, set from **Manage > Groups** with the **Sender defaults** button on a group.
+3. **The baseline**, set from **Manage > Sender baseline**. It applies to every domain.
+
+For example, authorise Microsoft 365 in the baseline, mark it Unauthorised in the defaults of a client
+group that has moved away from it, and authorise it again on one domain of that client that still uses
+it. Each row in the Senders table says where its decision came from: set on this domain, from a group,
+or from the baseline. Choosing **Reset to inherited** in the dialog removes the domain's own decision, so
+the row falls back to the level below.
+
+* A baseline or group decision only matters on a domain whose reports show that service. Nothing is
+  added to domains that don't use it.
+* If a domain is in several groups that disagree, the most cautious decision wins: Unauthorised, then
+  Under review, then Authorised. The row says which groups disagree, and a decision on the domain itself
+  settles it.
+* The baseline can be changed only by someone who isn't limited to particular groups. A person limited to
+  some groups can change the defaults of their own groups, and no others.
+* If a service later leaves dotMARC's list of known services, its decision is kept and shown as "no longer
+  recognised", with a button to remove it.
 
 Next: [Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx) to
 run it in production, or [Local Development](./local-development.mdx) to run and test from source.
