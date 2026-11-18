@@ -61,7 +61,8 @@ public static class SenderDecisionPresentation
         }
     }
 
-    private static string PolicyLine(DmarcPolicyLevel policy) => policy switch
+    /// <summary>What the domain's DMARC policy means for mail that fails it. Shared by the fix text and the delivered alert.</summary>
+    public static string PolicyLine(DmarcPolicyLevel policy) => policy switch
     {
         DmarcPolicyLevel.None => "Your policy is none, so this mail is still delivered. Move to quarantine or reject to block it.",
         DmarcPolicyLevel.Quarantine => "Your policy is quarantine, so receivers should send it to spam.",
