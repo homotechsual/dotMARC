@@ -1,0 +1,216 @@
+@page "/senders/baseline"
+@page "/groups/{GroupId:int}/senders"
+@attribute [Authorize(Policy = "SenderReview")]
+@using DotMarc.Components.Dialogs
+@using DotMarc.Data
+@using DotMarc.Reporting
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject ILogger<SenderDefaults> Logger
+
+<PageTitle>dotMARC - @Title</PageTitle>
+
+@if (_rows is not null)
+{
+    @if (GroupId is not null)
+    {
+        <MudButton Href="/groups" StartIcon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" Class="mb-2">Back to groups</MudButton>
+    }
+    <MudText Typo="Typo.h4" Class="mb-1">@Title</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        @if (GroupId is null)
+        {
+            <text>A decision here applies to every domain whose reports show that service. A group's defaults override it for that group's domains, and a domain's own decision overrides both.</text>
+        }
+        else
+        {
+            <text>These decisions apply to the domains in this group whose reports show the service. They override the baseline, and a domain's own decision overrides them.</text>
+        }
+    </MudText>
+
+    <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
+        <thead>
+            <tr>
+                <th>Service</th>
+                <th>Decision</th>
+                <th>Source</th>
+                <th>Note</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr>
+                    <td>@(row.InCatalogue ? row.Name : $"{row.Name} (no longer recognised)")</td>
+                    <td><MudChip T="string" Size="Size.Small" Color="@StatusColor(row.Status)">@SenderDecisionPresentation.StatusLabel(row.Status)</MudChip></td>
+                    <td>@row.Source</td>
+                    <td>@row.Note</td>
+                    <td>
+                        @if (row.InCatalogue)
+                        {
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeAsync(row))">Change</MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveAsync(row))">Remove</MudButton>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    [Parameter] public int? GroupId { get; set; }
+
+    private string? _groupName;
+    private List<DefaultRow>? _rows;
+    private List<SenderDecision> _decisions = [];
+
+    private string Title => GroupId is null ? "Sender baseline" : $"Sender defaults for {_groupName}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (GroupId is null ? !SenderDecisionAccess.MayChangeBaseline(user) : !SenderDecisionAccess.MayChangeGroup(user, GroupId.Value))
+        {
+            Navigation.NavigateTo("/AccessDenied");
+            return;
+        }
+
+        if (GroupId is { } groupId)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _groupName = await db.Groups.AsNoTracking().Where(group => group.Id == groupId).Select(group => group.Name).SingleOrDefaultAsync();
+            if (_groupName is null)
+            {
+                Navigation.NavigateTo("/AccessDenied");
+                return;
+            }
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _decisions = GroupId is { } groupId
+            ? await SenderDecisionService.LoadForGroupAsync(db, groupId)
+            : await SenderDecisionService.LoadBaselineAsync(db);
+
+        var catalogueNames = SenderServiceCatalog.All.Select(service => service.Name).ToList();
+        var ownNames = _decisions.Where(decision => IsOwn(decision)).Select(decision => decision.Key).ToList();
+        var names = catalogueNames.Concat(ownNames.Except(catalogueNames).Order(StringComparer.OrdinalIgnoreCase));
+        _rows = names.Select(name => BuildRow(name, catalogueNames.Contains(name))).ToList();
+    }
+
+    private bool IsOwn(SenderDecision decision) =>
+        GroupId is { } groupId
+            ? decision.Scope == SenderDecisionScope.Group && decision.GroupId == groupId
+            : decision.Scope == SenderDecisionScope.Baseline;
+
+    private DefaultRow BuildRow(string name, bool inCatalogue)
+    {
+        var own = _decisions.FirstOrDefault(decision => IsOwn(decision) && decision.Kind == SenderDecisionKind.Service && decision.Key == name);
+        if (GroupId is null)
+        {
+            return new DefaultRow(name, inCatalogue, own, own?.Status, own is null ? string.Empty : "set here", own?.Note);
+        }
+
+        // What this group's domains get: the group's own decision, else the baseline's.
+        var effective = _decisions.FirstOrDefault(decision => decision.Scope == SenderDecisionScope.Baseline && decision.Kind == SenderDecisionKind.Service && decision.Key == name);
+        var source = own is not null ? "set for this group" : effective is not null ? "from the baseline" : string.Empty;
+        return new DefaultRow(name, inCatalogue, own, own?.Status ?? effective?.Status, source, own?.Note);
+    }
+
+    private async Task ChangeAsync(DefaultRow row)
+    {
+        var baseline = GroupId is null
+            ? null
+            : _decisions.FirstOrDefault(decision => decision.Scope == SenderDecisionScope.Baseline && decision.Kind == SenderDecisionKind.Service && decision.Key == row.Name);
+        var parameters = new DialogParameters<SenderDecisionDialog>
+        {
+            { x => x.SenderLabel, row.Name },
+            { x => x.CurrentStatus, row.Own?.Status },
+            { x => x.CurrentNote, row.Own?.Note },
+            { x => x.HasOwnDecision, row.Own is not null },
+            { x => x.InheritedText, row.Own is null && baseline is not null ? $"Currently {SenderDecisionPresentation.StatusLabel(baseline.Status)}, from the baseline." : null },
+        };
+        var dialogRef = await DialogService.ShowAsync<SenderDecisionDialog>($"Decide on {row.Name}", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled)
+        {
+            return;
+        }
+
+        var choice = (SenderDecisionDialog.SenderDecisionDialogResult)result.Data!;
+        await SaveAsync(row.Name, async (db, actor) =>
+        {
+            if (choice.Reset)
+            {
+                await (GroupId is { } resetGroup
+                    ? SenderDecisionService.ResetForGroupAsync(db, actor, resetGroup, row.Name)
+                    : SenderDecisionService.ResetBaselineAsync(db, actor, row.Name));
+                Snackbar.Add($"Reset {row.Name}", Severity.Success);
+            }
+            else if (choice.Status is { } status)
+            {
+                await (GroupId is { } setGroup
+                    ? SenderDecisionService.SetForGroupAsync(db, actor, setGroup, row.Name, status, choice.Note)
+                    : SenderDecisionService.SetBaselineAsync(db, actor, row.Name, status, choice.Note));
+                Snackbar.Add($"Marked {row.Name} as {SenderDecisionPresentation.StatusLabel(status)}", Severity.Success);
+            }
+        });
+    }
+
+    /// <summary>Removes a decision for a service dotMARC no longer recognises. Resetting never checks the name.</summary>
+    private async Task RemoveAsync(DefaultRow row) =>
+        await SaveAsync(row.Name, async (db, actor) =>
+        {
+            await (GroupId is { } groupId
+                ? SenderDecisionService.ResetForGroupAsync(db, actor, groupId, row.Name)
+                : SenderDecisionService.ResetBaselineAsync(db, actor, row.Name));
+            Snackbar.Add($"Removed {row.Name}", Severity.Success);
+        });
+
+    private async Task SaveAsync(string name, Func<DotMarcDbContext, DotMarc.Audit.AuditActor, Task> save)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await save(db, await AuditActorAccessor.GetAsync());
+        }
+        catch (InvalidOperationException ex) when (GroupId is not null)
+        {
+            Logger.LogWarning(ex, "Saving sender defaults for {Sender} failed because the group is gone.", name);
+            Snackbar.Add("This group no longer exists. Go back to the groups list.", Severity.Error);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or DbUpdateException)
+        {
+            Logger.LogWarning(ex, "Saving a sender decision for {Sender} failed.", name);
+            Snackbar.Add($"The decision wasn't saved: {ex.Message}", Severity.Error);
+        }
+
+        await ReloadAsync();
+    }
+
+    private static Color StatusColor(SenderDecisionStatus? status) => status switch
+    {
+        SenderDecisionStatus.Authorised => Color.Success,
+        SenderDecisionStatus.Unauthorised => Color.Error,
+        SenderDecisionStatus.UnderReview => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private sealed record DefaultRow(string Name, bool InCatalogue, SenderDecision? Own, SenderDecisionStatus? Status, string Source, string? Note);
+}

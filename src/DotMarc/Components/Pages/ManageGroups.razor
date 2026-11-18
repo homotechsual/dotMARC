@@ -5,6 +5,7 @@
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
+@using DotMarc.Reporting
 @using DotMarc.Reporting.ClientReports
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -15,6 +16,7 @@
 @inject ISnackbar Snackbar
 @inject PsaDirectory PsaDirectory
 @inject ILogger<ManageGroups> Logger
+@inject NavigationManager Navigation
 
 <PageTitle>dotMARC - Manage Groups</PageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -137,6 +139,9 @@
                     <AuthorizeView Policy="ReportsManage" Context="authState">
                         <MudTh>Client reports</MudTh>
                     </AuthorizeView>
+                    <AuthorizeView Policy="SenderReview" Context="senderReviewState">
+                        <MudTh>Sender defaults</MudTh>
+                    </AuthorizeView>
                     <MudTh></MudTh>
                 </tr>
                 @if (_showGroupFilters)
@@ -164,6 +169,9 @@
                     }
                     <MudTh></MudTh>
                     <AuthorizeView Policy="ReportsManage" Context="authState">
+                        <MudTh></MudTh>
+                    </AuthorizeView>
+                    <AuthorizeView Policy="SenderReview" Context="senderReviewState">
                         <MudTh></MudTh>
                     </AuthorizeView>
                     <MudTh></MudTh>
@@ -246,6 +254,16 @@
                                 <MudChip T="string" Size="Size.Small" Color="Color.Info">@frequency</MudChip>
                             }
                         </div>
+                    </MudTd>
+                </AuthorizeView>
+                <AuthorizeView Policy="SenderReview" Context="senderReviewState">
+                    <MudTd>
+                        @if (SenderDecisionAccess.MayChangeGroup(senderReviewState.User, context.Id))
+                        {
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Rule" OnClick="@(() => OpenSenderDefaults(context))">
+                                Sender defaults
+                            </MudButton>
+                        }
                     </MudTd>
                 </AuthorizeView>
                 <MudTd>
@@ -806,6 +824,8 @@
             .Select(delivery => delivery.GroupId)
             .ToListAsync()).ToHashSet();
     }
+
+    private void OpenSenderDefaults(GroupRow row) => Navigation.NavigateTo($"/groups/{row.Id}/senders");
 
     private async Task OpenReportsAsync(GroupRow row)
     {

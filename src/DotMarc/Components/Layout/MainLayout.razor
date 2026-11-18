@@ -4,6 +4,7 @@
 @using Microsoft.JSInterop
 @using DotMarc.Demo
 @using DotMarc.Components.Shared
+@using DotMarc.Reporting
 @using Microsoft.Extensions.Options
 @using System.Reflection
 @implements IDisposable
@@ -59,6 +60,12 @@
             </AuthorizeView>
             <AuthorizeView Policy="ReportsManage">
                 <MudMenuItem Href="/reports/settings" Icon="@Icons.Material.Filled.Email">Email &amp; reports</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="SenderReview">
+                @if (SenderDecisionAccess.MayChangeBaseline(context.User))
+                {
+                    <MudMenuItem Href="/senders/baseline" Icon="@Icons.Material.Filled.Rule">Sender baseline</MudMenuItem>
+                }
             </AuthorizeView>
         </MudMenu>
         @if (DemoOptions.Value.Enabled)
