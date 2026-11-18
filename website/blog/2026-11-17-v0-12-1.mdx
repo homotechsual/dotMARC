@@ -1,0 +1,62 @@
+---
+slug: v0-12-1
+date: 2026-11-17T23:43:51.406Z
+title: "dotMARC v0.12.1: a By group dashboard, saved defaults, and MTA-STS failures that say what to do"
+description: The Dashboard can show one table per group and remember your view and filters, and MTA-STS provisioning failures now explain the cause and the fix.
+authors: [mikey]
+tags: [release]
+---
+
+A follow-up to v0.12.0 that makes the Dashboard easier to live in and makes MTA-STS failures easier to act on.
+
+{/* truncate */}
+
+## View the Dashboard by group
+
+A new **All domains / By group** toggle sits above the domain list. By group shows one table per group, each with its
+name and domain count, and the same columns, sorting and filters as the main table. The filter inputs are shared, so
+changing one filter changes every table.
+
+* A domain in several groups appears in each of them.
+* Domains in no group are listed last under **No group**.
+* Groups with no domains are left out.
+* If you are limited to certain groups, you only see those. A Group filter narrows the view to that group.
+
+## Save your own Dashboard defaults
+
+**Save as my default** keeps the current view, the Group and Tag filters, and the column filters (Status, minimum pass
+rate, Monitored, DMARC, MTA-STS and DKIM), and the Dashboard opens that way for you next time. **Clear my default**
+removes it and goes back to every domain.
+
+Defaults belong to the person who saved them. Free-text searches are not saved, because a saved search would hide
+domains without any hint why. If a saved Group or Tag has since been deleted, or you can no longer see that Group, that
+filter is dropped instead of showing an empty Dashboard.
+
+## MTA-STS failures say what to do
+
+When provisioning an MTA-STS host fails, dotMARC used to show Azure's raw error, response headers included. It now gives
+the cause first and then the fix, with Azure's error code in brackets at the end for anyone who needs to ask for help.
+The full error, with Azure's request ID, goes to the server log.
+
+| What Azure reported | What dotMARC now tells you |
+| --- | --- |
+| Access refused (401 or 403) | The managed identity isn't allowed to change the Container App. Assign it the two dotMARC MTA-STS roles the deployment template creates, then recheck. |
+| Not found (404) | Azure can't find the Container App or environment. Check the subscription ID, resource group, app and environment names in the MtaSts settings. |
+| Can't sign in | Turn on the Container App's system-assigned managed identity. |
+| Rate limited, a server error or a network failure | Nothing to do, or usually temporary. dotMARC retries automatically. |
+| A certificate for the hostname is already being issued | Nothing to do. dotMARC waits and retries. |
+
+Two of those used to be real failures:
+
+* **A certificate already being issued for the hostname** (a 409 from Azure) is now treated as "still issuing" rather
+  than a failure. Azure allows one certificate operation per hostname in an environment, so a certificate started by
+  hand, or by an earlier attempt, used to block the new one.
+* **An existing certificate for the hostname** is reused when it has already been issued, whatever it is called.
+
+The other MTA-STS messages now say what to do too: waiting for DNS, a CNAME pointing somewhere else, waiting for the
+certificate, and a domain that stopped serving its policy.
+
+## Specification: matching domains to Microsoft 365 tenants
+
+Not built yet, but written down: a spec for finding which Microsoft 365 tenant a domain belongs to and whether that
+tenant is one of your partner customers, in two phases. It is in the repository under `docs/superpowers/specs`.
