@@ -20,9 +20,22 @@ A report covers one Group (one client) and every monitored domain in it, for one
 - **Pass rate trend:** a daily line per domain (weekly for ranges over three months), for up to six domains.
 - **Each domain:** its policy in plain words, its health checks, the top ten senders with who owns them, how much of
   their mail passed and failed, what receivers did with the mail (delivered, sent to spam, rejected), and alerts raised
-  or resolved in the period.
+  or resolved in the period. If you have marked senders Unauthorised (see
+  [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised)) and any of their mail
+  was sent in the period, it also says how much was blocked and how much was delivered. Nothing is added for a domain
+  with no mail from unauthorised senders.
 - **What to do next:** a short list built from fixed rules, such as moving a domain from monitoring to a quarantine
   policy, publishing a missing SPF record, or a named sender that is failing DMARC.
+
+The sentences about unauthorised senders read, for example:
+
+> 120 messages from senders you haven't authorised were blocked.
+>
+> 40 messages from senders you haven't authorised were still delivered. Moving the DMARC policy to quarantine or reject
+> would block them.
+
+If the delivered mail passes DMARC, the second sentence says so instead and that you are checking whether the sender
+should be authorised, because a policy change would not block it.
 
 The email itself is short: the verdict and summary table in your colours, your support details, and the PDF attached.
 It contains no remote images, so nothing is blocked or tracked.

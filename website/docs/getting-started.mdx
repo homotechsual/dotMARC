@@ -149,6 +149,11 @@ service, so you decide on its IPs.
 Changing decisions needs the **SenderReview** permission, which the Admin role has. Custom roles can be
 given it on the Access page. Anyone who can see the domain can see the decisions.
 
+The domain's Overview tab shows how many senders still have no decision, with a **Review** button that opens the
+Sources tab, and it goes away once every sender has one. The sources API returns each source's decision in a read-only
+`decision` field: `Authorised`, `UnderReview`, `Unauthorised` or `Unreviewed`. [Client reports](./client-reports.mdx)
+say how much mail from unauthorised senders was blocked or delivered.
+
 dotMARC also raises two [sender alerts](./alerts.mdx#sender-alerts): one when a new sender appears
 that nobody has reviewed, and one when mail from a sender you marked Unauthorised is being delivered.
 

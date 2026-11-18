@@ -10,6 +10,12 @@ public static class SenderDecisionSummaries
 {
     private static readonly IReadOnlyDictionary<int, string> NoGroupNames = new Dictionary<int, string>();
 
+    /// <summary>How many senders have no decision at any level: each recognised service, judged by its service-level decision, and each
+    /// unrecognised IP, judged by its own. <paramref name="resolve"/> takes a service name (or null) and an IP (or empty).</summary>
+    public static int CountUnreviewed(SenderIdentificationResult identification, Func<string?, string, ResolvedSenderDecision> resolve) =>
+        identification.Services.Count(row => resolve(row.Name, string.Empty).Status is null)
+        + (identification.Unrecognised?.SourceIps ?? []).Count(ip => resolve(null, ip).Status is null);
+
     /// <summary>Attributes senders the way the Sources tab and the sender alerts do, and resolves each with <see cref="SenderDecisionResolver"/>,
     /// so every place that shows these numbers agrees.</summary>
     public static SenderDecisionSummary Summarise(
@@ -21,8 +27,7 @@ public static class SenderDecisionSummaries
         ResolvedSenderDecision Resolve(string? serviceName, string ip) =>
             SenderDecisionResolver.Resolve(decisions, domainId, groupIds, serviceName, ip, NoGroupNames);
 
-        var unreviewed = identification.Services.Count(row => Resolve(row.Name, string.Empty).Status is null)
-            + (identification.Unrecognised?.SourceIps ?? []).Count(ip => Resolve(null, ip).Status is null);
+        var unreviewed = CountUnreviewed(identification, Resolve);
 
         long blocked = 0, delivered = 0, deliveredFailing = 0;
         foreach (var source in reports.SelectMany(report => report.Records).GroupBy(record => record.SourceIp, StringComparer.Ordinal))

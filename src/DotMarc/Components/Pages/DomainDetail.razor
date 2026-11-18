@@ -61,6 +61,13 @@ else
                 <MudItem xs="4"><MudText>Volume (30d): <b>@_totalVolume</b></MudText></MudItem>
                 <MudItem xs="4"><MudText>Sources: <b>@_sourceCount</b></MudText></MudItem>
             </MudGrid>
+            @if (UnreviewedSenderCount is > 0 and var unreviewedSenders)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="my-2">
+                    @unreviewedSenders @(unreviewedSenders == 1 ? "sender needs" : "senders need") a decision.
+                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => NavigateToTabAsync("sources"))">Review</MudButton>
+                </MudAlert>
+            }
             @if (_hasTrend)
             {
                 <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
@@ -540,6 +547,12 @@ else
     private List<SenderDecision> _decisions = [];
     private Dictionary<int, string> _groupNames = [];
     private bool _canReviewSenders;
+
+    /// <summary>Senders with no decision at any level. Read each render, so it follows a saved decision and finished lookups.</summary>
+    private int? UnreviewedSenderCount => _senderResult is { } result && _domain is not null
+        ? SenderDecisionSummaries.CountUnreviewed(result, (service, ip) =>
+            SenderDecisionResolver.Resolve(_decisions, _domain.Id, _groupNames.Keys.ToList(), service, ip, _groupNames))
+        : null;
 
     private ResolvedSenderDecision DecisionFor(SenderServiceRow row) =>
         SenderDecisionResolver.Resolve(_decisions, _domain!.Id, _groupNames.Keys.ToList(), row.IsUnrecognised ? null : row.Name, string.Empty, _groupNames);
