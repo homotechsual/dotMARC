@@ -278,6 +278,25 @@ public static class DemoDataSeeder
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // Decisions refer to groups and domains by id, so they are written once those have been saved. They are attributed to a
+        // fictional person, never to a real sign-in.
+        foreach (var decisionSeed in dataset.SenderDecisions ?? [])
+        {
+            context.SenderDecisions.Add(new SenderDecision
+            {
+                Scope = decisionSeed.Scope,
+                GroupId = decisionSeed.GroupName is null ? null : groupsByName[decisionSeed.GroupName].Id,
+                DomainId = decisionSeed.DomainName is null ? null : context.Domains.Local.Single(candidate => candidate.Name == decisionSeed.DomainName).Id,
+                Kind = SenderDecisionKind.Service,
+                Key = decisionSeed.Key,
+                Status = decisionSeed.Status,
+                Note = decisionSeed.Note,
+                DecidedBy = "demo",
+                DecidedByName = "Nova MSP admin",
+                DecidedUtc = decisionSeed.DecidedUtc,
+            });
+        }
+
         context.UserAccesses.AddRange(
             new UserAccess { Email = AdminEmail, Role = adminRole },
             new UserAccess { Email = ViewerEmail, Role = viewerRole, ScopedGroups = [groupsByName[ViewerScopedGroupName]] },

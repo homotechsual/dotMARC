@@ -1,6 +1,7 @@
 // test/DotMarc.Tests/Demo/DemoDataGeneratorTests.cs
 using DotMarc.Data;
 using DotMarc.Demo;
+using DotMarc.Notifications;
 using DotMarc.Reporting;
 using Xunit;
 
@@ -240,7 +241,83 @@ public sealed class DemoDataGeneratorTests
         [.. dataset.Domains.Single(d => d.Name == domainName).Reports
             .SelectMany(r => r.Records)
             .Where(r => r.SpfResult == AuthResult.Fail && r.DkimResult == AuthResult.Fail)
+            // The Mailchimp source added for the sender states is a second failing source on Cobalt Freight, on purpose.
+            .Where(r => r.AuthDetails?.Any(detail => detail.Domain == MailchimpDomain) != true)
             .Select(r => r.SourceIp)];
+
+    // ---- Sender decisions and alerts, so the demo shows every state ----
+
+    private const string MailchimpDomain = "bounce.mcsv.net";
+    private const string SendGridDomain = "bounce.sendgrid.net";
+    private const string HubSpotDomain = "mail.hubspotemail.net";
+
+    private static List<(DemoReportSeed Report, DemoRecordSeed Record)> RecordsSignedBy(DemoDataset dataset, string domainName, string authDomain) =>
+        [.. dataset.Domains.Single(d => d.Name == domainName).Reports
+            .SelectMany(report => report.Records.Select(record => (Report: report, Record: record)))
+            .Where(pair => pair.Record.AuthDetails?.Any(detail => detail.Domain == authDomain) == true)];
+
+    [Fact]
+    public void TheDatasetCarriesTheSenderDecisions()
+    {
+        var decisions = Generate().SenderDecisions!;
+
+        Assert.Equal(4, decisions.Count);
+        Assert.Contains(decisions, d => d is { Scope: SenderDecisionScope.Baseline, Key: "Microsoft 365", Status: SenderDecisionStatus.Authorised });
+        Assert.Contains(decisions, d => d is { Scope: SenderDecisionScope.Baseline, Key: "Google Workspace", Status: SenderDecisionStatus.Authorised });
+        Assert.Contains(decisions, d => d is { Scope: SenderDecisionScope.Group, GroupName: "Cobalt Freight", Key: "Mailchimp", Status: SenderDecisionStatus.Unauthorised, Note: not null });
+        Assert.Contains(decisions, d => d is { Scope: SenderDecisionScope.Domain, DomainName: "emberwood-finance.example", Key: "HubSpot", Status: SenderDecisionStatus.UnderReview, Note: not null });
+        Assert.All(decisions, d => Assert.True(d.DecidedUtc <= NowUtc));
+    }
+
+    [Fact]
+    public void TheNewSenderIsFirstSeenTwoDaysAgo_AndTheOtherSendersAreOld()
+    {
+        var dataset = Generate();
+
+        var sendGrid = RecordsSignedBy(dataset, "shop.aurora-retail.example", SendGridDomain);
+        Assert.NotEmpty(sendGrid);
+        Assert.All(sendGrid, pair => Assert.True(pair.Report.DateRangeEndUtc >= NowUtc.AddDays(-3)));
+        Assert.Equal(2, sendGrid.Select(pair => pair.Report.DateRangeEndUtc.Date).Distinct().Count());
+
+        foreach (var (domainName, authDomain) in new[] { ("cobalt-freight.example", MailchimpDomain), ("emberwood-finance.example", HubSpotDomain) })
+        {
+            var earliest = RecordsSignedBy(dataset, domainName, authDomain).Min(pair => pair.Report.DateRangeEndUtc);
+            Assert.True(earliest <= NowUtc.AddDays(-25), $"{authDomain} should be an old sender on {domainName}, first seen {earliest:O}");
+        }
+    }
+
+    [Fact]
+    public void TheUnauthorisedMailchimpSource_IsDeliveredNotBlocked_OnADomainWhosePolicyIsNone()
+    {
+        var dataset = Generate();
+
+        var mailchimp = RecordsSignedBy(dataset, "cobalt-freight.example", MailchimpDomain);
+
+        Assert.NotEmpty(mailchimp);
+        Assert.All(mailchimp, pair => Assert.Equal(DispositionResult.None, pair.Record.Disposition));
+        Assert.Equal(DmarcPolicyLevel.None, dataset.Domains.Single(d => d.Name == "cobalt-freight.example").DmarcPolicy);
+    }
+
+    [Fact]
+    public void TheDemoSenderAlerts_UseTheSharedMessageText_AndAreFreshEnoughNotToBeRepeatedStraightAway()
+    {
+        var dataset = Generate();
+        var newSenderTotal = RecordsSignedBy(dataset, "shop.aurora-retail.example", SendGridDomain).Sum(pair => (long)pair.Record.MessageCount);
+        var deliveredTotal = RecordsSignedBy(dataset, "cobalt-freight.example", MailchimpDomain).Sum(pair => (long)pair.Record.MessageCount);
+
+        var newSender = Assert.Single(dataset.AlertEvents, alert => alert.AlertType == AlertTypes.NewUnreviewedSender);
+        var delivered = Assert.Single(dataset.AlertEvents, alert => alert.AlertType == AlertTypes.UnauthorisedSenderDelivered);
+
+        Assert.Equal(("shop.aurora-retail.example", SenderAlertMessages.NewSendersTitle, SenderAlertMessages.NewSenders("shop.aurora-retail.example", [new("SendGrid", newSenderTotal)])),
+            (newSender.DomainName, newSender.Title, newSender.Message));
+        Assert.Equal(("cobalt-freight.example", SenderAlertMessages.UnauthorisedDeliveredTitle, SenderAlertMessages.UnauthorisedDelivered("cobalt-freight.example", [new("Mailchimp", deliveredTotal)], DmarcPolicyLevel.None)),
+            (delivered.DomainName, delivered.Title, delivered.Message));
+        Assert.All(new[] { newSender, delivered }, alert =>
+        {
+            Assert.False(alert.IsResolved);
+            Assert.True(alert.CreatedUtc >= NowUtc.AddHours(-3), "raised within the 3 hour cooldown, so the live monitor does not repeat it at once");
+        });
+    }
 
     [Fact]
     public void SameSeedAndTime_ProducesTheSameDataset()
@@ -327,8 +404,7 @@ public sealed class DemoDataGeneratorTests
     {
         var dataset = Generate();
 
-        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "cobalt-freight.example");
-        Assert.Equal("TlsrptFailure", alert.AlertType);
+        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "cobalt-freight.example" && a.AlertType == "TlsrptFailure");
         Assert.False(alert.IsResolved);
     }
 
@@ -337,8 +413,7 @@ public sealed class DemoDataGeneratorTests
     {
         var dataset = Generate();
 
-        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "shop.aurora-retail.example");
-        Assert.Equal("TlsrptFailure", alert.AlertType);
+        var alert = Assert.Single(dataset.AlertEvents, a => a.DomainName == "shop.aurora-retail.example" && a.AlertType == "TlsrptFailure");
         Assert.True(alert.IsResolved);
         Assert.NotNull(alert.ResolvedUtc);
     }

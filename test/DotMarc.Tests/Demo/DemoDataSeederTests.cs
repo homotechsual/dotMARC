@@ -185,14 +185,13 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
 
         using var verify = CreateContext();
-        Assert.Equal(6, await verify.AlertEvents.CountAsync());
+        Assert.Equal(8, await verify.AlertEvents.CountAsync());
 
         var missedReport = await verify.AlertEvents.SingleAsync(a => a.DomainName == "fleet.cobalt-freight.example");
         Assert.Equal("MissedReport", missedReport.AlertType);
         Assert.False(missedReport.IsResolved);
 
-        var resolvedTlsFailure = await verify.AlertEvents.SingleAsync(a => a.DomainName == "shop.aurora-retail.example");
-        Assert.Equal("TlsrptFailure", resolvedTlsFailure.AlertType);
+        var resolvedTlsFailure = await verify.AlertEvents.SingleAsync(a => a.DomainName == "shop.aurora-retail.example" && a.AlertType == "TlsrptFailure");
         Assert.True(resolvedTlsFailure.IsResolved);
         Assert.NotNull(resolvedTlsFailure.ResolvedUtc);
     }

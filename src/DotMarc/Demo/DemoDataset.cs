@@ -11,9 +11,21 @@ public sealed record DemoDataset(
     List<DemoPollCycleDailySummarySeed> PollCycleDailySummaries,
     List<DemoParseFailureSeed> ParseFailures,
     List<DemoAlertEventSeed> AlertEvents,
-    List<DemoAlertStateSeed> AlertStates);
+    List<DemoAlertStateSeed> AlertStates,
+    IReadOnlyList<DemoSenderDecisionSeed>? SenderDecisions = null);
 
 public sealed record DemoGroupSeed(string Name);
+
+/// <summary>A decision about a sender, so the demo's Sources tabs show every state. <see cref="GroupName"/> is set for group scope
+/// and <see cref="DomainName"/> for domain scope. Written as made by a fictional person, never a real sign-in.</summary>
+public sealed record DemoSenderDecisionSeed(
+    SenderDecisionScope Scope,
+    string? GroupName,
+    string? DomainName,
+    string Key,
+    SenderDecisionStatus Status,
+    string? Note,
+    DateTimeOffset DecidedUtc);
 
 public sealed record DemoDomainSeed(
     string Name,

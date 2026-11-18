@@ -252,15 +252,76 @@ public static class DemoDataGenerator
         var auroraIndex = domains.FindIndex(domain => domain.Name == "aurora-retail.example");
         domains[auroraIndex] = domains[auroraIndex] with { DmarcPolicy = DmarcPolicyLevel.Quarantine, DmarcSubdomainPolicy = DmarcPolicyLevel.Quarantine, DmarcPercent = 100 };
 
+        // The sender states: a Mailchimp source the Cobalt Freight group has marked unauthorised that is still being delivered (its policy is
+        // none), a SendGrid source that appeared two days ago on a Shop domain with nobody having reviewed it, and a HubSpot source on
+        // Emberwood Finance that is under review. They use their own random source, so adding them does not shift anything else.
+        var senderRandom = new Random(20261118);
+        AddSender(domains, "cobalt-freight.example", senderRandom, nowUtc, "198.51.100.71", 60, 110, AuthResult.Fail, AuthResult.Fail, DispositionResult.None,
+            [new(DmarcAuthMechanism.Dkim, "bounce.mcsv.net", DmarcMechanismResult.Pass)], onlyLastDays: 0);
+        AddSender(domains, "shop.aurora-retail.example", senderRandom, nowUtc, "198.51.100.72", 40, 75, AuthResult.Pass, AuthResult.Pass, DispositionResult.None,
+            [new(DmarcAuthMechanism.Dkim, "bounce.sendgrid.net", DmarcMechanismResult.Pass)], onlyLastDays: 2);
+        AddSender(domains, "emberwood-finance.example", senderRandom, nowUtc, "198.51.100.73", 30, 60, AuthResult.Pass, AuthResult.Pass, DispositionResult.None,
+            [new(DmarcAuthMechanism.Dkim, "mail.hubspotemail.net", DmarcMechanismResult.Pass)], onlyLastDays: 0);
+        var cobaltIndex = domains.FindIndex(domain => domain.Name == "cobalt-freight.example");
+        domains[cobaltIndex] = domains[cobaltIndex] with { DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100 };
+
+        var alertEvents = BuildAlertEvents(nowUtc, domains);
+        alertEvents.AddRange(BuildSenderAlertEvents(nowUtc, domains));
+
         return new DemoDataset(
             groups,
             domains,
             BuildPollCycles(random, nowUtc),
             BuildPollCycleDailySummaries(random, nowUtc),
             BuildParseFailures(nowUtc),
-            BuildAlertEvents(nowUtc, domains),
-            BuildAlertStates());
+            alertEvents,
+            BuildAlertStates(),
+            BuildSenderDecisions(nowUtc));
     }
+
+    /// <summary>Adds one extra sending source to a domain's reports: to every report from the last <paramref name="onlyLastDays"/> days, or to
+    /// every report when that is 0. A source added for only the last two days is how the demo shows a new sender.</summary>
+    private static void AddSender(
+        List<DemoDomainSeed> domains, string domainName, Random random, DateTimeOffset nowUtc, string sourceIp, int minPerReport, int maxPerReport,
+        AuthResult spfResult, AuthResult dkimResult, DispositionResult disposition, List<DemoAuthDetailSeed> authDetails, int onlyLastDays)
+    {
+        var since = onlyLastDays > 0 ? nowUtc.AddDays(-onlyLastDays) : DateTimeOffset.MinValue;
+        foreach (var report in domains.Single(domain => domain.Name == domainName).Reports.Where(report => report.DateRangeEndUtc >= since))
+        {
+            report.Records.Add(new DemoRecordSeed(sourceIp, random.Next(minPerReport, maxPerReport + 1), spfResult, dkimResult, disposition, null, authDetails));
+        }
+    }
+
+    private static long SenderMessages(List<DemoDomainSeed> domains, string domainName, string authDomain) =>
+        domains.Single(domain => domain.Name == domainName).Reports
+            .SelectMany(report => report.Records)
+            .Where(record => record.AuthDetails?.Any(detail => detail.Domain == authDomain) == true)
+            .Sum(record => (long)record.MessageCount);
+
+    /// <summary>The two sender alerts the real alerting cycle raises over this data, written with the same text it uses. They are
+    /// fresh enough that its cooldown doesn't repeat them the moment the monitor runs.</summary>
+    private static List<DemoAlertEventSeed> BuildSenderAlertEvents(DateTimeOffset nowUtc, List<DemoDomainSeed> domains) =>
+    [
+        new DemoAlertEventSeed(
+            "shop.aurora-retail.example", AlertTypes.NewUnreviewedSender, "Warning", SenderAlertMessages.NewSendersTitle,
+            SenderAlertMessages.NewSenders("shop.aurora-retail.example", [new("SendGrid", SenderMessages(domains, "shop.aurora-retail.example", "bounce.sendgrid.net"))]),
+            IsResolved: false, CreatedUtc: nowUtc.AddMinutes(-40), ResolvedUtc: null),
+
+        new DemoAlertEventSeed(
+            "cobalt-freight.example", AlertTypes.UnauthorisedSenderDelivered, "Warning", SenderAlertMessages.UnauthorisedDeliveredTitle,
+            SenderAlertMessages.UnauthorisedDelivered("cobalt-freight.example", [new("Mailchimp", SenderMessages(domains, "cobalt-freight.example", "bounce.mcsv.net"))], DmarcPolicyLevel.None),
+            IsResolved: false, CreatedUtc: nowUtc.AddMinutes(-25), ResolvedUtc: null),
+    ];
+
+    /// <summary>Four decisions covering every level and state: the baseline authorises the two big providers, a group marks Mailchimp
+    /// unauthorised, and one domain has a sender under review.</summary>
+    private static List<DemoSenderDecisionSeed> BuildSenderDecisions(DateTimeOffset nowUtc) =>
+    [
+        new(SenderDecisionScope.Baseline, null, null, "Microsoft 365", SenderDecisionStatus.Authorised, "Our own tenants run on it.", nowUtc.AddDays(-20)),
+        new(SenderDecisionScope.Baseline, null, null, "Google Workspace", SenderDecisionStatus.Authorised, null, nowUtc.AddDays(-20)),
+        new(SenderDecisionScope.Group, "Cobalt Freight", null, "Mailchimp", SenderDecisionStatus.Unauthorised, "The client does not use Mailchimp.", nowUtc.AddDays(-9)),
+        new(SenderDecisionScope.Domain, null, "emberwood-finance.example", "HubSpot", SenderDecisionStatus.UnderReview, "Asked the client on Monday.", nowUtc.AddDays(-3)),
+    ];
 
     private static double Lerp(double from, double to, double t) => from + ((to - from) * t);
 
