@@ -69,7 +69,7 @@ public static class DomainStatistics
                 var dkimResult = CombineAuthResult(g.Select(r => r.DkimResult));
                 var disposition = CombineDisposition(g.Select(r => r.Disposition));
                 var overrideReasonTypes = g.SelectMany(r => r.OverrideReasons).Select(o => o.Type).Distinct().ToList();
-                var authDetails = g.SelectMany(r => r.AuthDetails).Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).Distinct().ToList();
+                var authDetails = g.SelectMany(r => r.AuthDetails).Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result, d.Selector)).Distinct().ToList();
 
                 return new SourceAggregate(
                     g.Key,
@@ -267,7 +267,7 @@ public static class DomainStatistics
             {
                 if (record.AuthDetails.Count > 0)
                 {
-                    var authDetails = record.AuthDetails.Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result)).ToList();
+                    var authDetails = record.AuthDetails.Select(d => new AuthDetailSummary(d.Mechanism, d.Domain, d.Result, d.Selector)).ToList();
                     var category = ClassifyFailureCategory(
                         ClassifyMechanism(DmarcAuthMechanism.Spf, record.HeaderFrom, authDetails),
                         ClassifyMechanism(DmarcAuthMechanism.Dkim, record.HeaderFrom, authDetails));
@@ -362,7 +362,7 @@ public sealed record SourceAggregate(string SourceIp, int Volume, AuthResult Spf
 
 /// <summary>One distinct (mechanism, domain, result) combination seen for a source in-window -
 /// deduplicated so a source failing the same way on every report doesn't repeat itself.</summary>
-public sealed record AuthDetailSummary(DmarcAuthMechanism Mechanism, string Domain, DmarcMechanismResult Result);
+public sealed record AuthDetailSummary(DmarcAuthMechanism Mechanism, string Domain, DmarcMechanismResult Result, string? Selector = null);
 
 /// <summary>Reject/Quarantine message volume in a window, bucketed by why it happened. See
 /// DomainStatistics.GetReasonBreakdown for the bucketing rules. The three Inferred* fields default
