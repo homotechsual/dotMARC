@@ -30,6 +30,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserAccess> UserAccesses => Set<UserAccess>();
     public DbSet<UserDashboardPreference> UserDashboardPreferences => Set<UserDashboardPreference>();
+    public DbSet<SenderDecision> SenderDecisions => Set<SenderDecision>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<IpInfo> IpInfos => Set<IpInfo>();
     public DbSet<IpRange> IpRanges => Set<IpRange>();
@@ -251,6 +252,33 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.HasIndex(p => p.UserKey).IsUnique();
             entity.Property(p => p.UserKey).HasMaxLength(UserDashboardPreference.MaxUserKeyLength);
+        });
+
+        modelBuilder.Entity<SenderDecision>(entity =>
+        {
+            entity.Property(d => d.Scope).HasConversion<string>().HasMaxLength(16);
+            entity.Property(d => d.Kind).HasConversion<string>().HasMaxLength(16);
+            entity.Property(d => d.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(d => d.Key).HasMaxLength(SenderDecision.MaxKeyLength);
+            entity.Property(d => d.Note).HasMaxLength(SenderDecision.MaxNoteLength);
+            entity.Property(d => d.DecidedBy).HasMaxLength(UserDashboardPreference.MaxUserKeyLength);
+            entity.Property(d => d.DecidedByName).HasMaxLength(UserDashboardPreference.MaxUserKeyLength);
+
+            // One decision per sender at each owner. Nulls count as equal, so there is only one baseline row per sender.
+            entity.HasIndex(d => new { d.Scope, d.GroupId, d.DomainId, d.Kind, d.Key }).IsUnique().AreNullsDistinct(false);
+
+            entity.HasOne<Domain>().WithMany().HasForeignKey(d => d.DomainId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Group>().WithMany().HasForeignKey(d => d.GroupId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_SenderDecisions_ScopeOwner",
+                    "(\"Scope\" = 'Baseline' AND \"GroupId\" IS NULL AND \"DomainId\" IS NULL) " +
+                    "OR (\"Scope\" = 'Group' AND \"GroupId\" IS NOT NULL AND \"DomainId\" IS NULL) " +
+                    "OR (\"Scope\" = 'Domain' AND \"DomainId\" IS NOT NULL AND \"GroupId\" IS NULL)");
+                table.HasCheckConstraint("CK_SenderDecisions_IpOnlyOnDomains", "\"Kind\" <> 'Ip' OR \"Scope\" = 'Domain'");
+            });
         });
 
         modelBuilder.Entity<UserAccess>(entity =>

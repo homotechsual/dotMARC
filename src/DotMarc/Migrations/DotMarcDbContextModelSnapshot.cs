@@ -823,6 +823,76 @@ namespace DotMarc.Migrations
                     b.ToTable("Roles");
                 });
 
+            modelBuilder.Entity("DotMarc.Data.SenderDecision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DecidedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DecidedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("DecidedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DomainId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DomainId");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("Scope", "GroupId", "DomainId", "Kind", "Key")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("Scope", "GroupId", "DomainId", "Kind", "Key"), false);
+
+                    b.ToTable("SenderDecisions", t =>
+                        {
+                            t.HasCheckConstraint("CK_SenderDecisions_IpOnlyOnDomains", "\"Kind\" <> 'Ip' OR \"Scope\" = 'Domain'");
+
+                            t.HasCheckConstraint("CK_SenderDecisions_ScopeOwner", "(\"Scope\" = 'Baseline' AND \"GroupId\" IS NULL AND \"DomainId\" IS NULL) OR (\"Scope\" = 'Group' AND \"GroupId\" IS NOT NULL AND \"DomainId\" IS NULL) OR (\"Scope\" = 'Domain' AND \"DomainId\" IS NOT NULL AND \"GroupId\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("DotMarc.Data.Tag", b =>
                 {
                     b.Property<int>("Id")
@@ -2240,6 +2310,19 @@ namespace DotMarc.Migrations
                         .IsRequired();
 
                     b.Navigation("ReportRecord");
+                });
+
+            modelBuilder.Entity("DotMarc.Data.SenderDecision", b =>
+                {
+                    b.HasOne("DotMarc.Data.Domain", null)
+                        .WithMany()
+                        .HasForeignKey("DomainId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("DotMarc.Data.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("DotMarc.Data.TlsrptFailureDetail", b =>
