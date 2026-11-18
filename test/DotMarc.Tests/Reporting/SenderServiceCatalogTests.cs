@@ -58,6 +58,33 @@ public sealed class SenderServiceCatalogTests
         Assert.All(SpfIncludeCatalog.All, entry => Assert.Contains(entry.Name.Replace(" (EU)", ""), known));
     }
 
+    [Fact]
+    public void EveryIncludeInSpfIncludeCatalog_MapsToItsCatalogueService() =>
+        Assert.All(SpfIncludeCatalog.All, entry =>
+            Assert.Equal(entry.Name.Replace(" (EU)", ""), SenderServiceCatalog.ServiceForSpfInclude(entry.Include)));
+
+    [Theory]
+    [InlineData("spf.protection.outlook.com", "Microsoft 365")]
+    [InlineData("_spf.google.com", "Google Workspace")]
+    [InlineData("_netblocks.google.com", "Google Workspace")]
+    [InlineData("SERVERS.MCSV.NET.", "Mailchimp")]
+    [InlineData("sendgrid.net", "SendGrid")]
+    [InlineData("mailgun.org", "Mailgun")]
+    [InlineData("spf.mandrillapp.com", "Mandrill (Mailchimp Transactional)")]
+    [InlineData("spf.mtasv.net", "Postmark")]
+    [InlineData("sparkpostmail.com", "SparkPost")]
+    [InlineData("hubspotemail.net", "HubSpot")]
+    [InlineData("mail.zendesk.com", "Zendesk")]
+    [InlineData("email.freshdesk.com", "Freshdesk")]
+    [InlineData("amazonses.com", "Amazon SES")]
+    [InlineData("_spf.salesforce.com", "Salesforce")]
+    [InlineData("spf.constantcontact.com", "Constant Contact")]
+    [InlineData("mail.unknown.example", null)]
+    [InlineData("notgoogle.com", null)]
+    [InlineData("_spf.google.com.evil.example", null)]
+    public void ServiceForSpfInclude_MatchesTheHostOrItsSubdomains(string host, string? expected) =>
+        Assert.Equal(expected, SenderServiceCatalog.ServiceForSpfInclude(host));
+
     [Theory]
     [InlineData("Microsoft 365")]
     [InlineData("Google Workspace")]
