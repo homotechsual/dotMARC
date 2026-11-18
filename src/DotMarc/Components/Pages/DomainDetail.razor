@@ -371,6 +371,7 @@ else
         </MudTabPanel>
 
         <MudTabPanel Text="Sources">
+            <SenderServicesTable Result="_senderResult" />
             <MudTable Items="_sources" Hover="true" T="SourceRow" CustomHeader="true" Filter="SourceMatchesFilters">
                 <ToolBarContent>
                     <MudSpacer />
@@ -380,6 +381,7 @@ else
                 <HeaderContent>
                     <tr>
                         <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.SourceIp)">Source IP</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => ServiceFor(s.SourceIp))">Service</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Volume)">Volume</MudTableSortLabel></MudTh>
                         <MudTh>7d trend</MudTh>
                         <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.FirstSeenUtc ?? DateTimeOffset.MinValue)">First seen</MudTableSortLabel></MudTh>
@@ -394,6 +396,7 @@ else
                     {
                     <tr>
                         <MudTh><MudTextField T="string" @bind-Value="_sourceIpFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
+                        <MudTh></MudTh>
                         <MudTh><MudNumericField T="int?" @bind-Value="_sourceMinVolumeFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
                         <MudTh></MudTh>
                         <MudTh>
@@ -437,6 +440,7 @@ else
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.SourceIp</MudTd>
+                    <MudTd>@ServiceFor(context.SourceIp)</MudTd>
                     <MudTd>@context.Volume</MudTd>
                     <MudTd>
                         @if (context.DailyVolumes.Length > 0)
@@ -530,6 +534,23 @@ else
     private int _activeTabIndex;
     private Domain? _domain;
     private List<DetectedMailService> _detectedMailServices = [];
+    private SenderIdentificationResult? _senderResult;
+
+    private string ServiceFor(string sourceIp) => _senderResult is { } result && result.ServiceByIp.TryGetValue(sourceIp, out var service) ? service : string.Empty;
+
+    /// <summary>Re-attributes the sources to sending services. Called after the load and whenever an owner lookup or the mail
+    /// service detection finishes, since both add evidence. Cheap: it works on the reports already in memory.</summary>
+    private void RebuildSenders()
+    {
+        if (_domain is null)
+        {
+            return;
+        }
+
+        var ownerByIp = _sources.ToDictionary(source => source.SourceIp, source => source.Organization, StringComparer.Ordinal);
+        var spfIncludedNames = _detectedMailServices.Where(service => service.Kind == DetectedMailServiceKind.Sending).Select(service => service.ProviderName).ToList();
+        _senderResult = SenderIdentification.Identify(_domain.Reports, ownerByIp, spfIncludedNames);
+    }
     private List<Report> _reports = [];
     private List<TlsrptReport> _tlsrptReports = [];
     private List<SourceRow> _sources = [];
@@ -790,6 +811,8 @@ else
             _ = DetectMailServicesInBackgroundAsync();
         }
 
+        RebuildSenders();
+
         var trend = DispositionTrend.Build(_domain.Reports, DateOnly.FromDateTime(DateTime.UtcNow));
         _xAxisLabels = trend.Labels.ToArray();
         _series = trend.Series.ToList();
@@ -829,7 +852,11 @@ else
         {
             EnrichmentThrottle.Release();
             source.IsEnrichmentPending = false;
-            await InvokeAsync(StateHasChanged);
+            await InvokeAsync(() =>
+            {
+                RebuildSenders();
+                StateHasChanged();
+            });
         }
     }
 
@@ -851,7 +878,11 @@ else
         }
         finally
         {
-            await InvokeAsync(StateHasChanged);
+            await InvokeAsync(() =>
+            {
+                RebuildSenders();
+                StateHasChanged();
+            });
         }
     }
 
