@@ -2277,7 +2277,8 @@
                   "audit.exported",
                   "signin.succeeded",
                   "signin.refused",
-                  "page.viewed"
+                  "page.viewed",
+                  "sender.decision_changed"
                 ],
                 "type": "string"
               },

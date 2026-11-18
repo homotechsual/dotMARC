@@ -27,5 +27,6 @@ public enum Permission
     LogsView,
     AuditView,
     AuditManage,
-    ReportsManage
+    ReportsManage,
+    SenderReview
 }

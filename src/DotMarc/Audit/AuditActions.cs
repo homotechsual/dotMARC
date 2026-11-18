@@ -69,6 +69,7 @@ public static class AuditActions
     public const string SignInSucceeded = "signin.succeeded";
     public const string SignInRefused = "signin.refused";
     public const string PageViewed = "page.viewed";
+    public const string SenderDecisionChanged = "sender.decision_changed";
 
     /// <summary>Every action with a short label, for the Action filter on the Audit log page.</summary>
     public static IReadOnlyList<(string Action, string Label)> All { get; } =
@@ -139,5 +140,6 @@ public static class AuditActions
         (SignInSucceeded, "Signed in"),
         (SignInRefused, "Sign-in refused"),
         (PageViewed, "Page viewed"),
+        (SenderDecisionChanged, "Sender decision changed"),
     ];
 }
