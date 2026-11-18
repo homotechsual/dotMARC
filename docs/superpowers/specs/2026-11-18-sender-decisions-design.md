@@ -4,7 +4,7 @@ Builds on `2026-11-18-sender-identification-design.md`, which shows which sendin
 
 ## Goal
 
-Let a person record, per domain, a decision about each sender: **Authorised** (it should send as this domain), **Unauthorised** (it should not), or **Under review**. Then use the decision:
+Let a person record a decision about a sender: **Authorised** (it should send as this domain), **Unauthorised** (it should not), or **Under review**. Decisions are made at three levels that inherit from each other: a **baseline** for everything, an override **per group**, and a decision on a single **domain**. Then use the decision:
 
 - Stop telling someone to fix a sender they have already decided to leave blocked.
 - Say plainly whether an unauthorised sender is actually being blocked.
@@ -17,62 +17,84 @@ It is a label and a set of alerts. It never changes DNS, and it never blocks any
 
 Today the sender table says "treat it as unauthorised" and the app does nothing with that. Every visit shows the same fix for a sender already dismissed, and a sender nobody has reviewed looks the same as one that has been reviewed.
 
-An MSP reviews a client's senders once, then wants to hear only about what changes: a new sender, an authorised sender that starts failing, or spoofed mail that is being delivered.
+An MSP reviews its senders once, and many of the answers are the same everywhere ("Microsoft 365 is fine"), a few are the same for one client's domains, and the rest are per domain. It then wants to hear only about what changes: a new sender, an authorised sender that starts failing, or spoofed mail that is being delivered.
 
 ## Goals
 
-- One decision per domain per sender, with who made it, when, and an optional note.
-- The sender table shows each sender's decision and lets a person with the right permission change it.
-- A sender nobody has decided on is **Unreviewed**, which is the default and needs no row.
+- A decision on a service or an IP, with who made it, when, and an optional note.
+- Inheritance: a domain decision beats a group decision, which beats the baseline. Each row in the sender table says where its decision came from.
+- A sender nobody has decided on is **Unreviewed**, the default, and needs no row.
 - The fix text depends on the decision (see "What a decision changes").
-- Two new alerts, both quiet by default: a new unreviewed sender, and unauthorised mail being delivered.
+- Two new alerts, both quiet by default and with every threshold configurable.
 - The client report counts unauthorised mail that receivers blocked.
-- Every change is audited.
+- Every change is audited, and changing decisions has its own permission.
 
 ## Non-goals
 
 - No DNS changes and no policy changes. Moving to reject stays a separate action.
-- No decisions shared across domains or groups ("Mailchimp is authorised for every domain in this group"). That is the obvious next request and is listed under open questions.
 - No decision editing through the public API in this version. The sources API gets a read-only `decision` field.
 - No Dashboard column.
 - No automatic decisions. dotMARC never marks a sender on its own.
+- No IP decisions at baseline or group level. An address only means something on one domain.
 
 ## Anti-goals
 
 - Alert fatigue. Turning this on must not raise an alert for every sender a domain already has.
-- Overstating a label. "Unauthorised" is someone's decision, not a finding. The page says who decided and when.
+- Overstating a label. "Unauthorised" is someone's decision, not a finding. The page says who decided, when, and at which level.
 - A decision that hides a problem. An authorised sender that is failing gets a stronger fix, never a quieter one.
+- A baseline silently changing a domain. A baseline or group decision shows its source, and a domain decision always overrides it.
 
 ## Design
 
 ### What a decision is keyed on
 
-A decision is on a **service** (for example Mailchimp) or on a single **IP**, within one domain:
+A decision is on a **service** (for example Mailchimp) or an **IP**:
 
-- When a source is attributed to a service, the decision is made on the service and covers all of that service's sources for the domain.
-- A source in the Unrecognised row has no service, so its decision is made on the IP.
-- A person can also make an IP decision inside an expanded service row, to override the service for one address. An IP decision wins over a service decision.
+- When a source is attributed to a service, the decision is made on the service and covers all of that service's sources.
+- A source in the Unrecognised row has no service, so its decision is made on the IP, on that domain only.
+- A person can also make an IP decision inside an expanded service row, to override the service for one address on that domain.
 
 Service decisions rest on the catalogue's names, so the names are now a stable key. Renaming a service in the catalogue needs a migration of its decisions.
+
+### Levels and which one wins
+
+For one sender on one domain, the first match in this order wins:
+
+1. The domain's decision on the IP.
+2. The domain's decision on the service.
+3. The domain's groups' decisions on the service.
+4. The baseline decision on the service.
+5. Otherwise Unreviewed.
+
+A domain in several groups can be given conflicting group decisions. The most cautious one wins: Unauthorised, then Under review, then Authorised. The row says so ("Aurora Retail says Authorised, Brightline Legal says Unauthorised"), and a decision on the domain itself settles it.
+
+A baseline or group decision is a rule for when the service shows up, so it applies to a domain only if that service appears in its reports. Nothing is added to domains that don't use it.
+
+"Reset to inherited" on a domain row deletes the domain's own decision.
 
 ### Data
 
 A new table `SenderDecisions`:
 
 - `Id`
-- `DomainId` (cascade delete with the domain)
-- `Kind`: `Service` or `Ip`
+- `Scope`: `Baseline`, `Group` or `Domain`
+- `GroupId` (set for Group scope) and `DomainId` (set for Domain scope), each cascading with its owner, and a check that the right one is set for the scope
+- `Kind`: `Service` or `Ip` (Ip is allowed only at Domain scope)
 - `Key`: the service name or the IP text
 - `Status`: `Authorised`, `Unauthorised` or `UnderReview`
 - `Note` (nullable, up to 500 characters)
 - `DecidedBy`: the same actor key the saved dashboard defaults use (Entra object ID, else email)
 - `DecidedUtc`
 
-Unique on `(DomainId, Kind, Key)`. Choosing Unreviewed deletes the row.
+Unique on the scope, its owner and the key (with nulls treated as equal, so there is one baseline row per service). Choosing Unreviewed, or "reset to inherited", deletes the row.
+
+### Where people make decisions
+
+- **A domain's sender table:** each row has a status chip, its source ("from the baseline", "from the Aurora Retail group", or "set on this domain"), and an action menu. Changing it saves a domain decision.
+- **Baseline:** a "Sender baseline" section in settings, listing every catalogue service with its baseline status.
+- **A group:** a "Sender defaults" section on the group's page, listing the services with the group's override and what it overrides ("baseline: Authorised").
 
 ### What a decision changes
-
-In the sender table, each row shows a status chip and an action menu to change it.
 
 | Decision | Failing mail | Fix column says |
 |---|---|---|
@@ -89,10 +111,14 @@ The policy line comes from the domain's DMARC policy: at `none` it says "Your po
 
 Two new alert types, in the existing alert system, with the existing ticket rules and acknowledgement behaviour:
 
-1. **New unreviewed sender.** A source with no decision, first seen on this domain in the last 7 days (the same "new source" test the sources table already uses), sending at least a set number of messages. It resolves when a decision is made. Existing senders never alert, because they were first seen long ago. They only show as Unreviewed. This is how switching the feature on stays quiet.
-2. **Unauthorised mail delivered.** A sender marked Unauthorised whose failing mail was delivered (disposition none) in at least a set volume over the window. It resolves when the volume drops below the threshold, for example after the policy moves to quarantine or reject.
+1. **New unreviewed sender.** A source with no decision at any level, first seen on this domain within a set number of days, sending at least a set number of messages. It resolves when a decision is made at any level, including Under review. Existing senders never alert, because they were first seen long ago. They only show as Unreviewed. This is how switching the feature on stays quiet, and a baseline entry for a service silences it everywhere.
+2. **Unauthorised mail delivered.** A sender whose decision is Unauthorised, and whose failing mail was delivered (disposition none) in at least a set volume over the window. It resolves when the volume drops below the threshold, for example after the policy moves to quarantine or reject.
 
-Settings, beside the existing suspicious reject settings: a minimum volume for each (defaults 20 and 10 messages), and each alert type can be turned off.
+Settings, beside the existing suspicious reject settings, all configurable:
+
+- A minimum message volume for each alert (defaults 20 and 10).
+- How many days count as "new" (default 7).
+- An on and off switch for each alert type.
 
 ### Client report
 
@@ -100,8 +126,9 @@ One added sentence per domain when it has any unauthorised mail: "{N} messages f
 
 ### Permissions and audit
 
-- Changing a decision needs the same permission as editing a domain's settings. Client portal users cannot see or change decisions.
-- A new audit action `sender.decision_changed`, recording the domain, the sender, the old and new status, and the note.
+- A new permission, **Review senders**, is needed to change any decision. Seeing decisions needs the existing domain view permission. Client portal users cannot see or change decisions.
+- Review senders applies at each level like this: a person limited to some groups can decide for their own groups' domains and for those groups' defaults, but only someone with no group limit can change the baseline.
+- A new audit action `sender.decision_changed`, recording the level, the domain or group, the sender, the old and new status, and the note.
 
 ### Failures
 
@@ -110,33 +137,31 @@ Saving a decision that races another person's change keeps the later one and sho
 ## Constraints
 
 - One migration, adding `SenderDecisions` only.
-- Reads join decisions to the sender table's result in memory, so no new queries beyond one per page load.
+- Reads load a domain's decisions with its groups' and the baseline in one query per page load, and resolve them in memory.
+- The resolution rule lives in one pure function, so the table, the alerts, the report and the API all agree.
 - No em dashes in any copy.
 
 ## Testing
 
-- The decision lookup: an IP decision overrides a service decision, and Unreviewed is the default.
+- The resolution function: each level winning in turn, an IP decision overriding a service decision, conflicting group decisions resolving to the most cautious, a baseline entry for a service the domain doesn't use changing nothing, and Unreviewed as the default.
 - The fix text for each row of the table above, for each of the three policies.
-- Alerts: a new sender alerts, an old one doesn't, a decision resolves the alert, volume thresholds respected, the delivered alert resolves after the volume drops.
-- Database tests (the existing Postgres fixture): the migration, the unique key, delete cascading with the domain, the last write winning.
-- Permissions: a viewer and a client portal user cannot change a decision, and the audit entry is written.
+- Alerts: a new sender alerts, an old one doesn't, a decision at any level resolves it, each configurable threshold respected, each alert switch honoured, and the delivered alert resolving after the volume drops.
+- Database tests (the existing Postgres fixture): the migration, the unique key including the single baseline row, the scope check, cascading deletes with the domain and the group, and the last write winning.
+- Permissions: a viewer and a client portal user cannot change a decision, a group-limited user can change their groups' decisions but not the baseline, and the audit entry is written.
 - The report sentence appears only when there is unauthorised mail, and counts blocked and delivered separately.
 
 ## Phasing
 
-1. **Phase 1:** the table, the migration, decisions in the sender table, the fix text and the audit entry.
-2. **Phase 2:** the two alerts and their settings.
-3. **Phase 3:** the client report sentence, the read-only `decision` field in the sources API, and an "N senders to review" count on the domain's Overview.
+1. **Phase 1:** the table, the migration, the resolution function with domain-level decisions, decisions in the sender table, the fix text, the new permission and the audit entry.
+2. **Phase 2:** the baseline and group levels with inheritance, their settings and group page sections, and the source shown on each row.
+3. **Phase 3:** the two alerts and their settings.
+4. **Phase 4:** the client report sentence, the read-only `decision` field in the sources API, and an "N senders to review" count on the domain's Overview.
 
-## Open questions
+## My calls (to check)
 
-1. **Shared decisions.** An MSP will want "Microsoft 365 is authorised everywhere" or per group. Do you want that in version 1, or after we've seen how single-domain decisions get used? My proposal is after, because a shared decision needs a rule for when a domain disagrees with its group.
-2. **Who may decide.** I have proposed the domain edit permission. A separate "review senders" permission would let a junior mark things without editing settings. Is that wanted?
-3. **Under review.** Is it worth having as a third state, or is Authorised, Unauthorised and Unreviewed enough? I kept it because "I've seen this, I'm asking the client" is a real state, and it stops the new sender alert re-firing.
-4. **Alert defaults.** The 20 and 10 message thresholds are my guesses.
-
-## My calls
-
-- Decisions are per domain, keyed on the service name or the IP.
-- Only senders first seen in the last 7 days can raise the new sender alert, so enabling this is quiet.
+- Inheritance order is domain, then group, then baseline, and conflicting group decisions resolve to the most cautious.
+- A baseline or group decision applies only when the service shows up in a domain's reports.
+- A group-limited person can decide for their own groups, and only an unlimited one can change the baseline.
+- Only senders first seen within the configured number of days (default 7) can raise the new sender alert, so enabling this is quiet.
+- Defaults of 20 and 10 messages for the alert volumes are guesses, and they are configurable.
 - No API writes and no Dashboard column in version 1.
