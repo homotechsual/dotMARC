@@ -179,6 +179,30 @@ public static class DomainStatistics
 
     private enum AuthFailureCategory { Spf, Dkim, Both }
 
+    /// <summary>Why one failing record failed, in the terms the sender table's fix text uses. No DKIM signature at all (while SPF
+    /// reported something) is DkimMissing; a DKIM pass for another domain, with SPF not also misaligned, is DkimNotAligned; an SPF
+    /// pass for another domain with DKIM failing outright is SpfNotAligned; everything else is Both. Records with no auth details
+    /// (ingested before the backfill) therefore land in Both.</summary>
+    public static SenderFailureCause ClassifyFailureCause(IReadOnlyList<AuthDetailSummary> authDetails, string headerFrom)
+    {
+        var spf = ClassifyMechanism(DmarcAuthMechanism.Spf, headerFrom, authDetails);
+        var dkim = ClassifyMechanism(DmarcAuthMechanism.Dkim, headerFrom, authDetails);
+
+        if (dkim == MechanismOutcome.NotCovered && spf != MechanismOutcome.NotCovered)
+        {
+            return SenderFailureCause.DkimMissing;
+        }
+        if (dkim == MechanismOutcome.Misaligned && spf != MechanismOutcome.Misaligned)
+        {
+            return SenderFailureCause.DkimNotAligned;
+        }
+        if (spf == MechanismOutcome.Misaligned && dkim == MechanismOutcome.Failed)
+        {
+            return SenderFailureCause.SpfNotAligned;
+        }
+        return SenderFailureCause.Both;
+    }
+
     /// <summary>Hostname suffixes of well-known email service providers, matched against whatever
     /// domain SPF/DKIM auth_results actually reported for a source - a known name turns "some
     /// third party you don't recognize" into "this is Salesforce, go check their alignment docs",
