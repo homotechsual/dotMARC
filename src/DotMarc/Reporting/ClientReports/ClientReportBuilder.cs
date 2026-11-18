@@ -29,7 +29,8 @@ public sealed class ClientReportBuilder(IDbContextFactory<DotMarcDbContext> dbFa
         var loadFromUtc = ReportPeriods.StartUtc(ReportPeriods.PreviousForComparison(period), zone);
         var reports = await context.Reports.AsNoTracking()
             .Where(report => domainIds.Contains(report.DomainId) && report.DateRangeBeginUtc >= loadFromUtc && report.DateRangeBeginUtc < periodEndUtc)
-            .Include(report => report.Records)
+            .Include(report => report.Records).ThenInclude(record => record.AuthDetails)
+            .AsSplitQuery()
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var periodAlerts = await context.AlertEvents.AsNoTracking()
             .Where(alert => domainNames.Contains(alert.DomainName)

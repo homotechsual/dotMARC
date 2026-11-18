@@ -84,6 +84,8 @@ public static class ClientReportCalculator
     {
         var records = reports.SelectMany(report => report.Records).ToList();
         var total = records.Sum(record => (long)record.MessageCount);
+        var ownerByIp = owners.ToDictionary(entry => entry.Key, entry => entry.Value.Organization);
+        var serviceByIp = SenderIdentification.Identify(reports, ownerByIp, []).ServiceByIp;
         return records
             .GroupBy(record => record.SourceIp)
             .Select(source =>
@@ -91,7 +93,7 @@ public static class ClientReportCalculator
                 var messages = source.Sum(record => (long)record.MessageCount);
                 var passing = source.Where(DomainStatistics.IsPassing).Sum(record => (long)record.MessageCount);
                 return new ClientReportSender(source.Key, owners.TryGetValue(source.Key, out var owner) ? owner.Organization : null,
-                    messages, passing, messages - passing, total == 0 ? 0 : (double)messages / total);
+                    messages, passing, messages - passing, total == 0 ? 0 : (double)messages / total, serviceByIp.GetValueOrDefault(source.Key));
             })
             .OrderByDescending(sender => sender.Messages)
             .ThenBy(sender => sender.Ip, StringComparer.Ordinal)

@@ -42,10 +42,10 @@ public static class ClientReportNextSteps
                 continue;
             }
 
-            foreach (var sender in row.TopSenders.Where(sender => sender.Owner is not null && (double)sender.Failing / row.Messages > FailingSenderShare))
+            foreach (var sender in row.TopSenders.Where(sender => (sender.Service ?? sender.Owner) is not null && (double)sender.Failing / row.Messages > FailingSenderShare))
             {
                 steps.Add(string.Create(culture ?? CultureInfo.InvariantCulture,
-                    $"{sender.Owner} sent {sender.Failing:N0} messages as {domain.Name} that failed DMARC. If they send for you, add them to SPF or set up DKIM for them."));
+                    $"{sender.Service ?? sender.Owner} sent {sender.Failing:N0} messages as {domain.Name} that failed DMARC. If they send for you, add them to SPF or set up DKIM for them."));
             }
         }
 

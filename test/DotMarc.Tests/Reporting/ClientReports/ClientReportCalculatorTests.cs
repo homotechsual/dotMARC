@@ -95,6 +95,23 @@ public sealed class ClientReportCalculatorTests
     }
 
     [Fact]
+    public void TopSenders_NameTheSendingService_WhenTheReportsPointToOne_AndLeaveItNullOtherwise()
+    {
+        var domain = AuroraDomain();
+        var mailchimpRecord = Record("198.51.100.7", 30, AuthResult.Fail, AuthResult.Fail);
+        mailchimpRecord.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bounce.mcsv.net", Result = DmarcMechanismResult.Pass });
+        var reports = new[]
+        {
+            ReportOn(1, new DateTimeOffset(2026, 3, 5, 0, 0, 0, TimeSpan.Zero), Record("203.0.113.10", 70, AuthResult.Pass, AuthResult.Pass), mailchimpRecord),
+        };
+
+        var senders = Build([domain], reports).Domains.Single().TopSenders;
+
+        Assert.Null(senders.Single(sender => sender.Ip == "203.0.113.10").Service);
+        Assert.Equal("Mailchimp", senders.Single(sender => sender.Ip == "198.51.100.7").Service);
+    }
+
+    [Fact]
     public void ReceiverActions_CountWhatHappened_IncludingFailingMailDelivered()
     {
         var domain = AuroraDomain();

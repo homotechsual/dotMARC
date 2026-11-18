@@ -88,6 +88,25 @@ public sealed class ClientReportNextStepsTests
     }
 
     [Fact]
+    public void AFailingSenderWithAKnownService_IsNamedByServiceInPreferenceToItsOwner_EvenWithNoOwner()
+    {
+        var senders = new[]
+        {
+            new ClientReportSender("198.51.100.7", "Rocket Science Group LLC", 60, 0, 60, 0.06, "Mailchimp"),
+            new ClientReportSender("198.51.100.8", null, 90, 0, 90, 0.09, "SendGrid"),
+        };
+
+        var steps = ClientReportNextSteps.For([Healthy()], [Row("aurora-retail.example", 1000, senders)]);
+
+        Assert.Equal(
+            [
+                "Mailchimp sent 60 messages as aurora-retail.example that failed DMARC. If they send for you, add them to SPF or set up DKIM for them.",
+                "SendGrid sent 90 messages as aurora-retail.example that failed DMARC. If they send for you, add them to SPF or set up DKIM for them.",
+            ],
+            steps);
+    }
+
+    [Fact]
     public void ASendersCount_FollowsTheNumberFormat()
     {
         var senders = new[] { new ClientReportSender("198.51.100.7", "Mailchimp", 1234, 0, 1234, 0.6) };

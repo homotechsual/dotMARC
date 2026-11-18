@@ -27,7 +27,7 @@ public sealed record ClientReportDomain(
             : string.Create(culture, $"{(rate - previous) * 100:+0.0;-0.0;0.0} pts");
 }
 
-public sealed record ClientReportSender(string Ip, string? Owner, long Messages, long Passing, long Failing, double Share);
+public sealed record ClientReportSender(string Ip, string? Owner, long Messages, long Passing, long Failing, double Share, string? Service = null);
 
 public sealed record ReceiverActions(long Delivered, long Quarantined, long Rejected, long FailingDelivered);
 

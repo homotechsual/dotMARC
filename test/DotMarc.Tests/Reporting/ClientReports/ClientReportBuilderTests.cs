@@ -83,6 +83,29 @@ public sealed class ClientReportBuilderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheReport_LoadsAuthDetails_SoASenderIsNamedByItsService()
+    {
+        int groupId;
+        await using (var context = CreateContext())
+        {
+            var group = new Group { Name = "Aurora Retail" };
+            var domain = new Domain { Name = "aurora-retail.example", IsMonitored = true, Groups = [group] };
+            context.Domains.Add(domain);
+            await context.SaveChangesAsync();
+            var report = Report(domain.Id, new DateTimeOffset(2026, 3, 10, 0, 0, 0, TimeSpan.Zero), 40);
+            report.Records[0].AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bounce.mcsv.net", Result = DmarcMechanismResult.Pass });
+            context.Reports.Add(report);
+            await context.SaveChangesAsync();
+            groupId = group.Id;
+        }
+
+        var builder = new ClientReportBuilder(new FakeDbContextFactory(_connectionString), new PortalBrandLoader(new FakeDbContextFactory(_connectionString)), TimeProvider.System);
+        var built = await builder.BuildAsync(groupId, new ReportPeriod(new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 31), ReportPeriodKind.Month), TimeZoneInfo.Utc, CancellationToken.None);
+
+        Assert.Equal("Mailchimp", Assert.Single(Assert.Single(built!.Domains).TopSenders).Service);
+    }
+
+    [Fact]
     public async Task AGroupThatDoesntExist_HasNoReport()
     {
         var builder = new ClientReportBuilder(new FakeDbContextFactory(_connectionString), new PortalBrandLoader(new FakeDbContextFactory(_connectionString)), TimeProvider.System);

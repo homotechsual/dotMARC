@@ -218,7 +218,7 @@ public static partial class ClientReportDocument
             var senders = NewTable(section, brand, ("Sender", 5.6), ("Messages", 2.4), ("Passed", 2.4), ("Failed", 2.4), ("Share", 3.2));
             foreach (var sender in domain.TopSenders)
             {
-                AddRow(senders, sender.Owner is null ? sender.Ip : $"{sender.Owner} ({sender.Ip})", Count(culture, sender.Messages), Count(culture, sender.Passing), Count(culture, sender.Failing), Percent(culture, sender.Share));
+                AddRow(senders, (sender.Service ?? sender.Owner) is { } name ? $"{name} ({sender.Ip})" : sender.Ip, Count(culture, sender.Messages), Count(culture, sender.Passing), Count(culture, sender.Failing), Percent(culture, sender.Share));
             }
         }
 

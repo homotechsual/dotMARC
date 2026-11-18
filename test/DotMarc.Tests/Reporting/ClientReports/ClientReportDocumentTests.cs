@@ -42,6 +42,18 @@ public sealed class ClientReportDocumentTests
     }
 
     [Fact]
+    public void ASenderWithAKnownService_IsListedByServiceThenIp()
+    {
+        var report = SampleReport(domains:
+        [
+            new("aurora-retail.example", new PortalDomainStatus(PortalHealth.Protected, []), 100, 1.0, null, [1.0], "Mail that fails DMARC is rejected.", [],
+                [new ClientReportSender("198.51.100.7", "Rocket Science Group LLC", 100, 100, 0, 1.0, "Mailchimp")], new ReceiverActions(100, 0, 0, 0), []),
+        ]);
+
+        Assert.Contains("Mailchimp (198.51.100.7)", MigraDocText.Of(ClientReportDocument.Build(report)));
+    }
+
+    [Fact]
     public void AGroupWithNoDomains_StillRenders_AndSaysSo()
     {
         var report = SampleReport(domains: []) with { Verdict = "There are no domains in this report.", NextSteps = ClientReportNextSteps.For([], []) };
