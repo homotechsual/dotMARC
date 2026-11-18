@@ -86,6 +86,31 @@ public sealed class PortalDataTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetDomain_NamesTheSendingServiceOfATopSource_WhenTheReportsPointToOne()
+    {
+        var (auroraGroupId, _) = await SeedAsync();
+        await using (var context = CreateContext())
+        {
+            var domain = await context.Domains.SingleAsync(candidate => candidate.Name == "aurora-retail.example");
+            var record = new ReportRecord { SourceIp = "198.51.100.7", MessageCount = 20, SpfResult = AuthResult.Fail, DkimResult = AuthResult.Fail, HeaderFrom = domain.Name };
+            record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bounce.mcsv.net", Result = DmarcMechanismResult.Pass });
+            var plain = new ReportRecord { SourceIp = "203.0.113.10", MessageCount = 5, SpfResult = AuthResult.Pass, DkimResult = AuthResult.Pass, HeaderFrom = domain.Name };
+            context.Reports.Add(new Report
+            {
+                DomainId = domain.Id, ReportingOrg = "google.com", ReportId = Guid.NewGuid().ToString(), RawXml = "<feedback/>",
+                DateRangeBeginUtc = DateTimeOffset.UtcNow.AddDays(-2), DateRangeEndUtc = DateTimeOffset.UtcNow.AddDays(-1), ReceivedUtc = DateTimeOffset.UtcNow.AddDays(-1),
+                Records = [record, plain],
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var detail = await CreatePortalData().GetDomainAsync([auroraGroupId], "aurora-retail.example");
+
+        Assert.Equal("Mailchimp", detail!.ServiceByIp["198.51.100.7"]);
+        Assert.False(detail.ServiceByIp.ContainsKey("203.0.113.10"));
+    }
+
+    [Fact]
     public async Task GetDomain_WithNoGroups_IsNull()
     {
         await SeedAsync();

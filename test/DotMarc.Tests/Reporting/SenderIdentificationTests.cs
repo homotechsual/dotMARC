@@ -213,6 +213,16 @@ public sealed class SenderIdentificationTests
     }
 
     [Fact]
+    public void RecordsCanBePassedDirectly_WithoutWrappingThemInAReport()
+    {
+        var record = Record("198.51.100.1", 10, passing: true, details: Dkim("mcsv.net", DmarcMechanismResult.Pass));
+
+        var result = SenderIdentification.IdentifyRecords([record], Owners(), NoSpfIncludes);
+
+        Assert.Equal("Mailchimp", result.ServiceByIp["198.51.100.1"]);
+    }
+
+    [Fact]
     public void FixText_StatesTheCauseFirst_ThenTheFix_NamingTheService_WithoutEmDashes()
     {
         foreach (var cause in Enum.GetValues<SenderFailureCause>())

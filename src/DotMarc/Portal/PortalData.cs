@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using DotMarc.Data;
+using DotMarc.IpEnrichment;
 using DotMarc.Notifications;
 using DotMarc.Reporting;
 using DotMarc.Security;
@@ -10,7 +11,9 @@ namespace DotMarc.Portal;
 
 public sealed record PortalDomainSummary(string Name, PortalDomainStatus Status, double? PassRate, IReadOnlyList<double?> Trend, IReadOnlyList<AlertEvent> OpenAlerts);
 
-public sealed record PortalDomainDetail(PortalDomainSummary Summary, Domain Domain, IReadOnlyList<SourceAggregate> TopSources, IReadOnlyList<AlertEvent> RecentAlerts);
+/// <summary><see cref="ServiceByIp"/> names the sending service behind each top source the reports point to one for (such as Mailchimp).</summary>
+public sealed record PortalDomainDetail(PortalDomainSummary Summary, Domain Domain, IReadOnlyList<SourceAggregate> TopSources, IReadOnlyList<AlertEvent> RecentAlerts,
+    IReadOnlyDictionary<string, string> ServiceByIp);
 
 /// <summary>Loads what the portal shows, always limited to the given Groups. An empty set of Groups shows nothing: unlike
 /// elsewhere in dotMARC, "no Groups" never means "every domain" here.</summary>
@@ -65,7 +68,12 @@ public sealed class PortalData(IDbContextFactory<DotMarcDbContext> dbFactory, Ti
             .OrderByDescending(source => source.Volume)
             .Take(TopSourceCount)
             .ToList();
-        return new PortalDomainDetail(Summarise(domain, openAlerts[domain.Name]), domain, topSources, recentAlerts);
+        var topIps = topSources.Select(source => source.SourceIp).ToList();
+        var owners = await IpInfoService.GetCachedAsync(context, topIps, cancellationToken).ConfigureAwait(false);
+        var ownerByIp = owners.ToDictionary(entry => entry.Key, entry => entry.Value.Organization);
+        var serviceByIp = SenderIdentification.IdentifyRecords(
+            domain.Reports.SelectMany(report => report.Records).Where(record => topIps.Contains(record.SourceIp)), ownerByIp, []).ServiceByIp;
+        return new PortalDomainDetail(Summarise(domain, openAlerts[domain.Name]), domain, topSources, recentAlerts, serviceByIp);
     }
 
     private IQueryable<Domain> DomainsWithReports(DotMarcDbContext context, IReadOnlyCollection<int> groupIds)

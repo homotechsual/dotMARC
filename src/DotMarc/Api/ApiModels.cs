@@ -105,9 +105,10 @@ public sealed record ApiAuditEntry(
     IReadOnlyList<ApiAuditChange> Changes);
 
 /// <summary>A sending IP over the range. Passed means SPF or DKIM passed; Spf and Dkim are Pass if they passed in any
-/// record; Disposition is the most severe seen. Organization and Country come from dotMARC's cache of IP lookups.</summary>
+/// record; Disposition is the most severe seen. Organization and Country come from dotMARC's cache of IP lookups. Service is
+/// the sending service the reports point to (such as Mailchimp), or null when none is recognised.</summary>
 public sealed record ApiSourceDetail(string Ip, int Volume, int Passed, int Failed, double? PassRate, string Spf, string Dkim, string Disposition,
-    string? Organization, string? Country);
+    string? Organization, string? Country, string? Service = null);
 
 public sealed record ApiOverrideReason(string Type, string? Comment);
 

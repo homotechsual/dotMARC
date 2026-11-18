@@ -1544,6 +1544,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "service": {
+            "nullable": true,
+            "type": "string"
+          },
           "spf": {
             "type": "string"
           },

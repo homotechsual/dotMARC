@@ -64,7 +64,7 @@ else
                     @foreach (var source in Detail.TopSources)
                     {
                         <tr>
-                            <td>@source.SourceIp</td>
+                            <td>@(Detail.ServiceByIp.TryGetValue(source.SourceIp, out var service) ? $"{service} ({source.SourceIp})" : source.SourceIp)</td>
                             <td>@source.Volume.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td>@source.SpfResult</td>
                             <td>@source.DkimResult</td>

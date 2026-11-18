@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using DotMarc.Data;
 using DotMarc.IpEnrichment;
+using DotMarc.Reporting;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -135,6 +136,12 @@ public static class SourceEndpoints
             owner = await OwnersAsync(context, pageRows.Select(source => source.Ip).ToList(), timeProvider, cancellationToken);
         }
 
+        // The page was totalled in SQL, so the sending service is worked out from just this page's IPs and their auth details.
+        var pageIps = pageRows.Select(source => source.Ip).ToList();
+        var pageRecords = await records.Where(record => pageIps.Contains(record.SourceIp)).Include(record => record.AuthDetails).ToListAsync(cancellationToken);
+        var ownerByIp = pageIps.ToDictionary(ip => ip, ip => owner(ip).Organization);
+        var serviceByIp = SenderIdentification.IdentifyRecords(pageRecords, ownerByIp, []).ServiceByIp;
+
         var items = pageRows.Select(source =>
         {
             var (organization, country) = owner(source.Ip);
@@ -142,7 +149,7 @@ public static class SourceEndpoints
                 source.Volume == 0 ? null : (double)source.Passed / source.Volume,
                 source.SpfPasses > 0 ? "Pass" : "Fail", source.DkimPasses > 0 ? "Pass" : "Fail",
                 (source.Rejected > 0 ? DispositionResult.Reject : source.Quarantined > 0 ? DispositionResult.Quarantine : DispositionResult.None).ToString(),
-                organization, country);
+                organization, country, serviceByIp.GetValueOrDefault(source.Ip));
         }).ToList();
         return TypedResults.Ok(new ApiPage<ApiSourceDetail>(items, pageNumber, size, totalCount));
     }

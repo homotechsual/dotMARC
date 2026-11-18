@@ -67,6 +67,27 @@ public sealed class SourceEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Sources_NameTheSendingService_OrAreNull_WhenTheReportsDontPointToOne()
+    {
+        var received = DateTimeOffset.UtcNow.AddDays(-2);
+        await _host.SeedDomainAsync("api-sources-service.example", configure: domain =>
+        {
+            var report = ReportWith(received,
+                ("198.51.100.7", 20, AuthResult.Fail, AuthResult.Fail, DispositionResult.None),
+                ("203.0.113.10", 5, AuthResult.Pass, AuthResult.Pass, DispositionResult.None));
+            report.Records[0].AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bounce.mcsv.net", Result = DmarcMechanismResult.Pass });
+            domain.Reports.Add(report);
+        });
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var page = await client.GetFromJsonAsync<ApiPage<ApiSourceDetail>>("/api/v1/domains/api-sources-service.example/sources");
+
+        Assert.Equal("Mailchimp", page!.Items.Single(source => source.Ip == "198.51.100.7").Service);
+        Assert.Null(page.Items.Single(source => source.Ip == "203.0.113.10").Service);
+    }
+
+    [Fact]
     public async Task Filters_NarrowSources()
     {
         await SeedMixedAsync("api-sources-filter.example");

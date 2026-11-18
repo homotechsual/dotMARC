@@ -36,9 +36,16 @@ public static class SenderIdentification
     public static SenderIdentificationResult Identify(
         IEnumerable<Report> reportsInWindow,
         IReadOnlyDictionary<string, string?> ownerByIp,
+        IReadOnlyCollection<string> spfIncludedNames) =>
+        IdentifyRecords(reportsInWindow.SelectMany(report => report.Records), ownerByIp, spfIncludedNames);
+
+    /// <summary>The same, for callers that load records directly (with their <c>AuthDetails</c>) rather than whole reports.</summary>
+    public static SenderIdentificationResult IdentifyRecords(
+        IEnumerable<ReportRecord> recordsInWindow,
+        IReadOnlyDictionary<string, string?> ownerByIp,
         IReadOnlyCollection<string> spfIncludedNames)
     {
-        var records = reportsInWindow.SelectMany(report => report.Records).ToList();
+        var records = recordsInWindow.ToList();
         var totalMessages = records.Sum(record => (long)record.MessageCount);
 
         var serviceByIp = new Dictionary<string, string>(StringComparer.Ordinal);
