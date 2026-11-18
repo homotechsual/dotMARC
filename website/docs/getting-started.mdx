@@ -118,6 +118,38 @@ dotMARC could not match them, not that they are bad. The matching is worked out 
 the page, so it improves as dotMARC learns more services, and it also names the service in failure
 recommendations, client reports, the client portal and the `service` field of the sources API.
 
+### Decide which senders are authorised
+
+The **Decision** column is where your team records what it has decided about a sender on this domain:
+
+* **Authorised**: it should send as this domain.
+* **Unauthorised**: it should not.
+* **Under review**: you are still finding out, for example waiting for the client to answer.
+* **Unreviewed**: nobody has decided yet. This is the default.
+
+Select a status to change it, add an optional note, and save. A decision is a label for your team. It
+never changes DNS and never blocks mail, because your DMARC policy decides what receivers do. The row
+shows who decided and when, and every change is recorded in the [audit log](./audit-log.mdx).
+
+The **Fix** column changes with the decision:
+
+* An **Unauthorised** sender is not asked to be fixed. If its failing mail is all blocked, the row says
+  your policy is blocking it. If some was still delivered, it says how much and what your policy
+  means for that: at `none` nothing is blocked, at `quarantine` it goes to spam, and at `reject`
+  receivers should refuse it.
+* An **Unauthorised** sender whose mail passes DMARC is flagged first, because it means the sender
+  authenticates as your domain. Decide whether it should be authorised, or remove its access.
+* An **Authorised** sender gets no fix while its mail passes. If some of it fails, the row says you
+  authorised it but it is failing, and keeps the fix.
+
+Open a service row to decide on a single IP address. An IP decision overrides the decision on its
+service, and the other IPs show "same as the service". A source in the Not matched row has no
+service, so you decide on its IPs.
+
+Changing decisions needs the **SenderReview** permission, which the Admin role has. Custom roles can be
+given it on the Access page. Anyone who can see the domain can see the decisions. Baseline and
+per-group decisions, which let you set an answer once for many domains, come in a later release.
+
 Next: [Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx) to
 run it in production, or [Local Development](./local-development.mdx) to run and test from source.
 Once you're up and running, [DNS Provider Push](./dns-provider-push.mdx) lets dotMARC fix DNS
