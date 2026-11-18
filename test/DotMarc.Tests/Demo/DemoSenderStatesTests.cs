@@ -1,6 +1,8 @@
 using DotMarc.Data;
 using DotMarc.Demo;
+using DotMarc.Dns;
 using DotMarc.Notifications;
+using DotMarc.Reporting;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -58,6 +60,35 @@ public sealed class DemoSenderStatesTests : IAsyncLifetime
         Assert.Contains(decisions, decision => decision is { Scope: SenderDecisionScope.Group, Key: "Mailchimp", Status: SenderDecisionStatus.Unauthorised } && decision.GroupId == cobaltGroupId);
         Assert.Contains(decisions, decision => decision is { Scope: SenderDecisionScope.Domain, Key: "HubSpot", Status: SenderDecisionStatus.UnderReview } && decision.DomainId == emberwoodId);
         Assert.All(decisions, decision => Assert.Equal("Nova MSP admin", decision.DecidedByName));
+    }
+
+    [Fact]
+    public async Task TheShopDomain_HasSpfRanges_ThatNameItsOtherwiseUnmatchedSource()
+    {
+        await SeedDemoAsync();
+
+        await using var verify = CreateContext();
+        var shop = await verify.Domains.AsNoTracking()
+            .Include(domain => domain.Reports).ThenInclude(report => report.Records).ThenInclude(record => record.AuthDetails)
+            .SingleAsync(domain => domain.Name == "shop.aurora-retail.example");
+        var ranges = SpfServiceRanges.Parse(shop.SpfRangesJson);
+        Assert.NotEmpty(ranges);
+
+        var withRanges = SenderIdentification.Identify(shop.Reports, new Dictionary<string, string?>(), [], ranges);
+        var without = SenderIdentification.Identify(shop.Reports, new Dictionary<string, string?>(), []);
+
+        var named = withRanges.Services.Single(row => row.Name == "Amazon SES");
+        Assert.Contains("Your SPF record authorises this IP for Amazon SES", named.EvidenceLines);
+        Assert.DoesNotContain(without.Services, row => row.Name == "Amazon SES");
+    }
+
+    [Fact]
+    public async Task OtherDemoDomains_HaveNoStoredRanges()
+    {
+        await SeedDemoAsync();
+
+        await using var verify = CreateContext();
+        Assert.Equal(["shop.aurora-retail.example"], await verify.Domains.Where(domain => domain.SpfRangesJson != null).Select(domain => domain.Name).ToListAsync());
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 // src/DotMarc/Demo/DemoDataGenerator.cs
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Notifications;
 using DotMarc.Reporting;
 
@@ -262,6 +263,13 @@ public static class DemoDataGenerator
             [new(DmarcAuthMechanism.Dkim, "bounce.sendgrid.net", DmarcMechanismResult.Pass)], onlyLastDays: 2);
         AddSender(domains, "emberwood-finance.example", senderRandom, nowUtc, "198.51.100.73", 30, 60, AuthResult.Pass, AuthResult.Pass, DispositionResult.None,
             [new(DmarcAuthMechanism.Dkim, "mail.hubspotemail.net", DmarcMechanismResult.Pass)], onlyLastDays: 0);
+        // The Shop domain's SPF record includes Amazon SES, and its ranges cover the third-party-looking address that sends it a little mail,
+        // so the Sources tab names that source from the record instead of leaving it unrecognised.
+        var shopIndex = domains.FindIndex(domain => domain.Name == "shop.aurora-retail.example");
+        domains[shopIndex] = domains[shopIndex] with
+        {
+            SpfRangesJson = SpfServiceRanges.Serialize([new SpfServiceRange("Amazon SES", "amazonses.com", "203.0.113.0/24")]),
+        };
         var cobaltIndex = domains.FindIndex(domain => domain.Name == "cobalt-freight.example");
         domains[cobaltIndex] = domains[cobaltIndex] with { DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100 };
 

@@ -107,8 +107,16 @@ The signals are:
 * an SPF or DKIM domain in the report that belongs to the service
 * the DKIM selector the service is known to use
 * who owns the sending IP
-* the service being included in the domain's own SPF record, which is the weakest signal because it
-  shows what is allowed to send, not what did
+* the sending IP falling inside an IP range your domain's own SPF record authorises for the service,
+  which is a strong signal
+* the service being included in the domain's own SPF record without a matching IP, which is the
+  weakest signal because it shows what is allowed to send, not what did
+
+dotMARC reads those SPF ranges when it runs the daily SPF check, by following the record's `include:`
+and `redirect=` entries. The evidence says "Your SPF record authorises this IP for" the service. It
+does not say confirmed: a range shared by many customers of a service shows the service, not that this
+particular sender is yours. Only entries that authorise count, so a `-ip4:` or `~ip4:` entry is ignored.
+If the check can't read the record, the last ranges dotMARC read are kept.
 
 Mail from a properly set up Microsoft 365 or Google Workspace signs as your own domain, so it is
 recognised by its IP owner and DKIM selector instead.

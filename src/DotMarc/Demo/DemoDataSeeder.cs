@@ -92,6 +92,7 @@ public static class DemoDataSeeder
                 SpfCheckStatus = domainSeed.SpfCheckStatus,
                 SpfCheckedUtc = domainSeed.SpfCheckStatus == SpfCheckStatus.NotChecked ? null : domainSeed.FirstSeenUtc,
                 SpfCheckDetail = domainSeed.SpfCheckDetail,
+                SpfRangesJson = domainSeed.SpfRangesJson,
                 MxCheckStatus = domainSeed.MxCheckStatus,
                 MxCheckedUtc = domainSeed.MxCheckStatus == MxCheckStatus.NotChecked ? null : domainSeed.FirstSeenUtc,
                 MxCheckDetail = domainSeed.MxCheckDetail,
