@@ -167,6 +167,18 @@ public class DomainStatisticsTests
     }
 
     [Fact]
+    public void GetSourceAggregates_InferredReason_NamesAGoogleSender_WhichTheOldSuffixListMissed()
+    {
+        var record = Record("198.51.100.76", 9, AuthResult.Fail, AuthResult.Fail, DispositionResult.Reject);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "mail.google.com", Result = DmarcMechanismResult.Pass });
+        var report = ReportWith(record);
+
+        var source = DomainStatistics.GetSourceAggregates([report]).Single();
+
+        Assert.Contains("Google Workspace", source.InferredReason);
+    }
+
+    [Fact]
     public void GetSourceDailyVolumes_BucketsVolumeByDayAcrossTheTrendWindow()
     {
         var now = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);

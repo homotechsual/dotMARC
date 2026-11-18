@@ -203,35 +203,12 @@ public static class DomainStatistics
         return SenderFailureCause.Both;
     }
 
-    /// <summary>Hostname suffixes of well-known email service providers, matched against whatever
-    /// domain SPF/DKIM auth_results actually reported for a source - a known name turns "some
-    /// third party you don't recognize" into "this is Salesforce, go check their alignment docs",
-    /// a much shorter path to a fix. Deliberately doesn't suggest exact SPF include/DKIM selector
-    /// values: those vary by the sender's own account/region and change over time, so a literal
-    /// recommendation here could go stale or be outright wrong - naming the provider is the safe,
-    /// durable part of this signal.</summary>
-    private static readonly (string Suffix, string Name)[] KnownEmailServiceProviders =
-    [
-        (".sendgrid.net", "SendGrid"),
-        (".mailgun.org", "Mailgun"),
-        (".mcsv.net", "Mailchimp"),
-        (".mandrillapp.com", "Mandrill (Mailchimp Transactional)"),
-        (".salesforce.com", "Salesforce"),
-        (".exacttarget.com", "Salesforce Marketing Cloud"),
-        (".zendesk.com", "Zendesk"),
-        (".hubspotemail.net", "HubSpot"),
-        (".freshdesk.com", "Freshdesk"),
-        (".constantcontact.com", "Constant Contact"),
-        (".sparkpostmail.com", "SparkPost"),
-        (".postmarkapp.com", "Postmark"),
-        (".amazonses.com", "Amazon SES"),
-    ];
-
+    /// <summary>The well-known sending service behind whatever domains SPF/DKIM auth_results reported for a source, from
+    /// <see cref="SenderServiceCatalog"/> - a known name turns "some third party you don't recognize" into "this is
+    /// Salesforce, go check their alignment docs". Deliberately doesn't suggest exact SPF include/DKIM selector values:
+    /// those vary by the sender's own account and go stale, so naming the provider is the durable part of this signal.</summary>
     private static string? IdentifyKnownEsp(IReadOnlyList<AuthDetailSummary> authDetails) =>
-        KnownEmailServiceProviders
-            .Where(p => authDetails.Any(d => d.Domain.EndsWith(p.Suffix, StringComparison.OrdinalIgnoreCase)))
-            .Select(p => p.Name)
-            .FirstOrDefault();
+        SenderServiceCatalog.IdentifyByAuthDomains(authDetails.Select(detail => detail.Domain));
 
     /// <summary>The one-line "what should I actually do about this" that turns the SPF/DKIM
     /// explanation into something actionable rather than just diagnostic.</summary>
