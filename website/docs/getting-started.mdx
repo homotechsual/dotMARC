@@ -88,6 +88,36 @@ behind each pass/fail on hover, plus who owns the IP:
   }}
 />
 
+### Which services are sending
+
+Above the per-IP table, the Sources tab has a **Senders** table with one row per sending service your
+reports point to, such as Microsoft 365, Google Workspace or Mailchimp:
+
+* **Messages and Share** are how much of the domain's mail the service sent in the last 30 days.
+* **Evidence** is a score of the signals dotMARC found for that service, with a label of strong,
+  moderate or weak. It is not a probability, and it never reaches 100%. Open a row to see the signals
+  behind it.
+* **Pass rate and Failing** show how much of its mail passed DMARC, and how much was quarantined or
+  rejected.
+* **Fix** says what is failing and what to do about it, naming the service. It appears only when some
+  of that service's mail is failing.
+
+The signals are:
+
+* an SPF or DKIM domain in the report that belongs to the service
+* the DKIM selector the service is known to use
+* who owns the sending IP
+* the service being included in the domain's own SPF record, which is the weakest signal because it
+  shows what is allowed to send, not what did
+
+Mail from a properly set up Microsoft 365 or Google Workspace signs as your own domain, so it is
+recognised by its IP owner and DKIM selector instead.
+
+Sources that match no known service are listed last as **Not matched to a known service**. That means
+dotMARC could not match them, not that they are bad. The matching is worked out each time you open
+the page, so it improves as dotMARC learns more services, and it also names the service in failure
+recommendations, client reports, the client portal and the `service` field of the sources API.
+
 Next: [Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx) to
 run it in production, or [Local Development](./local-development.mdx) to run and test from source.
 Once you're up and running, [DNS Provider Push](./dns-provider-push.mdx) lets dotMARC fix DNS

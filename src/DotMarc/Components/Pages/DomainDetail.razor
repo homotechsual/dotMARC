@@ -854,7 +854,12 @@ else
             source.IsEnrichmentPending = false;
             await InvokeAsync(() =>
             {
-                RebuildSenders();
+                // Re-attribution walks every record, so with hundreds of sources it waits for the last lookup instead of running after each.
+                if (_sources.All(row => !row.IsEnrichmentPending))
+                {
+                    RebuildSenders();
+                }
+
                 StateHasChanged();
             });
         }
