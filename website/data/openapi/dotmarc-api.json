@@ -1907,7 +1907,9 @@
                   "NameserversChanged",
                   "ApiKeyExpiring",
                   "ClientReportFailed",
-                  "PsaConnectionLost"
+                  "PsaConnectionLost",
+                  "NewUnreviewedSender",
+                  "UnauthorisedSenderDelivered"
                 ],
                 "type": "string"
               },

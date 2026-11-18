@@ -35,4 +35,20 @@ public sealed class NotificationSettings
     /// <summary>Close an open DMARC policy weakened or nameservers changed alert this many days after it was raised,
     /// as if acknowledged. 0 means never.</summary>
     public int AcknowledgeableAutoCloseDays { get; set; }
+
+    /// <summary>Alert when a sender nobody has reviewed first appears on a domain. Only a sender first seen within
+    /// <see cref="NewSenderDays"/> days that has sent at least <see cref="NewSenderMinVolume"/> messages counts, so a domain's
+    /// existing senders never alert.</summary>
+    public bool NewSenderAlertEnabled { get; set; } = true;
+
+    public int NewSenderMinVolume { get; set; } = 20;
+
+    /// <summary>How many days a sender counts as new, from 1 to 30 (the length of the report window).</summary>
+    public int NewSenderDays { get; set; } = 7;
+
+    /// <summary>Alert when mail from a sender marked Unauthorised is being delivered, at least
+    /// <see cref="UnauthorisedDeliveredMinVolume"/> messages over the window.</summary>
+    public bool UnauthorisedDeliveredAlertEnabled { get; set; } = true;
+
+    public int UnauthorisedDeliveredMinVolume { get; set; } = 10;
 }

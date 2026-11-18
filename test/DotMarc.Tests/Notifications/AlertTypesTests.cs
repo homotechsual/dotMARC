@@ -33,19 +33,29 @@ public sealed class AlertTypesTests
         Assert.Equal(
             ["MissedReport", "SuspiciousRejectActivity", "TlsrptFailure", "UnexpectedActivityOnNullRoutedDomain",
              "DmarcRecordBroken", "DmarcAuthorizationBroken", "TlsrptRecordBroken", "SpfRecordBroken", "MxRecordBroken",
-             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "NameserversChanged", "ApiKeyExpiring", "ClientReportFailed", "PsaConnectionLost"],
+             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "NameserversChanged", "ApiKeyExpiring", "ClientReportFailed", "PsaConnectionLost",
+             "NewUnreviewedSender", "UnauthorisedSenderDelivered"],
             AlertTypes.All.Select(alertType => alertType.Key));
     }
 
     [Fact]
-    public void EveryAlertType_HasANameAndADescription_AndAllButNameserverChangesAndExpiringKeysCreateTickets()
+    public void EveryAlertType_HasANameAndADescription_AndOnlyTheQuietOnesSkipTicketsByDefault()
     {
         foreach (var alertType in AlertTypes.All)
         {
             Assert.False(string.IsNullOrWhiteSpace(alertType.DisplayName));
             Assert.False(string.IsNullOrWhiteSpace(alertType.Description));
-            Assert.Equal(alertType.Key is not (AlertTypes.NameserversChanged or AlertTypes.ApiKeyExpiring or AlertTypes.ClientReportFailed or AlertTypes.PsaConnectionLost), alertType.CreatesTicketByDefault);
+            Assert.Equal(alertType.Key is not (AlertTypes.NameserversChanged or AlertTypes.ApiKeyExpiring or AlertTypes.ClientReportFailed or AlertTypes.PsaConnectionLost or AlertTypes.NewUnreviewedSender), alertType.CreatesTicketByDefault);
         }
+    }
+
+    [Fact]
+    public void TheSenderAlertTypes_AreRegistered_WithTheirTicketDefaults()
+    {
+        Assert.False(AlertTypes.Find(AlertTypes.NewUnreviewedSender)!.CreatesTicketByDefault);
+        Assert.True(AlertTypes.Find(AlertTypes.UnauthorisedSenderDelivered)!.CreatesTicketByDefault);
+        Assert.Equal("NewUnreviewedSender", AlertTypes.NewUnreviewedSender);
+        Assert.Equal("UnauthorisedSenderDelivered", AlertTypes.UnauthorisedSenderDelivered);
     }
 
     [Fact]

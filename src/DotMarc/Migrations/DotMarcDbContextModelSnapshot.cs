@@ -1467,6 +1467,15 @@ namespace DotMarc.Migrations
                     b.Property<bool>("NameserversChangedEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("NewSenderAlertEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("NewSenderDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NewSenderMinVolume")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("SlackEnabled")
                         .HasColumnType("boolean");
 
@@ -1495,6 +1504,12 @@ namespace DotMarc.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<bool>("UnauthorisedDeliveredAlertEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("UnauthorisedDeliveredMinVolume")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.ToTable("NotificationSettings");
@@ -1516,12 +1531,17 @@ namespace DotMarc.Migrations
                             MtaStsAlertMode = "WhenItBreaks",
                             MxAlertMode = "WhenItBreaks",
                             NameserversChangedEnabled = true,
+                            NewSenderAlertEnabled = true,
+                            NewSenderDays = 7,
+                            NewSenderMinVolume = 20,
                             SlackEnabled = false,
                             SpfAlertMode = "WhenItBreaks",
                             SuspiciousRejectMinVolume = 10,
                             SuspiciousRejectNonBenignPercent = 50,
                             TeamsEnabled = true,
-                            TlsrptAlertMode = "WhenItBreaks"
+                            TlsrptAlertMode = "WhenItBreaks",
+                            UnauthorisedDeliveredAlertEnabled = true,
+                            UnauthorisedDeliveredMinVolume = 10
                         });
                 });
 
