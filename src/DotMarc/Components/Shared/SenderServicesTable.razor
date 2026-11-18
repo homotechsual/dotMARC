@@ -1,6 +1,7 @@
+@using DotMarc.Data
 @using DotMarc.Reporting
 
-@* One row per sending service found in a domain's reports, with the evidence behind it and what is failing. *@
+@* One row per sending service found in a domain's reports, with the evidence behind it, what is failing, and the decision made about it. *@
 @if (Result is null || (Result.Services.Count == 0 && Result.Unrecognised is null))
 {
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">No sending sources in the last 30 days.</MudText>
@@ -19,6 +20,7 @@ else
                 <th>Messages</th>
                 <th>Share</th>
                 <th>Evidence</th>
+                <th>Decision</th>
                 <th>Pass rate</th>
                 <th>Failing</th>
                 <th>Fix</th>
@@ -27,6 +29,7 @@ else
         <tbody>
             @foreach (var row in Rows())
             {
+                var resolved = RowDecision(row);
                 <tr>
                     <td>
                         <MudIconButton Icon="@(IsOpen(row) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small"
@@ -39,6 +42,16 @@ else
                         @if (row.Evidence is { } evidence)
                         {
                             <MudChip T="string" Size="Size.Small" Color="@BandColor(evidence)">@(Percent(evidence) + " " + BandLabel(evidence))</MudChip>
+                        }
+                    </td>
+                    <td>
+                        @if (row.IsUnrecognised)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Decide per IP, below</MudText>
+                        }
+                        else
+                        {
+                            @DecisionChip(resolved, row.Name, row.Name, SenderDecisionKind.Service)
                         }
                     </td>
                     <td>@(row.PassRate is { } passRate ? Percent(passRate) : "n/a")</td>
@@ -56,13 +69,13 @@ else
                             <span>0</span>
                         }
                     </td>
-                    <td>@row.Fix</td>
+                    <td>@FixText(row, resolved)</td>
                 </tr>
                 @if (IsOpen(row))
                 {
                     <tr>
                         <td></td>
-                        <td colspan="7">
+                        <td colspan="8">
                             @if (row.EvidenceLines.Count > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">@(row.IsUnrecognised ? "Who owns these IPs" : "Why we think so")</MudText>
@@ -74,7 +87,13 @@ else
                                 </ul>
                             }
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Source IPs</MudText>
-                            <div>@string.Join(", ", row.SourceIps)</div>
+                            @foreach (var ip in row.SourceIps)
+                            {
+                                <div class="d-flex align-center" style="gap:0.5rem;">
+                                    <span>@ip</span>
+                                    @DecisionChip(IpResolved(ip), ip, ip, SenderDecisionKind.Ip)
+                                </div>
+                            }
                         </td>
                     </tr>
                 }
@@ -86,10 +105,67 @@ else
 @code {
     [Parameter] public SenderIdentificationResult? Result { get; set; }
 
+    /// <summary>The decision that applies to a service row. Unrecognised rows have no row-level decision.</summary>
+    [Parameter] public Func<SenderServiceRow, ResolvedSenderDecision>? DecisionFor { get; set; }
+
+    /// <summary>The decision that applies to one source IP, with its service's decision if it has no IP decision of its own.</summary>
+    [Parameter] public Func<string, ResolvedSenderDecision>? IpDecisionFor { get; set; }
+
+    [Parameter] public DmarcPolicyLevel Policy { get; set; }
+    [Parameter] public IReadOnlyDictionary<int, string> GroupNames { get; set; } = new Dictionary<int, string>();
+
+    /// <summary>Whether the person can change decisions. Without it the chips are labels, not buttons.</summary>
+    [Parameter] public bool CanReview { get; set; }
+
+    [Parameter] public EventCallback<SenderDecisionRequest> OnDecide { get; set; }
+
+    /// <summary>Which sender someone asked to decide on, and what to call it in the dialog.</summary>
+    public sealed record SenderDecisionRequest(SenderDecisionKind Kind, string Key, string Label);
+
+    private static readonly ResolvedSenderDecision Unreviewed = new(null, SenderDecisionLevel.None, null, null);
+
     private readonly HashSet<string> _open = [];
 
     private IEnumerable<SenderServiceRow> Rows() =>
         Result is null ? [] : Result.Unrecognised is { } unrecognised ? Result.Services.Append(unrecognised) : Result.Services;
+
+    private ResolvedSenderDecision RowDecision(SenderServiceRow row) =>
+        row.IsUnrecognised || DecisionFor is null ? Unreviewed : DecisionFor(row);
+
+    private ResolvedSenderDecision IpResolved(string ip) => IpDecisionFor?.Invoke(ip) ?? Unreviewed;
+
+    private string? FixText(SenderServiceRow row, ResolvedSenderDecision resolved) =>
+        row.IsUnrecognised ? row.Fix : SenderDecisionPresentation.FixFor(row, resolved, Policy);
+
+    private RenderFragment DecisionChip(ResolvedSenderDecision resolved, string key, string label, SenderDecisionKind kind) => @<div>
+        <MudTooltip Text="@resolved.Conflict" Disabled="@(resolved.Conflict is null)" Arrow="true">
+            @if (CanReview)
+            {
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(resolved.Status)" OnClick="@(() => OnDecide.InvokeAsync(new SenderDecisionRequest(kind, key, label)))">@SenderDecisionPresentation.StatusLabel(resolved.Status)</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(resolved.Status)">@SenderDecisionPresentation.StatusLabel(resolved.Status)</MudChip>
+            }
+        </MudTooltip>
+        @if (Caption(resolved, kind) is { Length: > 0 } caption)
+        {
+            <div><MudText Typo="Typo.caption" Color="Color.Secondary">@caption</MudText></div>
+        }
+    </div>;
+
+    private string Caption(ResolvedSenderDecision resolved, SenderDecisionKind kind) =>
+        kind == SenderDecisionKind.Ip && resolved.Decision?.Kind == SenderDecisionKind.Service
+            ? "same as the service"
+            : SenderDecisionPresentation.Provenance(resolved, GroupNames);
+
+    private static Color StatusColor(SenderDecisionStatus? status) => status switch
+    {
+        SenderDecisionStatus.Authorised => Color.Success,
+        SenderDecisionStatus.Unauthorised => Color.Error,
+        SenderDecisionStatus.UnderReview => Color.Warning,
+        _ => Color.Default,
+    };
 
     private bool IsOpen(SenderServiceRow row) => _open.Contains(row.Name);
 

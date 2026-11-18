@@ -68,6 +68,20 @@ public sealed class SenderDecisionPresentationTests
             SenderDecisionPresentation.FixFor(Row(90, 0, 0), Decided(SenderDecisionStatus.Unauthorised), DmarcPolicyLevel.Reject));
 
     [Fact]
+    public void Unauthorised_WithMostOfItsMailPassing_LeadsWithThat_BeforeTheFailingPart() =>
+        Assert.Equal(
+            $"{MadeBy}, but 33,069 messages from it pass DMARC. It authenticates as your domain, so check whether it should be authorised or remove its access. " +
+            "The 202 that fail are being blocked by your DMARC policy.",
+            SenderDecisionPresentation.FixFor(Row(33069, 202, 202), Decided(SenderDecisionStatus.Unauthorised), DmarcPolicyLevel.Reject));
+
+    [Fact]
+    public void Unauthorised_WithPassingMail_AndSomeFailingMailDelivered_SaysHowMuchAndWhatThePolicyMeans() =>
+        Assert.Equal(
+            $"{MadeBy}, but 90 messages from it pass DMARC. It authenticates as your domain, so check whether it should be authorised or remove its access. " +
+            "Of the 40 that fail, 25 were still delivered. Your policy is none, so this mail is still delivered. Move to quarantine or reject to block it.",
+            SenderDecisionPresentation.FixFor(Row(90, 40, 15), Decided(SenderDecisionStatus.Unauthorised), DmarcPolicyLevel.None));
+
+    [Fact]
     public void ADecisionWithNoStoredRow_FallsBackToTodaysFix() =>
         Assert.Equal(
             TodaysFix,

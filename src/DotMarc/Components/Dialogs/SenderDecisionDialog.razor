@@ -1,0 +1,62 @@
+@* src/DotMarc/Components/Dialogs/SenderDecisionDialog.razor *@
+@using DotMarc.Data
+<MudDialog>
+    <TitleContent>Decide on @SenderLabel</TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            This is a label for your team. It doesn't change DNS or block anything. Your DMARC policy decides what receivers do with the mail.
+        </MudText>
+        @if (!string.IsNullOrEmpty(InheritedText))
+        {
+            <MudText Typo="Typo.caption" Class="d-block mb-2 mud-text-secondary">@InheritedText</MudText>
+        }
+        <MudRadioGroup T="SenderDecisionStatus?" @bind-Value="_status">
+            <MudRadio T="SenderDecisionStatus?" Value="_authorised">Authorised: it should send as this domain</MudRadio>
+            <MudRadio T="SenderDecisionStatus?" Value="_unauthorised">Unauthorised: it should not send as this domain</MudRadio>
+            <MudRadio T="SenderDecisionStatus?" Value="_underReview">Under review: still finding out</MudRadio>
+        </MudRadioGroup>
+        <MudTextField T="string" @bind-Value="_note" Label="Note (optional)" Lines="3" MaxLength="@SenderDecision.MaxNoteLength" Counter="@SenderDecision.MaxNoteLength" Class="mt-2" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Reset" Disabled="@(!HasOwnDecision)">Reset to inherited</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(_status is null)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>What the dialog is about, such as "Mailchimp" or an IP address.</summary>
+    [Parameter] public string SenderLabel { get; set; } = "";
+
+    /// <summary>The decision set on this domain, or null when this domain has none of its own.</summary>
+    [Parameter] public SenderDecisionStatus? CurrentStatus { get; set; }
+
+    [Parameter] public string? CurrentNote { get; set; }
+    [Parameter] public bool HasOwnDecision { get; set; }
+
+    /// <summary>What the sender inherits while this domain has no decision of its own, such as "Currently Authorised, from the baseline."</summary>
+    [Parameter] public string? InheritedText { get; set; }
+
+    private static readonly SenderDecisionStatus? _authorised = SenderDecisionStatus.Authorised;
+    private static readonly SenderDecisionStatus? _unauthorised = SenderDecisionStatus.Unauthorised;
+    private static readonly SenderDecisionStatus? _underReview = SenderDecisionStatus.UnderReview;
+
+    private SenderDecisionStatus? _status;
+    private string? _note;
+
+    protected override void OnInitialized()
+    {
+        _status = CurrentStatus;
+        _note = CurrentNote;
+    }
+
+    private void Save() => MudDialog.Close(DialogResult.Ok(new SenderDecisionDialogResult(_status, _note, Reset: false)));
+
+    private void Reset() => MudDialog.Close(DialogResult.Ok(new SenderDecisionDialogResult(null, null, Reset: true)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public sealed record SenderDecisionDialogResult(SenderDecisionStatus? Status, string? Note, bool Reset);
+}

@@ -36,12 +36,22 @@ public static class SenderDecisionPresentation
 
             case SenderDecisionStatus.Unauthorised:
                 var madeBy = $"Marked unauthorised by {decision.Decision.DecidedByName} on {decision.Decision.DecidedUtc.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)}";
-                if (row.Failing == 0)
+                var delivered = row.Failing - row.ActedOn;
+
+                // Mail that passes DMARC is mail the domain's own records vouch for, so it matters more than the failing part and leads.
+                if (row.Passing > 0)
                 {
-                    return $"{madeBy}, but {Count(row.Passing)} messages from it pass DMARC. It authenticates as your domain, so check whether it should be authorised or remove its access.";
+                    var passing = $"{madeBy}, but {Count(row.Passing)} messages from it pass DMARC. It authenticates as your domain, so check whether it should be authorised or remove its access.";
+                    if (row.Failing == 0)
+                    {
+                        return passing;
+                    }
+
+                    return delivered <= 0
+                        ? $"{passing} The {Count(row.Failing)} that fail are being blocked by your DMARC policy."
+                        : $"{passing} Of the {Count(row.Failing)} that fail, {Count(delivered)} were still delivered. {PolicyLine(policy)}";
                 }
 
-                var delivered = row.Failing - row.ActedOn;
                 return delivered <= 0
                     ? $"{madeBy}. Your DMARC policy is blocking it."
                     : $"{madeBy}. {Count(delivered)} messages were still delivered. {PolicyLine(policy)}";

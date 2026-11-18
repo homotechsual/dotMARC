@@ -16,6 +16,7 @@
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @inject AuditActorAccessor AuditActorAccessor
+@inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IIpInfoLookup IpLookup
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -371,7 +372,8 @@ else
         </MudTabPanel>
 
         <MudTabPanel Text="Sources">
-            <SenderServicesTable Result="_senderResult" />
+            <SenderServicesTable Result="_senderResult" DecisionFor="DecisionFor" IpDecisionFor="IpDecisionFor" Policy="@(_domain?.DmarcPolicy ?? DmarcPolicyLevel.None)"
+                                 GroupNames="_groupNames" CanReview="_canReviewSenders" OnDecide="DecideAsync" />
             <MudTable Items="_sources" Hover="true" T="SourceRow" CustomHeader="true" Filter="SourceMatchesFilters">
                 <ToolBarContent>
                     <MudSpacer />
@@ -535,6 +537,71 @@ else
     private Domain? _domain;
     private List<DetectedMailService> _detectedMailServices = [];
     private SenderIdentificationResult? _senderResult;
+    private List<SenderDecision> _decisions = [];
+    private Dictionary<int, string> _groupNames = [];
+    private bool _canReviewSenders;
+
+    private ResolvedSenderDecision DecisionFor(SenderServiceRow row) =>
+        SenderDecisionResolver.Resolve(_decisions, _domain!.Id, _groupNames.Keys.ToList(), row.IsUnrecognised ? null : row.Name, string.Empty, _groupNames);
+
+    /// <summary>The decision for one source IP: its own if it has one, else its service's, else whatever the groups and baseline say.</summary>
+    private ResolvedSenderDecision IpDecisionFor(string sourceIp)
+    {
+        var service = ServiceFor(sourceIp);
+        return SenderDecisionResolver.Resolve(_decisions, _domain!.Id, _groupNames.Keys.ToList(), service.Length == 0 ? null : service, sourceIp, _groupNames);
+    }
+
+    private async Task DecideAsync(SenderServicesTable.SenderDecisionRequest request)
+    {
+        if (_domain is null || !_canReviewSenders)
+        {
+            return;
+        }
+
+        var own = _decisions.FirstOrDefault(decision => decision.Scope == SenderDecisionScope.Domain && decision.DomainId == _domain.Id
+            && decision.Kind == request.Kind && decision.Key == request.Key);
+        var inherited = request.Kind == SenderDecisionKind.Ip
+            ? IpDecisionFor(request.Key)
+            : SenderDecisionResolver.Resolve(_decisions, _domain.Id, _groupNames.Keys.ToList(), request.Key, string.Empty, _groupNames);
+        var parameters = new DialogParameters<SenderDecisionDialog>
+        {
+            { x => x.SenderLabel, request.Label },
+            { x => x.CurrentStatus, own?.Status },
+            { x => x.CurrentNote, own?.Note },
+            { x => x.HasOwnDecision, own is not null },
+            { x => x.InheritedText, own is null && inherited.Status is { } inheritedStatus ? $"Currently {SenderDecisionPresentation.StatusLabel(inheritedStatus)}, {SenderDecisionPresentation.Provenance(inherited, _groupNames)}." : null },
+        };
+        var dialogRef = await DialogService.ShowAsync<SenderDecisionDialog>($"Decide on {request.Label}", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled)
+        {
+            return;
+        }
+
+        var choice = (SenderDecisionDialog.SenderDecisionDialogResult)result.Data!;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actor = await AuditActorAccessor.GetAsync();
+            if (choice.Reset)
+            {
+                await SenderDecisionService.ResetAsync(db, actor, _domain.Id, request.Kind, request.Key);
+                Snackbar.Add($"Reset the decision for {request.Label}", Severity.Success);
+            }
+            else if (choice.Status is { } status)
+            {
+                await SenderDecisionService.SetAsync(db, actor, _domain.Id, request.Kind, request.Key, status, choice.Note);
+                Snackbar.Add($"Marked {request.Label} as {SenderDecisionPresentation.StatusLabel(status)}", Severity.Success);
+            }
+
+            _decisions = await SenderDecisionService.LoadForDomainAsync(db, _domain.Id);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or DbUpdateException)
+        {
+            Logger.LogWarning(ex, "Saving a sender decision for {Sender} on {DomainName} failed.", request.Key, DomainName);
+            Snackbar.Add($"The decision wasn't saved: {ex.Message}", Severity.Error);
+        }
+    }
 
     private string ServiceFor(string sourceIp) => _senderResult is { } result && result.ServiceByIp.TryGetValue(sourceIp, out var service) ? service : string.Empty;
 
@@ -729,6 +796,10 @@ else
                 return;
             }
         }
+
+        _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, "SenderReview")).Succeeded;
+        _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
+        _decisions = await SenderDecisionService.LoadForDomainAsync(db, _domain.Id);
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
         _tlsrptReports = _domain.TlsrptReports.OrderByDescending(report => report.ReceivedUtc).ToList();
