@@ -84,6 +84,7 @@ A new table `SenderDecisions`:
 - `Status`: `Authorised`, `Unauthorised` or `UnderReview`
 - `Note` (nullable, up to 500 characters)
 - `DecidedBy`: the same actor key the saved dashboard defaults use (Entra object ID, else email)
+- `DecidedByName`: the person's display name at the time, so "decided by" reads as a name and survives a rename
 - `DecidedUtc`
 
 Unique on the scope, its owner and the key (with nulls treated as equal, so there is one baseline row per service). Choosing Unreviewed, or "reset to inherited", deletes the row.
@@ -104,6 +105,7 @@ Unique on the scope, its owner and the key (with nulls treated as equal, so ther
 | Authorised | some | "You authorised {service}, but N messages fail DMARC. {today's fix}" |
 | Unauthorised | blocked (all failing mail was quarantined or rejected) | "Marked unauthorised by {name} on {date}. Your DMARC policy is blocking it." |
 | Unauthorised | some delivered | "Marked unauthorised by {name} on {date}. N messages were still delivered. {policy line}" |
+| Unauthorised | none failing, some passing | "Marked unauthorised by {name} on {date}, but N messages from it pass DMARC. It authenticates as your domain, so check whether it should be authorised or remove its access." |
 
 The policy line comes from the domain's DMARC policy: at `none` it says "Your policy is none, so this mail is still delivered. Move to quarantine or reject to block it.", at `quarantine` it says it is going to spam, and at `reject` it says receivers should be rejecting it. The wording follows the existing failure messages: the cause first, then what to do.
 
