@@ -16,6 +16,8 @@ resolves itself automatically once the underlying condition clears, no manual di
 | `MissedReport` | A monitored domain hasn't received a DMARC report within the configured threshold. | A DMARC report is received for that domain. |
 | `TlsrptFailure` | A TLSRPT report for the domain contains one or more failed TLS delivery sessions. See [MTA-STS: TLS reporting](./mta-sts.mdx#tls-reporting). | A later TLSRPT report for the same domain has zero failed sessions. |
 | `PsaConnectionLost` | dotMARC can no longer sign in to a PSA, such as when NinjaOne's sign-in lapses. It doesn't raise tickets by default. See [NinjaOne](./psa/ninjaone.mdx#keeping-the-connection-alive). | Someone reconnects the PSA, or turns it off. |
+| `NewUnreviewedSender` | A sender that nobody has decided on first appeared on a domain within the last few days. See [Sender alerts](#sender-alerts). It doesn't raise tickets by default. | A decision is made on the sender at any level, including Under review. |
+| `UnauthorisedSenderDelivered` | Mail from a sender marked Unauthorised is being delivered. See [Sender alerts](#sender-alerts). | The delivered volume falls below the minimum. |
 
 These alert types are raised at `Warning` severity. The DNS health alerts below have their own severities.
 
@@ -54,9 +56,50 @@ permission, granted separately from `AlertsView`.
 | Alert when a DMARC policy weakens | On by default. |
 | Alert when nameservers change | On by default. |
 | Close policy and nameserver alerts after (days) | `0` (default) keeps them open until acknowledged or their ticket is closed. |
+| Alert on new senders to review | On by default. See [Sender alerts](#sender-alerts). |
+| Days a sender counts as new | From `1` to `30`. Default `7`. |
+| New sender minimum messages | Messages a sender needs in the last 30 days before it alerts. Default `20`. |
+| Alert when unauthorised sender mail is delivered | On by default. |
+| Delivered minimum messages | Delivered messages an unauthorised sender needs in the last 30 days before it alerts. Default `10`. |
 
 Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
 `https://user:pass@host/...`); anything else is rejected on save, and **Send test** won't post to it.
+
+## Sender alerts
+
+Two alerts watch the services that send as a domain, using the decisions your team records on the
+domain's Sources tab (see [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised)).
+
+**New sender to review** (`NewUnreviewedSender`) is raised once for a domain, listing its new senders:
+
+> shop.example has 1 new sender that nobody has reviewed: SendGrid (274 messages). Open the domain's
+> Sources tab and mark it Authorised, Unauthorised or Under review.
+
+* A sender is **new** only if it first appeared on that domain within the configured number of days.
+  A domain's existing senders never alert, so turning this on doesn't flood you. A sender that
+  returns after a quiet spell isn't new either, because new means the first time ever.
+* A service is new only if all of its sending IPs are new, so a known service gaining an IP isn't a
+  new sender. A source dotMARC can't match to a service is judged on its own, by its IP.
+* **Unreviewed** means no decision applies at any level, domain, group or baseline. **Under review**
+  counts as a decision, so it closes the alert. A baseline entry for a service silences this alert for
+  that service on every domain.
+
+**Unauthorised sender mail delivered** (`UnauthorisedSenderDelivered`) is raised when mail from a
+sender whose decision is Unauthorised is reaching inboxes:
+
+> Mail from a sender marked unauthorised is being delivered for cobalt-freight.example: Mailchimp
+> (5,162 messages). Your policy is none, so this mail is still delivered. Move to quarantine or reject
+> to block it.
+
+* **Delivered** means receivers didn't quarantine or reject it, whether it passes DMARC or fails it.
+  An unauthorised sender whose mail passes DMARC is the more serious case, because it authenticates
+  as your domain.
+* It closes when the delivered volume falls below the minimum, for example after the policy moves to
+  quarantine or reject.
+
+Neither alert is raised for a null-routed domain, which has its own unexpected-activity alert. Turn
+either off, or change the thresholds, under **Alert settings**. Turning one off closes any open alert
+of that type. The new sender alert doesn't create tickets by default, and the delivered alert does.
 
 ## DNS health alerts
 

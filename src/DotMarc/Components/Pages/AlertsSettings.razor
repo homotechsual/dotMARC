@@ -123,6 +123,39 @@ else
 <MudNumericField Label="Close policy and nameserver alerts after (days)" @bind-Value="_settings.AcknowledgeableAutoCloseDays" Min="0" Max="365" Variant="Variant.Outlined" HelperText="0 keeps them open." />
 </FieldWithHelp>
             </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mt-2">Sender alerts</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    Alert about the services that send as a domain. A sender a domain already had never alerts as new. Mark a sender
+                    Authorised, Unauthorised or Under review on the domain's Sources tab, or set a baseline, and its alert closes.
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="New senders" Inline="true" Help="Alerts when a sender that nobody has decided on first appears on a domain. Only senders first seen within the number of days below count, so a domain's existing senders never alert. A decision at any level, including Under review, closes the alert.">
+<MudSwitch @bind-Value="_settings.NewSenderAlertEnabled" Color="Color.Primary" Label="Alert on new senders to review" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Unauthorised sender mail delivered" Inline="true" Help="Alerts when mail from a sender you marked Unauthorised is being delivered, which means your DMARC policy is not blocking it. It closes when the volume drops below the minimum, for example after the policy moves to quarantine or reject.">
+<MudSwitch @bind-Value="_settings.UnauthorisedDeliveredAlertEnabled" Color="Color.Primary" Label="Alert when unauthorised sender mail is delivered" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="New sender days" Help="How many days a sender counts as new, counted from the first report it appears in. From 1 to 30, the length of the report window.">
+<MudNumericField Label="Days a sender counts as new" @bind-Value="_settings.NewSenderDays" Min="1" Max="30" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="New sender minimum messages" Help="A new sender alert needs at least this many messages from the sender in the domain's last 30 days, so a stray test message doesn't alert.">
+<MudNumericField Label="New sender minimum messages" @bind-Value="_settings.NewSenderMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <FieldWithHelp Topic="Delivered minimum messages" Help="An unauthorised sender alert needs at least this many delivered messages from the sender in the domain's last 30 days. Delivered means receivers did not quarantine or reject them, whether they pass DMARC or fail it.">
+<MudNumericField Label="Delivered minimum messages" @bind-Value="_settings.UnauthorisedDeliveredMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined" />
+</FieldWithHelp>
+            </MudItem>
         </MudGrid>
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAsync">Save settings</MudButton>
