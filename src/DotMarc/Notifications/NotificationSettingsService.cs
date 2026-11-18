@@ -24,6 +24,16 @@ public static class NotificationSettingsService
             throw new ArgumentException("Close policy and nameserver alerts after (days) must be from 0 to 365.", nameof(updated));
         }
 
+        if (updated.NewSenderDays is < 1 or > 30)
+        {
+            throw new ArgumentException("New sender days must be from 1 to 30, the length of the report window.", nameof(updated));
+        }
+
+        if (updated.NewSenderMinVolume < 1 || updated.UnauthorisedDeliveredMinVolume < 1)
+        {
+            throw new ArgumentException("The minimum number of messages for a sender alert must be at least 1.", nameof(updated));
+        }
+
         // A no-tracking snapshot, because the caller may pass the very instance this context is tracking.
         var saved = await context.NotificationSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()
@@ -49,7 +59,12 @@ public static class NotificationSettingsService
             .Field("MTA-STS alerts", saved.MtaStsAlertMode, updated.MtaStsAlertMode)
             .Field("DMARC policy weakened alerts", saved.DmarcPolicyWeakenedEnabled, updated.DmarcPolicyWeakenedEnabled)
             .Field("Nameservers changed alerts", saved.NameserversChangedEnabled, updated.NameserversChangedEnabled)
-            .Field("Close policy and nameserver alerts after (days)", saved.AcknowledgeableAutoCloseDays, updated.AcknowledgeableAutoCloseDays);
+            .Field("Close policy and nameserver alerts after (days)", saved.AcknowledgeableAutoCloseDays, updated.AcknowledgeableAutoCloseDays)
+            .Field("New sender alerts", saved.NewSenderAlertEnabled, updated.NewSenderAlertEnabled)
+            .Field("New sender minimum messages", saved.NewSenderMinVolume, updated.NewSenderMinVolume)
+            .Field("New sender days", saved.NewSenderDays, updated.NewSenderDays)
+            .Field("Unauthorised sender delivered alerts", saved.UnauthorisedDeliveredAlertEnabled, updated.UnauthorisedDeliveredAlertEnabled)
+            .Field("Unauthorised sender delivered minimum messages", saved.UnauthorisedDeliveredMinVolume, updated.UnauthorisedDeliveredMinVolume);
         if (!changes.Any)
         {
             return;
@@ -79,6 +94,11 @@ public static class NotificationSettingsService
         existing.DmarcPolicyWeakenedEnabled = updated.DmarcPolicyWeakenedEnabled;
         existing.NameserversChangedEnabled = updated.NameserversChangedEnabled;
         existing.AcknowledgeableAutoCloseDays = updated.AcknowledgeableAutoCloseDays;
+        existing.NewSenderAlertEnabled = updated.NewSenderAlertEnabled;
+        existing.NewSenderMinVolume = updated.NewSenderMinVolume;
+        existing.NewSenderDays = updated.NewSenderDays;
+        existing.UnauthorisedDeliveredAlertEnabled = updated.UnauthorisedDeliveredAlertEnabled;
+        existing.UnauthorisedDeliveredMinVolume = updated.UnauthorisedDeliveredMinVolume;
 
         AuditLog.Record(context, actor, AuditActions.NotificationSettingsSaved, AuditTarget.Settings("Notifications"), "Saved notification settings", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

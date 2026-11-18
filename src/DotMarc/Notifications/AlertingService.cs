@@ -1,6 +1,7 @@
 using System.Globalization;
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.IpEnrichment;
 using DotMarc.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -53,6 +54,7 @@ public sealed class AlertingService : IAlertingService
         var domains = await db.Domains
             .AsNoTracking()
             .Where(d => d.IsMonitored)
+            .Include(d => d.Groups)
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= reasonWindowCutoffUtc))
             .ThenInclude(r => r.Records)
             .ThenInclude(rec => rec.OverrideReasons)
@@ -64,6 +66,8 @@ public sealed class AlertingService : IAlertingService
             .AsSplitQuery()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        var senderAlerts = await LoadSenderAlertContextAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
 
         foreach (var domain in domains)
         {
@@ -102,10 +106,94 @@ public sealed class AlertingService : IAlertingService
             // Independent of the report-freshness branch above - a domain can be reporting fine
             // AND have a reject mix worth flagging, so this always runs.
             await CheckSuspiciousRejectActivityAsync(db, settings, domain, cancellationToken).ConfigureAwait(false);
+
+            await CheckSenderAlertsAsync(db, settings, domain, senderAlerts, cancellationToken).ConfigureAwait(false);
         }
 
         await CheckDnsHealthAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
         await CheckApiKeyExpiryAsync(db, settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>What the sender alerts need that is the same for every domain in a cycle: every decision (a small table), the cached
+    /// IP owners for the IPs in the window, and which sender alerts are already open, so a quiet cycle costs one query for that.</summary>
+    private sealed record SenderAlertContext(
+        List<SenderDecision> Decisions, Dictionary<string, IpInfo> CachedInfo, List<IpRange> Ranges, HashSet<(string DomainName, string AlertType)> OpenAlerts);
+
+    private async Task<SenderAlertContext> LoadSenderAlertContextAsync(DotMarcDbContext db, NotificationSettings settings, List<Domain> domains, CancellationToken cancellationToken)
+    {
+        var openAlerts = (await db.AlertEvents.AsNoTracking()
+                .Where(alert => !alert.IsResolved && (alert.AlertType == AlertTypes.NewUnreviewedSender || alert.AlertType == AlertTypes.UnauthorisedSenderDelivered))
+                .Select(alert => new { alert.DomainName, alert.AlertType })
+                .ToListAsync(cancellationToken).ConfigureAwait(false))
+            .Select(alert => (alert.DomainName, alert.AlertType))
+            .ToHashSet();
+        if (!settings.NewSenderAlertEnabled && !settings.UnauthorisedDeliveredAlertEnabled)
+        {
+            return new SenderAlertContext([], [], [], openAlerts);
+        }
+
+        var decisions = await db.SenderDecisions.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var ips = domains.SelectMany(domain => domain.Reports).SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct().ToList();
+        var cached = ips.Count == 0 ? [] : await IpInfoService.GetCachedAsync(db, ips, cancellationToken).ConfigureAwait(false);
+        var ranges = await IpInfoService.GetCachedRangesAsync(db, cancellationToken).ConfigureAwait(false);
+        return new SenderAlertContext(decisions, cached, ranges, openAlerts);
+    }
+
+    /// <summary>Raises or resolves the two sender alerts for one domain. A new sender is one first seen within the configured number
+    /// of days, so a domain's existing senders never alert. Null-routed domains get neither, since they have their own alert.</summary>
+    private async Task CheckSenderAlertsAsync(DotMarcDbContext db, NotificationSettings settings, Domain domain, SenderAlertContext context, CancellationToken cancellationToken)
+    {
+        var applies = domain.SpfCheckStatus != SpfCheckStatus.NullSpf;
+        var newEnabled = applies && settings.NewSenderAlertEnabled;
+        var deliveredEnabled = applies && settings.UnauthorisedDeliveredAlertEnabled;
+
+        var result = new SenderAlertResult([], []);
+        if (newEnabled || deliveredEnabled)
+        {
+            var nowUtc = DateTimeOffset.UtcNow;
+            var newSinceUtc = nowUtc.AddDays(-Math.Clamp(settings.NewSenderDays, 1, 30));
+            var newIps = new HashSet<string>(StringComparer.Ordinal);
+            if (newEnabled)
+            {
+                // A source that looks new inside the window may have reported before it. Only these few candidates cost a query.
+                foreach (var ip in SenderAlertEvaluator.NewSourceCandidates(domain.Reports.ToList(), newSinceUtc))
+                {
+                    var hadEarlierReport = await db.ReportRecords
+                        .AnyAsync(record => record.Report.DomainId == domain.Id && record.SourceIp == ip && record.Report.ReceivedUtc < newSinceUtc, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!hadEarlierReport)
+                    {
+                        newIps.Add(ip);
+                    }
+                }
+            }
+
+            var ownerByIp = IpInfoService.OwnerByIp(
+                context.CachedInfo, context.Ranges, domain.Reports.SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct(), nowUtc);
+            result = SenderAlertEvaluator.Evaluate(new SenderAlertInputs(
+                domain.Id, domain.Groups.Select(group => group.Id).ToList(), domain.Reports.ToList(), context.Decisions, ownerByIp, newIps,
+                new SenderAlertSettings(settings.NewSenderMinVolume, settings.UnauthorisedDeliveredMinVolume)));
+        }
+
+        if (newEnabled && result.NewUnreviewed.Count > 0)
+        {
+            await EnsureAlertAsync(db, settings, domain.Name, AlertTypes.NewUnreviewedSender, "Warning", SenderAlertMessages.NewSendersTitle,
+                SenderAlertMessages.NewSenders(domain.Name, result.NewUnreviewed), cancellationToken).ConfigureAwait(false);
+        }
+        else if (context.OpenAlerts.Contains((domain.Name, AlertTypes.NewUnreviewedSender)))
+        {
+            await ResolveAlertAsync(domain.Name, AlertTypes.NewUnreviewedSender, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (deliveredEnabled && result.UnauthorisedDelivered.Count > 0)
+        {
+            await EnsureAlertAsync(db, settings, domain.Name, AlertTypes.UnauthorisedSenderDelivered, "Warning", SenderAlertMessages.UnauthorisedDeliveredTitle,
+                SenderAlertMessages.UnauthorisedDelivered(domain.Name, result.UnauthorisedDelivered, domain.DmarcPolicy ?? DmarcPolicyLevel.None), cancellationToken).ConfigureAwait(false);
+        }
+        else if (context.OpenAlerts.Contains((domain.Name, AlertTypes.UnauthorisedSenderDelivered)))
+        {
+            await ResolveAlertAsync(domain.Name, AlertTypes.UnauthorisedSenderDelivered, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Runs DnsHealthAlertEvaluator for every monitored domain, saves what it remembers, then raises and

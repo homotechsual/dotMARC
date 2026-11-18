@@ -31,6 +31,21 @@ public static class IpInfoService
     public static async Task<List<IpRange>> GetCachedRangesAsync(DotMarcDbContext context, CancellationToken cancellationToken) =>
         await context.IpRanges.ToListAsync(cancellationToken).ConfigureAwait(false);
 
+    /// <summary>The network owner for each IP from the lookup cache, by the rule the domain page and the API use: the IP's own
+    /// result while it is current, else a cached range containing it, else null. Never looks anything up.</summary>
+    public static Dictionary<string, string?> OwnerByIp(IReadOnlyDictionary<string, IpInfo> cached, IReadOnlyList<IpRange> ranges, IEnumerable<string> ips, DateTimeOffset nowUtc)
+    {
+        var owners = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var ip in ips)
+        {
+            owners[ip] = cached.TryGetValue(ip, out var info) && !NeedsLookup(info, nowUtc)
+                ? info.Organization
+                : IpRangeMatcher.FindContaining(ranges, ip)?.Organization;
+        }
+
+        return owners;
+    }
+
     public static bool NeedsLookup(IpInfo? cached, DateTimeOffset nowUtc) =>
         cached is null || (cached.Status != IpLookupStatus.Ok && cached.LookedUpUtc < nowUtc - FailureRetryWindow);
 
