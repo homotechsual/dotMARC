@@ -1,4 +1,6 @@
+using System.Globalization;
 using DotMarc.Portal;
+using DotMarc.Reporting;
 using DotMarc.Reporting.ClientReports;
 using MudBlazor;
 using PdfSharp.Pdf.IO;
@@ -39,6 +41,32 @@ public sealed class ClientReportDocumentTests
         Assert.Contains("Publish an SPF record for aurora-retail.example.", text);
         Assert.Contains("SPF record broken", text);
         Assert.Contains("help@nova-msp.example", text);
+    }
+
+    public static TheoryData<long, long, long, string[]> SentenceCases => new()
+    {
+        { 120, 0, 0, ["120 messages from senders you haven't authorised were blocked."] },
+        { 1, 0, 0, ["1 message from senders you haven't authorised was blocked."] },
+        { 0, 40, 40, ["40 messages from senders you haven't authorised were still delivered. Moving the DMARC policy to quarantine or reject would block them."] },
+        { 10, 5, 5, ["10 messages from senders you haven't authorised were blocked.", "5 messages from senders you haven't authorised were still delivered. Moving the DMARC policy to quarantine or reject would block them."] },
+        { 0, 9, 0, ["9 messages from senders you haven't authorised were delivered. They pass DMARC, so we are checking whether they should be authorised."] },
+        { 0, 0, 0, Array.Empty<string>() },
+    };
+
+    [Theory]
+    [MemberData(nameof(SentenceCases))]
+    public void UnauthorisedSentences_SayWhatWasBlockedAndWhatWasDelivered(long blocked, long delivered, long deliveredFailing, string[] expected) =>
+        Assert.Equal(expected, ClientReportDocument.UnauthorisedSentences(new SenderDecisionSummary(0, blocked, delivered, deliveredFailing), CultureInfo.InvariantCulture));
+
+    [Fact]
+    public void TheDocument_ShowsTheSentencesOnlyForADomainWithUnauthorisedMail()
+    {
+        var domain = (SampleReport().Domains[1]) with { Senders = new SenderDecisionSummary(0, 12, 0, 0) };
+        var quiet = SampleReport().Domains[0] with { Senders = new SenderDecisionSummary(2, 0, 0, 0) };
+
+        var text = MigraDocText.Of(ClientReportDocument.Build(SampleReport(domains: [quiet, domain])));
+
+        Assert.Equal(1, text.Split("you haven't authorised").Length - 1);
     }
 
     [Fact]

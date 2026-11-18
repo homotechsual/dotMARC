@@ -185,6 +185,28 @@ public static partial class ClientReportDocument
         }
     }
 
+    /// <summary>What the report says about mail from senders marked Unauthorised: how much was blocked, and how much was delivered.</summary>
+    public static IReadOnlyList<string> UnauthorisedSentences(SenderDecisionSummary summary, CultureInfo culture)
+    {
+        string Messages(long count, string singular, string plural) => $"{Count(culture, count)} {(count == 1 ? singular : plural)}";
+        var sentences = new List<string>();
+        if (summary.UnauthorisedBlocked > 0)
+        {
+            sentences.Add($"{Messages(summary.UnauthorisedBlocked, "message from senders", "messages from senders")} you haven't authorised {(summary.UnauthorisedBlocked == 1 ? "was" : "were")} blocked.");
+        }
+
+        if (summary.UnauthorisedDelivered > 0)
+        {
+            var delivered = summary.UnauthorisedDelivered;
+            var lead = $"{Messages(delivered, "message from senders", "messages from senders")} you haven't authorised {(delivered == 1 ? "was" : "were")}";
+            sentences.Add(summary.UnauthorisedDeliveredFailing > 0
+                ? $"{lead} still delivered. Moving the DMARC policy to quarantine or reject would block {(delivered == 1 ? "it" : "them")}."
+                : $"{lead} delivered. {(delivered == 1 ? "It passes" : "They pass")} DMARC, so we are checking whether {(delivered == 1 ? "it" : "they")} should be authorised.");
+        }
+
+        return sentences;
+    }
+
     private static void AddDomain(Section section, ResolvedBrand brand, ClientReportDomain domain, TimeZoneInfo zone, CultureInfo culture)
     {
         section.AddParagraph(domain.Name, StyleNames.Heading2);
@@ -231,6 +253,14 @@ public static partial class ClientReportDocument
         if (receivers.FailingDelivered > 0)
         {
             section.AddParagraph($"{Count(culture, receivers.FailingDelivered)} messages failed DMARC but were delivered anyway, because the policy doesn't block them yet.");
+        }
+
+        if (domain.Senders is { } decisionSummary)
+        {
+            foreach (var sentence in UnauthorisedSentences(decisionSummary, culture))
+            {
+                section.AddParagraph(sentence);
+            }
         }
 
         if (domain.Alerts.Count > 0)

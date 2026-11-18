@@ -14,7 +14,7 @@ public sealed record ClientReport(
 public sealed record ClientReportDomain(
     string Name, PortalDomainStatus Status, long Messages, double? PassRate, double? PreviousPassRate, IReadOnlyList<double?> Trend,
     string PolicySentence, IReadOnlyList<HealthRow> Health, IReadOnlyList<ClientReportSender> TopSenders, ReceiverActions Receivers,
-    IReadOnlyList<ClientReportAlert> Alerts)
+    IReadOnlyList<ClientReportAlert> Alerts, SenderDecisionSummary? Senders = null)
 {
     /// <summary>The pass rate's change from the comparison period in percentage points, "new" when that period had no
     /// mail, or empty when this one had none.</summary>

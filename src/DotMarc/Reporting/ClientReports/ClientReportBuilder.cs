@@ -20,6 +20,7 @@ public sealed class ClientReportBuilder(IDbContextFactory<DotMarcDbContext> dbFa
 
         var domains = await context.Domains.AsNoTracking()
             .Where(domain => domain.IsMonitored && domain.Groups.Any(candidate => candidate.Id == groupId))
+            .Include(domain => domain.Groups)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var domainIds = domains.Select(domain => domain.Id).ToList();
         var domainNames = domains.Select(domain => domain.Name).ToList();
@@ -53,8 +54,15 @@ public sealed class ClientReportBuilder(IDbContextFactory<DotMarcDbContext> dbFa
                 .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        var domainGroupIds = domains.SelectMany(domain => domain.Groups.Select(candidate => candidate.Id)).Distinct().ToList();
+        var decisions = await context.SenderDecisions.AsNoTracking()
+            .Where(decision => decision.Scope == SenderDecisionScope.Baseline
+                || (decision.Scope == SenderDecisionScope.Domain && domainIds.Contains(decision.DomainId!.Value))
+                || (decision.Scope == SenderDecisionScope.Group && domainGroupIds.Contains(decision.GroupId!.Value)))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
         var numberFormat = (await ReportSettingsService.GetAsync(context, cancellationToken).ConfigureAwait(false)).NumberFormat;
         return ClientReportCalculator.Build(new ClientReportInputs(
-            brand, logo, group.Name, period, zone, domains, reports, periodAlerts, openAlerts, owners, timeProvider.GetUtcNow(), numberFormat));
+            brand, logo, group.Name, period, zone, domains, reports, periodAlerts, openAlerts, owners, timeProvider.GetUtcNow(), numberFormat, decisions));
     }
 }

@@ -7,7 +7,8 @@ namespace DotMarc.Reporting.ClientReports;
 public sealed record ClientReportInputs(
     ResolvedBrand Brand, byte[]? Logo, string GroupName, ReportPeriod Period, TimeZoneInfo Zone, IReadOnlyList<Domain> Domains,
     IReadOnlyList<Report> Reports, IReadOnlyList<AlertEvent> PeriodAlerts, IReadOnlyList<AlertEvent> OpenAlerts,
-    IReadOnlyDictionary<string, IpInfo> Owners, DateTimeOffset NowUtc, string NumberFormat = ReportSettings.DefaultNumberFormat);
+    IReadOnlyDictionary<string, IpInfo> Owners, DateTimeOffset NowUtc, string NumberFormat = ReportSettings.DefaultNumberFormat,
+    IReadOnlyList<SenderDecision>? Decisions = null);
 
 /// <summary>Turns loaded rows into a report. Pure, so every figure can be tested without a database. A report belongs to
 /// the local day its date range begins, the same rule as the portal's trend, measured in the report time zone.</summary>
@@ -39,7 +40,10 @@ public static class ClientReportCalculator
                     PortalWording.HealthRows(domain),
                     TopSenders(inPeriod, inputs.Owners),
                     Receivers(inPeriod),
-                    Alerts(inputs.PeriodAlerts.Where(alert => alert.DomainName == domain.Name)));
+                    Alerts(inputs.PeriodAlerts.Where(alert => alert.DomainName == domain.Name)),
+                    inputs.Decisions is null
+                        ? null
+                        : SenderDecisionSummaries.Summarise(inPeriod, OwnerByIp(inputs.Owners), inputs.Decisions, domain.Id, domain.Groups.Select(group => group.Id).ToList()));
             })
             .ToList();
 
@@ -80,11 +84,14 @@ public static class ClientReportCalculator
         return Enumerable.Range(0, buckets).Select(bucket => DomainStatistics.GetPassRate(byBucket[bucket])).ToList();
     }
 
+    private static Dictionary<string, string?> OwnerByIp(IReadOnlyDictionary<string, IpInfo> owners) =>
+        owners.ToDictionary(entry => entry.Key, entry => (string?)entry.Value.Organization);
+
     private static IReadOnlyList<ClientReportSender> TopSenders(IReadOnlyList<Report> reports, IReadOnlyDictionary<string, IpInfo> owners)
     {
         var records = reports.SelectMany(report => report.Records).ToList();
         var total = records.Sum(record => (long)record.MessageCount);
-        var ownerByIp = owners.ToDictionary(entry => entry.Key, entry => entry.Value.Organization);
+        var ownerByIp = OwnerByIp(owners);
         var serviceByIp = SenderIdentification.Identify(reports, ownerByIp, []).ServiceByIp;
         return records
             .GroupBy(record => record.SourceIp)

@@ -36,6 +36,55 @@ public sealed class ClientReportCalculatorTests
         ClientReportCalculator.Build(new ClientReportInputs(Brand, null, "Aurora Retail", period ?? March, zone ?? TimeZoneInfo.Utc, domains, reports,
             periodAlerts ?? [], [], owners ?? new Dictionary<string, IpInfo>(), Now));
 
+    private static ReportRecord Mailchimp(int count, DispositionResult disposition)
+    {
+        var record = Record("198.51.100.7", count, AuthResult.Fail, AuthResult.Fail, disposition);
+        record.AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bounce.mcsv.net", Result = DmarcMechanismResult.Pass });
+        return record;
+    }
+
+    private static SenderDecision GroupUnauthorised(int groupId) => new()
+    {
+        Scope = SenderDecisionScope.Group, GroupId = groupId, Kind = SenderDecisionKind.Service, Key = "Mailchimp",
+        Status = SenderDecisionStatus.Unauthorised, DecidedBy = "u", DecidedByName = "Sam Lee",
+    };
+
+    private static ClientReport BuildWithDecisions(Domain domain, IReadOnlyList<Report> reports, IReadOnlyList<SenderDecision>? decisions) =>
+        ClientReportCalculator.Build(new ClientReportInputs(Brand, null, "Aurora Retail", March, TimeZoneInfo.Utc, [domain], reports, [], [],
+            new Dictionary<string, IpInfo>(), Now, Decisions: decisions));
+
+    [Fact]
+    public void Build_FillsSenderSummaryFromDecisionsForTheDomainsGroups()
+    {
+        var domain = AuroraDomain();
+        domain.Groups = [new Group { Id = 7, Name = "Aurora" }];
+        var reports = new[] { ReportOn(1, new DateTimeOffset(2026, 3, 5, 0, 0, 0, TimeSpan.Zero), Mailchimp(30, DispositionResult.Quarantine), Mailchimp(5, DispositionResult.None)) };
+
+        var senders = Assert.Single(BuildWithDecisions(domain, reports, [GroupUnauthorised(7)]).Domains).Senders;
+
+        Assert.Equal((30L, 5L), (senders!.UnauthorisedBlocked, senders.UnauthorisedDelivered));
+    }
+
+    [Fact]
+    public void Build_LeavesSendersNullWhenNoDecisionsAreSupplied()
+    {
+        var reports = new[] { ReportOn(1, new DateTimeOffset(2026, 3, 5, 0, 0, 0, TimeSpan.Zero), Mailchimp(30, DispositionResult.Quarantine)) };
+
+        Assert.Null(Assert.Single(BuildWithDecisions(AuroraDomain(), reports, null).Domains).Senders);
+    }
+
+    [Fact]
+    public void Build_IgnoresReportsOutsideThePeriodForSenderCounts()
+    {
+        var domain = AuroraDomain();
+        domain.Groups = [new Group { Id = 7, Name = "Aurora" }];
+        var february = new[] { ReportOn(1, new DateTimeOffset(2026, 2, 10, 0, 0, 0, TimeSpan.Zero), Mailchimp(30, DispositionResult.Quarantine)) };
+
+        var senders = Assert.Single(BuildWithDecisions(domain, february, [GroupUnauthorised(7)]).Domains).Senders;
+
+        Assert.Equal(new SenderDecisionSummary(0, 0, 0, 0), senders);
+    }
+
     [Fact]
     public void ThePassRate_MatchesTheDashboardsDefinition()
     {
