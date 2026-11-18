@@ -1,3 +1,4 @@
+using DotMarc.Dns;
 using DotMarc.Data;
 using DotMarc.Notifications;
 using DotMarc.Portal;
@@ -38,12 +39,12 @@ public static class ClientReportCalculator
                     Trend(inputs.Period, inPeriod, inputs.Zone),
                     PortalWording.PolicySentence(domain),
                     PortalWording.HealthRows(domain),
-                    TopSenders(inPeriod, inputs.Owners),
+                    TopSenders(inPeriod, inputs.Owners, SpfServiceRanges.Parse(domain.SpfRangesJson)),
                     Receivers(inPeriod),
                     Alerts(inputs.PeriodAlerts.Where(alert => alert.DomainName == domain.Name)),
                     inputs.Decisions is null
                         ? null
-                        : SenderDecisionSummaries.Summarise(inPeriod, OwnerByIp(inputs.Owners), inputs.Decisions, domain.Id, domain.Groups.Select(group => group.Id).ToList()));
+                        : SenderDecisionSummaries.Summarise(inPeriod, OwnerByIp(inputs.Owners), inputs.Decisions, domain.Id, domain.Groups.Select(group => group.Id).ToList(), SpfServiceRanges.Parse(domain.SpfRangesJson)));
             })
             .ToList();
 
@@ -87,12 +88,12 @@ public static class ClientReportCalculator
     private static Dictionary<string, string?> OwnerByIp(IReadOnlyDictionary<string, IpInfo> owners) =>
         owners.ToDictionary(entry => entry.Key, entry => (string?)entry.Value.Organization);
 
-    private static IReadOnlyList<ClientReportSender> TopSenders(IReadOnlyList<Report> reports, IReadOnlyDictionary<string, IpInfo> owners)
+    private static IReadOnlyList<ClientReportSender> TopSenders(IReadOnlyList<Report> reports, IReadOnlyDictionary<string, IpInfo> owners, IReadOnlyList<SpfServiceRange> spfRanges)
     {
         var records = reports.SelectMany(report => report.Records).ToList();
         var total = records.Sum(record => (long)record.MessageCount);
         var ownerByIp = OwnerByIp(owners);
-        var serviceByIp = SenderIdentification.Identify(reports, ownerByIp, []).ServiceByIp;
+        var serviceByIp = SenderIdentification.Identify(reports, ownerByIp, [], spfRanges).ServiceByIp;
         return records
             .GroupBy(record => record.SourceIp)
             .Select(source =>

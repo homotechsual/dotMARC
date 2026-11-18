@@ -30,8 +30,10 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
             {
                 await context.GetService<IMigrator>().MigrateAsync(MigrationBeforePsaTables);
 
-                // Inserted through EF (only the old tables' columns are written), then the old Halo columns set in SQL,
-                // because they leave the model in a later change.
+                // Inserted through EF, which writes every column the current model has. Columns added after this point in the
+                // history (SpfRangesJson) don't exist yet, so they are added here and dropped again before migrating on. The old
+                // Halo columns are set in SQL, because they leave the model in a later change.
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"SpfRangesJson\" text");
                 var group = new Group { Name = "Client A" };
                 var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
                 var openAlert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "open", Message = "m" };
@@ -46,6 +48,7 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
                 await context.Database.ExecuteSqlRawAsync("UPDATE \"AlertEvents\" SET \"ExternalTicketProvider\" = 'HaloPSA', \"ExternalTicketId\" = '100' WHERE \"Id\" = {0}", openAlertId);
                 await context.Database.ExecuteSqlRawAsync("UPDATE \"AlertEvents\" SET \"ExternalTicketProvider\" = 'HaloPSA', \"ExternalTicketId\" = '101' WHERE \"Id\" = {0}", resolvedAlertId);
 
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"SpfRangesJson\"");
                 await context.Database.MigrateAsync();
             }
 

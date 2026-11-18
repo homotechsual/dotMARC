@@ -1,3 +1,4 @@
+using DotMarc.Dns;
 using System.Security.Claims;
 using DotMarc.Data;
 using DotMarc.IpEnrichment;
@@ -140,7 +141,8 @@ public static class SourceEndpoints
         var pageIps = pageRows.Select(source => source.Ip).ToList();
         var pageRecords = await records.Where(record => pageIps.Contains(record.SourceIp)).Include(record => record.AuthDetails).ToListAsync(cancellationToken);
         var ownerByIp = pageIps.ToDictionary(ip => ip, ip => owner(ip).Organization);
-        var serviceByIp = SenderIdentification.IdentifyRecords(pageRecords, ownerByIp, []).ServiceByIp;
+        var spfRanges = SpfServiceRanges.Parse(await context.Domains.AsNoTracking().Where(domain => domain.Id == domainId.Value).Select(domain => domain.SpfRangesJson).SingleOrDefaultAsync(cancellationToken));
+        var serviceByIp = SenderIdentification.IdentifyRecords(pageRecords, ownerByIp, [], spfRanges).ServiceByIp;
 
         var (decisions, groupIds) = await SenderDecisionService.LoadForDomainWithGroupsAsync(context, domainId.Value, cancellationToken);
         var noGroupNames = new Dictionary<int, string>();

@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Notifications;
 using DotMarc.Portal;
 using DotMarc.Reporting;
@@ -232,5 +233,36 @@ public sealed class ClientReportCalculatorTests
         var report = Build([AuroraDomain(), AuroraDomain(2, "shop.aurora-retail.example")], []);
 
         Assert.Equal(PortalStatus.Verdict(report.Domains.Select(domain => domain.Status).ToList()), report.Verdict);
+    }
+
+    [Fact]
+    public void Build_AttributesSendersByTheDomainsSpfRanges()
+    {
+        var domain = AuroraDomain();
+        domain.Groups = [new Group { Id = 7, Name = "Aurora" }];
+        domain.SpfRangesJson = SpfServiceRanges.Serialize([new SpfServiceRange("Mailchimp", "servers.mcsv.net", "198.51.100.0/24")]);
+        var reports = new[]
+        {
+            ReportOn(1, new DateTimeOffset(2026, 3, 5, 0, 0, 0, TimeSpan.Zero),
+                Record("198.51.100.7", 30, AuthResult.Fail, AuthResult.Fail, DispositionResult.Quarantine)),
+        };
+
+        var senders = Assert.Single(BuildWithDecisions(domain, reports, [GroupUnauthorised(7)]).Domains).Senders;
+
+        Assert.Equal(30L, senders!.UnauthorisedBlocked);
+    }
+
+    [Fact]
+    public void Build_WithNoStoredRanges_LeavesTheSameIpUnattributed()
+    {
+        var domain = AuroraDomain();
+        domain.Groups = [new Group { Id = 7, Name = "Aurora" }];
+        var reports = new[]
+        {
+            ReportOn(1, new DateTimeOffset(2026, 3, 5, 0, 0, 0, TimeSpan.Zero),
+                Record("198.51.100.7", 30, AuthResult.Fail, AuthResult.Fail, DispositionResult.Quarantine)),
+        };
+
+        Assert.Equal(0L, Assert.Single(BuildWithDecisions(domain, reports, [GroupUnauthorised(7)]).Domains).Senders!.UnauthorisedBlocked);
     }
 }

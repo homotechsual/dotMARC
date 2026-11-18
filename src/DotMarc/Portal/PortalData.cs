@@ -1,3 +1,4 @@
+using DotMarc.Dns;
 using System.Globalization;
 using System.Security.Claims;
 using DotMarc.Data;
@@ -72,7 +73,7 @@ public sealed class PortalData(IDbContextFactory<DotMarcDbContext> dbFactory, Ti
         var owners = await IpInfoService.GetCachedAsync(context, topIps, cancellationToken).ConfigureAwait(false);
         var ownerByIp = owners.ToDictionary(entry => entry.Key, entry => entry.Value.Organization);
         var serviceByIp = SenderIdentification.IdentifyRecords(
-            domain.Reports.SelectMany(report => report.Records).Where(record => topIps.Contains(record.SourceIp)), ownerByIp, []).ServiceByIp;
+            domain.Reports.SelectMany(report => report.Records).Where(record => topIps.Contains(record.SourceIp)), ownerByIp, [], SpfServiceRanges.Parse(domain.SpfRangesJson)).ServiceByIp;
         return new PortalDomainDetail(Summarise(domain, openAlerts[domain.Name]), domain, topSources, recentAlerts, serviceByIp);
     }
 

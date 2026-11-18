@@ -1,3 +1,4 @@
+using DotMarc.Dns;
 using System.Globalization;
 using DotMarc.Audit;
 using DotMarc.Data;
@@ -172,7 +173,8 @@ public sealed class AlertingService : IAlertingService
                 context.CachedInfo, context.Ranges, domain.Reports.SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct(), nowUtc);
             result = SenderAlertEvaluator.Evaluate(new SenderAlertInputs(
                 domain.Id, domain.Groups.Select(group => group.Id).ToList(), domain.Reports.ToList(), context.Decisions, ownerByIp, newIps,
-                new SenderAlertSettings(settings.NewSenderMinVolume, settings.UnauthorisedDeliveredMinVolume)));
+                new SenderAlertSettings(settings.NewSenderMinVolume, settings.UnauthorisedDeliveredMinVolume),
+                SpfServiceRanges.Parse(domain.SpfRangesJson)));
         }
 
         if (newEnabled && result.NewUnreviewed.Count > 0)

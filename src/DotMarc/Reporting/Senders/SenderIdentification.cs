@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 
 namespace DotMarc.Reporting;
 
@@ -36,14 +37,16 @@ public static class SenderIdentification
     public static SenderIdentificationResult Identify(
         IEnumerable<Report> reportsInWindow,
         IReadOnlyDictionary<string, string?> ownerByIp,
-        IReadOnlyCollection<string> spfIncludedNames) =>
-        IdentifyRecords(reportsInWindow.SelectMany(report => report.Records), ownerByIp, spfIncludedNames);
+        IReadOnlyCollection<string> spfIncludedNames,
+        IReadOnlyList<SpfServiceRange>? spfRanges = null) =>
+        IdentifyRecords(reportsInWindow.SelectMany(report => report.Records), ownerByIp, spfIncludedNames, spfRanges);
 
     /// <summary>The same, for callers that load records directly (with their <c>AuthDetails</c>) rather than whole reports.</summary>
     public static SenderIdentificationResult IdentifyRecords(
         IEnumerable<ReportRecord> recordsInWindow,
         IReadOnlyDictionary<string, string?> ownerByIp,
-        IReadOnlyCollection<string> spfIncludedNames)
+        IReadOnlyCollection<string> spfIncludedNames,
+        IReadOnlyList<SpfServiceRange>? spfRanges = null)
     {
         var records = recordsInWindow.ToList();
         var totalMessages = records.Sum(record => (long)record.MessageCount);
@@ -57,7 +60,7 @@ public static class SenderIdentification
                 .Select(detail => new AuthDetailSummary(detail.Mechanism, detail.Domain, detail.Result, detail.Selector))
                 .Distinct()
                 .ToList();
-            var best = SenderScoring.Score(new SenderSourceInput(ipGroup.Key, ownerByIp.GetValueOrDefault(ipGroup.Key), details), spfIncludedNames)
+            var best = SenderScoring.Score(new SenderSourceInput(ipGroup.Key, ownerByIp.GetValueOrDefault(ipGroup.Key), details), spfIncludedNames, spfRanges)
                 .FirstOrDefault();
             if (best is not null && best.Score >= SenderScoring.AttributionThreshold)
             {

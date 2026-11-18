@@ -629,7 +629,7 @@ else
 
         var ownerByIp = _sources.ToDictionary(source => source.SourceIp, source => source.Organization, StringComparer.Ordinal);
         var spfIncludedNames = _detectedMailServices.Where(service => service.Kind == DetectedMailServiceKind.Sending).Select(service => service.ProviderName).ToList();
-        _senderResult = SenderIdentification.Identify(_domain.Reports, ownerByIp, spfIncludedNames);
+        _senderResult = SenderIdentification.Identify(_domain.Reports, ownerByIp, spfIncludedNames, SpfServiceRanges.Parse(_domain.SpfRangesJson));
     }
     private List<Report> _reports = [];
     private List<TlsrptReport> _tlsrptReports = [];

@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Reporting;
 using Xunit;
 
@@ -117,4 +118,28 @@ public sealed class SenderDecisionSummaryTests
     [Fact]
     public void Summarise_ReturnsZerosForNoReports() =>
         Assert.Equal(new SenderDecisionSummary(0, 0, 0, 0), Summarise([]));
+
+    private static readonly SpfServiceRange[] MailchimpRange = [new("Mailchimp", "servers.mcsv.net", "203.0.113.0/24")];
+
+    [Fact]
+    public void Summarise_AnIpInASpfRange_TakesItsServicesDecision()
+    {
+        var reports = ReportsOf(Mail(UnrecognisedIp, 30, DispositionResult.Quarantine, passing: false, mailchimp: false), Mail(UnrecognisedIp, 6, mailchimp: false));
+
+        var summary = SenderDecisionSummaries.Summarise(
+            reports, new Dictionary<string, string?>(), [Decision(SenderDecisionScope.Domain, SenderDecisionStatus.Unauthorised, "Mailchimp")],
+            DomainId, [GroupId], MailchimpRange);
+
+        Assert.Equal((30L, 6L, 0), (summary.UnauthorisedBlocked, summary.UnauthorisedDelivered, summary.UnreviewedSenders));
+    }
+
+    [Fact]
+    public void Summarise_AnIpInASpfRange_CountsOnceAsTheServiceWhenUnreviewed()
+    {
+        var reports = ReportsOf(Mail(UnrecognisedIp, 5, mailchimp: false), Mail(MailchimpIp, 5, mailchimp: false));
+
+        var summary = SenderDecisionSummaries.Summarise(reports, new Dictionary<string, string?>(), [], DomainId, [GroupId], [new SpfServiceRange("Mailchimp", "servers.mcsv.net", "203.0.113.0/24"), new SpfServiceRange("Mailchimp", "servers.mcsv.net", "198.51.100.0/24")]);
+
+        Assert.Equal(1, summary.UnreviewedSenders);
+    }
 }

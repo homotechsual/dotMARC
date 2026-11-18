@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Reporting;
 using Xunit;
 
@@ -232,5 +233,40 @@ public sealed class SenderIdentificationTests
             Assert.Contains("Mailchimp", text);
             Assert.DoesNotContain('—', text);
         }
+    }
+
+    [Fact]
+    public void AnIpInsideASpfRangeTaggedForAService_IsAttributedToIt_WithTheAuthorisesLine()
+    {
+        var report = ReportOf(Record("203.0.113.7", 40, passing: true), Record("192.0.2.9", 10, passing: true));
+        SpfServiceRange[] ranges = [new("SendGrid", "sendgrid.net", "203.0.113.0/24")];
+
+        var result = SenderIdentification.Identify([report], Owners(), NoSpfIncludes, ranges);
+
+        var sendGrid = Assert.Single(result.Services);
+        Assert.Equal("SendGrid", sendGrid.Name);
+        Assert.Equal(["203.0.113.7"], sendGrid.SourceIps);
+        Assert.Contains("Your SPF record authorises this IP for SendGrid", sendGrid.EvidenceLines);
+        Assert.Equal(["192.0.2.9"], result.Unrecognised!.SourceIps);
+    }
+
+    [Fact]
+    public void WithoutRanges_TheSameIpStaysUnrecognised()
+    {
+        var report = ReportOf(Record("203.0.113.7", 40, passing: true));
+
+        var result = SenderIdentification.Identify([report], Owners(), NoSpfIncludes);
+
+        Assert.Empty(result.Services);
+        Assert.NotNull(result.Unrecognised);
+    }
+
+    [Fact]
+    public void IdentifyRecords_UsesTheRangesToo()
+    {
+        var result = SenderIdentification.IdentifyRecords(
+            [Record("203.0.113.7", 40, passing: true)], Owners(), NoSpfIncludes, [new SpfServiceRange("SendGrid", "sendgrid.net", "203.0.113.0/24")]);
+
+        Assert.Equal("SendGrid", result.ServiceByIp["203.0.113.7"]);
     }
 }

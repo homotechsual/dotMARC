@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using DotMarc.Api;
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.IpEnrichment;
 using DotMarc.Reporting;
 using DotMarc.Tests.Internal;
@@ -228,5 +229,23 @@ public sealed class SourceEndpointTests : IAsyncLifetime
         Assert.Contains("\"result\"", body);
         Assert.Contains("\"days\"", body);
         Assert.Equal(HttpStatusCode.NotFound, unseen.StatusCode);
+    }
+
+    [Fact]
+    public async Task Sources_AreNamedByTheDomainsSpfRanges_AndFollowTheServiceDecision()
+    {
+        await _host.SeedDomainAsync("api-spf-range.example", configure: domain =>
+        {
+            domain.SpfRangesJson = SpfServiceRanges.Serialize([new SpfServiceRange("SendGrid", "sendgrid.net", "203.0.113.0/24")]);
+            domain.Reports.Add(ReportWith(DateTimeOffset.UtcNow.AddDays(-2), ("203.0.113.10", 5, AuthResult.Pass, AuthResult.Pass, DispositionResult.None)));
+        });
+        await DecideAsync(SenderDecisionScope.Baseline, SenderDecisionStatus.Unauthorised, "SendGrid");
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var page = await client.GetFromJsonAsync<ApiPage<ApiSourceDetail>>("/api/v1/domains/api-spf-range.example/sources");
+
+        var source = Assert.Single(page!.Items);
+        Assert.Equal(("SendGrid", "Unauthorised"), (source.Service, source.Decision));
     }
 }

@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 
 namespace DotMarc.Reporting;
 
@@ -20,9 +21,9 @@ public static class SenderDecisionSummaries
     /// so every place that shows these numbers agrees.</summary>
     public static SenderDecisionSummary Summarise(
         IReadOnlyList<Report> reports, IReadOnlyDictionary<string, string?> ownerByIp, IReadOnlyList<SenderDecision> decisions,
-        int domainId, IReadOnlyCollection<int> groupIds)
+        int domainId, IReadOnlyCollection<int> groupIds, IReadOnlyList<SpfServiceRange>? spfRanges = null)
     {
-        var identification = SenderIdentification.Identify(reports, ownerByIp, []);
+        var identification = SenderIdentification.Identify(reports, ownerByIp, [], spfRanges);
 
         ResolvedSenderDecision Resolve(string? serviceName, string ip) =>
             SenderDecisionResolver.Resolve(decisions, domainId, groupIds, serviceName, ip, NoGroupNames);

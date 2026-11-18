@@ -1,5 +1,6 @@
 using System.Globalization;
 using DotMarc.Data;
+using DotMarc.Dns;
 
 namespace DotMarc.Reporting;
 
@@ -14,7 +15,8 @@ public sealed record SenderAlertInputs(
     IReadOnlyList<SenderDecision> Decisions,
     IReadOnlyDictionary<string, string?> OwnerByIp,
     IReadOnlySet<string> NewIps,
-    SenderAlertSettings Settings);
+    SenderAlertSettings Settings,
+    IReadOnlyList<SpfServiceRange>? SpfRanges = null);
 
 /// <summary>One sender an alert is about: a service name, or the IP of a source no service was recognised for.</summary>
 public sealed record SenderAlertFinding(string Sender, long Messages);
@@ -41,7 +43,7 @@ public static class SenderAlertEvaluator
     public static SenderAlertResult Evaluate(SenderAlertInputs inputs)
     {
         var records = inputs.Reports.SelectMany(report => report.Records).ToList();
-        var identification = SenderIdentification.Identify(inputs.Reports, inputs.OwnerByIp, []);
+        var identification = SenderIdentification.Identify(inputs.Reports, inputs.OwnerByIp, [], inputs.SpfRanges);
 
         ResolvedSenderDecision Resolve(string? serviceName, string ip) =>
             SenderDecisionResolver.Resolve(inputs.Decisions, inputs.DomainId, inputs.GroupIds, serviceName, ip, NoGroupNames);
