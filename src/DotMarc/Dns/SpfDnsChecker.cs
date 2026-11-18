@@ -13,6 +13,7 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
     private readonly SpfLookupCounter _lookupCounter;
+    private readonly SpfRangeExpander _rangeExpander;
 
     public SpfDnsChecker(HttpClient http) : this(http, new TxtRecordLookup(http))
     {
@@ -24,6 +25,7 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
     {
         _http = http;
         _lookupCounter = new SpfLookupCounter(includeLookup);
+        _rangeExpander = new SpfRangeExpander(includeLookup);
     }
 
     public async Task<SpfCheckResult> CheckAsync(string domainName, CancellationToken cancellationToken)
@@ -42,7 +44,7 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
             {
                 return new SpfCheckResult(SpfCheckStatus.Misconfigured, $"{domainName} has a record that looks like SPF but doesn't start with v=spf1: {nearMiss}");
             }
-            return new SpfCheckResult(SpfCheckStatus.MissingRecord, $"No SPF (v=spf1) TXT record found at {domainName}");
+            return new SpfCheckResult(SpfCheckStatus.MissingRecord, $"No SPF (v=spf1) TXT record found at {domainName}", []);
         }
         if (spfRecords.Count > 1)
         {
@@ -55,34 +57,37 @@ public sealed class SpfDnsChecker : ISpfDnsChecker
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (mechanisms.Length == 1 && string.Equals(mechanisms[0], "-all", StringComparison.OrdinalIgnoreCase))
         {
-            return new SpfCheckResult(SpfCheckStatus.NullSpf, $"{domainName} publishes a null SPF record (v=spf1 -all) - no senders are authorized to send mail as this domain.");
+            return new SpfCheckResult(SpfCheckStatus.NullSpf, $"{domainName} publishes a null SPF record (v=spf1 -all) - no senders are authorized to send mail as this domain.", []);
         }
+
+        var record = SpfRecord.Parse(spfRecords[0]);
+        var ranges = await _rangeExpander.ExpandAsync(domainName, record, cancellationToken).ConfigureAwait(false);
 
         SpfLookupCount count;
         try
         {
-            count = await _lookupCounter.CountAsync(domainName, SpfRecord.Parse(spfRecords[0]), cancellationToken).ConfigureAwait(false);
+            count = await _lookupCounter.CountAsync(domainName, record, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException && !cancellationToken.IsCancellationRequested)
         {
             // A lookup that fails is a resolver problem, not the domain's: leave the check as it would have been.
-            return new SpfCheckResult(SpfCheckStatus.Ok, null);
+            return new SpfCheckResult(SpfCheckStatus.Ok, null, ranges);
         }
 
         if (count.IsOverLimit)
         {
             var costliest = count.TermCosts.OrderByDescending(cost => cost.Lookups).Take(3).Select(cost => $"{cost.Term} ({cost.Lookups})");
             return new SpfCheckResult(SpfCheckStatus.TooManyLookups,
-                $"{domainName}'s SPF record needs {count.Total}{(count.Total > 20 ? " or more" : "")} DNS lookups. Receivers stop at {SpfLookupCount.Limit}, so SPF fails. Costliest: {string.Join(", ", costliest)}.");
+                $"{domainName}'s SPF record needs {count.Total}{(count.Total > 20 ? " or more" : "")} DNS lookups. Receivers stop at {SpfLookupCount.Limit}, so SPF fails. Costliest: {string.Join(", ", costliest)}.", ranges);
         }
 
         if (count.MissingTargets.Count > 0)
         {
             return new SpfCheckResult(SpfCheckStatus.Misconfigured,
-                $"{domainName}'s SPF record points at {string.Join(", ", count.MissingTargets)}, which {(count.MissingTargets.Count == 1 ? "has" : "have")} no SPF record.");
+                $"{domainName}'s SPF record points at {string.Join(", ", count.MissingTargets)}, which {(count.MissingTargets.Count == 1 ? "has" : "have")} no SPF record.", ranges);
         }
 
-        return new SpfCheckResult(SpfCheckStatus.Ok, null);
+        return new SpfCheckResult(SpfCheckStatus.Ok, null, ranges);
     }
 
     /// <summary>Unlike DmarcDnsChecker/TlsrptDnsChecker's QueryTxtAsync (which only returns the

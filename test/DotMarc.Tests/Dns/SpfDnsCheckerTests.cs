@@ -160,4 +160,53 @@ public sealed class SpfDnsCheckerTests
 
         Assert.Equal(SpfCheckStatus.Ok, (await checker.CheckAsync("contoso.io", CancellationToken.None)).Status);
     }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsTheRangesTheRecordAuthorises()
+    {
+        var (checker, _, includes) = CreateCountingChecker("v=spf1 include:servers.mcsv.net ip4:192.0.2.0/24 ~all");
+        includes.TxtByName["servers.mcsv.net"] = ["v=spf1 ip4:198.51.100.0/24 ~all"];
+
+        var result = await checker.CheckAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(SpfCheckStatus.Ok, result.Status);
+        Assert.Equal(
+            [new SpfServiceRange(null, "contoso.io", "192.0.2.0/24"), new SpfServiceRange("Mailchimp", "servers.mcsv.net", "198.51.100.0/24")],
+            result.Ranges!.OrderBy(range => range.Include));
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsNoRanges_WhenTheDomainAuthorisesNothing()
+    {
+        var (missing, missingHandler) = CreateChecker();
+        missingHandler.ResponseBody = """{"Status":3}""";
+        var (nullSpf, nullHandler) = CreateChecker();
+        nullHandler.ResponseBody = """{"Status":0,"Answer":[{"type":16,"data":"\"v=spf1 -all\""}]}""";
+
+        Assert.Empty((await missing.CheckAsync("contoso.io", CancellationToken.None)).Ranges!);
+        Assert.Empty((await nullSpf.CheckAsync("contoso.io", CancellationToken.None)).Ranges!);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsNullRanges_WhenThereAreSeveralRecords()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = """
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=spf1 ip4:192.0.2.0/24 ~all\""},{"type":16,"data":"\"v=spf1 -all\""}]}
+            """;
+
+        Assert.Null((await checker.CheckAsync("contoso.io", CancellationToken.None)).Ranges);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsNullRanges_WhenExpansionFails()
+    {
+        var (checker, _, includes) = CreateCountingChecker("v=spf1 include:a.example ~all");
+        includes.ThrowOnQuery = new HttpRequestException("DNS is down");
+
+        var result = await checker.CheckAsync("contoso.io", CancellationToken.None);
+
+        Assert.Equal(SpfCheckStatus.Ok, result.Status);
+        Assert.Null(result.Ranges);
+    }
 }

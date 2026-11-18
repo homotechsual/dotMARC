@@ -32,6 +32,9 @@ public sealed class Domain
     public DateTimeOffset? SpfCheckedUtc { get; set; }
     public string? SpfCheckDetail { get; set; }
 
+    /// <summary>The IP ranges the domain's SPF record authorises, as JSON written by the SPF check (see <c>SpfServiceRanges</c>).</summary>
+    public string? SpfRangesJson { get; set; }
+
     public MxCheckStatus MxCheckStatus { get; set; }
     public DateTimeOffset? MxCheckedUtc { get; set; }
     public string? MxCheckDetail { get; set; }

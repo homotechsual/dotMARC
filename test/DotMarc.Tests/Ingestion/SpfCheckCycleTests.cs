@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Ingestion;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
@@ -122,5 +123,51 @@ public sealed class SpfCheckCycleTests : IAsyncLifetime
         Assert.Empty(checker.CheckedDomains);
 
         await lockTransaction.RollbackAsync();
+    }
+
+    private static readonly SpfServiceRange[] SampleRanges = [new("Mailchimp", "servers.mcsv.net", "198.51.100.0/24")];
+
+    [Fact]
+    public async Task RunSingleSpfCheckAsync_StoresTheRangesTheCheckFound()
+    {
+        var domain = new Domain { Name = "contoso.io" };
+        var checker = new FakeSpfDnsChecker { Result = new(SpfCheckStatus.Ok, null, SampleRanges) };
+
+        await PollingService.RunSingleSpfCheckAsync(domain, checker, CancellationToken.None);
+
+        Assert.Equal(SampleRanges, SpfServiceRanges.Parse(domain.SpfRangesJson));
+    }
+
+    [Fact]
+    public async Task RunSingleSpfCheckAsync_KeepsTheLastGoodRanges_WhenTheCheckFoundNone()
+    {
+        var domain = new Domain { Name = "contoso.io", SpfRangesJson = SpfServiceRanges.Serialize(SampleRanges) };
+        var checker = new FakeSpfDnsChecker { Result = new(SpfCheckStatus.Ok, null, null) };
+
+        await PollingService.RunSingleSpfCheckAsync(domain, checker, CancellationToken.None);
+
+        Assert.Equal(SampleRanges, SpfServiceRanges.Parse(domain.SpfRangesJson));
+    }
+
+    [Fact]
+    public async Task RunSingleSpfCheckAsync_ClearsTheRanges_WhenTheDomainAuthorisesNothing()
+    {
+        var domain = new Domain { Name = "contoso.io", SpfRangesJson = SpfServiceRanges.Serialize(SampleRanges) };
+        var checker = new FakeSpfDnsChecker { Result = new(SpfCheckStatus.NullSpf, "none", []) };
+
+        await PollingService.RunSingleSpfCheckAsync(domain, checker, CancellationToken.None);
+
+        Assert.Equal("[]", domain.SpfRangesJson);
+    }
+
+    [Fact]
+    public async Task TheStoredRanges_SurviveASaveAndReload()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow, SpfRangesJson = SpfServiceRanges.Serialize(SampleRanges) });
+        await context.SaveChangesAsync();
+
+        using var reload = CreateContext();
+        Assert.Equal(SampleRanges, SpfServiceRanges.Parse(reload.Domains.Single().SpfRangesJson));
     }
 }

@@ -349,6 +349,9 @@ namespace DotMarc.Migrations
                     b.Property<DateTimeOffset?>("SpfCheckedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("SpfRangesJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("TlsrptCheckDetail")
                         .HasColumnType("text");
 

@@ -503,6 +503,10 @@ public sealed class PollingService : BackgroundService
         domain.SpfCheckStatus = result.Status;
         domain.SpfCheckedUtc = DateTimeOffset.UtcNow;
         domain.SpfCheckDetail = result.Detail;
+        if (result.Ranges is { } ranges)
+        {
+            domain.SpfRangesJson = SpfServiceRanges.Serialize(ranges);
+        }
     }
 
     /// <summary>MX counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
