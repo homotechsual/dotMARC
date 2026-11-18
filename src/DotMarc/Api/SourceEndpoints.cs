@@ -142,6 +142,9 @@ public static class SourceEndpoints
         var ownerByIp = pageIps.ToDictionary(ip => ip, ip => owner(ip).Organization);
         var serviceByIp = SenderIdentification.IdentifyRecords(pageRecords, ownerByIp, []).ServiceByIp;
 
+        var (decisions, groupIds) = await SenderDecisionService.LoadForDomainWithGroupsAsync(context, domainId.Value, cancellationToken);
+        var noGroupNames = new Dictionary<int, string>();
+
         var items = pageRows.Select(source =>
         {
             var (organization, country) = owner(source.Ip);
@@ -149,7 +152,8 @@ public static class SourceEndpoints
                 source.Volume == 0 ? null : (double)source.Passed / source.Volume,
                 source.SpfPasses > 0 ? "Pass" : "Fail", source.DkimPasses > 0 ? "Pass" : "Fail",
                 (source.Rejected > 0 ? DispositionResult.Reject : source.Quarantined > 0 ? DispositionResult.Quarantine : DispositionResult.None).ToString(),
-                organization, country, serviceByIp.GetValueOrDefault(source.Ip));
+                organization, country, serviceByIp.GetValueOrDefault(source.Ip),
+                SenderDecisionResolver.Resolve(decisions, domainId.Value, groupIds, serviceByIp.GetValueOrDefault(source.Ip), source.Ip, noGroupNames).Status?.ToString() ?? "Unreviewed");
         }).ToList();
         return TypedResults.Ok(new ApiPage<ApiSourceDetail>(items, pageNumber, size, totalCount));
     }

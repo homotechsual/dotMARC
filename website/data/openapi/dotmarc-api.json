@@ -1518,6 +1518,10 @@
             "nullable": true,
             "type": "string"
           },
+          "decision": {
+            "nullable": true,
+            "type": "string"
+          },
           "disposition": {
             "type": "string"
           },

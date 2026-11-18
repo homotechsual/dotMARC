@@ -87,6 +87,93 @@ public sealed class SourceEndpointTests : IAsyncLifetime
         Assert.Null(page.Items.Single(source => source.Ip == "203.0.113.10").Service);
     }
 
+    private async Task<(int DomainId, int GroupId)> SeedMailchimpDomainAsync(string name)
+    {
+        var group = new Group { Name = $"Group of {name}" };
+        var domainId = await _host.SeedDomainAsync(name, configure: domain =>
+        {
+            domain.Groups.Add(group);
+            var report = ReportWith(DateTimeOffset.UtcNow.AddDays(-2),
+                ("198.51.100.7", 20, AuthResult.Fail, AuthResult.Fail, DispositionResult.None),
+                ("203.0.113.10", 5, AuthResult.Pass, AuthResult.Pass, DispositionResult.None));
+            report.Records[0].AuthDetails.Add(new ReportRecordAuthDetail { Mechanism = DmarcAuthMechanism.Dkim, Domain = "bounce.mcsv.net", Result = DmarcMechanismResult.Pass });
+            domain.Reports.Add(report);
+        });
+        await using var context = _host.CreateContext();
+        return (domainId, (await context.Groups.SingleAsync(candidate => candidate.Name == group.Name)).Id);
+    }
+
+    private async Task DecideAsync(SenderDecisionScope scope, SenderDecisionStatus status, string key, SenderDecisionKind kind = SenderDecisionKind.Service, int? domainId = null, int? groupId = null)
+    {
+        await using var context = _host.CreateContext();
+        context.SenderDecisions.Add(new SenderDecision
+        {
+            Scope = scope, Kind = kind, Key = key, Status = status, DomainId = scope == SenderDecisionScope.Domain ? domainId : null,
+            GroupId = scope == SenderDecisionScope.Group ? groupId : null, DecidedBy = "u", DecidedByName = "Sam Lee",
+        });
+        await context.SaveChangesAsync();
+    }
+
+    private async Task<Dictionary<string, string?>> DecisionsAsync(string domainName)
+    {
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+        var page = await client.GetFromJsonAsync<ApiPage<ApiSourceDetail>>($"/api/v1/domains/{domainName}/sources");
+        return page!.Items.ToDictionary(source => source.Ip, source => source.Decision);
+    }
+
+    [Fact]
+    public async Task Sources_ReturnUnreviewed_WhenNoDecisionApplies()
+    {
+        await SeedMailchimpDomainAsync("api-decision-none.example");
+
+        var decisions = await DecisionsAsync("api-decision-none.example");
+
+        Assert.Equal(["Unreviewed", "Unreviewed"], decisions.Values);
+    }
+
+    [Fact]
+    public async Task Sources_ReturnTheDomainDecision_ForAServiceMatchedIp()
+    {
+        var (domainId, _) = await SeedMailchimpDomainAsync("api-decision-domain.example");
+        await DecideAsync(SenderDecisionScope.Domain, SenderDecisionStatus.Unauthorised, "Mailchimp", domainId: domainId);
+
+        var decisions = await DecisionsAsync("api-decision-domain.example");
+
+        Assert.Equal(("Unauthorised", "Unreviewed"), (decisions["198.51.100.7"], decisions["203.0.113.10"]));
+    }
+
+    [Fact]
+    public async Task Sources_AnIpDecisionOverridesTheServiceDecision()
+    {
+        var (domainId, _) = await SeedMailchimpDomainAsync("api-decision-ip.example");
+        await DecideAsync(SenderDecisionScope.Domain, SenderDecisionStatus.Authorised, "Mailchimp", domainId: domainId);
+        await DecideAsync(SenderDecisionScope.Domain, SenderDecisionStatus.Unauthorised, "198.51.100.7", SenderDecisionKind.Ip, domainId: domainId);
+
+        Assert.Equal("Unauthorised", (await DecisionsAsync("api-decision-ip.example"))["198.51.100.7"]);
+    }
+
+    [Fact]
+    public async Task Sources_UseTheBaselineAndGroupDecisions()
+    {
+        var (_, groupId) = await SeedMailchimpDomainAsync("api-decision-levels.example");
+        await DecideAsync(SenderDecisionScope.Baseline, SenderDecisionStatus.UnderReview, "Mailchimp");
+        Assert.Equal("UnderReview", (await DecisionsAsync("api-decision-levels.example"))["198.51.100.7"]);
+
+        await DecideAsync(SenderDecisionScope.Group, SenderDecisionStatus.Authorised, "Mailchimp", groupId: groupId);
+
+        Assert.Equal("Authorised", (await DecisionsAsync("api-decision-levels.example"))["198.51.100.7"]);
+    }
+
+    [Fact]
+    public async Task Sources_ReturnUnreviewed_ForAnUnmatchedIp_WithOnlyAServiceBaseline()
+    {
+        await SeedMailchimpDomainAsync("api-decision-unmatched.example");
+        await DecideAsync(SenderDecisionScope.Baseline, SenderDecisionStatus.Authorised, "Mailchimp");
+
+        Assert.Equal("Unreviewed", (await DecisionsAsync("api-decision-unmatched.example"))["203.0.113.10"]);
+    }
+
     [Fact]
     public async Task Filters_NarrowSources()
     {

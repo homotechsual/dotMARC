@@ -52,17 +52,23 @@ public static class SenderDecisionService
     // ---- Reading ----
 
     /// <summary>Every decision that can apply to the domain: its own, those of the groups it is in, and the baseline.</summary>
-    public static async Task<List<SenderDecision>> LoadForDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default)
+    public static async Task<List<SenderDecision>> LoadForDomainAsync(DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default) =>
+        (await LoadForDomainWithGroupsAsync(context, domainId, cancellationToken).ConfigureAwait(false)).Decisions;
+
+    /// <summary>The domain's, its groups' and the baseline decisions, with the ids of the groups the domain is in.</summary>
+    public static async Task<(List<SenderDecision> Decisions, List<int> GroupIds)> LoadForDomainWithGroupsAsync(
+        DotMarcDbContext context, int domainId, CancellationToken cancellationToken = default)
     {
         var groupIds = await context.Domains.AsNoTracking()
             .Where(domain => domain.Id == domainId)
             .SelectMany(domain => domain.Groups.Select(group => group.Id))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        return await context.SenderDecisions.AsNoTracking()
+        var decisions = await context.SenderDecisions.AsNoTracking()
             .Where(decision => decision.Scope == SenderDecisionScope.Baseline
                 || (decision.Scope == SenderDecisionScope.Domain && decision.DomainId == domainId)
                 || (decision.Scope == SenderDecisionScope.Group && groupIds.Contains(decision.GroupId!.Value)))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return (decisions, groupIds);
     }
 
     public static async Task<List<SenderDecision>> LoadBaselineAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) =>
