@@ -77,6 +77,8 @@ public sealed class AlertingService : IAlertingService
         foreach (var domain in domains)
         {
             var facts = FactsFor(domain);
+            applicable.Record(domain.Name, AlertTypes.TlsrptFailure, rules.For(AlertTypes.TlsrptFailure, facts));
+            applicable.Record(domain.Name, AlertTypes.UnexpectedActivityOnNullRoutedDomain, rules.For(AlertTypes.UnexpectedActivityOnNullRoutedDomain, facts));
             var missedRules = applicable.Record(domain.Name, AlertTypes.MissedReport, rules.For(AlertTypes.MissedReport, facts));
             if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
             {
@@ -138,15 +140,26 @@ public sealed class AlertingService : IAlertingService
         // A rule that was disabled, moved out of scope or put behind a rule that stops processing no longer applies to a
         // domain, so what it left open there closes. Only for domains still monitored: the rest keep their alerts as before.
         var monitoredNames = domains.Select(domain => domain.Name).ToHashSet(StringComparer.Ordinal);
-        await ResolveOrphanedAlertsAsync(openAlerts.All.Where(alert => monitoredNames.Contains(alert.Subject)), applicable, cancellationToken).ConfigureAwait(false);
+        foreach (var systemAlert in openAlerts.All.Where(alert => SystemKinds.Contains(alert.Kind)))
+        {
+            applicable.Record(systemAlert.Subject, systemAlert.Kind, rules.For(systemAlert.Kind, facts: null));
+        }
+
+        await ResolveOrphanedAlertsAsync(
+            openAlerts.All.Where(alert => monitoredNames.Contains(alert.Subject) || SystemKinds.Contains(alert.Kind)), applicable, cancellationToken).ConfigureAwait(false);
 
         await CheckDnsHealthAsync(db, settings, rules, domains, cancellationToken).ConfigureAwait(false);
-        await CheckApiKeyExpiryAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        await CheckApiKeyExpiryAsync(db, settings, rules, cancellationToken).ConfigureAwait(false);
     }
 
+    private static readonly string[] SystemKinds = [AlertTypes.ClientReportFailed, AlertTypes.PsaConnectionLost, AlertTypes.ApiKeyExpiring];
+
+    /// <summary>The kinds whose rule changes the cycle reconciles: the ones it raises itself, plus the ones raised by events, so an
+    /// alert closes when its rule stops applying whichever way it was raised.</summary>
     private static readonly string[] CycleKinds =
     [
-        AlertTypes.MissedReport, AlertTypes.SuspiciousRejectActivity, AlertTypes.NewUnreviewedSender, AlertTypes.UnauthorisedSenderDelivered
+        AlertTypes.MissedReport, AlertTypes.SuspiciousRejectActivity, AlertTypes.NewUnreviewedSender, AlertTypes.UnauthorisedSenderDelivered,
+        AlertTypes.TlsrptFailure, AlertTypes.UnexpectedActivityOnNullRoutedDomain, .. SystemKinds
     ];
 
     private static DomainFacts FactsFor(Domain domain) =>
@@ -470,7 +483,26 @@ public sealed class AlertingService : IAlertingService
         }
 
         var failureSummary = failureTypes.Count == 0 ? "no failure category supplied" : string.Join(", ", failureTypes.Distinct(StringComparer.OrdinalIgnoreCase));
-        await EnsureAlertAsync(db, settings, domainName, AlertTypes.TlsrptFailure, "Warning", "TLS delivery failures reported", $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.", cancellationToken).ConfigureAwait(false);
+        var message = $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.";
+        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var facts = await LoadDomainFactsAsync(db, domainName, cancellationToken).ConfigureAwait(false);
+        foreach (var rule in rules.For(AlertTypes.TlsrptFailure, facts))
+        {
+            await EnsureAlertAsync(db, settings, rule, domainName, "TLS delivery failures reported", message, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The ids that decide which rules apply to a domain, found by name. A name that is not a known domain gets only the
+    /// rules that apply to every domain.</summary>
+    private static async Task<DomainFacts> LoadDomainFactsAsync(DotMarcDbContext db, string domainName, CancellationToken cancellationToken)
+    {
+        var domain = await db.Domains.AsNoTracking()
+            .Include(candidate => candidate.Groups)
+            .Include(candidate => candidate.Tags)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(candidate => candidate.Name == domainName, cancellationToken)
+            .ConfigureAwait(false);
+        return domain is null ? DomainFacts.None : FactsFor(domain);
     }
 
     public async Task FlagUnexpectedActivityForNullRoutedDomainAsync(string domainName, ReasonBreakdown reasonBreakdown, CancellationToken cancellationToken = default)
@@ -492,7 +524,12 @@ public sealed class AlertingService : IAlertingService
                 : " No benign override reason was given - this looks like a genuine spoofing attempt.";
 
         var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.{reasonContext}";
-        await EnsureAlertAsync(db, settings, domainName, AlertTypes.UnexpectedActivityOnNullRoutedDomain, "Warning", "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var facts = await LoadDomainFactsAsync(db, domainName, cancellationToken).ConfigureAwait(false);
+        foreach (var rule in rules.For(AlertTypes.UnexpectedActivityOnNullRoutedDomain, facts))
+        {
+            await EnsureAlertAsync(db, settings, rule, domainName, "Unexpected mail activity on a null-routed domain", message, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Whether a policy or nameserver change is still waiting, read fresh from the database. Someone may have
@@ -584,18 +621,6 @@ public sealed class AlertingService : IAlertingService
         await EnsureAlertCoreAsync(context, settings, rule.RuleId, rule.Severity, subject, rule.Rule.Kind, title, message, cancellationToken, cooldown).ConfigureAwait(false);
     }
 
-    /// <summary>Raises an alert that is not yet driven by a rule, as the type's default rule, with the given severity. Each caller
-    /// moves to the rule overload above as its alert kind is converted.</summary>
-    private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken, TimeSpan? cooldown = null)
-    {
-        var defaultRuleId = await context.AlertRules.AsNoTracking()
-            .Where(rule => rule.DefaultKey == alertType)
-            .Select(rule => (int?)rule.Id)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-        await EnsureAlertCoreAsync(context, settings, defaultRuleId, severity, domainName, alertType, title, message, cancellationToken, cooldown).ConfigureAwait(false);
-    }
-
     private async Task EnsureAlertCoreAsync(DotMarcDbContext context, NotificationSettings settings, int? ruleId, string severity, string domainName, string alertType, string title, string message, CancellationToken cancellationToken, TimeSpan? cooldown)
     {
         if (AlertTypes.Find(alertType) is null)
@@ -670,8 +695,12 @@ public sealed class AlertingService : IAlertingService
             return;
         }
 
-        await EnsureAlertAsync(db, settings, ClientReportAlertSubject(groupId, groupName), AlertTypes.ClientReportFailed, "Warning", "Client report failed",
-            $"The {periodLabel} report for {groupName} couldn't be sent for 24 hours. Last error: {error}", cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        foreach (var rule in rules.For(AlertTypes.ClientReportFailed, facts: null))
+        {
+            await EnsureAlertAsync(db, settings, rule, ClientReportAlertSubject(groupId, groupName), "Client report failed",
+                $"The {periodLabel} report for {groupName} couldn't be sent for 24 hours. Last error: {error}", cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task ResolveClientReportFailedAsync(int groupId, CancellationToken cancellationToken = default)
@@ -702,9 +731,13 @@ public sealed class AlertingService : IAlertingService
         }
 
         var name = DotMarc.Psa.PsaKindNames.DisplayName(psa);
-        await EnsureAlertAsync(db, settings, PsaConnectionAlertSubject(psa), AlertTypes.PsaConnectionLost, "Warning", "PSA connection lost",
-            $"dotMARC can no longer refresh its {name} sign-in ({reason}). New alerts won't raise {name} tickets until someone reconnects under Manage > PSA settings > {name}.",
-            cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        foreach (var rule in rules.For(AlertTypes.PsaConnectionLost, facts: null))
+        {
+            await EnsureAlertAsync(db, settings, rule, PsaConnectionAlertSubject(psa), "PSA connection lost",
+                $"dotMARC can no longer refresh its {name} sign-in ({reason}). New alerts won't raise {name} tickets until someone reconnects under Manage > PSA settings > {name}.",
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task ResolvePsaConnectionLostAsync(DotMarc.Psa.PsaKind psa, CancellationToken cancellationToken = default)
@@ -731,7 +764,7 @@ public sealed class AlertingService : IAlertingService
     /// <summary>Warns before an API key expires so whatever uses it doesn't break unannounced. An expiry is a known date,
     /// so it's announced once (the cooldown is the whole warning period) rather than every cooldown like a fault. The
     /// alert closes when the key is revoked or finally expires.</summary>
-    private async Task CheckApiKeyExpiryAsync(DotMarcDbContext db, NotificationSettings settings, CancellationToken cancellationToken)
+    private async Task CheckApiKeyExpiryAsync(DotMarcDbContext db, NotificationSettings settings, AlertRuleSet rules, CancellationToken cancellationToken)
     {
         var nowUtc = DateTimeOffset.UtcNow;
         var openSubjects = (await db.AlertEvents
@@ -740,15 +773,19 @@ public sealed class AlertingService : IAlertingService
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false)).ToHashSet();
         var keys = await db.ApiKeys.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var keyRules = rules.For(AlertTypes.ApiKeyExpiring, facts: null);
         foreach (var apiKey in keys)
         {
             var subject = ApiKeyAlertSubject(apiKey);
             var expiresSoon = apiKey.IsActive(nowUtc) && apiKey.ExpiresUtc - nowUtc <= ApiKeyExpiryWarning;
             if (expiresSoon)
             {
-                await EnsureAlertAsync(db, settings, subject, AlertTypes.ApiKeyExpiring, "Warning", "API key expiring soon",
-                    $"The API key '{apiKey.Name}' ({apiKey.Prefix}...) expires on {apiKey.ExpiresUtc:yyyy-MM-dd}. Create a replacement on the Access page, switch whatever uses this key over to it, then revoke this one.",
-                    cancellationToken, cooldown: ApiKeyExpiryWarning).ConfigureAwait(false);
+                foreach (var rule in keyRules)
+                {
+                    await EnsureAlertAsync(db, settings, rule, subject, "API key expiring soon",
+                        $"The API key '{apiKey.Name}' ({apiKey.Prefix}...) expires on {apiKey.ExpiresUtc:yyyy-MM-dd}. Create a replacement on the Access page, switch whatever uses this key over to it, then revoke this one.",
+                        cancellationToken, defaultCooldown: ApiKeyExpiryWarning).ConfigureAwait(false);
+                }
             }
             else if (openSubjects.Contains(subject))
             {
