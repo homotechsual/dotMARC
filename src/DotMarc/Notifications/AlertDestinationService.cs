@@ -6,6 +6,10 @@ namespace DotMarc.Notifications;
 
 public sealed record AlertDestinationInput(string Name, AlertChannel Kind, string Url, bool Enabled);
 
+/// <summary>What the rules page and dialog show about a destination. It has no URL on purpose: the URL is a secret, and the only
+/// screen that handles it is the destination dialog on Alert settings.</summary>
+public sealed record AlertDestinationSummary(int Id, string Name, AlertChannel Kind, bool Enabled);
+
 /// <summary>A destination change was refused. The message is a sentence a person can act on and never contains the URL.</summary>
 public sealed class AlertDestinationException(string message) : Exception(message);
 
@@ -51,6 +55,12 @@ public static class AlertDestinationService
         AuditLog.Record(context, actor, AuditActions.AlertDestinationChanged, AuditTarget.For(destination), $"Changed the alert destination '{destination.Name}'", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Every destination by name, without its URL.</summary>
+    public static async Task<IReadOnlyList<AlertDestinationSummary>> ListSummariesAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) =>
+        await context.AlertDestinations.AsNoTracking().OrderBy(destination => destination.Name)
+            .Select(destination => new AlertDestinationSummary(destination.Id, destination.Name, destination.Kind, destination.Enabled))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
     /// <summary>How many rules choose this destination. Only rules in Selected mode count: a rule in All mode sends to it without
     /// choosing it. Deleting a destination leaves those rules choosing nothing, which sends their alerts nowhere.</summary>

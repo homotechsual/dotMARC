@@ -139,6 +139,50 @@
                     </MudItem>
                 }
             </MudGrid>
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Where it goes</MudText>
+            <MudRadioGroup T="AlertDestinationMode" @bind-Value="_destinationMode">
+                <MudRadio T="AlertDestinationMode" Value="AlertDestinationMode.All" Color="Color.Primary">All destinations</MudRadio>
+                <MudRadio T="AlertDestinationMode" Value="AlertDestinationMode.Selected" Color="Color.Primary">Only the destinations I choose</MudRadio>
+            </MudRadioGroup>
+            @if (_destinationMode == AlertDestinationMode.Selected)
+            {
+                @if (_destinations.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        There are no destinations yet, so this rule's alerts would not be sent anywhere. Add one on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+                    </MudAlert>
+                }
+                else
+                {
+                    <div class="d-flex flex-column mt-1">
+                        @foreach (var destination in _destinations)
+                        {
+                            <MudCheckBox T="bool" Value="_selectedDestinations.Contains(destination.Id)" ValueChanged="@(chosen => ToggleDestination(destination.Id, chosen))"
+                                         Color="Color.Primary" Label="@(destination.Enabled ? destination.Name : $"{destination.Name} (off)")" />
+                        }
+                    </div>
+                }
+
+                @if (_selectedDestinations.Count == 0 && _destinations.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        No destinations chosen: the alerts this rule raises are still recorded, but not sent anywhere.
+                    </MudAlert>
+                }
+            }
+
+            @if (_kind.HasDomainScope)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-4">Tickets</MudText>
+                <FieldWithHelp Topic="Ticket mode" Help="Follow the ticket rules is what happens today: the group's rule, then the global rule, then the alert type's default. Never opens no ticket for this rule's alerts. Always opens one whatever the ticket rules say, provided a PSA is connected and the domain has a company there.">
+                    <MudSelect T="AlertTicketMode" Label="Ticket mode" @bind-Value="_ticketMode" Variant="Variant.Outlined">
+                        <MudSelectItem T="AlertTicketMode" Value="AlertTicketMode.FollowRules">Follow the ticket rules</MudSelectItem>
+                        <MudSelectItem T="AlertTicketMode" Value="AlertTicketMode.Never">Never open a ticket</MudSelectItem>
+                        <MudSelectItem T="AlertTicketMode" Value="AlertTicketMode.Always">Always open a ticket</MudSelectItem>
+                    </MudSelect>
+                </FieldWithHelp>
+            }
         }
     </DialogContent>
     <DialogActions>
@@ -176,6 +220,10 @@
     private bool _stop = true;
     private int? _cooldown;
     private int? _autoCloseDays;
+    private AlertDestinationMode _destinationMode = AlertDestinationMode.All;
+    private readonly HashSet<int> _selectedDestinations = [];
+    private AlertTicketMode _ticketMode = AlertTicketMode.FollowRules;
+    private IReadOnlyList<AlertDestinationSummary> _destinations = [];
     private Dictionary<string, string> _parameters = [];
     private int _position;
     private bool _isDefault;
@@ -206,7 +254,8 @@
 
         _kindDescription = AlertTypes.Find(Kind)?.Description ?? "";
         await using var db = await DbFactory.CreateDbContextAsync();
-        _rulesOfKind = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Where(rule => rule.Kind == Kind).ToListAsync();
+        _rulesOfKind = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).AsSplitQuery().Where(rule => rule.Kind == Kind).ToListAsync();
+        _destinations = await AlertDestinationService.ListSummariesAsync(db);
         _groups = await db.Groups.AsNoTracking().ToDictionaryAsync(group => group.Id, group => group.Name);
         _tags = await db.Tags.AsNoTracking().ToDictionaryAsync(tag => tag.Id, tag => tag.Name);
         _domains = await db.Domains.AsNoTracking().ToDictionaryAsync(domain => domain.Id, domain => domain.Name);
@@ -227,6 +276,8 @@
             var input = AlertRulePresentation.ToInput(rule);
             (_name, _enabled, _severity, _stop, _cooldown, _autoCloseDays) = (input.Name, input.Enabled, input.Severity, input.StopProcessing, input.CooldownMinutes, input.AutoCloseDays);
             _parameters = input.Parameters.ToDictionary(pair => pair.Key, pair => pair.Value);
+            (_destinationMode, _ticketMode) = (input.DestinationMode, input.TicketMode);
+            _selectedDestinations.UnionWith(input.DestinationIds ?? []);
             _position = rule.Position;
             _isDefault = rule.DefaultKey is not null;
             foreach (var entry in input.Scope)
@@ -295,6 +346,18 @@
 
     private void SetParameter(string key, string value) => _parameters[key] = value;
 
+    private void ToggleDestination(int id, bool chosen)
+    {
+        if (chosen)
+        {
+            _selectedDestinations.Add(id);
+        }
+        else
+        {
+            _selectedDestinations.Remove(id);
+        }
+    }
+
     private async Task<bool> MayManageAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -321,7 +384,8 @@
             }
 
             var input = new AlertRuleInput(
-                _name, _enabled, _severity, _stop, _cooldown, _kind.HasAutoClose ? _autoCloseDays : null, _parameters, _kind.HasDomainScope ? ScopeInputs() : []);
+                _name, _enabled, _severity, _stop, _cooldown, _kind.HasAutoClose ? _autoCloseDays : null, _parameters, _kind.HasDomainScope ? ScopeInputs() : [],
+                _destinationMode, [.. _selectedDestinations], _kind.HasDomainScope ? _ticketMode : AlertTicketMode.FollowRules);
             await using var db = await DbFactory.CreateDbContextAsync();
             var actor = await AuditActorAccessor.GetAsync();
             if (RuleId is { } ruleId)

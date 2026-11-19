@@ -1,5 +1,6 @@
 @page "/alerts/settings"
 @attribute [Authorize(Policy = "AlertsManage")]
+@using DotMarc.Components.Dialogs
 @using DotMarc.Data
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
@@ -9,7 +10,7 @@
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject ILogger<AlertsSettings> Logger
-@inject IAlertWebhookClient AlertWebhookClient
+@inject IDialogService DialogService
 
 <PageTitle>dotMARC - Alert Settings</PageTitle>
 <div class="d-flex align-center mb-4">
@@ -30,31 +31,6 @@ else
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
 </FieldWithHelp>
             </MudItem>
-
-            <MudItem xs="12">
-                <MudText Typo="Typo.subtitle1">Where alerts go</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
-                    Switch on each channel alerts should reach. PSA tickets are set up under PSA settings.
-                </MudText>
-            </MudItem>
-
-            @foreach (var channelSetting in AlertChannelSettings)
-            {
-                <MudItem xs="12" sm="4" md="3" Class="d-flex align-center">
-                    <MudSwitch T="bool" Value="channelSetting.GetEnabled(_settings)" ValueChanged="@(enabled => channelSetting.SetEnabled(_settings!, enabled))"
-                               Color="Color.Primary" Label="@channelSetting.Name" />
-                </MudItem>
-                <MudItem xs="12" sm="8" md="7">
-                    <FieldWithHelp Topic="@($"{channelSetting.Name} webhook URL")" Help="@channelSetting.Help">
-                        <MudTextField T="string" Label="@($"{channelSetting.Name} webhook URL")" Value="channelSetting.GetUrl(_settings)"
-                                      ValueChanged="@(url => channelSetting.SetUrl(_settings!, url))" InputType="InputType.Url" Variant="Variant.Outlined" />
-                    </FieldWithHelp>
-                </MudItem>
-                <MudItem xs="12" md="2" Class="d-flex align-start">
-                    <MudButton Variant="Variant.Outlined" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Send" Disabled="@(_testingChannel is not null || string.IsNullOrWhiteSpace(channelSetting.GetUrl(_settings)))"
-                               OnClick="@(() => SendTestAlertAsync(channelSetting))">@(_testingChannel == channelSetting.Channel ? "Sending..." : "Send test")</MudButton>
-                </MudItem>
-            }
 
             <MudItem xs="12" md="6">
                 <FieldWithHelp Topic="Cooldown" Help="While an alert is open, dotMARC won't raise it again for this long. After that, if the problem is still there, it's raised again, with a new notification and ticket.">
@@ -81,13 +57,57 @@ else
 }
 
 <MudPaper Class="pa-4 mt-4">
+    <div class="d-flex align-center flex-wrap mb-1" style="gap: 0.5rem;">
+        <MudText Typo="Typo.h5">Where alerts go</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditDestinationAsync(null))">Add a destination</MudButton>
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        A destination is a Teams channel, a Slack channel or a webhook. Each alert rule sends to all of them, or only to the ones it chooses
+        under <MudLink Href="/alerts/rules">Alert rules</MudLink>. PSA tickets are set up under PSA settings.
+    </MudText>
+    @if (_destinations is null)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (_destinations.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">
+            No destinations yet. Alerts are still recorded and tickets still open, but nothing is posted anywhere. Add a destination to send alerts to Teams, Slack or a webhook.
+        </MudAlert>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
+            <thead>
+                <tr><th>Name</th><th>Kind</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var destination in _destinations)
+                {
+                    <tr @key="destination.Id">
+                        <td>@destination.Name</td>
+                        <td>@KindName(destination.Kind)</td>
+                        <td><MudChip T="string" Size="Size.Small" Color="@(destination.Enabled ? Color.Success : Color.Default)">@(destination.Enabled ? "On" : "Off")</MudChip></td>
+                        <td style="white-space:nowrap;">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditDestinationAsync(destination.Id))">Edit</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Class="ml-1" OnClick="@(() => DeleteDestinationAsync(destination))">Delete</MudButton>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4">
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
         PSA connections have moved to <MudLink Href="/psa/settings">PSA settings</MudLink>.
     </MudAlert>
     <MudText Typo="Typo.h5" Class="mb-1">Which alerts create tickets</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         These apply to every PSA. Turn off an alert type to stop it opening tickets. The alert is still recorded and any
-        Teams, Slack or webhook notification still goes out. A group can override this for its own domains from Manage
+        notification to its destinations still goes out. A group can override this for its own domains from Manage
         groups. A domain with its own company set on Manage domains uses these settings.
     </MudText>
     @foreach (var alertType in AlertTypes.All)
@@ -106,46 +126,68 @@ else
 
 @code {
     private NotificationSettings? _settings;
-    private AlertChannel? _testingChannel;
+    private IReadOnlyList<AlertDestinationSummary>? _destinations;
 
-    private sealed record AlertChannelSetting(AlertChannel Channel, string Name, string Help,
-        Func<NotificationSettings, bool> GetEnabled, Action<NotificationSettings, bool> SetEnabled,
-        Func<NotificationSettings, string?> GetUrl, Action<NotificationSettings, string?> SetUrl);
-
-    private static readonly AlertChannelSetting[] AlertChannelSettings =
-    [
-        new(AlertChannel.Teams, "Teams", "The webhook URL of the Teams channel alerts should post to.",
-            settings => settings.TeamsEnabled, (settings, enabled) => settings.TeamsEnabled = enabled,
-            settings => settings.TeamsWebhookUrl, (settings, url) => settings.TeamsWebhookUrl = url),
-        new(AlertChannel.Slack, "Slack", "The incoming webhook URL from your Slack app (Incoming Webhooks), starting https://hooks.slack.com/services/. Alerts post to the channel you picked when you added the webhook.",
-            settings => settings.SlackEnabled, (settings, enabled) => settings.SlackEnabled = enabled,
-            settings => settings.SlackWebhookUrl, (settings, url) => settings.SlackWebhookUrl = url),
-        new(AlertChannel.GenericWebhook, "Generic", "dotMARC POSTs each alert here as JSON, with domainName, alertType, title, message, severity and createdUtc.",
-            settings => settings.GenericWebhookEnabled, (settings, enabled) => settings.GenericWebhookEnabled = enabled,
-            settings => settings.GenericWebhookUrl, (settings, url) => settings.GenericWebhookUrl = url),
-    ];
-
-    /// <summary>Sends a marked test alert to the URL as typed, saved or not, so a channel can be checked before saving.</summary>
-    private async Task SendTestAlertAsync(AlertChannelSetting channelSetting)
+    private static string KindName(AlertChannel kind) => kind switch
     {
-        _testingChannel = channelSetting.Channel;
-        try
+        AlertChannel.Teams => "Teams",
+        AlertChannel.Slack => "Slack",
+        _ => "Generic webhook"
+    };
+
+    private async Task LoadDestinationsAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _destinations = await AlertDestinationService.ListSummariesAsync(db);
+    }
+
+    private async Task EditDestinationAsync(int? destinationId)
+    {
+        var parameters = new DialogParameters<AlertDestinationDialog> { { dialog => dialog.DestinationId, destinationId } };
+        var dialog = await DialogService.ShowAsync<AlertDestinationDialog>(destinationId is null ? "Add a destination" : "Edit destination", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
         {
-            var problem = await AlertWebhookClient.SendTestAsync(channelSetting.Channel, channelSetting.GetUrl(_settings!));
-            if (problem is null)
-            {
-                Snackbar.Add($"Test alert sent to {channelSetting.Name}. Check that it arrived.", Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add($"The {channelSetting.Name} test didn't go through: {problem}", Severity.Error);
-            }
-        }
-        finally
-        {
-            _testingChannel = null;
+            await LoadDestinationsAsync();
         }
     }
+
+    private async Task DeleteDestinationAsync(AlertDestinationSummary destination)
+    {
+        int ruleCount;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            ruleCount = await AlertDestinationService.CountRulesAsync(db, destination.Id);
+        }
+
+        var consequence = ruleCount == 0
+            ? "No rule chooses it specifically."
+            : $"{ruleCount} rule{(ruleCount == 1 ? " chooses" : "s choose")} it specifically, and will stop sending there. A rule that chose only this destination will send nowhere.";
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete destination", $"Delete '{destination.Name}'? {consequence} This can't be undone.", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await AlertDestinationService.DeleteAsync(db, await AuditActorAccessor.GetAsync(), destination.Id);
+            Snackbar.Add("Destination deleted.", Severity.Success);
+        }
+        catch (AlertDestinationException exception)
+        {
+            Snackbar.Add(exception.Message, Severity.Warning);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Deleting alert destination {DestinationId} failed", destination.Id);
+            Snackbar.Add("Couldn't delete that destination. Try again.", Severity.Error);
+        }
+
+        await LoadDestinationsAsync();
+    }
+
     private Dictionary<string, bool> _globalTicketRules = [];
 
     // MudSwitch keeps its own toggled state. Bumping this after a failed save changes the switch @key, so a fresh
@@ -178,6 +220,7 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await NotificationSettingsService.GetAsync(db);
         _globalTicketRules = await AlertTicketRuleService.GetGlobalAsync(db);
+        _destinations = await AlertDestinationService.ListSummariesAsync(db);
     }
 
     private async Task SaveAsync()

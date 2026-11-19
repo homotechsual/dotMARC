@@ -24,9 +24,9 @@
     <DocsLink Href="https://dotmarc.app/docs/alerts#alert-rules" Text="How alert rules work" Class="ml-2" />
 </div>
 <MudText Typo="Typo.body1" Class="mb-4">
-    Each rule decides when one kind of alert is raised, for which domains, and how serious it is. For a domain, rules of a kind run in the order shown,
-    top to bottom, and stop at the first one that stops processing. Where the alerts go and the cooldown are on
-    <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+    Each rule decides when one kind of alert is raised, for which domains, how serious it is, where it is sent and whether it opens a ticket. For a domain,
+    rules of a kind run in the order shown, top to bottom, and stop at the first one that stops processing. The destinations themselves and the global
+    cooldown are on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
 </MudText>
 
 @if (!_loaded)
@@ -99,6 +99,10 @@ else
                                 {
                                     <MudChip T="string" Size="Size.Small" Class="ml-1">Default</MudChip>
                                 }
+                                @if (AlertRulePresentation.DescribeDelivery(rule, _destinationNames) is { } delivery)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@delivery</MudText>
+                                }
                             </td>
                             <td>@AlertRulePresentation.DescribeScope(rule, _names, kind.HasDomainScope)</td>
                             <td><MudChip T="string" Size="Size.Small" Color="@SeverityColor(rule.Severity)">@rule.Severity</MudChip></td>
@@ -161,6 +165,9 @@ else
     private AlertScopeNames _names = new(new Dictionary<int, string>(), new Dictionary<int, string>(), new Dictionary<int, string>());
     private int _deadCount;
 
+    /// <summary>Destination names by id, for the "Sends to" line. Only names: the URLs are never loaded on this page.</summary>
+    private Dictionary<int, string> _destinationNames = [];
+
     protected override async Task OnInitializedAsync()
     {
         // Domain alerts first, in the order the Alerts page lists them, then the ones about the system itself.
@@ -185,7 +192,8 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         // Seeds the default pack the first time, so the page is never empty on an install that has not raised an alert yet.
         await AlertRuleSeeder.EnsureDefaultPackAsync(db, CancellationToken.None);
-        _rules = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).ToListAsync();
+        _rules = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).AsSplitQuery().ToListAsync();
+        _destinationNames = (await AlertDestinationService.ListSummariesAsync(db)).ToDictionary(destination => destination.Id, destination => destination.Name);
         var groups = await db.Groups.AsNoTracking().ToDictionaryAsync(group => group.Id, group => group.Name);
         var tags = await db.Tags.AsNoTracking().ToDictionaryAsync(tag => tag.Id, tag => tag.Name);
         var domains = await db.Domains.AsNoTracking().ToDictionaryAsync(domain => domain.Id, domain => domain.Name);

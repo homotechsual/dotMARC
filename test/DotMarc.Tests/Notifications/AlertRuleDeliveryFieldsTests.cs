@@ -3,6 +3,7 @@ using DotMarc.Data;
 using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace DotMarc.Tests.Notifications;
@@ -38,8 +39,11 @@ public sealed class AlertRuleDeliveryFieldsTests : IAsyncLifetime
         }
     }
 
+    // Configured like the app (Program.cs): loading two collections at once without a split query throws, so a service that does
+    // it fails here as it would in production.
     private DotMarcDbContext CreateContext() =>
-        new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
+        new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString)
+            .ConfigureWarnings(warnings => warnings.Throw(RelationalEventId.MultipleCollectionIncludeWarning)).Options);
 
     private static AlertRuleInput Input(
         string name = "Aurora weekly", AlertDestinationMode mode = AlertDestinationMode.All, int[]? destinationIds = null, AlertTicketMode ticketMode = AlertTicketMode.FollowRules) =>

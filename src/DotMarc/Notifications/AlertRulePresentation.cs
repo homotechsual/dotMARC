@@ -66,6 +66,28 @@ public static class AlertRulePresentation
         return ordered.Select(rule => new AlertRuleReach(rule.Id, appliesTo[rule.Id], hidden[rule.Id], hiddenBy[rule.Id])).ToList();
     }
 
+    /// <summary>Where a rule's alerts go and whether it opens tickets, in words, or null when it does what every rule does by default
+    /// (sends to all destinations and follows the ticket rules). A destination that has since been deleted is left out.</summary>
+    public static string? DescribeDelivery(AlertRule rule, IReadOnlyDictionary<int, string> destinationNames)
+    {
+        var sentences = new List<string>();
+        if (rule.DestinationMode == AlertDestinationMode.Selected)
+        {
+            var names = rule.Destinations.Select(link => destinationNames.GetValueOrDefault(link.AlertDestinationId)).OfType<string>().ToList();
+            sentences.Add(names.Count == 0 ? "Sends nowhere." : $"Sends to {Join(names)}.");
+        }
+
+        if (rule.TicketMode != AlertTicketMode.FollowRules)
+        {
+            sentences.Add(rule.TicketMode == AlertTicketMode.Always ? "Always opens a ticket." : "Never opens a ticket.");
+        }
+
+        return sentences.Count == 0 ? null : string.Join(" ", sentences);
+    }
+
+    private static string Join(IReadOnlyList<string> names) =>
+        names.Count == 1 ? names[0] : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
+
     /// <summary>A stored rule as an editable input: the same values, with every parameter the kind defines present (the kind's default
     /// for one the rule leaves out), so the editor and a toggle both start from a complete, valid input.</summary>
     public static AlertRuleInput ToInput(AlertRule rule)

@@ -247,7 +247,7 @@ public static class AlertRuleService
     }
 
     private static async Task<AlertRule> LoadAsync(DotMarcDbContext context, int ruleId, CancellationToken cancellationToken) =>
-        await context.AlertRules.Include(rule => rule.Scope).Include(rule => rule.Destinations).SingleOrDefaultAsync(rule => rule.Id == ruleId, cancellationToken).ConfigureAwait(false)
+        await context.AlertRules.Include(rule => rule.Scope).Include(rule => rule.Destinations).AsSplitQuery().SingleOrDefaultAsync(rule => rule.Id == ruleId, cancellationToken).ConfigureAwait(false)
         ?? throw new AlertRuleValidationException(["That alert rule no longer exists."]);
 
     private static async Task AddDuplicateNameProblemAsync(DotMarcDbContext context, string kind, string name, int? exceptRuleId, List<string> problems, CancellationToken cancellationToken)
