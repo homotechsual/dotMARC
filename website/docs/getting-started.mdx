@@ -135,9 +135,16 @@ The **Decision** column is where your team records what it has decided about a s
 * **Under review**: you are still finding out, for example waiting for the client to answer.
 * **Unreviewed**: nobody has decided yet. This is the default.
 
-Select **Decide** (or **Change**, once there is a decision) beside the status, pick a new one, add an optional note, and save. Hover over a status to see where it came from: this domain, its group, or the baseline. A decision is a label for your team. It
-never changes DNS and never blocks mail, because your DMARC policy decides what receivers do. The row
-shows who decided and when, and every change is recorded in the [audit log](./audit-log.mdx).
+Select **Decide** (or **Change**, once there is a decision) beside the status, pick a new one, add an optional note, and save. Hover over a status to see where it came from: this domain, its group, or the baseline. A decision never changes DNS and
+never blocks mail, because your DMARC policy decides what receivers do. It does change what dotMARC tells you:
+
+* A sender with no decision raises a **new sender** alert when it first appears, and counts towards "senders need a
+  decision" on the Overview. Authorised and Under review both stop the alert and the count.
+* An **Unauthorised** sender whose mail is still being delivered raises an alert (see [Alerts](./alerts.mdx)).
+* The **Fix** column changes, as described below.
+* Client reports summarise the decisions, and the [API](./api.mdx) returns each sender's decision.
+
+The row shows who decided and when, and every change is recorded in the [audit log](./audit-log.mdx).
 
 The **Fix** column changes with the decision:
 
