@@ -101,7 +101,11 @@ A rule editor shows "Applies to N domains" live as the scope changes. It also wa
 
 ## Migration
 
-One migration adds the rule tables, then seeds the default pack from the current settings row (for example a custom missing-report threshold of five days becomes the default rule's five). The old settings columns stop being read and stay in place for one release, marked obsolete, then are dropped. This keeps a downgrade possible for a release. Seeding is keyed by a stable key per default rule, so running it again never duplicates, and a future kind or parameter added to the pack is added to existing installs without touching rules the admin changed.
+One migration adds the rule tables, then the default pack is seeded from the current settings row (for example a custom missing-report threshold of five days becomes the default rule's five). The old settings columns stop being read and stay in place for one release, marked obsolete, then are dropped. This keeps a downgrade possible for a release. Seeding is keyed by a stable key per default rule, so running it again never duplicates, and a future kind or parameter added to the pack is added to existing installs without touching rules the admin changed.
+
+**How Phase 1 does this.** Phase 1 has no editor, so the Alert settings page is still the only place the values are changed. To keep it working, the default pack carries no parameter values of its own: a parameter a rule does not set falls back to the global setting, and a rule is also off while its global switch is off. Phase 2 copies the values into the rules and retires those fields. The pack is seeded the first time rules are loaded (by the alerting cycle or an event), not in the migration, which also hands every existing alert to its type's default rule so cooldown, resolve and acknowledge keep finding it. The demo seeds the pack and one scoped rule on every reset.
+
+**Known gap for Phase 2.** A rule's scope refers to groups, tags and domains by id with no foreign key, so deleting a group, tag or domain leaves its scope entries behind. An include entry for something that no longer exists matches nothing, which fails safe (the rule stops applying), and an exclude entry does nothing. The editor must show and clean these up.
 
 ## Permissions and audit
 

@@ -50,7 +50,7 @@ public static class DemoDataSeeder
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
                 "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates", "DomainDkimRecords",
-                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions"
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions", "AlertRules", "AlertRuleScopeEntries"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);
@@ -349,6 +349,21 @@ public static class DemoDataSeeder
             Recipients = ["reports@aurora-retail.example"], StartedUtc = DateTimeOffset.UtcNow,
         });
 
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The default pack of alert rules (which also hands the alerts above to their default rules), and one rule beside it for the
+        // demo to show: Aurora Retail reports weekly, so it is told about a missing report after 5 days, not the default 2.
+        await AlertRuleSeeder.EnsureDefaultPackAsync(context, cancellationToken).ConfigureAwait(false);
+        context.AlertRules.Add(new AlertRule
+        {
+            Kind = AlertTypes.MissedReport,
+            Name = "Missing report: Aurora Retail reports weekly",
+            Severity = "Warning",
+            Position = -10,
+            StopProcessing = true,
+            ParametersJson = "{\"days\":\"5\"}",
+            Scope = [new AlertRuleScopeEntry { Target = AlertRuleScopeTarget.Group, TargetId = groupsByName[ViewerScopedGroupName].Id }],
+        });
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }
