@@ -29,46 +29,6 @@ public sealed class AlertRuleKindsTests
     }
 
     [Theory]
-    [InlineData(AlertTypes.NewUnreviewedSender, true)]
-    [InlineData(AlertTypes.NewUnreviewedSender, false)]
-    [InlineData(AlertTypes.UnauthorisedSenderDelivered, true)]
-    [InlineData(AlertTypes.UnauthorisedSenderDelivered, false)]
-    [InlineData(AlertTypes.DmarcPolicyWeakened, true)]
-    [InlineData(AlertTypes.DmarcPolicyWeakened, false)]
-    [InlineData(AlertTypes.NameserversChanged, true)]
-    [InlineData(AlertTypes.NameserversChanged, false)]
-    public void IsEnabledBySettings_FollowsEachLegacySwitch(string kind, bool switchedOn)
-    {
-        var settings = new NotificationSettings
-        {
-            NewSenderAlertEnabled = switchedOn,
-            UnauthorisedDeliveredAlertEnabled = switchedOn,
-            DmarcPolicyWeakenedEnabled = switchedOn,
-            NameserversChangedEnabled = switchedOn
-        };
-
-        Assert.Equal(switchedOn, AlertRuleKinds.IsEnabledBySettings(kind, settings));
-    }
-
-    [Fact]
-    public void ADnsRecordKind_IsOffWhenItsSettingModeIsOff()
-    {
-        var settings = new NotificationSettings { SpfAlertMode = DnsHealthAlertMode.Off };
-
-        Assert.False(AlertRuleKinds.IsEnabledBySettings(AlertTypes.SpfRecordBroken, settings));
-        Assert.True(AlertRuleKinds.IsEnabledBySettings(AlertTypes.DmarcRecordBroken, settings));
-    }
-
-    [Fact]
-    public void OtherKinds_AreEnabledBySettings()
-    {
-        var settings = new NotificationSettings();
-
-        Assert.True(AlertRuleKinds.IsEnabledBySettings(AlertTypes.MissedReport, settings));
-        Assert.True(AlertRuleKinds.IsEnabledBySettings(AlertTypes.ApiKeyExpiring, settings));
-    }
-
-    [Theory]
     [InlineData(null, 2)]
     [InlineData("", 2)]
     [InlineData("{\"days\":\"5\"}", 5)]

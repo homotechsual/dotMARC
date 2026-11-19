@@ -262,22 +262,17 @@ public sealed class AlertRuleAlertingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheLegacySwitchStillSilencesAStackedRule()
+    public async Task ADisabledDefaultRule_DoesNotSilenceAStackedRuleOfTheSameKind()
     {
-        await using (var context = CreateContext())
-        {
-            var settings = await NotificationSettingsService.GetAsync(context);
-            settings.NewSenderAlertEnabled = false;
-            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
-        }
-
         var (domainId, _) = await SeedDomainAsync("senders.test", lastReportDaysAgo: 0);
         await AddReportAsync(domainId, daysAgo: 1, Mail("senders.test", MailchimpIp, 30));
-        await AddRuleAsync(AlertTypes.NewUnreviewedSender, position: -10, stop: false);
+        await UpdateRuleAsync(await DefaultRuleIdAsync(AlertTypes.NewUnreviewedSender), rule => rule.Enabled = false);
+        var stackedRuleId = await AddRuleAsync(AlertTypes.NewUnreviewedSender, position: -10, stop: false);
 
         await RunCycleAsync();
 
-        Assert.Empty(await AlertsAsync(AlertTypes.NewUnreviewedSender));
+        var alert = Assert.Single(await AlertsAsync(AlertTypes.NewUnreviewedSender));
+        Assert.Equal(stackedRuleId, alert.AlertRuleId);
     }
 
     [Fact]

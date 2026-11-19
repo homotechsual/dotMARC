@@ -50,8 +50,7 @@ public sealed class AlertingService : IAlertingService
             return;
         }
 
-        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
-        var defaultCutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.MissingReportThresholdDays);
+        var rules = await AlertRuleSet.LoadAsync(db, cancellationToken).ConfigureAwait(false);
         var reasonWindowCutoffUtc = DomainStatistics.GetWindowCutoffUtc();
         var domains = await db.Domains
             .AsNoTracking()
@@ -95,7 +94,10 @@ public sealed class AlertingService : IAlertingService
                 // see. Same threshold semantics as MissedReport, just inverted: fires when a
                 // report unexpectedly arrives, stays open while reports keep arriving within the
                 // threshold window, auto-resolves once activity stops for the threshold period.
-                if (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < defaultCutoffUtc)
+                var quietCutoffUtc = DateTimeOffset.UtcNow.AddDays(-(missedRules.Count > 0
+                    ? missedRules[0].Int(AlertRuleParameterKeys.MissingDays)
+                    : AlertRuleKinds.DefaultInt(AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays)));
+                if (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < quietCutoffUtc)
                 {
                     await ResolveAlertAsync(domain.Name, AlertTypes.UnexpectedActivityOnNullRoutedDomain, cancellationToken).ConfigureAwait(false);
                 }
@@ -112,7 +114,7 @@ public sealed class AlertingService : IAlertingService
             {
                 foreach (var rule in missedRules)
                 {
-                    var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-rule.Parameters.Int(AlertRuleParameterKeys.MissingDays, settings.MissingReportThresholdDays));
+                    var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-rule.Int(AlertRuleParameterKeys.MissingDays));
                     if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
                     {
                         if (openAlerts.Has(domain.Name, AlertTypes.MissedReport, rule.RuleId))
@@ -306,7 +308,11 @@ public sealed class AlertingService : IAlertingService
             return result;
         }
 
-        var defaultNewDays = Math.Clamp(settings.NewSenderDays, 1, 30);
+        // What the other kind's side of a shared evaluation uses: the kinds' own defaults, so a new sender rule and a delivered rule
+        // with default values share one evaluation.
+        var defaultNewDays = AlertRuleKinds.DefaultInt(AlertTypes.NewUnreviewedSender, AlertRuleParameterKeys.NewDays);
+        var defaultNewMinimum = AlertRuleKinds.DefaultInt(AlertTypes.NewUnreviewedSender, AlertRuleParameterKeys.MinimumMessages);
+        var defaultDeliveredMinimum = AlertRuleKinds.DefaultInt(AlertTypes.UnauthorisedSenderDelivered, AlertRuleParameterKeys.MinimumMessages);
 
         if (newRules.Count == 0 && openAlerts.HasAny(domain.Name, AlertTypes.NewUnreviewedSender))
         {
@@ -315,9 +321,9 @@ public sealed class AlertingService : IAlertingService
 
         foreach (var rule in newRules)
         {
-            var newDays = Math.Clamp(rule.Parameters.Int(AlertRuleParameterKeys.NewDays, settings.NewSenderDays), 1, 30);
-            var minimum = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.NewSenderMinVolume);
-            var result = await ResultAsync(newDays, minimum, settings.UnauthorisedDeliveredMinVolume, rule.Parameters.UnderReview(), needsNewIps: true).ConfigureAwait(false);
+            var newDays = Math.Clamp(rule.Int(AlertRuleParameterKeys.NewDays), 1, 30);
+            var minimum = rule.Int(AlertRuleParameterKeys.MinimumMessages);
+            var result = await ResultAsync(newDays, minimum, defaultDeliveredMinimum, rule.UnderReview(), needsNewIps: true).ConfigureAwait(false);
             if (result.NewUnreviewed.Count > 0)
             {
                 await EnsureAlertAsync(db, settings, rule, domain.Name, SenderAlertMessages.NewSendersTitle,
@@ -336,8 +342,8 @@ public sealed class AlertingService : IAlertingService
 
         foreach (var rule in deliveredRules)
         {
-            var minimum = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.UnauthorisedDeliveredMinVolume);
-            var result = await ResultAsync(defaultNewDays, settings.NewSenderMinVolume, minimum, UnderReviewHandling.Default, needsNewIps: false).ConfigureAwait(false);
+            var minimum = rule.Int(AlertRuleParameterKeys.MinimumMessages);
+            var result = await ResultAsync(defaultNewDays, defaultNewMinimum, minimum, UnderReviewHandling.Default, needsNewIps: false).ConfigureAwait(false);
             if (result.UnauthorisedDelivered.Count > 0)
             {
                 await EnsureAlertAsync(db, settings, rule, domain.Name, SenderAlertMessages.UnauthorisedDeliveredTitle,
@@ -355,7 +361,7 @@ public sealed class AlertingService : IAlertingService
     /// domain per check.</summary>
     private async Task CheckDnsHealthAsync(DotMarcDbContext db, NotificationSettings settings, AlertRuleSet rules, List<Domain> domains, CancellationToken cancellationToken)
     {
-        await AutoCloseAcknowledgeableAlertsAsync(settings, rules, cancellationToken).ConfigureAwait(false);
+        await AutoCloseAcknowledgeableAlertsAsync(rules, cancellationToken).ConfigureAwait(false);
 
         var nowUtc = DateTimeOffset.UtcNow;
         var domainIds = domains.Select(domain => domain.Id).ToList();
@@ -370,7 +376,7 @@ public sealed class AlertingService : IAlertingService
         foreach (var domain in domains)
         {
             var domainStates = states.Where(state => state.DomainId == domain.Id).ToList();
-            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, rules, settings, nowUtc)));
+            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, rules, nowUtc)));
             db.DomainAlertStates.AddRange(domainStates.Where(state => state.Id == 0));
 
             var facts = FactsFor(domain);
@@ -437,8 +443,8 @@ public sealed class AlertingService : IAlertingService
 
         foreach (var rule in suspiciousRules)
         {
-            var minimumVolume = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.SuspiciousRejectMinVolume);
-            var minimumPercent = rule.Parameters.Int(AlertRuleParameterKeys.NonBenignPercent, settings.SuspiciousRejectNonBenignPercent);
+            var minimumVolume = rule.Int(AlertRuleParameterKeys.MinimumMessages);
+            var minimumPercent = rule.Int(AlertRuleParameterKeys.NonBenignPercent);
             if (breakdown.Total >= minimumVolume && nonBenignPercent >= minimumPercent)
             {
                 var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding." +
@@ -494,7 +500,7 @@ public sealed class AlertingService : IAlertingService
 
         var failureSummary = failureTypes.Count == 0 ? "no failure category supplied" : string.Join(", ", failureTypes.Distinct(StringComparer.OrdinalIgnoreCase));
         var message = $"TLSRPT reported {failedSessionCount} failed TLS delivery session(s) for '{domainName}'. Failure types: {failureSummary}.";
-        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, cancellationToken).ConfigureAwait(false);
         var facts = await LoadDomainFactsAsync(db, domainName, cancellationToken).ConfigureAwait(false);
         foreach (var rule in rules.For(AlertTypes.TlsrptFailure, facts))
         {
@@ -534,7 +540,7 @@ public sealed class AlertingService : IAlertingService
                 : " No benign override reason was given - this looks like a genuine spoofing attempt.";
 
         var message = $"'{domainName}' is marked null-routed (SPF v=spf1 -all - no authorized senders) but a DMARC aggregate report just arrived showing mail activity. This may be legitimate traffic that needs accounting for, or a spoofing attempt.{reasonContext}";
-        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, cancellationToken).ConfigureAwait(false);
         var facts = await LoadDomainFactsAsync(db, domainName, cancellationToken).ConfigureAwait(false);
         foreach (var rule in rules.For(AlertTypes.UnexpectedActivityOnNullRoutedDomain, facts))
         {
@@ -705,7 +711,7 @@ public sealed class AlertingService : IAlertingService
             return;
         }
 
-        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, cancellationToken).ConfigureAwait(false);
         foreach (var rule in rules.For(AlertTypes.ClientReportFailed, facts: null))
         {
             await EnsureAlertAsync(db, settings, rule, ClientReportAlertSubject(groupId, groupName), "Client report failed",
@@ -741,7 +747,7 @@ public sealed class AlertingService : IAlertingService
         }
 
         var name = DotMarc.Psa.PsaKindNames.DisplayName(psa);
-        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var rules = await AlertRuleSet.LoadAsync(db, cancellationToken).ConfigureAwait(false);
         foreach (var rule in rules.For(AlertTypes.PsaConnectionLost, facts: null))
         {
             await EnsureAlertAsync(db, settings, rule, PsaConnectionAlertSubject(psa), "PSA connection lost",
@@ -806,9 +812,9 @@ public sealed class AlertingService : IAlertingService
 
     private static readonly AuditActor AutoCloseActor = AuditActor.ForSystem("Alert auto-close");
 
-    /// <summary>Closes policy and nameserver alerts left open past their rule's auto-close days (or, for a rule that sets none,
-    /// the global setting), as if acknowledged. Zero or less means never.</summary>
-    private async Task AutoCloseAcknowledgeableAlertsAsync(NotificationSettings settings, AlertRuleSet rules, CancellationToken cancellationToken)
+    /// <summary>Closes policy and nameserver alerts left open past their rule's auto-close days, as if acknowledged. A rule with none
+    /// (or zero) never closes them.</summary>
+    private async Task AutoCloseAcknowledgeableAlertsAsync(AlertRuleSet rules, CancellationToken cancellationToken)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var open = await db.AlertEvents.AsNoTracking()
@@ -821,8 +827,8 @@ public sealed class AlertingService : IAlertingService
         var staleAlertIds = open
             .Where(alert =>
             {
-                var days = (alert.AlertRuleId is { } ruleId ? rules.Find(ruleId)?.AutoCloseDays : null) ?? settings.AcknowledgeableAutoCloseDays;
-                return days > 0 && alert.CreatedUtc < nowUtc.AddDays(-days);
+                var days = alert.AlertRuleId is { } ruleId ? rules.Find(ruleId)?.AutoCloseDays : null;
+                return days > 0 && alert.CreatedUtc < nowUtc.AddDays(-days.Value);
             })
             .Select(alert => alert.Id)
             .ToList();

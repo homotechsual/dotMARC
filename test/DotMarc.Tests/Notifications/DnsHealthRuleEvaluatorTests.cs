@@ -31,13 +31,13 @@ public sealed class DnsHealthRuleEvaluatorTests
     /// <summary>The default pack with ids 101 and up, plus the given rules, which sit above it.</summary>
     private static AlertRuleSet Rules(NotificationSettings settings, params AlertRule[] extraRules)
     {
-        var pack = AlertRuleSeeder.DefaultPack();
+        var pack = AlertRuleSeeder.DefaultPack(settings);
         for (var index = 0; index < pack.Count; index++)
         {
             pack[index].Id = 101 + index;
         }
 
-        return new AlertRuleSet([.. pack, .. extraRules], settings);
+        return new AlertRuleSet([.. pack, .. extraRules]);
     }
 
     private static AlertRule Extra(int id, string kind, int position = -10, bool stop = true, string? json = null, string severity = "Warning", params AlertRuleScopeEntry[] scope) => new()
@@ -48,7 +48,7 @@ public sealed class DnsHealthRuleEvaluatorTests
     private static AlertRuleScopeEntry InAuroraGroup() => new() { Target = AlertRuleScopeTarget.Group, TargetId = AuroraGroupId };
 
     private static List<DnsHealthAlertAction> Run(Domain domain, List<DomainAlertState> states, AlertRuleSet rules, DateTimeOffset now) =>
-        DnsHealthAlertEvaluator.Evaluate(domain, states, rules, new NotificationSettings(), now).ToList();
+        DnsHealthAlertEvaluator.Evaluate(domain, states, rules, now).ToList();
 
     /// <summary>Two cycles 20 minutes apart with a recheck in between, which is when a pending failure is confirmed.</summary>
     private static List<DnsHealthAlertAction> RunToConfirmation(Domain domain, AlertRuleSet rules, List<DomainAlertState>? states = null)

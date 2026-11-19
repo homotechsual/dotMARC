@@ -30,15 +30,14 @@ public static class DnsHealthAlertEvaluator
     public static readonly TimeSpan ConfirmationDelay = TimeSpan.FromMinutes(15);
 
     /// <summary>The rules decide which alerts may be raised for the domain and how: a check is quiet when no rule applies to it,
-    /// and each applicable rule's mode decides whether it alerts. <paramref name="settings"/> supplies the mode a rule does not
-    /// set itself.</summary>
-    public static IReadOnlyList<DnsHealthAlertAction> Evaluate(Domain domain, List<DomainAlertState> states, AlertRuleSet rules, NotificationSettings settings, DateTimeOffset nowUtc)
+    /// and each applicable rule's mode decides whether it alerts.</summary>
+    public static IReadOnlyList<DnsHealthAlertAction> Evaluate(Domain domain, List<DomainAlertState> states, AlertRuleSet rules, DateTimeOffset nowUtc)
     {
         var facts = new DomainFacts(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet());
         var actions = new List<DnsHealthAlertAction>();
         foreach (var check in DnsHealthChecks.All)
         {
-            EvaluateCheck(check, domain, StateFor(states, domain, check.Item), rules.For(check.AlertType, facts), settings, nowUtc, actions);
+            EvaluateCheck(check, domain, StateFor(states, domain, check.Item), rules.For(check.AlertType, facts), nowUtc, actions);
         }
 
         EvaluatePolicy(domain, StateFor(states, domain, DnsHealthItems.DmarcPolicy), rules.For(AlertTypes.DmarcPolicyWeakened, facts), nowUtc, actions);
@@ -59,7 +58,7 @@ public static class DnsHealthAlertEvaluator
         return names.Count == 0 ? null : string.Join(';', names);
     }
 
-    private static void EvaluateCheck(DnsHealthCheck check, Domain domain, DomainAlertState state, IReadOnlyList<ResolvedAlertRule> applicable, NotificationSettings settings, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
+    private static void EvaluateCheck(DnsHealthCheck check, Domain domain, DomainAlertState state, IReadOnlyList<ResolvedAlertRule> applicable, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
     {
         switch (check.Health(domain))
         {
@@ -76,7 +75,7 @@ public static class DnsHealthAlertEvaluator
 
         // A rule wants an alert for a failing check by its mode: always, or only once the check has passed at least once so a
         // domain that was never set up stays quiet. A rule that does not set a mode uses the global setting for the check.
-        var wanting = applicable.Where(rule => WantsAlert(rule.Parameters.Mode(check.Mode(settings)), state)).ToList();
+        var wanting = applicable.Where(rule => WantsAlert(rule.Mode(), state)).ToList();
         if (wanting.Count == 0)
         {
             // No rule applies, or none wants this failure (never passed, or switched off): clear the pending failure and close

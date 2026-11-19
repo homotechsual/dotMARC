@@ -81,19 +81,6 @@ public static class AlertRuleKinds
     public static int DefaultInt(string kind, string parameterKey) =>
         int.Parse(DefaultOf(kind, parameterKey), System.Globalization.CultureInfo.InvariantCulture);
 
-    /// <summary>Whether the global settings leave this kind on. Until the settings fields are retired they still
-    /// switch a kind off for every rule of it.</summary>
-    public static bool IsEnabledBySettings(string kind, NotificationSettings settings) => kind switch
-    {
-        AlertTypes.NewUnreviewedSender => settings.NewSenderAlertEnabled,
-        AlertTypes.UnauthorisedSenderDelivered => settings.UnauthorisedDeliveredAlertEnabled,
-        AlertTypes.DmarcPolicyWeakened => settings.DmarcPolicyWeakenedEnabled,
-        AlertTypes.NameserversChanged => settings.NameserversChangedEnabled,
-        _ => DnsHealthChecks.All.FirstOrDefault(check => check.AlertType == kind) is { } check
-            ? check.Mode(settings) != DnsHealthAlertMode.Off
-            : true
-    };
-
     private static IReadOnlyList<AlertRuleParameterDefinition> ParametersFor(string kind)
     {
         if (DnsRecordKinds.Contains(kind))

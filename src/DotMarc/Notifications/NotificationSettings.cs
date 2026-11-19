@@ -17,6 +17,9 @@ public sealed class NotificationSettings
     public string? SlackWebhookUrl { get; set; }
     public bool GenericWebhookEnabled { get; set; }
     public string? GenericWebhookUrl { get; set; }
+    // Retired: the thresholds, modes and switches from here down to UnauthorisedDeliveredMinVolume are no longer read by alerting.
+    // They live on the alert rules now (see AlertRule). The columns stay for one release so a downgrade still finds the values; a
+    // new default rule is created from them once (AlertRuleSeeder), and nothing else uses them.
     public int MissingReportThresholdDays { get; set; } = 2;
     public int CooldownMinutes { get; set; } = 180;
     public int MonitorIntervalSeconds { get; set; } = 300;
