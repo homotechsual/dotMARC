@@ -8,6 +8,7 @@ public static class ApiTags
     public const string Imports = "Imports";
     public const string GroupsAndTags = "Groups and tags";
     public const string Alerts = "Alerts";
+    public const string AlertRules = "Alert rules";
     public const string AuditLog = "Audit log";
     public const string Reports = "Reports";
     public const string ClientReports = "Client reports";
@@ -19,6 +20,7 @@ public static class ApiTags
         (Imports, "Add and update many domains at once, as the Import domains page does."),
         (GroupsAndTags, "The groups and tags domains are organised by."),
         (Alerts, "List alerts and acknowledge DMARC policy and nameserver alerts."),
+        (AlertRules, "Read the alert rules that decide when each kind of alert is raised and where it goes, and the names of the destinations they send to."),
         (AuditLog, "Who did what in dotMARC: changes, sign-ins and, on request, pages opened."),
         (Reports, "Sending sources, DMARC and TLS reports with their original files, and the dashboard's headline figures."),
         (ClientReports, "Each group's report schedule and delivery history, report PDFs for any period, and sending a report now."),

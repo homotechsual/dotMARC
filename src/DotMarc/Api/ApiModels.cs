@@ -92,6 +92,25 @@ public sealed record ApiAlert(
     DateTimeOffset RaisedUtc, bool Resolved, DateTimeOffset? ResolvedUtc, bool Acknowledgeable, IReadOnlyList<ApiAlertTicket> Tickets,
     ApiNamedRef? Rule = null);
 
+/// <summary>An alert rule as the API shows it. Times of day are "HH:mm" in the time zone set on Alert settings. DestinationMode is All or
+/// Selected (Destinations is only meaningful for Selected). TicketMode is FollowRules, Never or Always. A destination's URL is never included.</summary>
+public sealed record ApiAlertRule(
+    int Id, string Kind, string Name, bool Enabled, string Severity, int Position, bool StopProcessing, int? CooldownMinutes, int? AutoCloseDays,
+    IReadOnlyDictionary<string, string> Parameters, string DestinationMode, IReadOnlyList<ApiNamedRef> Destinations, string TicketMode,
+    ApiQuietHours QuietHours, ApiEscalation Escalation, string AppliesTo, IReadOnlyList<ApiRuleScopeEntry> Scope);
+
+/// <summary>Mode is Off, Hold or Mute. Start and End are null when there is no window.</summary>
+public sealed record ApiQuietHours(string Mode, string? Start, string? End, bool IgnoredForCritical);
+
+/// <summary>AfterMinutes is null when the rule does not escalate.</summary>
+public sealed record ApiEscalation(int? AfterMinutes, IReadOnlyList<ApiNamedRef> Destinations);
+
+/// <summary>One group, tag or domain a rule applies to (or leaves out, when Exclude is true). Target is Group, Tag or Domain.</summary>
+public sealed record ApiRuleScopeEntry(string Target, int Id, bool Exclude);
+
+/// <summary>Kind is Teams, Slack or GenericWebhook. The webhook URL is a secret and is never returned.</summary>
+public sealed record ApiAlertDestination(int Id, string Name, string Kind, bool Enabled);
+
 /// <summary>The outcome of acknowledging an alert. TicketClosed is true when no PSA ticket failed to close (also when the
 /// alert had none); a ticket that failed stays open in dotMARC and is retried.</summary>
 public sealed record ApiAcknowledgement(bool TicketClosed, int TicketsClosed, int TicketsFailed);
