@@ -140,7 +140,7 @@ public sealed class AlertingService : IAlertingService
         var monitoredNames = domains.Select(domain => domain.Name).ToHashSet(StringComparer.Ordinal);
         await ResolveOrphanedAlertsAsync(openAlerts.All.Where(alert => monitoredNames.Contains(alert.Subject)), applicable, cancellationToken).ConfigureAwait(false);
 
-        await CheckDnsHealthAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
+        await CheckDnsHealthAsync(db, settings, rules, domains, cancellationToken).ConfigureAwait(false);
         await CheckApiKeyExpiryAsync(db, settings, cancellationToken).ConfigureAwait(false);
     }
 
@@ -330,9 +330,9 @@ public sealed class AlertingService : IAlertingService
     /// <summary>Runs DnsHealthAlertEvaluator for every monitored domain, saves what it remembers, then raises and
     /// resolves alerts. Resolves are only sent for alerts that are open, so a quiet cycle costs one query, not one per
     /// domain per check.</summary>
-    private async Task CheckDnsHealthAsync(DotMarcDbContext db, NotificationSettings settings, List<Domain> domains, CancellationToken cancellationToken)
+    private async Task CheckDnsHealthAsync(DotMarcDbContext db, NotificationSettings settings, AlertRuleSet rules, List<Domain> domains, CancellationToken cancellationToken)
     {
-        await AutoCloseAcknowledgeableAlertsAsync(settings, cancellationToken).ConfigureAwait(false);
+        await AutoCloseAcknowledgeableAlertsAsync(settings, rules, cancellationToken).ConfigureAwait(false);
 
         var nowUtc = DateTimeOffset.UtcNow;
         var domainIds = domains.Select(domain => domain.Id).ToList();
@@ -340,20 +340,21 @@ public sealed class AlertingService : IAlertingService
             .Where(state => domainIds.Contains(state.DomainId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        var openAlerts = (await db.AlertEvents
-                .Where(alert => !alert.IsResolved && AlertTypes.DnsHealth.Contains(alert.AlertType))
-                .Select(alert => new { alert.DomainName, alert.AlertType })
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false))
-            .Select(alert => (alert.DomainName, alert.AlertType))
-            .ToHashSet();
+        var openAlerts = await LoadOpenAlertsAsync(db, AlertTypes.DnsHealth, cancellationToken).ConfigureAwait(false);
+        var applicable = new ApplicableRules();
 
         var actionsByDomain = new List<(Domain Domain, IReadOnlyList<DnsHealthAlertAction> Actions)>();
         foreach (var domain in domains)
         {
             var domainStates = states.Where(state => state.DomainId == domain.Id).ToList();
-            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, settings, nowUtc)));
+            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, rules, settings, nowUtc)));
             db.DomainAlertStates.AddRange(domainStates.Where(state => state.Id == 0));
+
+            var facts = FactsFor(domain);
+            foreach (var kind in AlertTypes.DnsHealth)
+            {
+                applicable.Record(domain.Name, kind, rules.For(kind, facts));
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -370,21 +371,27 @@ public sealed class AlertingService : IAlertingService
                         continue;
                     }
 
-                    await EnsureAlertAsync(db, settings, domain.Name, action.AlertType, action.Severity, action.Title, action.Message, cancellationToken).ConfigureAwait(false);
+                    await EnsureAlertAsync(db, settings, action.Rule!, domain.Name, action.Title, action.Message, cancellationToken).ConfigureAwait(false);
                 }
-                else if (openAlerts.Contains((domain.Name, action.AlertType)))
+                else if (action.RuleId is { } ruleId
+                    ? openAlerts.Has(domain.Name, action.AlertType, ruleId)
+                    : openAlerts.HasAny(domain.Name, action.AlertType))
                 {
-                    await ResolveAllCopiesAsync(domain.Name, action.AlertType, cancellationToken).ConfigureAwait(false);
+                    await ResolveAllCopiesAsync(domain.Name, action.AlertType, action.RuleId, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
 
-        // A domain that stops being monitored isn't evaluated any more, so close what it left open.
+        // A domain that stops being monitored isn't evaluated any more, so close what it left open. For the ones still monitored,
+        // close what a rule left open once that rule no longer applies to the domain.
         var monitoredNames = domains.Select(domain => domain.Name).ToHashSet(StringComparer.Ordinal);
-        foreach (var (domainName, alertType) in openAlerts.Where(alert => !monitoredNames.Contains(alert.DomainName)))
+        var unmonitored = openAlerts.All.Where(alert => !monitoredNames.Contains(alert.Subject)).Select(alert => (alert.Subject, alert.Kind)).Distinct().ToList();
+        foreach (var (subject, kind) in unmonitored)
         {
-            await ResolveAllCopiesAsync(domainName, alertType, cancellationToken).ConfigureAwait(false);
+            await ResolveAllCopiesAsync(subject, kind, cancellationToken).ConfigureAwait(false);
         }
+
+        await ResolveOrphanedAlertsAsync(openAlerts.All.Where(alert => monitoredNames.Contains(alert.Subject)), applicable, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task CheckSuspiciousRejectActivityAsync(
@@ -752,23 +759,26 @@ public sealed class AlertingService : IAlertingService
 
     private static readonly AuditActor AutoCloseActor = AuditActor.ForSystem("Alert auto-close");
 
-    /// <summary>With AcknowledgeableAutoCloseDays above 0, closes policy and nameserver alerts left open that long, as
-    /// if acknowledged.</summary>
-    private async Task AutoCloseAcknowledgeableAlertsAsync(NotificationSettings settings, CancellationToken cancellationToken)
+    /// <summary>Closes policy and nameserver alerts left open past their rule's auto-close days (or, for a rule that sets none,
+    /// the global setting), as if acknowledged. Zero or less means never.</summary>
+    private async Task AutoCloseAcknowledgeableAlertsAsync(NotificationSettings settings, AlertRuleSet rules, CancellationToken cancellationToken)
     {
-        if (settings.AcknowledgeableAutoCloseDays <= 0)
-        {
-            return;
-        }
-
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.AcknowledgeableAutoCloseDays);
-        var staleAlertIds = await db.AlertEvents
-            .Where(alert => !alert.IsResolved && alert.CreatedUtc < cutoffUtc
-                && (alert.AlertType == AlertTypes.DmarcPolicyWeakened || alert.AlertType == AlertTypes.NameserversChanged))
-            .Select(alert => alert.Id)
+        var open = await db.AlertEvents.AsNoTracking()
+            .Where(alert => !alert.IsResolved && (alert.AlertType == AlertTypes.DmarcPolicyWeakened || alert.AlertType == AlertTypes.NameserversChanged))
+            .Select(alert => new { alert.Id, alert.CreatedUtc, alert.AlertRuleId })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var staleAlertIds = open
+            .Where(alert =>
+            {
+                var days = (alert.AlertRuleId is { } ruleId ? rules.Find(ruleId)?.AutoCloseDays : null) ?? settings.AcknowledgeableAutoCloseDays;
+                return days > 0 && alert.CreatedUtc < nowUtc.AddDays(-days);
+            })
+            .Select(alert => alert.Id)
+            .ToList();
 
         foreach (var alertId in staleAlertIds)
         {

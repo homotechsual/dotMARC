@@ -9,11 +9,15 @@ public enum DnsHealthActionKind
     Resolve
 }
 
-/// <summary>What the evaluator wants done: raise an alert (through AlertingService.EnsureAlertAsync, which
-/// de-duplicates and applies the cooldown) or resolve one.</summary>
-public sealed record DnsHealthAlertAction(DnsHealthActionKind Kind, string AlertType, string Severity = "", string Title = "", string Message = "")
+/// <summary>What the evaluator wants done: raise an alert for a rule (through AlertingService.EnsureAlertAsync, which
+/// de-duplicates and applies the cooldown) or resolve one. A resolve with no rule closes the alert type's alerts for every
+/// rule; with a rule, only that rule's.</summary>
+public sealed record DnsHealthAlertAction(DnsHealthActionKind Kind, string AlertType, ResolvedAlertRule? Rule = null, string Title = "", string Message = "")
 {
-    public static DnsHealthAlertAction Resolve(string alertType) => new(DnsHealthActionKind.Resolve, alertType);
+    public string Severity => Rule?.Severity ?? "";
+    public int? RuleId => Rule?.RuleId;
+
+    public static DnsHealthAlertAction Resolve(string alertType, ResolvedAlertRule? rule = null) => new(DnsHealthActionKind.Resolve, alertType, rule);
 }
 
 /// <summary>Decides, for one monitored domain, which DNS health alerts to raise or resolve, from its stored check
@@ -25,16 +29,20 @@ public static class DnsHealthAlertEvaluator
     /// <summary>How long after a first failure the confirmation recheck becomes due.</summary>
     public static readonly TimeSpan ConfirmationDelay = TimeSpan.FromMinutes(15);
 
-    public static IReadOnlyList<DnsHealthAlertAction> Evaluate(Domain domain, List<DomainAlertState> states, NotificationSettings settings, DateTimeOffset nowUtc)
+    /// <summary>The rules decide which alerts may be raised for the domain and how: a check is quiet when no rule applies to it,
+    /// and each applicable rule's mode decides whether it alerts. <paramref name="settings"/> supplies the mode a rule does not
+    /// set itself.</summary>
+    public static IReadOnlyList<DnsHealthAlertAction> Evaluate(Domain domain, List<DomainAlertState> states, AlertRuleSet rules, NotificationSettings settings, DateTimeOffset nowUtc)
     {
+        var facts = new DomainFacts(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet());
         var actions = new List<DnsHealthAlertAction>();
         foreach (var check in DnsHealthChecks.All)
         {
-            EvaluateCheck(check, domain, StateFor(states, domain, check.Item), settings, nowUtc, actions);
+            EvaluateCheck(check, domain, StateFor(states, domain, check.Item), rules.For(check.AlertType, facts), settings, nowUtc, actions);
         }
 
-        EvaluatePolicy(domain, StateFor(states, domain, DnsHealthItems.DmarcPolicy), settings, nowUtc, actions);
-        EvaluateNameservers(domain, StateFor(states, domain, DnsHealthItems.Nameservers), settings, nowUtc, actions);
+        EvaluatePolicy(domain, StateFor(states, domain, DnsHealthItems.DmarcPolicy), rules.For(AlertTypes.DmarcPolicyWeakened, facts), nowUtc, actions);
+        EvaluateNameservers(domain, StateFor(states, domain, DnsHealthItems.Nameservers), rules.For(AlertTypes.NameserversChanged, facts), nowUtc, actions);
         return actions;
     }
 
@@ -51,9 +59,8 @@ public static class DnsHealthAlertEvaluator
         return names.Count == 0 ? null : string.Join(';', names);
     }
 
-    private static void EvaluateCheck(DnsHealthCheck check, Domain domain, DomainAlertState state, NotificationSettings settings, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
+    private static void EvaluateCheck(DnsHealthCheck check, Domain domain, DomainAlertState state, IReadOnlyList<ResolvedAlertRule> applicable, NotificationSettings settings, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
     {
-        var mode = check.Mode(settings);
         switch (check.Health(domain))
         {
             case DnsCheckHealth.Passing:
@@ -67,17 +74,13 @@ public static class DnsHealthAlertEvaluator
                 return;
         }
 
-        if (mode == DnsHealthAlertMode.Off)
+        // A rule wants an alert for a failing check by its mode: always, or only once the check has passed at least once so a
+        // domain that was never set up stays quiet. A rule that does not set a mode uses the global setting for the check.
+        var wanting = applicable.Where(rule => WantsAlert(rule.Parameters.Mode(check.Mode(settings)), state)).ToList();
+        if (wanting.Count == 0)
         {
-            ClearPending(state);
-            actions.Add(DnsHealthAlertAction.Resolve(check.AlertType));
-            return;
-        }
-
-        if (mode == DnsHealthAlertMode.WhenItBreaks && !state.HasPassed)
-        {
-            // Never passed, so it hasn't broken: a domain that was never set up stays quiet. Resolving closes any
-            // alerts left from when the check was set to Whenever it fails.
+            // No rule applies, or none wants this failure (never passed, or switched off): clear the pending failure and close
+            // any alerts left from when a rule did.
             ClearPending(state);
             actions.Add(DnsHealthAlertAction.Resolve(check.AlertType));
             return;
@@ -87,14 +90,20 @@ public static class DnsHealthAlertEvaluator
         {
             var detail = check.Detail(domain) is { Length: > 0 } text ? $" ({text})" : "";
             var history = state.HasPassed ? " It was passing before." : "";
-            actions.Add(Raise(check.AlertType, "Warning",
-                $"The {check.Label} check for {domain.Name} is failing: {Words(check.Status(domain))}{detail}.{history}"));
+            var message = $"The {check.Label} check for {domain.Name} is failing: {Words(check.Status(domain))}{detail}.{history}";
+            foreach (var rule in applicable)
+            {
+                actions.Add(wanting.Contains(rule) ? Raise(check.AlertType, rule, message) : DnsHealthAlertAction.Resolve(check.AlertType, rule));
+            }
         }
     }
 
-    private static void EvaluatePolicy(Domain domain, DomainAlertState state, NotificationSettings settings, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
+    private static bool WantsAlert(DnsHealthAlertMode mode, DomainAlertState state) =>
+        mode == DnsHealthAlertMode.WheneverItFails || (mode == DnsHealthAlertMode.WhenItBreaks && state.HasPassed);
+
+    private static void EvaluatePolicy(Domain domain, DomainAlertState state, IReadOnlyList<ResolvedAlertRule> applicable, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
     {
-        if (!settings.DmarcPolicyWeakenedEnabled)
+        if (applicable.Count == 0)
         {
             ClearPending(state);
             actions.Add(DnsHealthAlertAction.Resolve(AlertTypes.DmarcPolicyWeakened));
@@ -125,14 +134,14 @@ public static class DnsHealthAlertEvaluator
 
         if (IsConfirmed(state, domain.DmarcCheckedUtc, nowUtc))
         {
-            actions.Add(Raise(AlertTypes.DmarcPolicyWeakened, "Warning",
-                $"The DMARC policy for {domain.Name} went from {baseline.Format()} to {current.Format()}."));
+            var message = $"The DMARC policy for {domain.Name} went from {baseline.Format()} to {current.Format()}.";
+            actions.AddRange(applicable.Select(rule => Raise(AlertTypes.DmarcPolicyWeakened, rule, message)));
         }
     }
 
-    private static void EvaluateNameservers(Domain domain, DomainAlertState state, NotificationSettings settings, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
+    private static void EvaluateNameservers(Domain domain, DomainAlertState state, IReadOnlyList<ResolvedAlertRule> applicable, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
     {
-        if (!settings.NameserversChangedEnabled)
+        if (applicable.Count == 0)
         {
             ClearPending(state);
             actions.Add(DnsHealthAlertAction.Resolve(AlertTypes.NameserversChanged));
@@ -161,8 +170,8 @@ public static class DnsHealthAlertEvaluator
 
         if (IsConfirmed(state, domain.DnsProviderCheckedUtc, nowUtc))
         {
-            actions.Add(Raise(AlertTypes.NameserversChanged, "Info",
-                $"The nameservers for {domain.Name} changed from {state.Baseline.Replace(";", ", ")} to {current.Replace(";", ", ")}. The DNS provider is now {domain.DnsProvider}."));
+            var message = $"The nameservers for {domain.Name} changed from {state.Baseline.Replace(";", ", ")} to {current.Replace(";", ", ")}. The DNS provider is now {domain.DnsProvider}.";
+            actions.AddRange(applicable.Select(rule => Raise(AlertTypes.NameserversChanged, rule, message)));
         }
     }
 
@@ -198,8 +207,8 @@ public static class DnsHealthAlertEvaluator
         return state;
     }
 
-    private static DnsHealthAlertAction Raise(string alertType, string severity, string message) =>
-        new(DnsHealthActionKind.Raise, alertType, severity, AlertTypes.Find(alertType)!.DisplayName, message);
+    private static DnsHealthAlertAction Raise(string alertType, ResolvedAlertRule rule, string message) =>
+        new(DnsHealthActionKind.Raise, alertType, rule, AlertTypes.Find(alertType)!.DisplayName, message);
 
     /// <summary>"MissingRecord" as "missing record".</summary>
     private static string Words(string status) =>

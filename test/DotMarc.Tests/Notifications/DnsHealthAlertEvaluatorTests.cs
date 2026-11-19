@@ -26,7 +26,7 @@ public sealed class DnsHealthAlertEvaluatorTests
     };
 
     private static List<DnsHealthAlertAction> Run(Domain domain, List<DomainAlertState> states, NotificationSettings? settings = null, DateTimeOffset? now = null) =>
-        DnsHealthAlertEvaluator.Evaluate(domain, states, settings ?? new NotificationSettings(), now ?? Now).ToList();
+        DnsHealthAlertEvaluator.Evaluate(domain, states, AlertRuleSet.Defaults(settings ?? new NotificationSettings()), settings ?? new NotificationSettings(), now ?? Now).ToList();
 
     private static IEnumerable<string> Raised(IEnumerable<DnsHealthAlertAction> actions) =>
         actions.Where(action => action.Kind == DnsHealthActionKind.Raise).Select(action => action.AlertType);
