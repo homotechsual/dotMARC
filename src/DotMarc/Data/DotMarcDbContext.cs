@@ -36,6 +36,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<IpRange> IpRanges => Set<IpRange>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
+    public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+    public DbSet<AlertRuleScopeEntry> AlertRuleScopeEntries => Set<AlertRuleScopeEntry>();
     public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
     public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
@@ -335,6 +337,27 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<AlertEvent>(entity =>
         {
             entity.HasIndex(e => new { e.DomainName, e.AlertType, e.CreatedUtc });
+            entity.HasIndex(e => new { e.DomainName, e.AlertType, e.AlertRuleId });
+            // Deleting a rule keeps the alerts it raised: they are history.
+            entity.HasOne<AlertRule>().WithMany().HasForeignKey(e => e.AlertRuleId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AlertRule>(entity =>
+        {
+            entity.Property(rule => rule.Kind).HasMaxLength(100);
+            entity.Property(rule => rule.Name).HasMaxLength(200);
+            entity.Property(rule => rule.Severity).HasMaxLength(20);
+            entity.Property(rule => rule.DefaultKey).HasMaxLength(100);
+            // Nulls are distinct in PostgreSQL, so many rules can have no DefaultKey while a default pack rule stays unique.
+            entity.HasIndex(rule => rule.DefaultKey).IsUnique();
+            entity.HasIndex(rule => new { rule.Kind, rule.Position });
+            entity.HasMany(rule => rule.Scope).WithOne().HasForeignKey(entry => entry.AlertRuleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AlertRuleScopeEntry>(entity =>
+        {
+            entity.Property(entry => entry.Target).HasConversion<string>().HasMaxLength(10);
+            entity.HasIndex(entry => new { entry.AlertRuleId, entry.Target, entry.TargetId, entry.Exclude }).IsUnique();
         });
 
         modelBuilder.Entity<AlertTicketRule>(entity =>

@@ -11,5 +11,7 @@ public sealed class AlertEvent
     public bool IsResolved { get; set; }
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ResolvedUtc { get; set; }
+    /// <summary>The rule that raised this alert. Null only for an alert raised before rules existed and not yet adopted by its default rule.</summary>
+    public int? AlertRuleId { get; set; }
     public List<DotMarc.Psa.AlertTicket> Tickets { get; set; } = [];
 }
