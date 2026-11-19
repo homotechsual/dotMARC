@@ -26,7 +26,7 @@
                     @if (host != record.Name)
                     {
                         <div class="d-flex align-center">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Host only: <code>@host</code></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Host only: <code>@host</code></MudText>
                             <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy host only" aria-label="Copy host only"
                                            OnClick="() => CopyAsync(host, CopyKind.Host)" />
                         </div>
