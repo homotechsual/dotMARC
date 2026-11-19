@@ -84,10 +84,13 @@ public sealed record ApiImportResponse(
     IReadOnlyList<ApiImportRow> Rows, IReadOnlyList<ApiImportUnknownName> UnknownNames, IReadOnlyList<string> Notices);
 
 /// <summary>Subject is what the alert is about: a domain name, or for alerts not about a domain (an expiring API key),
-/// a description. Domain is set when the subject is a domain this key can see.</summary>
+/// a description. Domain is set when the subject is a domain this key can see. Rule is the alert rule that raised it: null when it
+/// was raised before rules existed, when the rule has been deleted, and always for a key limited to some groups (a rule's name can
+/// name a client the key cannot see).</summary>
 public sealed record ApiAlert(
     int Id, string Type, string TypeName, string Subject, ApiNamedRef? Domain, string Severity, string Title, string Message,
-    DateTimeOffset RaisedUtc, bool Resolved, DateTimeOffset? ResolvedUtc, bool Acknowledgeable, IReadOnlyList<ApiAlertTicket> Tickets);
+    DateTimeOffset RaisedUtc, bool Resolved, DateTimeOffset? ResolvedUtc, bool Acknowledgeable, IReadOnlyList<ApiAlertTicket> Tickets,
+    ApiNamedRef? Rule = null);
 
 /// <summary>The outcome of acknowledging an alert. TicketClosed is true when no PSA ticket failed to close (also when the
 /// alert had none); a ticket that failed stays open in dotMARC and is retried.</summary>

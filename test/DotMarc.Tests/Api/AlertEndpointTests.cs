@@ -22,13 +22,13 @@ public sealed class AlertEndpointTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _host.DisposeAsync();
 
-    private async Task<int> SeedAlertAsync(string subject, string alertType, bool resolved = false, DateTimeOffset? createdUtc = null, string severity = "Warning")
+    private async Task<int> SeedAlertAsync(string subject, string alertType, bool resolved = false, DateTimeOffset? createdUtc = null, string severity = "Warning", int? ruleId = null)
     {
         await using var context = _host.CreateContext();
         var alert = new AlertEvent
         {
             DomainName = subject, AlertType = alertType, Severity = severity, Title = $"{alertType} title", Message = "message",
-            IsResolved = resolved, ResolvedUtc = resolved ? DateTimeOffset.UtcNow : null, CreatedUtc = createdUtc ?? DateTimeOffset.UtcNow,
+            IsResolved = resolved, ResolvedUtc = resolved ? DateTimeOffset.UtcNow : null, CreatedUtc = createdUtc ?? DateTimeOffset.UtcNow, AlertRuleId = ruleId,
         };
         context.AlertEvents.Add(alert);
         await context.SaveChangesAsync();
@@ -179,6 +179,35 @@ public sealed class AlertEndpointTests : IAsyncLifetime
         Assert.Equal([critical], found!.Items.Select(alert => alert.Id));
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.Contains("Critical", await refused.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task AnAlert_NamesTheRuleThatRaisedIt_ToUnscopedKeys_AndNotToScopedOnes()
+    {
+        var groupId = await _host.SeedGroupAsync("api-rule-alerts-group");
+        await _host.SeedDomainAsync("api-rule-alerts.example", groupIds: [groupId], monitored: false);
+        int ruleId;
+        await using (var context = _host.CreateContext())
+        {
+            var rule = new AlertRule { Kind = AlertTypes.MissedReport, Name = "Aurora weekly", Severity = "Warning", Position = -10 };
+            context.AlertRules.Add(rule);
+            await context.SaveChangesAsync();
+            ruleId = rule.Id;
+        }
+
+        var withRule = await SeedAlertAsync("api-rule-alerts.example", AlertTypes.MissedReport, ruleId: ruleId);
+        var withoutRule = await SeedAlertAsync("api-rule-alerts.example", AlertTypes.TlsrptFailure);
+        var (_, unscopedSecret) = await _host.CreateKeyAsync([Permission.AlertsView]);
+        var (_, scopedSecret) = await _host.CreateKeyAsync([Permission.AlertsView], scopedGroupIds: [groupId]);
+        using var unscoped = _host.ClientFor(unscopedSecret);
+        using var scoped = _host.ClientFor(scopedSecret);
+
+        var asStaff = await unscoped.GetFromJsonAsync<ApiPage<ApiAlert>>("/api/v1/alerts?domain=api-rule-alerts.example");
+        var asScoped = await scoped.GetFromJsonAsync<ApiPage<ApiAlert>>("/api/v1/alerts?domain=api-rule-alerts.example");
+
+        Assert.Equal(new ApiNamedRef(ruleId, "Aurora weekly"), asStaff!.Items.Single(alert => alert.Id == withRule).Rule);
+        Assert.Null(asStaff.Items.Single(alert => alert.Id == withoutRule).Rule);
+        Assert.All(asScoped!.Items, alert => Assert.Null(alert.Rule));
     }
 
     [Fact]

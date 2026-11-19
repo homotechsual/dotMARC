@@ -57,12 +57,6 @@ else
             }
 
             <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Missing report threshold" Help="How many days a monitored domain can go without a DMARC aggregate report before a 'Missing DMARC report' alert. Most receivers report daily, so 2 allows for one late day.">
-<MudNumericField Label="Missing report threshold (days)" @bind-Value="_settings.MissingReportThresholdDays" Min="1" Max="90" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
-
-            <MudItem xs="12" md="6">
                 <FieldWithHelp Topic="Cooldown" Help="While an alert is open, dotMARC won't raise it again for this long. After that, if the problem is still there, it's raised again, with a new notification and ticket.">
 <MudNumericField Label="Cooldown (minutes)" @bind-Value="_settings.CooldownMinutes" Min="1" Max="10080" Variant="Variant.Outlined" />
 </FieldWithHelp>
@@ -74,87 +68,11 @@ else
 </FieldWithHelp>
             </MudItem>
 
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Suspicious reject minimum volume" Help="A 'Suspicious reject activity' alert needs at least this many rejected or quarantined messages in the domain's last 30 days, so a handful of stray messages don't alert.">
-<MudNumericField Label="Suspicious reject minimum volume" @bind-Value="_settings.SuspiciousRejectMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
-
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Suspicious reject non-benign %" Help="Alerts when at least this share of a domain's rejected or quarantined mail has no benign reason given by the receiver (such as a forwarder, mailing list or sampling), which suggests spoofing or a misconfigured sender.">
-<MudNumericField Label="Suspicious reject non-benign %" @bind-Value="_settings.SuspiciousRejectNonBenignPercent" Min="1" Max="100" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
-
             <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mt-2">DNS health alerts</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
-                    Alert when a domain's DNS health check fails. "When it breaks" alerts only once the check has passed at least
-                    once, so domains that were never set up stay quiet. A failure is rechecked about 15 minutes later before it alerts.
-                </MudText>
-            </MudItem>
-
-            @foreach (var modeSetting in DnsHealthModeSettings)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <FieldWithHelp Topic="@modeSetting.Label" Help="@($"{modeSetting.Help} When it breaks: only once the check has passed at least once. Whenever it fails: every failure. Off: never.")">
-                    <MudSelect T="DnsHealthAlertMode" Label="@modeSetting.Label" Variant="Variant.Outlined"
-                               Value="modeSetting.Get(_settings)" ValueChanged="@(mode => modeSetting.Set(_settings!, mode))">
-                        <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.WhenItBreaks">When it breaks</MudSelectItem>
-                        <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.WheneverItFails">Whenever it fails</MudSelectItem>
-                        <MudSelectItem T="DnsHealthAlertMode" Value="DnsHealthAlertMode.Off">Off</MudSelectItem>
-                    </MudSelect>
-                    </FieldWithHelp>
-                </MudItem>
-            }
-
-            <MudItem xs="12" md="4">
-                <FieldWithHelp Topic="DMARC policy weakens" Inline="true" Help="Alerts when a domain's DMARC policy, subdomain policy or percentage goes down, such as reject to quarantine. If the change was deliberate, acknowledge the alert and the new policy becomes the baseline.">
-<MudSwitch @bind-Value="_settings.DmarcPolicyWeakenedEnabled" Color="Color.Primary" Label="Alert when a DMARC policy weakens" />
-</FieldWithHelp>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <FieldWithHelp Topic="Nameservers change" Inline="true" Help="Alerts when a domain's nameservers change, often the first sign of a DNS migration that could drop its records. It doesn't open a PSA ticket unless you turn that on.">
-<MudSwitch @bind-Value="_settings.NameserversChangedEnabled" Color="Color.Primary" Label="Alert when nameservers change" />
-</FieldWithHelp>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <FieldWithHelp Topic="Close policy and nameserver alerts after" Help="Policy and nameserver alerts can describe deliberate changes, so they stay open until someone acknowledges them or closes their ticket. Set a number of days to close them automatically, as if acknowledged. 0 keeps them open.">
-<MudNumericField Label="Close policy and nameserver alerts after (days)" @bind-Value="_settings.AcknowledgeableAutoCloseDays" Min="0" Max="365" Variant="Variant.Outlined" HelperText="0 keeps them open." />
-</FieldWithHelp>
-            </MudItem>
-
-            <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mt-2">Sender alerts</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
-                    Alert about the services that send as a domain. A sender a domain already had never alerts as new. Mark a sender
-                    Authorised, Unauthorised or Under review on the domain's Sources tab, or set a baseline, and its alert closes.
-                </MudText>
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="New senders" Inline="true" Help="Alerts when a sender that nobody has decided on first appears on a domain. Only senders first seen within the number of days below count, so a domain's existing senders never alert. A decision at any level, including Under review, closes the alert.">
-<MudSwitch @bind-Value="_settings.NewSenderAlertEnabled" Color="Color.Primary" Label="Alert on new senders to review" />
-</FieldWithHelp>
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <FieldWithHelp Topic="Unauthorised sender mail delivered" Inline="true" Help="Alerts when mail from a sender you marked Unauthorised is being delivered, which means your DMARC policy is not blocking it. It closes when the volume drops below the minimum, for example after the policy moves to quarantine or reject.">
-<MudSwitch @bind-Value="_settings.UnauthorisedDeliveredAlertEnabled" Color="Color.Primary" Label="Alert when unauthorised sender mail is delivered" />
-</FieldWithHelp>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <FieldWithHelp Topic="New sender days" Help="How many days a sender counts as new, counted from the first report it appears in. From 1 to 30, the length of the report window.">
-<MudNumericField Label="Days a sender counts as new" @bind-Value="_settings.NewSenderDays" Min="1" Max="30" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <FieldWithHelp Topic="New sender minimum messages" Help="A new sender alert needs at least this many messages from the sender in the domain's last 30 days, so a stray test message doesn't alert.">
-<MudNumericField Label="New sender minimum messages" @bind-Value="_settings.NewSenderMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined" />
-</FieldWithHelp>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <FieldWithHelp Topic="Delivered minimum messages" Help="An unauthorised sender alert needs at least this many delivered messages from the sender in the domain's last 30 days. Delivered means receivers did not quarantine or reject them, whether they pass DMARC or fail it.">
-<MudNumericField Label="Delivered minimum messages" @bind-Value="_settings.UnauthorisedDeliveredMinVolume" Min="1" Max="1000000" Variant="Variant.Outlined" />
-</FieldWithHelp>
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    When each alert is raised, for which domains, and how serious it is now live in <MudLink Href="/alerts/rules">Alert rules</MudLink>.
+                    The thresholds, DNS check modes and sender settings that used to be here are rule settings there.
+                </MudAlert>
             </MudItem>
         </MudGrid>
 
@@ -187,19 +105,6 @@ else
 </MudPaper>
 
 @code {
-    private sealed record DnsHealthModeSetting(string Label, string Help, Func<NotificationSettings, DnsHealthAlertMode> Get, Action<NotificationSettings, DnsHealthAlertMode> Set);
-
-    private static readonly DnsHealthModeSetting[] DnsHealthModeSettings =
-    [
-        new("DMARC record", "Alerts when the domain's DMARC record (_dmarc TXT) is missing or can't be read.", settings => settings.DmarcAlertMode, (settings, mode) => settings.DmarcAlertMode = mode),
-        new("DMARC authorization record", "Alerts when the record that lets receivers send this domain's reports to dotMARC's mailbox (on another domain) is missing. Without it, receivers drop the reports.", settings => settings.DmarcAuthorizationAlertMode, (settings, mode) => settings.DmarcAuthorizationAlertMode = mode),
-        new("TLS-RPT record", "Alerts when the domain's TLS reporting record (_smtp._tls TXT) is missing or invalid.", settings => settings.TlsrptAlertMode, (settings, mode) => settings.TlsrptAlertMode = mode),
-        new("SPF record", "Alerts when the domain's SPF record is missing, duplicated or broken.", settings => settings.SpfAlertMode, (settings, mode) => settings.SpfAlertMode = mode),
-        new("MX", "Alerts when the domain has no MX record, or its mail server's name doesn't resolve.", settings => settings.MxAlertMode, (settings, mode) => settings.MxAlertMode = mode),
-        new("DKIM", "Alerts when a DKIM selector set for the domain is missing or broken. Domains with no selectors set aren't checked.", settings => settings.DkimAlertMode, (settings, mode) => settings.DkimAlertMode = mode),
-        new("MTA-STS", "Alerts when dotMARC stops being able to serve the domain's MTA-STS policy. Only for domains with MTA-STS hosting on.", settings => settings.MtaStsAlertMode, (settings, mode) => settings.MtaStsAlertMode = mode),
-    ];
-
     private NotificationSettings? _settings;
     private AlertChannel? _testingChannel;
 

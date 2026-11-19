@@ -13,6 +13,7 @@
 @inject IPsaTicketService PsaTicketService
 @inject IEnumerable<IPsaProvider> PsaProviders
 @inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ISnackbar Snackbar
 
 <PageTitle>dotMARC - Alerts</PageTitle>
@@ -41,6 +42,10 @@ else
             <tr>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.DomainName)">Domain</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.AlertType)">Type</MudTableSortLabel></MudTh>
+                @if (_showRule)
+                {
+                    <MudTh>Rule</MudTh>
+                }
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.Severity)">Severity</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
@@ -60,6 +65,10 @@ else
                         }
                     </MudSelect>
                 </MudTh>
+                @if (_showRule)
+                {
+                    <MudTh></MudTh>
+                }
                 <MudTh>
                     <MudSelect T="string" Value="_severityFilter" ValueChanged="@(v => _severityFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
                         @foreach (var severity in _alerts.Select(e => e.Severity).Distinct().OrderBy(s => s))
@@ -93,6 +102,10 @@ else
                 }
             </MudTd>
             <MudTd>@context.AlertType</MudTd>
+            @if (_showRule)
+            {
+                <MudTd>@RuleNameOf(context)</MudTd>
+            }
             <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
             <MudTd>@FormatCreated(context)</MudTd>
             <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
@@ -170,6 +183,12 @@ else
         return true;
     }
 
+    // Rule names can name clients, so the column is only for staff with no group limit, as the rules page is.
+    private bool _showRule;
+    private Dictionary<int, string> _ruleNames = [];
+
+    private string RuleNameOf(AlertEvent alert) => alert.AlertRuleId is { } ruleId && _ruleNames.TryGetValue(ruleId, out var name) ? name : string.Empty;
+
     protected override Task OnInitializedAsync() => LoadAsync();
 
     private async Task LoadAsync()
@@ -181,6 +200,9 @@ else
             .OrderByDescending(e => e.CreatedUtc)
             .Take(100)
             .ToListAsync();
+
+        _showRule = AlertRuleAccess.MayView((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        _ruleNames = _showRule ? await db.AlertRules.AsNoTracking().ToDictionaryAsync(rule => rule.Id, rule => rule.Name) : [];
 
         var alertDomainNames = _alerts.Select(alert => alert.DomainName).Distinct().ToArray();
         _domainNames = (await db.Domains.AsNoTracking()

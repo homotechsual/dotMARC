@@ -64,7 +64,6 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
             GenericWebhookEnabled = true,
             TeamsWebhookUrl = "https://example.test/teams",
             GenericWebhookUrl = "https://example.test/generic",
-            MissingReportThresholdDays = 5,
             CooldownMinutes = 60,
             MonitorIntervalSeconds = 120
         }, CancellationToken.None);
@@ -79,7 +78,6 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
         Assert.True(stored.GenericWebhookEnabled);
         Assert.Equal("https://example.test/teams", stored.TeamsWebhookUrl);
         Assert.Equal("https://example.test/generic", stored.GenericWebhookUrl);
-        Assert.Equal(5, stored.MissingReportThresholdDays);
         Assert.Equal(60, stored.CooldownMinutes);
         Assert.Equal(120, stored.MonitorIntervalSeconds);
     }
@@ -210,17 +208,28 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SaveAsync_SavesAndAuditsTheDnsHealthAlertSettings()
+    public async Task SavingSettings_NoLongerChangesTheRetiredFields_OrComplainsAboutThem()
     {
-        NotificationSettings updated;
+        NotificationSettings before;
         await using (var loadContext = CreateContext())
         {
-            updated = await loadContext.NotificationSettings.AsNoTracking().SingleAsync();
+            before = await loadContext.NotificationSettings.AsNoTracking().SingleAsync();
         }
+
+        var updated = await CopyAsync(before);
+        updated.MissingReportThresholdDays = 9;
+        updated.SuspiciousRejectMinVolume = 77;
+        updated.SuspiciousRejectNonBenignPercent = 12;
         updated.SpfAlertMode = DnsHealthAlertMode.WheneverItFails;
         updated.DkimAlertMode = DnsHealthAlertMode.Off;
+        updated.DmarcPolicyWeakenedEnabled = false;
         updated.NameserversChangedEnabled = false;
-        updated.AcknowledgeableAutoCloseDays = 7;
+        updated.AcknowledgeableAutoCloseDays = 5000;
+        updated.NewSenderAlertEnabled = false;
+        updated.NewSenderMinVolume = 0;
+        updated.NewSenderDays = 99;
+        updated.UnauthorisedDeliveredAlertEnabled = false;
+        updated.UnauthorisedDeliveredMinVolume = -3;
 
         await using (var context = CreateContext())
         {
@@ -229,24 +238,45 @@ public sealed class NotificationSettingsServiceTests : IAsyncLifetime
 
         await using var verify = CreateContext();
         var saved = await NotificationSettingsService.GetAsync(verify);
-        Assert.Equal(DnsHealthAlertMode.WheneverItFails, saved.SpfAlertMode);
-        Assert.Equal(DnsHealthAlertMode.Off, saved.DkimAlertMode);
-        Assert.False(saved.NameserversChangedEnabled);
-        Assert.Equal(7, saved.AcknowledgeableAutoCloseDays);
-        var entry = await verify.AuditEntries.SingleAsync();
-        Assert.Contains(new AuditFieldChange("SPF alerts", "WhenItBreaks", "WheneverItFails"), entry.Changes);
-        Assert.Contains(new AuditFieldChange("Close policy and nameserver alerts after (days)", "0", "7"), entry.Changes);
+        Assert.Equal(
+            (before.MissingReportThresholdDays, before.SuspiciousRejectMinVolume, before.SuspiciousRejectNonBenignPercent, before.SpfAlertMode, before.DkimAlertMode,
+                before.DmarcPolicyWeakenedEnabled, before.NameserversChangedEnabled, before.AcknowledgeableAutoCloseDays, before.NewSenderAlertEnabled,
+                before.NewSenderMinVolume, before.NewSenderDays, before.UnauthorisedDeliveredAlertEnabled, before.UnauthorisedDeliveredMinVolume),
+            (saved.MissingReportThresholdDays, saved.SuspiciousRejectMinVolume, saved.SuspiciousRejectNonBenignPercent, saved.SpfAlertMode, saved.DkimAlertMode,
+                saved.DmarcPolicyWeakenedEnabled, saved.NameserversChangedEnabled, saved.AcknowledgeableAutoCloseDays, saved.NewSenderAlertEnabled,
+                saved.NewSenderMinVolume, saved.NewSenderDays, saved.UnauthorisedDeliveredAlertEnabled, saved.UnauthorisedDeliveredMinVolume));
+        Assert.Empty(verify.AuditEntries);
     }
 
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(366)]
-    public async Task SaveAsync_RefusesAnAutoCloseOutsideZeroTo365Days(int days)
+    [Fact]
+    public async Task SavingSettings_StillAuditsTheFieldsItKeeps()
     {
-        await using var context = CreateContext();
-        var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
-        settings.AcknowledgeableAutoCloseDays = days;
+        NotificationSettings updated;
+        await using (var loadContext = CreateContext())
+        {
+            updated = await CopyAsync(await loadContext.NotificationSettings.AsNoTracking().SingleAsync());
+        }
 
-        await Assert.ThrowsAsync<ArgumentException>(() => NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings));
+        updated.MonitorIntervalSeconds += 60;
+        updated.SlackEnabled = !updated.SlackEnabled;
+        updated.MissingReportThresholdDays = 9;
+
+        await using (var context = CreateContext())
+        {
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, updated);
+        }
+
+        await using var verify = CreateContext();
+        var entry = await verify.AuditEntries.SingleAsync();
+        Assert.Contains(entry.Changes, change => change.Field == "Monitor interval (seconds)");
+        Assert.Contains(entry.Changes, change => change.Field == "Slack");
+        Assert.DoesNotContain(entry.Changes, change => change.Field.Contains("Missing report"));
     }
+
+    private static Task<NotificationSettings> CopyAsync(NotificationSettings source) => Task.FromResult(new NotificationSettings
+    {
+        Id = source.Id, Enabled = source.Enabled, TeamsEnabled = source.TeamsEnabled, TeamsWebhookUrl = source.TeamsWebhookUrl,
+        SlackEnabled = source.SlackEnabled, SlackWebhookUrl = source.SlackWebhookUrl, GenericWebhookEnabled = source.GenericWebhookEnabled,
+        GenericWebhookUrl = source.GenericWebhookUrl, CooldownMinutes = source.CooldownMinutes, MonitorIntervalSeconds = source.MonitorIntervalSeconds,
+    });
 }

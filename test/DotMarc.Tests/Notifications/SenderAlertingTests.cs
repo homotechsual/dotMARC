@@ -332,42 +332,4 @@ public sealed class SenderAlertingTests : IAsyncLifetime
         Assert.Null(owners["192.0.2.1"]);
     }
 
-    // ---- Saving the settings ----
-
-    [Fact]
-    public async Task SavingTheSenderAlertSettings_KeepsThem_AndAuditsTheChange()
-    {
-        await using (var context = CreateContext())
-        {
-            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
-            {
-                Enabled = true, TeamsEnabled = true, TeamsWebhookUrl = "https://example.test/webhook",
-                NewSenderAlertEnabled = false, NewSenderMinVolume = 50, NewSenderDays = 14, UnauthorisedDeliveredAlertEnabled = false, UnauthorisedDeliveredMinVolume = 25,
-            });
-        }
-
-        await using var verify = CreateContext();
-        var settings = await verify.NotificationSettings.SingleAsync();
-        Assert.Equal((false, 50, 14, false, 25),
-            (settings.NewSenderAlertEnabled, settings.NewSenderMinVolume, settings.NewSenderDays, settings.UnauthorisedDeliveredAlertEnabled, settings.UnauthorisedDeliveredMinVolume));
-        var entry = await verify.AuditEntries.Where(candidate => candidate.Action == AuditActions.NotificationSettingsSaved).OrderByDescending(candidate => candidate.Id).FirstAsync();
-        Assert.Contains(entry.Changes, change => change is { Field: "New sender alerts", Old: "Yes", New: "No" });
-        Assert.Contains(entry.Changes, change => change.Field == "New sender days" && change.New == "14");
-    }
-
-    [Theory]
-    [InlineData(0, 1, 1)]
-    [InlineData(31, 1, 1)]
-    [InlineData(7, 0, 1)]
-    [InlineData(7, 1, 0)]
-    public async Task OutOfRangeSenderAlertSettings_AreRefused(int days, int newMinimum, int deliveredMinimum)
-    {
-        await using var context = CreateContext();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
-        {
-            Enabled = true, TeamsEnabled = true, TeamsWebhookUrl = "https://example.test/webhook",
-            NewSenderDays = days, NewSenderMinVolume = newMinimum, UnauthorisedDeliveredMinVolume = deliveredMinimum,
-        }));
-    }
 }

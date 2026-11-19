@@ -19,20 +19,6 @@ public static class NotificationSettingsService
         ValidateWebhookUrl(updated.TeamsWebhookUrl, "Teams webhook URL");
         ValidateWebhookUrl(updated.SlackWebhookUrl, "Slack webhook URL");
         ValidateWebhookUrl(updated.GenericWebhookUrl, "Generic webhook URL");
-        if (updated.AcknowledgeableAutoCloseDays is < 0 or > 365)
-        {
-            throw new ArgumentException("Close policy and nameserver alerts after (days) must be from 0 to 365.", nameof(updated));
-        }
-
-        if (updated.NewSenderDays is < 1 or > 30)
-        {
-            throw new ArgumentException("New sender days must be from 1 to 30, the length of the report window.", nameof(updated));
-        }
-
-        if (updated.NewSenderMinVolume < 1 || updated.UnauthorisedDeliveredMinVolume < 1)
-        {
-            throw new ArgumentException("The minimum number of messages for a sender alert must be at least 1.", nameof(updated));
-        }
 
         // A no-tracking snapshot, because the caller may pass the very instance this context is tracking.
         var saved = await context.NotificationSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
@@ -45,26 +31,8 @@ public static class NotificationSettingsService
             .Secret("Teams webhook URL", saved.TeamsWebhookUrl != updated.TeamsWebhookUrl)
             .Secret("Slack webhook URL", saved.SlackWebhookUrl != updated.SlackWebhookUrl)
             .Secret("Generic webhook URL", saved.GenericWebhookUrl != updated.GenericWebhookUrl)
-            .Field("Missing report threshold (days)", saved.MissingReportThresholdDays, updated.MissingReportThresholdDays)
             .Field("Cooldown (minutes)", saved.CooldownMinutes, updated.CooldownMinutes)
-            .Field("Monitor interval (seconds)", saved.MonitorIntervalSeconds, updated.MonitorIntervalSeconds)
-            .Field("Suspicious reject minimum volume", saved.SuspiciousRejectMinVolume, updated.SuspiciousRejectMinVolume)
-            .Field("Suspicious reject non-benign %", saved.SuspiciousRejectNonBenignPercent, updated.SuspiciousRejectNonBenignPercent)
-            .Field("DMARC record alerts", saved.DmarcAlertMode, updated.DmarcAlertMode)
-            .Field("DMARC authorization record alerts", saved.DmarcAuthorizationAlertMode, updated.DmarcAuthorizationAlertMode)
-            .Field("TLS-RPT record alerts", saved.TlsrptAlertMode, updated.TlsrptAlertMode)
-            .Field("SPF alerts", saved.SpfAlertMode, updated.SpfAlertMode)
-            .Field("MX alerts", saved.MxAlertMode, updated.MxAlertMode)
-            .Field("DKIM alerts", saved.DkimAlertMode, updated.DkimAlertMode)
-            .Field("MTA-STS alerts", saved.MtaStsAlertMode, updated.MtaStsAlertMode)
-            .Field("DMARC policy weakened alerts", saved.DmarcPolicyWeakenedEnabled, updated.DmarcPolicyWeakenedEnabled)
-            .Field("Nameservers changed alerts", saved.NameserversChangedEnabled, updated.NameserversChangedEnabled)
-            .Field("Close policy and nameserver alerts after (days)", saved.AcknowledgeableAutoCloseDays, updated.AcknowledgeableAutoCloseDays)
-            .Field("New sender alerts", saved.NewSenderAlertEnabled, updated.NewSenderAlertEnabled)
-            .Field("New sender minimum messages", saved.NewSenderMinVolume, updated.NewSenderMinVolume)
-            .Field("New sender days", saved.NewSenderDays, updated.NewSenderDays)
-            .Field("Unauthorised sender delivered alerts", saved.UnauthorisedDeliveredAlertEnabled, updated.UnauthorisedDeliveredAlertEnabled)
-            .Field("Unauthorised sender delivered minimum messages", saved.UnauthorisedDeliveredMinVolume, updated.UnauthorisedDeliveredMinVolume);
+            .Field("Monitor interval (seconds)", saved.MonitorIntervalSeconds, updated.MonitorIntervalSeconds);
         if (!changes.Any)
         {
             return;
@@ -79,26 +47,8 @@ public static class NotificationSettingsService
         existing.SlackWebhookUrl = updated.SlackWebhookUrl;
         existing.GenericWebhookEnabled = updated.GenericWebhookEnabled;
         existing.GenericWebhookUrl = updated.GenericWebhookUrl;
-        existing.MissingReportThresholdDays = updated.MissingReportThresholdDays;
         existing.CooldownMinutes = updated.CooldownMinutes;
         existing.MonitorIntervalSeconds = updated.MonitorIntervalSeconds;
-        existing.SuspiciousRejectMinVolume = updated.SuspiciousRejectMinVolume;
-        existing.SuspiciousRejectNonBenignPercent = updated.SuspiciousRejectNonBenignPercent;
-        existing.DmarcAlertMode = updated.DmarcAlertMode;
-        existing.DmarcAuthorizationAlertMode = updated.DmarcAuthorizationAlertMode;
-        existing.TlsrptAlertMode = updated.TlsrptAlertMode;
-        existing.SpfAlertMode = updated.SpfAlertMode;
-        existing.MxAlertMode = updated.MxAlertMode;
-        existing.DkimAlertMode = updated.DkimAlertMode;
-        existing.MtaStsAlertMode = updated.MtaStsAlertMode;
-        existing.DmarcPolicyWeakenedEnabled = updated.DmarcPolicyWeakenedEnabled;
-        existing.NameserversChangedEnabled = updated.NameserversChangedEnabled;
-        existing.AcknowledgeableAutoCloseDays = updated.AcknowledgeableAutoCloseDays;
-        existing.NewSenderAlertEnabled = updated.NewSenderAlertEnabled;
-        existing.NewSenderMinVolume = updated.NewSenderMinVolume;
-        existing.NewSenderDays = updated.NewSenderDays;
-        existing.UnauthorisedDeliveredAlertEnabled = updated.UnauthorisedDeliveredAlertEnabled;
-        existing.UnauthorisedDeliveredMinVolume = updated.UnauthorisedDeliveredMinVolume;
 
         AuditLog.Record(context, actor, AuditActions.NotificationSettingsSaved, AuditTarget.Settings("Notifications"), "Saved notification settings", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

@@ -54,6 +54,10 @@
           "raisedUtc": "2026-10-01T09:30:00+00:00",
           "resolved": false,
           "resolvedUtc": null,
+          "rule": {
+            "id": 8,
+            "name": "SPF record broken"
+          },
           "severity": "Warning",
           "subject": "contoso.example",
           "tickets": [
@@ -104,6 +108,19 @@
             "format": "date-time",
             "nullable": true,
             "type": "string"
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/ApiNamedRef"
+              }
+            ]
           },
           "severity": {
             "type": "string"
