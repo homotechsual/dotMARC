@@ -44,6 +44,12 @@ else
 </FieldWithHelp>
             </MudItem>
 
+            <MudItem xs="12" md="6">
+                <FieldWithHelp Topic="Time zone" Help="The time zone the quiet hours on alert rules are read in. A rule's quiet window of 22:00 to 07:00 means those times here.">
+                    <MudAutocomplete T="string" Label="Time zone" @bind-Value="_settings.TimeZoneId" SearchFunc="SearchZones" MaxItems="50" Variant="Variant.Outlined" />
+                </FieldWithHelp>
+            </MudItem>
+
             <MudItem xs="12">
                 <MudAlert Severity="Severity.Info" Dense="true">
                     When each alert is raised, for which domains, and how serious it is now live in <MudLink Href="/alerts/rules">Alert rules</MudLink>.
@@ -127,6 +133,12 @@ else
 @code {
     private NotificationSettings? _settings;
     private IReadOnlyList<AlertDestinationSummary>? _destinations;
+    private IReadOnlyList<string> _zones = [];
+
+    private Task<IEnumerable<string>> SearchZones(string? text, CancellationToken cancellationToken) =>
+        Task.FromResult(string.IsNullOrWhiteSpace(text)
+            ? _zones.AsEnumerable()
+            : _zones.Where(zone => zone.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase)));
 
     private static string KindName(AlertChannel kind) => kind switch
     {
@@ -221,6 +233,7 @@ else
         _settings = await NotificationSettingsService.GetAsync(db);
         _globalTicketRules = await AlertTicketRuleService.GetGlobalAsync(db);
         _destinations = await AlertDestinationService.ListSummariesAsync(db);
+        _zones = DotMarc.Reporting.ClientReports.ReportSettingsService.ListAvailableZones();
     }
 
     private async Task SaveAsync()

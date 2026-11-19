@@ -192,7 +192,7 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         // Seeds the default pack the first time, so the page is never empty on an install that has not raised an alert yet.
         await AlertRuleSeeder.EnsureDefaultPackAsync(db, CancellationToken.None);
-        _rules = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).AsSplitQuery().ToListAsync();
+        _rules = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).Include(rule => rule.EscalationDestinations).AsSplitQuery().ToListAsync();
         _destinationNames = (await AlertDestinationService.ListSummariesAsync(db)).ToDictionary(destination => destination.Id, destination => destination.Name);
         var groups = await db.Groups.AsNoTracking().ToDictionaryAsync(group => group.Id, group => group.Name);
         var tags = await db.Tags.AsNoTracking().ToDictionaryAsync(tag => tag.Id, tag => tag.Name);

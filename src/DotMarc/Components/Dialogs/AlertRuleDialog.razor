@@ -183,6 +183,73 @@
                     </MudSelect>
                 </FieldWithHelp>
             }
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Quiet hours</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+                Keeps this rule's notifications back during a daily window. The alert is still raised and recorded, and any ticket still opens. The time zone is set on
+                <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="AlertQuietMode" Label="During quiet hours" @bind-Value="_quietMode" Variant="Variant.Outlined">
+                        <MudSelectItem T="AlertQuietMode" Value="AlertQuietMode.Off">Send as usual</MudSelectItem>
+                        <MudSelectItem T="AlertQuietMode" Value="AlertQuietMode.Hold">Hold, then send when it ends</MudSelectItem>
+                        <MudSelectItem T="AlertQuietMode" Value="AlertQuietMode.Mute">Mute (never send)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                @if (_quietMode != AlertQuietMode.Off)
+                {
+                    <MudItem xs="6" sm="4">
+                        <MudTimePicker Label="From" @bind-Time="_quietStart" Editable="true" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudTimePicker Label="Until" @bind-Time="_quietEnd" Editable="true" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudSwitch T="bool" @bind-Value="_quietIgnoredForCritical" Color="Color.Primary" Label="Critical alerts ignore quiet hours" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            A held alert is sent when the window ends, only if it is still open then. A window that ends earlier than it starts runs overnight.
+                        </MudText>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Escalation</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+                If an alert is still open this long after it was notified, also tell the destinations chosen here, once. Quiet hours don't delay an escalation.
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="int?" Label="Escalate after (minutes)" @bind-Value="_escalateAfter" Min="@AlertRuleValidator.MinEscalateAfterMinutes" Max="@AlertRuleValidator.MaxEscalateAfterMinutes"
+                                     Clearable="true" Variant="Variant.Outlined" HelperText="Leave empty for no escalation." />
+                </MudItem>
+            </MudGrid>
+            @if (_escalateAfter is not null)
+            {
+                @if (_destinations.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        There are no destinations to escalate to. Add one on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+                    </MudAlert>
+                }
+                else
+                {
+                    <div class="d-flex flex-column mt-1">
+                        @foreach (var destination in _destinations)
+                        {
+                            <MudCheckBox T="bool" Value="_escalationDestinations.Contains(destination.Id)" ValueChanged="@(chosen => ToggleEscalationDestination(destination.Id, chosen))"
+                                         Color="Color.Primary" Label="@(destination.Enabled ? destination.Name : $"{destination.Name} (off)")" />
+                        }
+                    </div>
+                }
+
+                @if (_escalationDestinations.Count == 0 && _destinations.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        No destinations chosen: this rule will not escalate to anyone.
+                    </MudAlert>
+                }
+            }
         }
     </DialogContent>
     <DialogActions>
@@ -223,6 +290,12 @@
     private AlertDestinationMode _destinationMode = AlertDestinationMode.All;
     private readonly HashSet<int> _selectedDestinations = [];
     private AlertTicketMode _ticketMode = AlertTicketMode.FollowRules;
+    private AlertQuietMode _quietMode = AlertQuietMode.Off;
+    private TimeSpan? _quietStart;
+    private TimeSpan? _quietEnd;
+    private bool _quietIgnoredForCritical = true;
+    private int? _escalateAfter;
+    private readonly HashSet<int> _escalationDestinations = [];
     private IReadOnlyList<AlertDestinationSummary> _destinations = [];
     private Dictionary<string, string> _parameters = [];
     private int _position;
@@ -254,7 +327,7 @@
 
         _kindDescription = AlertTypes.Find(Kind)?.Description ?? "";
         await using var db = await DbFactory.CreateDbContextAsync();
-        _rulesOfKind = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).AsSplitQuery().Where(rule => rule.Kind == Kind).ToListAsync();
+        _rulesOfKind = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).Include(rule => rule.EscalationDestinations).AsSplitQuery().Where(rule => rule.Kind == Kind).ToListAsync();
         _destinations = await AlertDestinationService.ListSummariesAsync(db);
         _groups = await db.Groups.AsNoTracking().ToDictionaryAsync(group => group.Id, group => group.Name);
         _tags = await db.Tags.AsNoTracking().ToDictionaryAsync(tag => tag.Id, tag => tag.Name);
@@ -278,6 +351,11 @@
             _parameters = input.Parameters.ToDictionary(pair => pair.Key, pair => pair.Value);
             (_destinationMode, _ticketMode) = (input.DestinationMode, input.TicketMode);
             _selectedDestinations.UnionWith(input.DestinationIds ?? []);
+            _quietMode = input.QuietMode;
+            _quietStart = input.QuietStartMinutes is { } quietStartMinutes ? TimeSpan.FromMinutes(quietStartMinutes) : null;
+            _quietEnd = input.QuietEndMinutes is { } quietEndMinutes ? TimeSpan.FromMinutes(quietEndMinutes) : null;
+            (_quietIgnoredForCritical, _escalateAfter) = (input.QuietIgnoredForCritical, input.EscalateAfterMinutes);
+            _escalationDestinations.UnionWith(input.EscalationDestinationIds ?? []);
             _position = rule.Position;
             _isDefault = rule.DefaultKey is not null;
             foreach (var entry in input.Scope)
@@ -346,6 +424,20 @@
 
     private void SetParameter(string key, string value) => _parameters[key] = value;
 
+    private static int? MinutesOf(TimeSpan? time) => time is { } value ? (int)value.TotalMinutes : null;
+
+    private void ToggleEscalationDestination(int id, bool chosen)
+    {
+        if (chosen)
+        {
+            _escalationDestinations.Add(id);
+        }
+        else
+        {
+            _escalationDestinations.Remove(id);
+        }
+    }
+
     private void ToggleDestination(int id, bool chosen)
     {
         if (chosen)
@@ -385,7 +477,8 @@
 
             var input = new AlertRuleInput(
                 _name, _enabled, _severity, _stop, _cooldown, _kind.HasAutoClose ? _autoCloseDays : null, _parameters, _kind.HasDomainScope ? ScopeInputs() : [],
-                _destinationMode, [.. _selectedDestinations], _kind.HasDomainScope ? _ticketMode : AlertTicketMode.FollowRules);
+                _destinationMode, [.. _selectedDestinations], _kind.HasDomainScope ? _ticketMode : AlertTicketMode.FollowRules,
+                _quietMode, MinutesOf(_quietStart), MinutesOf(_quietEnd), _quietIgnoredForCritical, _escalateAfter, [.. _escalationDestinations]);
             await using var db = await DbFactory.CreateDbContextAsync();
             var actor = await AuditActorAccessor.GetAsync();
             if (RuleId is { } ruleId)

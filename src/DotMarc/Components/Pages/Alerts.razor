@@ -109,7 +109,13 @@ else
             <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
             <MudTd>@FormatCreated(context)</MudTd>
             <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
-            <MudTd>@context.Message</MudTd>
+            <MudTd>
+                @context.Message
+                @if (AlertRulePresentation.DescribeNotification(context, RuleOf(context), _zone) is { } notification)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@notification</MudText>
+                }
+            </MudTd>
             <MudTd DataLabel="Tickets">
                 @foreach (var ticket in context.Tickets.OrderBy(ticket => ticket.Psa))
                 {
@@ -187,6 +193,11 @@ else
     private bool _showRule;
     private Dictionary<int, string> _ruleNames = [];
 
+    private Dictionary<int, AlertRule> _rulesById = [];
+    private TimeZoneInfo _zone = TimeZoneInfo.Utc;
+
+    private AlertRule? RuleOf(AlertEvent alert) => alert.AlertRuleId is { } ruleId && _rulesById.TryGetValue(ruleId, out var rule) ? rule : null;
+
     private string RuleNameOf(AlertEvent alert) => alert.AlertRuleId is { } ruleId && _ruleNames.TryGetValue(ruleId, out var name) ? name : string.Empty;
 
     protected override Task OnInitializedAsync() => LoadAsync();
@@ -202,7 +213,9 @@ else
             .ToListAsync();
 
         _showRule = AlertRuleAccess.MayView((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
-        _ruleNames = _showRule ? await db.AlertRules.AsNoTracking().ToDictionaryAsync(rule => rule.Id, rule => rule.Name) : [];
+        _rulesById = _showRule ? await db.AlertRules.AsNoTracking().ToDictionaryAsync(rule => rule.Id) : [];
+        _ruleNames = _rulesById.ToDictionary(pair => pair.Key, pair => pair.Value.Name);
+        _zone = QuietHours.ZoneFor((await NotificationSettingsService.GetAsync(db)).TimeZoneId);
 
         var alertDomainNames = _alerts.Select(alert => alert.DomainName).Distinct().ToArray();
         _domainNames = (await db.Domains.AsNoTracking()

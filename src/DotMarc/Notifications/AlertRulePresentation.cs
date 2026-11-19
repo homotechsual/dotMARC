@@ -95,6 +95,26 @@ public static class AlertRulePresentation
         return sentences.Count == 0 ? null : string.Join(" ", sentences);
     }
 
+    /// <summary>What the Alerts page says about an alert's notification when quiet hours kept it back, or null when it went out as usual.
+    /// An open alert not yet notified is being held. An alert raised inside a Mute window is read from the rule as it is now, so a window
+    /// edited since may change the answer for old alerts.</summary>
+    public static string? DescribeNotification(AlertEvent alert, AlertRule? rule, TimeZoneInfo zone)
+    {
+        if (alert.IsResolved)
+        {
+            return null;
+        }
+
+        if (alert.NotifiedUtc is null)
+        {
+            return "Notification held until the quiet window ends.";
+        }
+
+        return rule is { QuietMode: AlertQuietMode.Mute } && QuietHours.Decide(rule, alert.Severity, alert.CreatedUtc, zone) == QuietDecision.Mute
+            ? "Muted by quiet hours."
+            : null;
+    }
+
     /// <summary>Minutes after midnight as "HH:mm", the way the rule dialog and the API show a time of day.</summary>
     public static string ClockTime(int minutesAfterMidnight) =>
         string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{minutesAfterMidnight / 60:00}:{minutesAfterMidnight % 60:00}");
