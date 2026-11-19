@@ -15,7 +15,7 @@ No two MSPs work the same way, and dotMARC is also used for internal IT. One MSP
 ## Goals
 
 - A rule is a built-in **kind** plus **parameters**, a **scope**, a **severity** and **delivery** settings, and an enabled switch.
-- Any number of rules per kind. For one domain and kind, exactly one rule applies: the most specific scope wins.
+- Any number of rules per kind, kept in an order the administrator controls. Each rule says whether processing **continues** to the rules after it (like a mail flow rule), so a narrow rule can replace the default for one client, or sit beside it.
 - A **default pack**: one rule per kind, scoped to all domains, with parameters equal to today's behaviour. On an existing install the pack is seeded from the values currently on the settings row, so no customisation is lost.
 - A new permission, **Manage alert rules**, that gates creating, editing, ordering, disabling and deleting rules. Viewing rules needs the existing alert view permission.
 - Every rule change is recorded in the audit log, with what changed.
@@ -58,7 +58,7 @@ A rule has:
 
 - **Kind**: which detection it configures. Fixed once the rule is created.
 - **Name**: shown in lists and on the alerts it raises. The default pack's names are the kinds' display names.
-- **Enabled**, **severity** (Info, Warning, Critical), **priority** (order, for ties).
+- **Enabled**, **severity** (Info, Warning, Critical), its place in the **order** of rules for its kind, and **Stop processing more rules** (on by default).
 - **Scope**: included groups, tags and domains, and excluded groups, tags and domains. Empty includes mean all domains. A kind with no domain, such as API key expiry, has no scope.
 - **Parameters**: a set of named values defined by the kind (below).
 - **Delivery**: cooldown in minutes (blank uses the global cooldown), auto-close after N days where the kind supports it, ticket mode (follow the ticket rules, never, or always), and destinations (Phase 3).
@@ -81,19 +81,23 @@ A rule has:
 
 ## Which rule applies
 
-For one domain and kind, the applicable rule is the enabled rule whose scope matches the domain, with the most specific scope winning: a rule naming the domain, then one matching one of its tags, then one matching one of its groups, then an all-domains rule. Exclusions remove a domain from a rule's reach before this ranking. Ties at the same specificity go to the lower priority number. If no enabled rule applies, no alert of that kind is raised for the domain, and an open one is resolved.
+Rules of one kind are processed for a domain **in order, top to bottom**. A rule applies to the domain if it is enabled and its scope matches (exclusions remove a domain from a rule's reach). The rule is evaluated and may raise an alert. Then, if the rule has **Stop processing more rules** on, the rules after it are skipped for that domain. If it is off, the next matching rule is evaluated too, so two rules can each raise their own alert for the same condition.
 
-Because one rule applies per domain and kind, an alert is still unique per domain and type, so cooldown, acknowledgement and tickets keep working unchanged. Alerts gain a nullable link to the rule that raised them.
+- **A new rule is added above the default rule of its kind**, with Stop processing on. A narrow rule for one client therefore replaces the default for that client with no further steps, which is today's "override" behaviour. Turning Stop processing off makes it additional.
+- A rule being skipped because an earlier rule stopped processing is not an error. The editor says which rule shadows it.
+- If no enabled rule applies to a domain for a kind, no alert of that kind is raised for it, and open ones are resolved.
 
-Default pack rules cannot be deleted. They can be disabled, edited, scoped and reset to the shipped values. Disabling the all-domains default and relying on a narrower rule is allowed and means other domains are not alerted.
+Because rules can stack, an alert's identity becomes **domain, alert type and rule**. Cooldown, acknowledgement, auto-close and resolution all work per rule, and an alert shows the rule that raised it. A domain can therefore have two open alerts of one type, from two rules with different settings. Tickets are created per alert, as now, so two stacked rules can open two tickets unless one sets its ticket mode to never. A rule that stops applying to a domain (it is disabled, rescoped or reordered behind a stopping rule) resolves its open alerts for that domain.
+
+Default pack rules cannot be deleted. They can be disabled, edited, scoped, moved and reset to the shipped values. Disabling the all-domains default and relying on a narrower rule is allowed and means other domains are not alerted.
 
 ## The editor
 
-A new **Alert rules** page under Manage, shown to people with Manage alert rules. A list grouped by kind, with the scope summarised in words, the severity, whether it is on, and how many domains it applies to. Opening a rule edits it in a dialog generated from the kind's parameter definitions: each parameter has a label, a help sentence, a type (number, choice, switch), a range and a default. **Reset to default** restores the shipped values. **Add a rule** picks a kind and starts from its default values.
+A new **Alert rules** page under Manage, shown to people with Manage alert rules. A list grouped by kind, in processing order, with up and down controls (drag where it works) and the scope summarised in words, the severity, whether it is on, whether it stops processing, and how many domains it applies to. Opening a rule edits it in a dialog generated from the kind's parameter definitions: each parameter has a label, a help sentence, a type (number, choice, switch), a range and a default. **Reset to default** restores the shipped values. **Add a rule** picks a kind and starts from its default values.
 
 The existing Alert settings page keeps what is not per rule: the master switch, the channels and their webhook URLs, the global cooldown and the monitor interval. The threshold and mode fields it has now move to the rules, with a note on the page saying where they went.
 
-A rule editor shows "Applies to N domains" live as the scope changes, and a warning when another rule of the same kind and the same specificity also matches some of those domains and wins.
+A rule editor shows "Applies to N domains" live as the scope changes. It also warns when an earlier rule that stops processing hides this rule from some of those domains, naming that rule, and when a later rule is hidden by this one.
 
 ## Migration
 
@@ -101,18 +105,19 @@ One migration adds the rule tables, then seeds the default pack from the current
 
 ## Permissions and audit
 
-A new permission, `AlertRulesManage`, added to the permission set with its place on the Access page. The Admin role has it. Existing custom roles do not, so on upgrade nobody who could edit thresholds yesterday loses a view of them, but they can no longer change them until granted. The release notes say so. Rule changes are audited with the rule, the field and the old and new values, using the existing audit log.
+A new permission, `AlertRulesManage`, added to the permission set with its place on the Access page. The Admin role has it. Existing custom roles do not get it automatically, so someone who could edit thresholds before can still see them but cannot change them until granted. The release notes say so. Rule changes are audited with the rule, the field and the old and new values, using the existing audit log.
 
 ## Phases
 
-1. **Engine and default pack.** Rule tables, the kinds catalogue with parameter definitions, scope resolution, the detections reading rule parameters, the migration and seeding, alerts linked to their rule. No new screen. Behaviour is identical to today: the existing alerting tests pass against rules built from defaults, plus tests for scope resolution and for migration of custom values.
+1. **Engine and default pack.** Rule tables, the kinds catalogue with parameter definitions, ordered rule processing with Stop processing, alerts keyed by rule, the detections reading rule parameters, the migration and seeding, alerts linked to their rule. No new screen. Behaviour is identical to today: the existing alerting tests pass against rules built from defaults, plus tests for ordering, Stop processing and stacked alerts, scope matching, and migration of custom values.
 2. **Editor, permission, audit, Under review.** The Alert rules page, the new permission, audit entries, the Under review parameter, the changed Alert settings page, demo data (a scoped rule and an Under review example), and the docs.
-3. **Destinations.** Named webhook destinations (a type and a URL, any number) replacing the three fixed channels, chosen per rule. The existing channels migrate to destinations. Ticket mode per rule.
+3. **Destinations (part of this work).** Named webhook destinations (a type and a URL, any number) replacing the three fixed channels, chosen per rule. The existing channels migrate to destinations. Ticket mode per rule.
 4. **Later, named only.** Quiet hours and escalation, a metric threshold kind, rule read endpoints in the API.
 
 ## Open points settled here (my calls)
 
-- Most specific scope wins and rules never stack, so overlapping rules do not double-alert. If someone needs two different outcomes for one condition, that is one rule with several destinations (Phase 3).
+- Rules are ordered and each has Stop processing more rules, on by default, so the common case (a narrower override) is one rule and no extra steps. Stacking is opt in.
+- An alert belongs to a rule: its identity is domain, type and rule.
 - Severity gets a Critical level in addition to today's Warning and Info. Existing alerts keep theirs.
 - Only the alert follows the Under review handling. The Overview count does not.
 - Old settings columns are kept for one release rather than dropped in the migration.
