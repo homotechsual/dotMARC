@@ -6,7 +6,6 @@ name: Deploy next
 on:
   push:
     branches: [develop]
-    paths-ignore: [website/**]
   workflow_dispatch:
 
 env:
