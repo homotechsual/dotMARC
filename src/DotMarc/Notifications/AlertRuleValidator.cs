@@ -18,7 +18,13 @@ public sealed record AlertRuleInput(
     IReadOnlyList<AlertRuleScopeInput> Scope,
     AlertDestinationMode DestinationMode = AlertDestinationMode.All,
     IReadOnlyList<int>? DestinationIds = null,
-    AlertTicketMode TicketMode = AlertTicketMode.FollowRules);
+    AlertTicketMode TicketMode = AlertTicketMode.FollowRules,
+    AlertQuietMode QuietMode = AlertQuietMode.Off,
+    int? QuietStartMinutes = null,
+    int? QuietEndMinutes = null,
+    bool QuietIgnoredForCritical = true,
+    int? EscalateAfterMinutes = null,
+    IReadOnlyList<int>? EscalationDestinationIds = null);
 
 /// <summary>Checks a rule against its kind's description. Every problem is a sentence that names the field, so a person can fix it
 /// without guessing; all problems are returned, not just the first.</summary>
@@ -27,6 +33,8 @@ public static class AlertRuleValidator
     public const int MaxNameLength = 200;
     public const int MaxCooldownMinutes = 10080;
     public const int MaxAutoCloseDays = 365;
+    public const int MinEscalateAfterMinutes = 5;
+    public const int MaxEscalateAfterMinutes = 10080;
 
     public static IReadOnlyList<string> Problems(string kind, AlertRuleInput input)
     {
@@ -68,6 +76,12 @@ public static class AlertRuleValidator
             }
         }
 
+        problems.AddRange(QuietHoursProblems(input));
+        if (input.EscalateAfterMinutes is { } escalateAfter && (escalateAfter < MinEscalateAfterMinutes || escalateAfter > MaxEscalateAfterMinutes))
+        {
+            problems.Add($"Escalate after must be from {MinEscalateAfterMinutes} to {MaxEscalateAfterMinutes} minutes.");
+        }
+
         foreach (var (key, value) in input.Parameters)
         {
             var parameter = definition.Parameters.FirstOrDefault(candidate => candidate.Key == key);
@@ -83,6 +97,32 @@ public static class AlertRuleValidator
 
         problems.AddRange(ScopeProblems(definition, input.Scope));
         return problems;
+    }
+
+    private static IEnumerable<string> QuietHoursProblems(AlertRuleInput input)
+    {
+        foreach (var minutes in new[] { input.QuietStartMinutes, input.QuietEndMinutes })
+        {
+            if (minutes is < 0 or >= QuietHours.MinutesInDay)
+            {
+                yield return "Quiet hours start and end must be times of day from 0:00 to 23:59.";
+                yield break;
+            }
+        }
+
+        if (input.QuietMode == AlertQuietMode.Off)
+        {
+            yield break;
+        }
+
+        if (input.QuietStartMinutes is null || input.QuietEndMinutes is null)
+        {
+            yield return "Quiet hours need a start and an end time.";
+        }
+        else if (input.QuietStartMinutes == input.QuietEndMinutes)
+        {
+            yield return "Quiet hours need a start and an end time that are different.";
+        }
     }
 
     private static string? ParameterProblem(AlertRuleParameterDefinition parameter, string value)

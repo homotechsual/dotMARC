@@ -17,12 +17,18 @@ public static class NotificationSettingsService
 
     public static async Task SaveAsync(DotMarcDbContext context, AuditActor actor, NotificationSettings updated, CancellationToken cancellationToken = default)
     {
+        if (!QuietHours.IsValidZone(updated.TimeZoneId))
+        {
+            throw new ArgumentException("The time zone isn't one dotMARC knows. Pick one from the list.", nameof(updated));
+        }
+
         // A no-tracking snapshot, because the caller may pass the very instance this context is tracking.
         var saved = await context.NotificationSettings.AsNoTracking().SingleAsync(cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()
             .Field("Enabled", saved.Enabled, updated.Enabled)
             .Field("Cooldown (minutes)", saved.CooldownMinutes, updated.CooldownMinutes)
-            .Field("Monitor interval (seconds)", saved.MonitorIntervalSeconds, updated.MonitorIntervalSeconds);
+            .Field("Monitor interval (seconds)", saved.MonitorIntervalSeconds, updated.MonitorIntervalSeconds)
+            .Field("Time zone", saved.TimeZoneId, updated.TimeZoneId.Trim());
         if (!changes.Any)
         {
             return;
@@ -33,6 +39,7 @@ public static class NotificationSettingsService
         existing.Enabled = updated.Enabled;
         existing.CooldownMinutes = updated.CooldownMinutes;
         existing.MonitorIntervalSeconds = updated.MonitorIntervalSeconds;
+        existing.TimeZoneId = updated.TimeZoneId.Trim();
 
         AuditLog.Record(context, actor, AuditActions.NotificationSettingsSaved, AuditTarget.Settings("Notifications"), "Saved notification settings", changes);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

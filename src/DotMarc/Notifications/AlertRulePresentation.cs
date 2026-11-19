@@ -82,8 +82,22 @@ public static class AlertRulePresentation
             sentences.Add(rule.TicketMode == AlertTicketMode.Always ? "Always opens a ticket." : "Never opens a ticket.");
         }
 
+        if (rule.QuietMode != AlertQuietMode.Off && rule.QuietStartMinutes is { } start && rule.QuietEndMinutes is { } end)
+        {
+            sentences.Add($"Quiet {ClockTime(start)} to {ClockTime(end)} ({(rule.QuietMode == AlertQuietMode.Hold ? "held" : "muted")}).");
+        }
+
+        if (rule.EscalateAfterMinutes is { } escalateAfter)
+        {
+            sentences.Add($"Escalates after {escalateAfter} minutes.");
+        }
+
         return sentences.Count == 0 ? null : string.Join(" ", sentences);
     }
+
+    /// <summary>Minutes after midnight as "HH:mm", the way the rule dialog and the API show a time of day.</summary>
+    public static string ClockTime(int minutesAfterMidnight) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{minutesAfterMidnight / 60:00}:{minutesAfterMidnight % 60:00}");
 
     private static string Join(IReadOnlyList<string> names) =>
         names.Count == 1 ? names[0] : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
@@ -99,7 +113,9 @@ public static class AlertRulePresentation
         return new AlertRuleInput(
             rule.Name, rule.Enabled, rule.Severity, rule.StopProcessing, rule.CooldownMinutes, rule.AutoCloseDays, parameters,
             [.. rule.Scope.Select(entry => new AlertRuleScopeInput(entry.Target, entry.TargetId, entry.Exclude))],
-            rule.DestinationMode, [.. rule.Destinations.Select(link => link.AlertDestinationId)], rule.TicketMode);
+            rule.DestinationMode, [.. rule.Destinations.Select(link => link.AlertDestinationId)], rule.TicketMode,
+            rule.QuietMode, rule.QuietStartMinutes, rule.QuietEndMinutes, rule.QuietIgnoredForCritical, rule.EscalateAfterMinutes,
+            [.. rule.EscalationDestinations.Select(link => link.AlertDestinationId)]);
     }
 
     public static bool IsDeadTarget(AlertRuleScopeEntry entry, AlertScopeNames names) => entry.Target switch

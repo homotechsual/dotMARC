@@ -23,6 +23,7 @@ public static class AlertRuleService
         var problems = AlertRuleValidator.Problems(kind, input).ToList();
         await AddDuplicateNameProblemAsync(context, kind, input.Name, exceptRuleId: null, problems, cancellationToken).ConfigureAwait(false);
         await AddUnknownDestinationProblemAsync(context, input, problems, cancellationToken).ConfigureAwait(false);
+        await AddUnknownEscalationProblemAsync(context, input, problems, cancellationToken).ConfigureAwait(false);
         if (problems.Count > 0)
         {
             throw new AlertRuleValidationException(problems);
@@ -44,7 +45,13 @@ public static class AlertRuleService
             Scope = [.. input.Scope.Select(entry => new AlertRuleScopeEntry { Target = entry.Target, TargetId = entry.TargetId, Exclude = entry.Exclude })],
             DestinationMode = input.DestinationMode,
             TicketMode = input.TicketMode,
-            Destinations = [.. WantedDestinationIds(input).Select(id => new AlertRuleDestination { AlertDestinationId = id })]
+            Destinations = [.. WantedDestinationIds(input).Select(id => new AlertRuleDestination { AlertDestinationId = id })],
+            QuietMode = input.QuietMode,
+            QuietStartMinutes = input.QuietStartMinutes,
+            QuietEndMinutes = input.QuietEndMinutes,
+            QuietIgnoredForCritical = input.QuietIgnoredForCritical,
+            EscalateAfterMinutes = input.EscalateAfterMinutes,
+            EscalationDestinations = [.. WantedEscalationIds(input).Select(id => new AlertRuleEscalationDestination { AlertDestinationId = id })]
         };
         context.AlertRules.Add(created);
         await AuditLog.SaveAndRecordAsync(
@@ -60,6 +67,7 @@ public static class AlertRuleService
         var problems = AlertRuleValidator.Problems(rule.Kind, input).ToList();
         await AddDuplicateNameProblemAsync(context, rule.Kind, input.Name, rule.Id, problems, cancellationToken).ConfigureAwait(false);
         await AddUnknownDestinationProblemAsync(context, input, problems, cancellationToken).ConfigureAwait(false);
+        await AddUnknownEscalationProblemAsync(context, input, problems, cancellationToken).ConfigureAwait(false);
         if (problems.Count > 0)
         {
             throw new AlertRuleValidationException(problems);
@@ -75,11 +83,21 @@ public static class AlertRuleService
             .Field("Stop processing", rule.StopProcessing, input.StopProcessing)
             .Field("Cooldown (minutes)", rule.CooldownMinutes, input.CooldownMinutes)
             .Field("Close after (days)", rule.AutoCloseDays, input.AutoCloseDays)
-            .Field("Ticket mode", rule.TicketMode.ToString(), input.TicketMode.ToString());
+            .Field("Ticket mode", rule.TicketMode.ToString(), input.TicketMode.ToString())
+            .Field("Quiet mode", rule.QuietMode.ToString(), input.QuietMode.ToString())
+            .Field("Quiet hours", QuietWindowText(rule.QuietMode, rule.QuietStartMinutes, rule.QuietEndMinutes), QuietWindowText(input.QuietMode, input.QuietStartMinutes, input.QuietEndMinutes))
+            .Field("Critical alerts ignore quiet hours", rule.QuietIgnoredForCritical, input.QuietIgnoredForCritical)
+            .Field("Escalate after (minutes)", rule.EscalateAfterMinutes, input.EscalateAfterMinutes);
         foreach (var definition in AlertRuleKinds.Find(rule.Kind)!.Parameters)
         {
             changes.Field(definition.Label, oldParameters.GetValueOrDefault(definition.Key, definition.Default), newParameters[definition.Key]);
         }
+
+        var wantedEscalationIds = WantedEscalationIds(input);
+        var escalationNames = await DestinationNamesAsync(context, rule.EscalationDestinations.Select(link => link.AlertDestinationId).Concat(wantedEscalationIds), cancellationToken).ConfigureAwait(false);
+        changes.Set("Escalation destinations",
+            rule.EscalationDestinations.Select(link => escalationNames.GetValueOrDefault(link.AlertDestinationId, $"Destination {link.AlertDestinationId}")),
+            wantedEscalationIds.Select(id => escalationNames.GetValueOrDefault(id, $"Destination {id}")));
 
         var wantedDestinationIds = WantedDestinationIds(input);
         var destinationNames = await DestinationNamesAsync(context, rule.Destinations.Select(link => link.AlertDestinationId).Concat(wantedDestinationIds), cancellationToken).ConfigureAwait(false);
@@ -102,6 +120,12 @@ public static class AlertRuleService
         rule.ParametersJson = JsonSerializer.Serialize(newParameters);
         rule.TicketMode = input.TicketMode;
         rule.DestinationMode = input.DestinationMode;
+        rule.QuietMode = input.QuietMode;
+        rule.QuietStartMinutes = input.QuietStartMinutes;
+        rule.QuietEndMinutes = input.QuietEndMinutes;
+        rule.QuietIgnoredForCritical = input.QuietIgnoredForCritical;
+        rule.EscalateAfterMinutes = input.EscalateAfterMinutes;
+        ReplaceEscalationDestinations(rule, wantedEscalationIds);
         ReplaceDestinations(rule, wantedDestinationIds);
         ReplaceScope(rule, input.Scope);
 
@@ -179,7 +203,11 @@ public static class AlertRuleService
             .Field("Cooldown (minutes)", rule.CooldownMinutes, shipped.CooldownMinutes)
             .Field("Close after (days)", rule.AutoCloseDays, shipped.AutoCloseDays)
             .Field("Ticket mode", rule.TicketMode.ToString(), AlertTicketMode.FollowRules.ToString())
-            .Set("Destinations", DestinationLabels(rule.DestinationMode, oldDestinationIds, resetNames), DestinationLabels(AlertDestinationMode.All, [], resetNames));
+            .Set("Destinations", DestinationLabels(rule.DestinationMode, oldDestinationIds, resetNames), DestinationLabels(AlertDestinationMode.All, [], resetNames))
+            .Field("Quiet mode", rule.QuietMode.ToString(), AlertQuietMode.Off.ToString())
+            .Field("Quiet hours", QuietWindowText(rule.QuietMode, rule.QuietStartMinutes, rule.QuietEndMinutes), QuietWindowText(AlertQuietMode.Off, null, null))
+            .Field("Critical alerts ignore quiet hours", rule.QuietIgnoredForCritical, true)
+            .Field("Escalate after (minutes)", rule.EscalateAfterMinutes, (int?)null);
         foreach (var definition in kind.Parameters)
         {
             changes.Field(definition.Label, oldParameters.GetValueOrDefault(definition.Key, definition.Default), definition.Default);
@@ -196,6 +224,8 @@ public static class AlertRuleService
         rule.ParametersJson = JsonSerializer.Serialize(shipped.Parameters);
         rule.TicketMode = AlertTicketMode.FollowRules;
         rule.DestinationMode = AlertDestinationMode.All;
+        (rule.QuietMode, rule.QuietStartMinutes, rule.QuietEndMinutes, rule.QuietIgnoredForCritical, rule.EscalateAfterMinutes) = (AlertQuietMode.Off, null, null, true, null);
+        ReplaceEscalationDestinations(rule, []);
         ReplaceDestinations(rule, []);
         ReplaceScope(rule, []);
 
@@ -247,7 +277,7 @@ public static class AlertRuleService
     }
 
     private static async Task<AlertRule> LoadAsync(DotMarcDbContext context, int ruleId, CancellationToken cancellationToken) =>
-        await context.AlertRules.Include(rule => rule.Scope).Include(rule => rule.Destinations).AsSplitQuery().SingleOrDefaultAsync(rule => rule.Id == ruleId, cancellationToken).ConfigureAwait(false)
+        await context.AlertRules.Include(rule => rule.Scope).Include(rule => rule.Destinations).Include(rule => rule.EscalationDestinations).AsSplitQuery().SingleOrDefaultAsync(rule => rule.Id == ruleId, cancellationToken).ConfigureAwait(false)
         ?? throw new AlertRuleValidationException(["That alert rule no longer exists."]);
 
     private static async Task AddDuplicateNameProblemAsync(DotMarcDbContext context, string kind, string name, int? exceptRuleId, List<string> problems, CancellationToken cancellationToken)
@@ -290,6 +320,43 @@ public static class AlertRuleService
     /// <summary>The destinations the rule keeps: the ones chosen when it is in Selected mode, none otherwise.</summary>
     private static List<int> WantedDestinationIds(AlertRuleInput input) =>
         input.DestinationMode == AlertDestinationMode.Selected ? [.. (input.DestinationIds ?? []).Distinct()] : [];
+
+    /// <summary>The destinations a rule escalates to: the ones ticked, and only while it has an escalation time.</summary>
+    private static List<int> WantedEscalationIds(AlertRuleInput input) =>
+        input.EscalateAfterMinutes is not null ? [.. (input.EscalationDestinationIds ?? []).Distinct()] : [];
+
+    private static async Task AddUnknownEscalationProblemAsync(DotMarcDbContext context, AlertRuleInput input, List<string> problems, CancellationToken cancellationToken)
+    {
+        var wanted = WantedEscalationIds(input);
+        if (wanted.Count == 0)
+        {
+            return;
+        }
+
+        var known = await context.AlertDestinations.AsNoTracking().Where(destination => wanted.Contains(destination.Id)).CountAsync(cancellationToken).ConfigureAwait(false);
+        if (known != wanted.Count)
+        {
+            problems.Add("A destination you chose to escalate to no longer exists. Reload the page and choose again.");
+        }
+    }
+
+    private static string QuietWindowText(AlertQuietMode mode, int? start, int? end) =>
+        mode == AlertQuietMode.Off || start is null || end is null
+            ? "None"
+            : $"{AlertRulePresentation.ClockTime(start.Value)} to {AlertRulePresentation.ClockTime(end.Value)}";
+
+    private static void ReplaceEscalationDestinations(AlertRule rule, IReadOnlyCollection<int> wanted)
+    {
+        foreach (var link in rule.EscalationDestinations.Where(link => !wanted.Contains(link.AlertDestinationId)).ToList())
+        {
+            rule.EscalationDestinations.Remove(link);
+        }
+
+        foreach (var id in wanted.Where(id => !rule.EscalationDestinations.Any(link => link.AlertDestinationId == id)))
+        {
+            rule.EscalationDestinations.Add(new AlertRuleEscalationDestination { AlertDestinationId = id });
+        }
+    }
 
     private static async Task AddUnknownDestinationProblemAsync(DotMarcDbContext context, AlertRuleInput input, List<string> problems, CancellationToken cancellationToken)
     {
