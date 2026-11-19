@@ -63,4 +63,24 @@ public sealed class AlertDestinationRoutingTests
 
         Assert.Empty(AlertDestinationRouting.Resolve(Rule(AlertDestinationMode.Selected), all));
     }
+
+    private static AlertRule EscalatingRule(params int[] escalationIds) => new()
+    {
+        Kind = AlertTypes.MissedReport, Name = "Rule", Severity = "Warning",
+        EscalationDestinations = [.. escalationIds.Select(id => new AlertRuleEscalationDestination { AlertDestinationId = id })]
+    };
+
+    [Fact]
+    public void Escalation_GoesOnlyToTheTickedDestinations_ThatAreOnAndHaveAUrl()
+    {
+        var all = new[] { Destination(1, "A"), Destination(2, "B", enabled: false), Destination(3, "C", url: " "), Destination(4, "D") };
+
+        Assert.Equal(["A"], Names(AlertDestinationRouting.ResolveEscalation(EscalatingRule(1, 2, 3), all)));
+    }
+
+    [Fact]
+    public void Escalation_WithNoneTicked_GoesNowhere()
+    {
+        Assert.Empty(AlertDestinationRouting.ResolveEscalation(EscalatingRule(), [Destination(1, "A")]));
+    }
 }

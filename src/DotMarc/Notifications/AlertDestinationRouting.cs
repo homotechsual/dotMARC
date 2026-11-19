@@ -19,4 +19,12 @@ public static class AlertDestinationRouting
         var chosen = rule.Destinations.Select(link => link.AlertDestinationId).ToHashSet();
         return [.. usable.Where(destination => chosen.Contains(destination.Id))];
     }
+
+    /// <summary>Where a rule's escalation goes: only the destinations ticked for escalation, and only those that are on and have a URL.
+    /// A rule with none ticked escalates to nobody.</summary>
+    public static IReadOnlyList<AlertDestination> ResolveEscalation(AlertRule rule, IReadOnlyCollection<AlertDestination> all)
+    {
+        var chosen = rule.EscalationDestinations.Select(link => link.AlertDestinationId).ToHashSet();
+        return [.. all.Where(destination => destination.Enabled && !string.IsNullOrWhiteSpace(destination.Url) && chosen.Contains(destination.Id))];
+    }
 }

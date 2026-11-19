@@ -27,13 +27,15 @@ public sealed class AlertingService : IAlertingService
     private readonly IAlertWebhookClient _alertWebhookClient;
     private readonly IPsaTicketService _psaTicketService;
     private readonly ILogger<AlertingService> _logger;
+    private readonly TimeProvider _timeProvider;
 
-    public AlertingService(IDbContextFactory<DotMarcDbContext> dbFactory, IAlertWebhookClient alertWebhookClient, IPsaTicketService psaTicketService, ILogger<AlertingService> logger)
+    public AlertingService(IDbContextFactory<DotMarcDbContext> dbFactory, IAlertWebhookClient alertWebhookClient, IPsaTicketService psaTicketService, ILogger<AlertingService> logger, TimeProvider? timeProvider = null)
     {
         _dbFactory = dbFactory;
         _alertWebhookClient = alertWebhookClient;
         _psaTicketService = psaTicketService;
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task CheckPinnedDomainsAsync(CancellationToken cancellationToken = default)
@@ -152,6 +154,10 @@ public sealed class AlertingService : IAlertingService
 
         await CheckDnsHealthAsync(db, settings, rules, domains, cancellationToken).ConfigureAwait(false);
         await CheckApiKeyExpiryAsync(db, settings, rules, cancellationToken).ConfigureAwait(false);
+
+        // Last, so an alert the checks above resolved is never sent after all, and one raised in this very cycle is considered too.
+        await SendHeldAlertsAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        await EscalateAlertsAsync(db, settings, cancellationToken).ConfigureAwait(false);
     }
 
     private static readonly string[] SystemKinds = [AlertTypes.ClientReportFailed, AlertTypes.PsaConnectionLost, AlertTypes.ApiKeyExpiring];
@@ -654,7 +660,7 @@ public sealed class AlertingService : IAlertingService
 
         if (activeAlert is not null)
         {
-            if (activeAlert.CreatedUtc > DateTimeOffset.UtcNow.Subtract(cooldown ?? TimeSpan.FromMinutes(settings.CooldownMinutes)))
+            if (activeAlert.CreatedUtc > _timeProvider.GetUtcNow().Subtract(cooldown ?? TimeSpan.FromMinutes(settings.CooldownMinutes)))
             {
                 return;
             }
@@ -667,18 +673,30 @@ public sealed class AlertingService : IAlertingService
             Severity = severity,
             Title = title,
             Message = message,
-            CreatedUtc = DateTimeOffset.UtcNow,
+            CreatedUtc = _timeProvider.GetUtcNow(),
             AlertRuleId = ruleId
         };
-
 
         context.AlertEvents.Add(alert);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            var destinations = settings.Enabled ? await DestinationsForAsync(context, ruleId, cancellationToken).ConfigureAwait(false) : [];
-            await _alertWebhookClient.SendAlertAsync(destinations, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
+            // Quiet hours decide whether the notification goes now, waits (Hold: NotifiedUtc stays empty and the cycle sends it
+            // once the window ends) or is muted. They affect the notification only: the alert is recorded and a ticket still opens.
+            var delivery = await LoadDeliveryAsync(context, settings, cancellationToken).ConfigureAwait(false);
+            var rule = ruleId is { } id ? delivery.Rules.GetValueOrDefault(id) : null;
+            var decision = QuietHours.Decide(rule, severity, delivery.Now, delivery.Zone);
+            if (decision == QuietDecision.Deliver)
+            {
+                await SendNotificationAsync(delivery, rule, alert, titlePrefix: null, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (decision != QuietDecision.Hold)
+            {
+                alert.NotifiedUtc = delivery.Now;
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -696,14 +714,99 @@ public sealed class AlertingService : IAlertingService
         }
     }
 
-    /// <summary>The destinations an alert from this rule goes to. A rule that no longer exists (null id, or deleted since) sends to all.</summary>
-    private static async Task<IReadOnlyList<AlertDestination>> DestinationsForAsync(DotMarcDbContext context, int? ruleId, CancellationToken cancellationToken)
+    /// <summary>Everything delivering a notification needs, read once: the rules with their destinations, every destination, the zone
+    /// quiet hours are read in, and now.</summary>
+    private sealed record DeliveryContext(Dictionary<int, AlertRule> Rules, IReadOnlyList<AlertDestination> Destinations, TimeZoneInfo Zone, DateTimeOffset Now, bool NotificationsEnabled);
+
+    private async Task<DeliveryContext> LoadDeliveryAsync(DotMarcDbContext context, NotificationSettings settings, CancellationToken cancellationToken)
     {
-        var rule = ruleId is null
-            ? null
-            : await context.AlertRules.AsNoTracking().Include(candidate => candidate.Destinations).SingleOrDefaultAsync(candidate => candidate.Id == ruleId, cancellationToken).ConfigureAwait(false);
-        var all = await context.AlertDestinations.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
-        return AlertDestinationRouting.Resolve(rule, all);
+        var rules = await context.AlertRules.AsNoTracking()
+            .Include(rule => rule.Destinations).Include(rule => rule.EscalationDestinations).AsSplitQuery()
+            .ToDictionaryAsync(rule => rule.Id, cancellationToken).ConfigureAwait(false);
+        var destinations = await context.AlertDestinations.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        return new DeliveryContext(rules, destinations, QuietHours.ZoneFor(settings.TimeZoneId), _timeProvider.GetUtcNow(), settings.Enabled);
+    }
+
+    /// <summary>Sends an alert to the destinations its rule chooses (to every destination for an alert with no rule), or to nobody while
+    /// notifications are switched off. A rule that no longer exists sends to all.</summary>
+    private async Task SendNotificationAsync(DeliveryContext delivery, AlertRule? rule, AlertEvent alert, string? titlePrefix, CancellationToken cancellationToken)
+    {
+        var destinations = delivery.NotificationsEnabled ? AlertDestinationRouting.Resolve(rule, delivery.Destinations) : [];
+        await _alertWebhookClient.SendAlertAsync(destinations, alert.DomainName, alert.AlertType, alert.Severity, titlePrefix + alert.Title, alert.Message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Sends the notification of every open alert a quiet window was holding, once its window has ended. An alert resolved or
+    /// acknowledged in the meantime is never sent.</summary>
+    private async Task SendHeldAlertsAsync(DotMarcDbContext context, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var held = await context.AlertEvents.Where(alert => !alert.IsResolved && alert.NotifiedUtc == null).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (held.Count == 0)
+        {
+            return;
+        }
+
+        var delivery = await LoadDeliveryAsync(context, settings, cancellationToken).ConfigureAwait(false);
+        foreach (var alert in held)
+        {
+            var rule = alert.AlertRuleId is { } id ? delivery.Rules.GetValueOrDefault(id) : null;
+            if (QuietHours.Decide(rule, alert.Severity, delivery.Now, delivery.Zone) != QuietDecision.Deliver)
+            {
+                continue;
+            }
+
+            try
+            {
+                await SendNotificationAsync(delivery, rule, alert, titlePrefix: null, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "Failed to send the held {AlertType} alert for {DomainName}.", alert.AlertType, alert.DomainName);
+            }
+
+            alert.NotifiedUtc = delivery.Now;
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Sends an open alert to its rule's escalation destinations once it has stayed open for the rule's escalation time since it was
+    /// notified. It happens once per alert, ignores quiet hours, and never happens to an alert still being held (not yet notified). Acknowledging
+    /// an alert resolves it, so open means unacknowledged.</summary>
+    private async Task EscalateAlertsAsync(DotMarcDbContext context, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var candidates = await context.AlertEvents
+            .Where(alert => !alert.IsResolved && alert.NotifiedUtc != null && alert.EscalatedUtc == null && alert.AlertRuleId != null)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        var delivery = await LoadDeliveryAsync(context, settings, cancellationToken).ConfigureAwait(false);
+        foreach (var alert in candidates)
+        {
+            if (delivery.Rules.GetValueOrDefault(alert.AlertRuleId!.Value) is not { EscalateAfterMinutes: { } minutes } rule
+                || alert.NotifiedUtc!.Value.AddMinutes(minutes) > delivery.Now)
+            {
+                continue;
+            }
+
+            var escalateTo = AlertDestinationRouting.ResolveEscalation(rule, delivery.Destinations);
+            if (escalateTo.Count > 0 && delivery.NotificationsEnabled)
+            {
+                try
+                {
+                    await _alertWebhookClient.SendAlertAsync(escalateTo, alert.DomainName, alert.AlertType, alert.Severity, "Escalated: " + alert.Title, alert.Message, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    _logger.LogWarning(exception, "Failed to escalate the {AlertType} alert for {DomainName}.", alert.AlertType, alert.DomainName);
+                }
+            }
+
+            // Marked even when there was nobody to tell or the send failed, so one alert is never escalated again and again.
+            alert.EscalatedUtc = delivery.Now;
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>What a Group's failed report alert is about. Stored where a domain alert stores its domain name; it ends
