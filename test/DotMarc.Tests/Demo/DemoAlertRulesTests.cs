@@ -144,4 +144,53 @@ public sealed class DemoAlertRulesTests : IAsyncLifetime
         Assert.All(await verify.AlertRules.AsNoTracking().ToListAsync(),
             rule => Assert.Equal((AlertDestinationMode.All, AlertTicketMode.FollowRules), (rule.DestinationMode, rule.TicketMode)));
     }
+
+    [Fact]
+    public async Task OnlyTheAuroraDemoRuleHasQuietHours_AndNoDemoRuleEscalates()
+    {
+        await SeedDemoAsync();
+
+        await using var context = CreateContext();
+        var rules = await context.AlertRules.AsNoTracking().Include(rule => rule.EscalationDestinations).ToListAsync();
+
+        var quiet = Assert.Single(rules, rule => rule.QuietMode != AlertQuietMode.Off);
+        Assert.Equal("Missing report: Aurora Retail reports weekly", quiet.Name);
+        Assert.Equal((AlertQuietMode.Hold, (int?)(22 * 60), (int?)(7 * 60), true), (quiet.QuietMode, quiet.QuietStartMinutes, quiet.QuietEndMinutes, quiet.QuietIgnoredForCritical));
+        Assert.All(rules, rule => Assert.Null(rule.EscalateAfterMinutes));
+        Assert.All(rules, rule => Assert.Empty(rule.EscalationDestinations));
+    }
+
+    [Fact]
+    public async Task ResettingTheDemo_ClearsEscalationDestinations()
+    {
+        await SeedDemoAsync();
+        await using (var context = CreateContext())
+        {
+            var destination = new AlertDestination { Name = "Left over", Kind = AlertChannel.Slack, Url = "https://hooks.slack.com/services/T0/B0/x" };
+            context.AlertDestinations.Add(destination);
+            await context.SaveChangesAsync();
+            var rule = await context.AlertRules.FirstAsync();
+            rule.EscalateAfterMinutes = 30;
+            rule.EscalationDestinations.Add(new AlertRuleEscalationDestination { AlertDestinationId = destination.Id });
+            await context.SaveChangesAsync();
+        }
+
+        await SeedDemoAsync();
+
+        await using var verify = CreateContext();
+        Assert.Empty(await verify.AlertRuleEscalationDestinations.ToListAsync());
+        Assert.All(await verify.AlertRules.AsNoTracking().ToListAsync(), rule => Assert.Null(rule.EscalateAfterMinutes));
+    }
+
+    [Fact]
+    public async Task EverySeededDemoAlert_CountsAsNotified_SoNoneShowsAsHeld()
+    {
+        await SeedDemoAsync();
+
+        await using var context = CreateContext();
+        var alerts = await context.AlertEvents.AsNoTracking().ToListAsync();
+
+        Assert.NotEmpty(alerts);
+        Assert.All(alerts, alert => Assert.Equal(alert.CreatedUtc, alert.NotifiedUtc));
+    }
 }

@@ -50,7 +50,7 @@ public static class DemoDataSeeder
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
                 "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates", "DomainDkimRecords",
-                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions", "AlertRules", "AlertRuleScopeEntries", "AlertDestinations", "AlertRuleDestinations"
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions", "AlertRules", "AlertRuleScopeEntries", "AlertDestinations", "AlertRuleDestinations", "AlertRuleEscalationDestinations"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);
@@ -235,7 +235,9 @@ public static class DemoDataSeeder
                 Message = alertSeed.Message,
                 IsResolved = alertSeed.IsResolved,
                 CreatedUtc = alertSeed.CreatedUtc,
-                ResolvedUtc = alertSeed.ResolvedUtc
+                ResolvedUtc = alertSeed.ResolvedUtc,
+                // Seeded alerts count as already notified, so none of them shows as held by a quiet window.
+                NotifiedUtc = alertSeed.CreatedUtc
             });
         }
 
@@ -361,6 +363,10 @@ public static class DemoDataSeeder
             Severity = "Warning",
             Position = -10,
             StopProcessing = true,
+            // Quiet overnight: a missing report found at 3am is held until 07:00 rather than posted then.
+            QuietMode = AlertQuietMode.Hold,
+            QuietStartMinutes = 22 * 60,
+            QuietEndMinutes = 7 * 60,
             ParametersJson = "{\"days\":\"5\"}",
             Scope = [new AlertRuleScopeEntry { Target = AlertRuleScopeTarget.Group, TargetId = groupsByName[ViewerScopedGroupName].Id }],
         });
