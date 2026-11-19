@@ -677,7 +677,8 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _alertWebhookClient.SendAlertAsync(settings, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
+            var destinations = settings.Enabled ? await DestinationsForAsync(context, ruleId, cancellationToken).ConfigureAwait(false) : [];
+            await _alertWebhookClient.SendAlertAsync(destinations, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -693,6 +694,16 @@ public sealed class AlertingService : IAlertingService
         {
             _logger.LogWarning(ex, "Failed to create PSA ticket for {DomainName} alert {AlertType}.", domainName, alertType);
         }
+    }
+
+    /// <summary>The destinations an alert from this rule goes to. A rule that no longer exists (null id, or deleted since) sends to all.</summary>
+    private static async Task<IReadOnlyList<AlertDestination>> DestinationsForAsync(DotMarcDbContext context, int? ruleId, CancellationToken cancellationToken)
+    {
+        var rule = ruleId is null
+            ? null
+            : await context.AlertRules.AsNoTracking().Include(candidate => candidate.Destinations).SingleOrDefaultAsync(candidate => candidate.Id == ruleId, cancellationToken).ConfigureAwait(false);
+        var all = await context.AlertDestinations.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        return AlertDestinationRouting.Resolve(rule, all);
     }
 
     /// <summary>What a Group's failed report alert is about. Stored where a domain alert stores its domain name; it ends

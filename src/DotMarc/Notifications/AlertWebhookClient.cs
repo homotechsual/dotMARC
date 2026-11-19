@@ -6,40 +6,31 @@ public enum AlertChannel { Teams, Slack, GenericWebhook }
 
 public interface IAlertWebhookClient
 {
-    Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default);
+    /// <summary>Sends an alert to each of the given destinations. Which destinations is decided by <see cref="AlertDestinationRouting"/>.</summary>
+    Task SendAlertAsync(IReadOnlyList<AlertDestination> destinations, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default);
 
     /// <summary>Sends a clearly marked test alert to one channel's URL (saved or not), for the Send test button. Returns
     /// null when it was accepted, otherwise what went wrong.</summary>
     Task<string?> SendTestAsync(AlertChannel channel, string? webhookUrl, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Sends an alert to every channel that's switched on and has a URL. Each channel is sent separately, so one
-/// that's down or misconfigured doesn't stop the others; its failure is logged.</summary>
+/// <summary>Sends an alert to each destination it is given. Each is sent separately, so one that's down or misconfigured
+/// doesn't stop the others; its failure is logged.</summary>
 public sealed class AlertWebhookClient(
     ITeamsWebhookClient teamsWebhookClient, ISlackWebhookClient slackWebhookClient, IGenericWebhookClient genericWebhookClient,
     ILogger<AlertWebhookClient> logger) : IAlertWebhookClient
 {
-    public async Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(IReadOnlyList<AlertDestination> destinations, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
     {
-        if (!settings.Enabled)
+        foreach (var destination in destinations)
         {
-            return;
-        }
-
-        foreach (var (channel, enabled, webhookUrl) in Channels(settings))
-        {
-            if (!enabled || string.IsNullOrWhiteSpace(webhookUrl))
-            {
-                continue;
-            }
-
             try
             {
-                await SendAsync(channel, webhookUrl, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
+                await SendAsync(destination.Kind, destination.Url, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                logger.LogWarning(exception, "Failed to send the {AlertType} alert for {DomainName} to {Channel}.", alertType, domainName, channel);
+                logger.LogWarning(exception, "Failed to send the {AlertType} alert for {DomainName} to the destination {Destination}.", alertType, domainName, destination.Name);
             }
         }
     }
@@ -74,11 +65,4 @@ public sealed class AlertWebhookClient(
         AlertChannel.Slack => slackWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, severity, title, message, cancellationToken),
         _ => genericWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, severity, title, message, cancellationToken),
     };
-
-    private static IEnumerable<(AlertChannel Channel, bool Enabled, string? WebhookUrl)> Channels(NotificationSettings settings) =>
-    [
-        (AlertChannel.Teams, settings.TeamsEnabled, settings.TeamsWebhookUrl),
-        (AlertChannel.Slack, settings.SlackEnabled, settings.SlackWebhookUrl),
-        (AlertChannel.GenericWebhook, settings.GenericWebhookEnabled, settings.GenericWebhookUrl),
-    ];
 }
