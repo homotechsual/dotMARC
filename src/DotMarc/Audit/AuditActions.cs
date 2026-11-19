@@ -70,6 +70,12 @@ public static class AuditActions
     public const string SignInRefused = "signin.refused";
     public const string PageViewed = "page.viewed";
     public const string SenderDecisionChanged = "sender.decision_changed";
+    public const string AlertRuleCreated = "alert_rule.created";
+    public const string AlertRuleChanged = "alert_rule.changed";
+    public const string AlertRuleDeleted = "alert_rule.deleted";
+    public const string AlertRuleMoved = "alert_rule.moved";
+    public const string AlertRuleReset = "alert_rule.reset";
+    public const string AlertRuleScopePruned = "alert_rule.scope_pruned";
 
     /// <summary>Every action with a short label, for the Action filter on the Audit log page.</summary>
     public static IReadOnlyList<(string Action, string Label)> All { get; } =
@@ -141,5 +147,11 @@ public static class AuditActions
         (SignInRefused, "Sign-in refused"),
         (PageViewed, "Page viewed"),
         (SenderDecisionChanged, "Sender decision changed"),
+        (AlertRuleCreated, "Alert rule created"),
+        (AlertRuleChanged, "Alert rule changed"),
+        (AlertRuleDeleted, "Alert rule deleted"),
+        (AlertRuleMoved, "Alert rule moved"),
+        (AlertRuleReset, "Alert rule reset to default"),
+        (AlertRuleScopePruned, "Alert rule scope cleaned up"),
     ];
 }

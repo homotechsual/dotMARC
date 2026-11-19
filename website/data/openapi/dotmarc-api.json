@@ -2285,7 +2285,13 @@
                   "signin.succeeded",
                   "signin.refused",
                   "page.viewed",
-                  "sender.decision_changed"
+                  "sender.decision_changed",
+                  "alert_rule.created",
+                  "alert_rule.changed",
+                  "alert_rule.deleted",
+                  "alert_rule.moved",
+                  "alert_rule.reset",
+                  "alert_rule.scope_pruned"
                 ],
                 "type": "string"
               },
