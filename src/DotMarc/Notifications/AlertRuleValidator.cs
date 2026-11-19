@@ -15,7 +15,10 @@ public sealed record AlertRuleInput(
     int? CooldownMinutes,
     int? AutoCloseDays,
     IReadOnlyDictionary<string, string> Parameters,
-    IReadOnlyList<AlertRuleScopeInput> Scope);
+    IReadOnlyList<AlertRuleScopeInput> Scope,
+    AlertDestinationMode DestinationMode = AlertDestinationMode.All,
+    IReadOnlyList<int>? DestinationIds = null,
+    AlertTicketMode TicketMode = AlertTicketMode.FollowRules);
 
 /// <summary>Checks a rule against its kind's description. Every problem is a sentence that names the field, so a person can fix it
 /// without guessing; all problems are returned, not just the first.</summary>

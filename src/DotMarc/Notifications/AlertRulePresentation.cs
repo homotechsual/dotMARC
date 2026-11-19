@@ -76,7 +76,8 @@ public static class AlertRulePresentation
         var parameters = (AlertRuleKinds.Find(rule.Kind)?.Parameters ?? []).ToDictionary(definition => definition.Key, definition => stored.GetValueOrDefault(definition.Key, definition.Default));
         return new AlertRuleInput(
             rule.Name, rule.Enabled, rule.Severity, rule.StopProcessing, rule.CooldownMinutes, rule.AutoCloseDays, parameters,
-            [.. rule.Scope.Select(entry => new AlertRuleScopeInput(entry.Target, entry.TargetId, entry.Exclude))]);
+            [.. rule.Scope.Select(entry => new AlertRuleScopeInput(entry.Target, entry.TargetId, entry.Exclude))],
+            rule.DestinationMode, [.. rule.Destinations.Select(link => link.AlertDestinationId)], rule.TicketMode);
     }
 
     public static bool IsDeadTarget(AlertRuleScopeEntry entry, AlertScopeNames names) => entry.Target switch

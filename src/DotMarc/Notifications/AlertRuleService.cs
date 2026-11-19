@@ -22,6 +22,7 @@ public static class AlertRuleService
     {
         var problems = AlertRuleValidator.Problems(kind, input).ToList();
         await AddDuplicateNameProblemAsync(context, kind, input.Name, exceptRuleId: null, problems, cancellationToken).ConfigureAwait(false);
+        await AddUnknownDestinationProblemAsync(context, input, problems, cancellationToken).ConfigureAwait(false);
         if (problems.Count > 0)
         {
             throw new AlertRuleValidationException(problems);
@@ -40,7 +41,10 @@ public static class AlertRuleService
             CooldownMinutes = input.CooldownMinutes,
             AutoCloseDays = input.AutoCloseDays,
             ParametersJson = JsonSerializer.Serialize(FullParameters(kind, input.Parameters)),
-            Scope = [.. input.Scope.Select(entry => new AlertRuleScopeEntry { Target = entry.Target, TargetId = entry.TargetId, Exclude = entry.Exclude })]
+            Scope = [.. input.Scope.Select(entry => new AlertRuleScopeEntry { Target = entry.Target, TargetId = entry.TargetId, Exclude = entry.Exclude })],
+            DestinationMode = input.DestinationMode,
+            TicketMode = input.TicketMode,
+            Destinations = [.. WantedDestinationIds(input).Select(id => new AlertRuleDestination { AlertDestinationId = id })]
         };
         context.AlertRules.Add(created);
         await AuditLog.SaveAndRecordAsync(
@@ -55,6 +59,7 @@ public static class AlertRuleService
         var rule = await LoadAsync(context, ruleId, cancellationToken).ConfigureAwait(false);
         var problems = AlertRuleValidator.Problems(rule.Kind, input).ToList();
         await AddDuplicateNameProblemAsync(context, rule.Kind, input.Name, rule.Id, problems, cancellationToken).ConfigureAwait(false);
+        await AddUnknownDestinationProblemAsync(context, input, problems, cancellationToken).ConfigureAwait(false);
         if (problems.Count > 0)
         {
             throw new AlertRuleValidationException(problems);
@@ -69,11 +74,18 @@ public static class AlertRuleService
             .Field("Severity", rule.Severity, input.Severity)
             .Field("Stop processing", rule.StopProcessing, input.StopProcessing)
             .Field("Cooldown (minutes)", rule.CooldownMinutes, input.CooldownMinutes)
-            .Field("Close after (days)", rule.AutoCloseDays, input.AutoCloseDays);
+            .Field("Close after (days)", rule.AutoCloseDays, input.AutoCloseDays)
+            .Field("Ticket mode", rule.TicketMode.ToString(), input.TicketMode.ToString());
         foreach (var definition in AlertRuleKinds.Find(rule.Kind)!.Parameters)
         {
             changes.Field(definition.Label, oldParameters.GetValueOrDefault(definition.Key, definition.Default), newParameters[definition.Key]);
         }
+
+        var wantedDestinationIds = WantedDestinationIds(input);
+        var destinationNames = await DestinationNamesAsync(context, rule.Destinations.Select(link => link.AlertDestinationId).Concat(wantedDestinationIds), cancellationToken).ConfigureAwait(false);
+        changes.Set("Destinations",
+            DestinationLabels(rule.DestinationMode, rule.Destinations.Select(link => link.AlertDestinationId), destinationNames),
+            DestinationLabels(input.DestinationMode, wantedDestinationIds, destinationNames));
 
         changes.Set("Scope", rule.Scope.Select(entry => Describe(entry.Target, entry.TargetId, entry.Exclude, names)), input.Scope.Select(entry => Describe(entry.Target, entry.TargetId, entry.Exclude, names)));
         if (!changes.Any)
@@ -88,6 +100,9 @@ public static class AlertRuleService
         rule.CooldownMinutes = input.CooldownMinutes;
         rule.AutoCloseDays = input.AutoCloseDays;
         rule.ParametersJson = JsonSerializer.Serialize(newParameters);
+        rule.TicketMode = input.TicketMode;
+        rule.DestinationMode = input.DestinationMode;
+        ReplaceDestinations(rule, wantedDestinationIds);
         ReplaceScope(rule, input.Scope);
 
         AuditLog.Record(context, actor, AuditActions.AlertRuleChanged, AuditTarget.For(rule), $"Changed the alert rule '{rule.Name}'", changes);
@@ -153,6 +168,8 @@ public static class AlertRuleService
         var shipped = new AlertRuleInput(kind.DisplayName, Enabled: true, kind.DefaultSeverity, StopProcessing: true, CooldownMinutes: null, AutoCloseDays: null,
             kind.Parameters.ToDictionary(definition => definition.Key, definition => definition.Default), []);
         var oldParameters = ParseParameters(rule.ParametersJson);
+        var oldDestinationIds = rule.Destinations.Select(link => link.AlertDestinationId).ToList();
+        var resetNames = await DestinationNamesAsync(context, oldDestinationIds, cancellationToken).ConfigureAwait(false);
         var names = await ScopeNamesAsync(context, rule.Scope.Select(entry => (entry.Target, entry.TargetId)), cancellationToken).ConfigureAwait(false);
         var changes = new AuditChanges()
             .Field("Name", rule.Name, shipped.Name)
@@ -160,7 +177,9 @@ public static class AlertRuleService
             .Field("Severity", rule.Severity, shipped.Severity)
             .Field("Stop processing", rule.StopProcessing, shipped.StopProcessing)
             .Field("Cooldown (minutes)", rule.CooldownMinutes, shipped.CooldownMinutes)
-            .Field("Close after (days)", rule.AutoCloseDays, shipped.AutoCloseDays);
+            .Field("Close after (days)", rule.AutoCloseDays, shipped.AutoCloseDays)
+            .Field("Ticket mode", rule.TicketMode.ToString(), AlertTicketMode.FollowRules.ToString())
+            .Set("Destinations", DestinationLabels(rule.DestinationMode, oldDestinationIds, resetNames), DestinationLabels(AlertDestinationMode.All, [], resetNames));
         foreach (var definition in kind.Parameters)
         {
             changes.Field(definition.Label, oldParameters.GetValueOrDefault(definition.Key, definition.Default), definition.Default);
@@ -175,6 +194,9 @@ public static class AlertRuleService
         rule.CooldownMinutes = null;
         rule.AutoCloseDays = null;
         rule.ParametersJson = JsonSerializer.Serialize(shipped.Parameters);
+        rule.TicketMode = AlertTicketMode.FollowRules;
+        rule.DestinationMode = AlertDestinationMode.All;
+        ReplaceDestinations(rule, []);
         ReplaceScope(rule, []);
 
         AuditLog.Record(context, actor, AuditActions.AlertRuleReset, AuditTarget.For(rule), $"Reset the alert rule '{rule.Name}' to its default values", changes);
@@ -225,7 +247,7 @@ public static class AlertRuleService
     }
 
     private static async Task<AlertRule> LoadAsync(DotMarcDbContext context, int ruleId, CancellationToken cancellationToken) =>
-        await context.AlertRules.Include(rule => rule.Scope).SingleOrDefaultAsync(rule => rule.Id == ruleId, cancellationToken).ConfigureAwait(false)
+        await context.AlertRules.Include(rule => rule.Scope).Include(rule => rule.Destinations).SingleOrDefaultAsync(rule => rule.Id == ruleId, cancellationToken).ConfigureAwait(false)
         ?? throw new AlertRuleValidationException(["That alert rule no longer exists."]);
 
     private static async Task AddDuplicateNameProblemAsync(DotMarcDbContext context, string kind, string name, int? exceptRuleId, List<string> problems, CancellationToken cancellationToken)
@@ -265,6 +287,57 @@ public static class AlertRuleService
 
     /// <summary>Makes the rule's scope match the wanted entries, adding and removing only the difference (so an entry that stays is
     /// never deleted and re-added, which the unique index would not like).</summary>
+    /// <summary>The destinations the rule keeps: the ones chosen when it is in Selected mode, none otherwise.</summary>
+    private static List<int> WantedDestinationIds(AlertRuleInput input) =>
+        input.DestinationMode == AlertDestinationMode.Selected ? [.. (input.DestinationIds ?? []).Distinct()] : [];
+
+    private static async Task AddUnknownDestinationProblemAsync(DotMarcDbContext context, AlertRuleInput input, List<string> problems, CancellationToken cancellationToken)
+    {
+        var wanted = WantedDestinationIds(input);
+        if (wanted.Count == 0)
+        {
+            return;
+        }
+
+        var known = await context.AlertDestinations.AsNoTracking().Where(destination => wanted.Contains(destination.Id)).CountAsync(cancellationToken).ConfigureAwait(false);
+        if (known != wanted.Count)
+        {
+            problems.Add("A destination you chose no longer exists. Reload the page and choose again.");
+        }
+    }
+
+    private static async Task<Dictionary<int, string>> DestinationNamesAsync(DotMarcDbContext context, IEnumerable<int> ids, CancellationToken cancellationToken)
+    {
+        var wanted = ids.Distinct().ToList();
+        return await context.AlertDestinations.AsNoTracking().Where(destination => wanted.Contains(destination.Id))
+            .ToDictionaryAsync(destination => destination.Id, destination => destination.Name, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>How a rule's destinations read in the audit log: "All destinations", "None", or the chosen names. Never a URL.</summary>
+    private static IEnumerable<string> DestinationLabels(AlertDestinationMode mode, IEnumerable<int> ids, IReadOnlyDictionary<int, string> names)
+    {
+        if (mode == AlertDestinationMode.All)
+        {
+            return ["All destinations"];
+        }
+
+        var chosen = ids.Select(id => names.GetValueOrDefault(id, $"Destination {id}")).ToList();
+        return chosen.Count == 0 ? ["None"] : chosen;
+    }
+
+    private static void ReplaceDestinations(AlertRule rule, IReadOnlyCollection<int> wanted)
+    {
+        foreach (var link in rule.Destinations.Where(link => !wanted.Contains(link.AlertDestinationId)).ToList())
+        {
+            rule.Destinations.Remove(link);
+        }
+
+        foreach (var id in wanted.Where(id => !rule.Destinations.Any(link => link.AlertDestinationId == id)))
+        {
+            rule.Destinations.Add(new AlertRuleDestination { AlertDestinationId = id });
+        }
+    }
+
     private static void ReplaceScope(AlertRule rule, IReadOnlyList<AlertRuleScopeInput> wanted)
     {
         foreach (var entry in rule.Scope.Where(entry => !wanted.Any(candidate => Same(entry, candidate))).ToList())
