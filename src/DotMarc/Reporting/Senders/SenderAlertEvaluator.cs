@@ -16,10 +16,14 @@ public sealed record SenderAlertInputs(
     IReadOnlyDictionary<string, string?> OwnerByIp,
     IReadOnlySet<string> NewIps,
     SenderAlertSettings Settings,
-    IReadOnlyList<SpfServiceRange>? SpfRanges = null);
+    IReadOnlyList<SpfServiceRange>? SpfRanges = null,
+    UnderReviewHandling? UnderReview = null,
+    DateTimeOffset? NowUtc = null);
 
-/// <summary>One sender an alert is about: a service name, or the IP of a source no service was recognised for.</summary>
-public sealed record SenderAlertFinding(string Sender, long Messages);
+/// <summary>One sender an alert is about: a service name, or the IP of a source no service was recognised for.
+/// <see cref="UnderReview"/> is true when the sender is in the new sender alert because it is still Under review, not because
+/// nobody has decided.</summary>
+public sealed record SenderAlertFinding(string Sender, long Messages, bool UnderReview = false);
 
 public sealed record SenderAlertResult(IReadOnlyList<SenderAlertFinding> NewUnreviewed, IReadOnlyList<SenderAlertFinding> UnauthorisedDelivered);
 
@@ -49,23 +53,35 @@ public static class SenderAlertEvaluator
             SenderDecisionResolver.Resolve(inputs.Decisions, inputs.DomainId, inputs.GroupIds, serviceName, ip, NoGroupNames);
 
         // ---- New and unreviewed: a service by its service-level decision, an unrecognised IP by its own ----
+        var handling = inputs.UnderReview ?? UnderReviewHandling.Default;
+        var nowUtc = inputs.NowUtc ?? DateTimeOffset.UtcNow;
         var newUnreviewed = new List<SenderAlertFinding>();
         foreach (var row in identification.Services)
         {
-            if (row.SourceIps.All(inputs.NewIps.Contains)
-                && row.Messages >= inputs.Settings.NewSenderMinVolume
-                && Resolve(row.Name, string.Empty).Status is null)
+            if (row.Messages < inputs.Settings.NewSenderMinVolume)
             {
-                newUnreviewed.Add(new SenderAlertFinding(row.Name, row.Messages));
+                continue;
+            }
+
+            var decision = Resolve(row.Name, string.Empty);
+            if (handling.NeedsAlert(decision, row.SourceIps.All(inputs.NewIps.Contains), nowUtc))
+            {
+                newUnreviewed.Add(new SenderAlertFinding(row.Name, row.Messages, decision.Status == SenderDecisionStatus.UnderReview));
             }
         }
 
         var messagesByIp = records.GroupBy(record => record.SourceIp, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(record => (long)record.MessageCount), StringComparer.Ordinal);
         foreach (var ip in identification.Unrecognised?.SourceIps ?? [])
         {
-            if (inputs.NewIps.Contains(ip) && messagesByIp[ip] >= inputs.Settings.NewSenderMinVolume && Resolve(null, ip).Status is null)
+            if (messagesByIp[ip] < inputs.Settings.NewSenderMinVolume)
             {
-                newUnreviewed.Add(new SenderAlertFinding(ip, messagesByIp[ip]));
+                continue;
+            }
+
+            var decision = Resolve(null, ip);
+            if (handling.NeedsAlert(decision, inputs.NewIps.Contains(ip), nowUtc))
+            {
+                newUnreviewed.Add(new SenderAlertFinding(ip, messagesByIp[ip], decision.Status == SenderDecisionStatus.UnderReview));
             }
         }
 
@@ -107,9 +123,24 @@ public static class SenderAlertMessages
 
     public static string NewSenders(string domainName, IReadOnlyList<SenderAlertFinding> findings)
     {
-        var plural = findings.Count != 1;
-        return $"{domainName} has {findings.Count} new sender{(plural ? "s" : "")} that nobody has reviewed: {List(findings)}. " +
-               $"Open the domain's Sources tab and mark {(plural ? "each one" : "it")} Authorised, Unauthorised or Under review.";
+        var fresh = findings.Where(finding => !finding.UnderReview).ToList();
+        var lingering = findings.Where(finding => finding.UnderReview).ToList();
+        var sentences = new List<string>();
+        if (fresh.Count > 0)
+        {
+            var plural = fresh.Count != 1;
+            sentences.Add($"{domainName} has {fresh.Count} new sender{(plural ? "s" : "")} that nobody has reviewed: {List(fresh)}. " +
+                          $"Open the domain's Sources tab and mark {(plural ? "each one" : "it")} Authorised, Unauthorised or Under review.");
+        }
+
+        if (lingering.Count > 0)
+        {
+            var plural = lingering.Count != 1;
+            sentences.Add($"{domainName} has {lingering.Count} sender{(plural ? "s" : "")} still under review: {List(lingering)}. " +
+                          $"Open the domain's Sources tab and decide on {(plural ? "each one" : "it")}.");
+        }
+
+        return string.Join(" ", sentences);
     }
 
     public static string UnauthorisedDelivered(string domainName, IReadOnlyList<SenderAlertFinding> findings, DmarcPolicyLevel policy) =>

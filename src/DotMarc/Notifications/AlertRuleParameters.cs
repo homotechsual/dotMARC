@@ -1,3 +1,4 @@
+using DotMarc.Reporting;
 using System.Globalization;
 using System.Text.Json;
 
@@ -43,6 +44,19 @@ public sealed class AlertRuleParameters
         _values.TryGetValue(key, out var text) && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value
             : fallback;
+
+    /// <summary>What Under review means for a new sender rule: decided unless the rule says otherwise. Alerting again after some days
+    /// uses the rule's days, or 14 when it sets none.</summary>
+    public UnderReviewHandling UnderReview()
+    {
+        _values.TryGetValue(AlertRuleParameterKeys.UnderReview, out var mode);
+        return mode switch
+        {
+            "unreviewed" => new UnderReviewHandling(UnderReviewMode.CountsAsUnreviewed),
+            "afterDays" => new UnderReviewHandling(UnderReviewMode.AlertAgainAfterDays, Int(AlertRuleParameterKeys.UnderReviewDays, AlertRuleKinds.DefaultInt(AlertTypes.NewUnreviewedSender, AlertRuleParameterKeys.UnderReviewDays))),
+            _ => UnderReviewHandling.Default
+        };
+    }
 
     public DnsHealthAlertMode Mode(DnsHealthAlertMode fallback) =>
         _values.TryGetValue(AlertRuleParameterKeys.Mode, out var text) && Enum.TryParse<DnsHealthAlertMode>(text, ignoreCase: false, out var mode) && Enum.IsDefined(mode)

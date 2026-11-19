@@ -254,7 +254,7 @@ public sealed class AlertingService : IAlertingService
         var deliveredRules = applicable.Record(domain.Name, AlertTypes.UnauthorisedSenderDelivered, applies ? rules.For(AlertTypes.UnauthorisedSenderDelivered, facts) : []);
 
         var nowUtc = DateTimeOffset.UtcNow;
-        var results = new Dictionary<(int NewDays, int NewMinimum, int DeliveredMinimum, bool NeedsNewIps), SenderAlertResult>();
+        var results = new Dictionary<(int NewDays, int NewMinimum, int DeliveredMinimum, UnderReviewHandling Handling, bool NeedsNewIps), SenderAlertResult>();
         var newIpsByDays = new Dictionary<int, HashSet<string>>();
         Dictionary<string, string?>? ownerByIp = null;
 
@@ -282,15 +282,15 @@ public sealed class AlertingService : IAlertingService
             return newIps;
         }
 
-        async Task<SenderAlertResult> ResultAsync(int newDays, int newMinimum, int deliveredMinimum, bool needsNewIps)
+        async Task<SenderAlertResult> ResultAsync(int newDays, int newMinimum, int deliveredMinimum, UnderReviewHandling handling, bool needsNewIps)
         {
             // A result that also worked out the new senders answers a delivered-only question too, so reuse it.
-            if (results.TryGetValue((newDays, newMinimum, deliveredMinimum, true), out var withNewIps))
+            if (results.TryGetValue((newDays, newMinimum, deliveredMinimum, handling, true), out var withNewIps))
             {
                 return withNewIps;
             }
 
-            if (results.TryGetValue((newDays, newMinimum, deliveredMinimum, needsNewIps), out var existing))
+            if (results.TryGetValue((newDays, newMinimum, deliveredMinimum, handling, needsNewIps), out var existing))
             {
                 return existing;
             }
@@ -301,8 +301,8 @@ public sealed class AlertingService : IAlertingService
             var result = SenderAlertEvaluator.Evaluate(new SenderAlertInputs(
                 domain.Id, domain.Groups.Select(group => group.Id).ToList(), domain.Reports.ToList(), context.Decisions, ownerByIp, newIps,
                 new SenderAlertSettings(newMinimum, deliveredMinimum),
-                SpfServiceRanges.Parse(domain.SpfRangesJson)));
-            results[(newDays, newMinimum, deliveredMinimum, needsNewIps)] = result;
+                SpfServiceRanges.Parse(domain.SpfRangesJson), handling, nowUtc));
+            results[(newDays, newMinimum, deliveredMinimum, handling, needsNewIps)] = result;
             return result;
         }
 
@@ -317,7 +317,7 @@ public sealed class AlertingService : IAlertingService
         {
             var newDays = Math.Clamp(rule.Parameters.Int(AlertRuleParameterKeys.NewDays, settings.NewSenderDays), 1, 30);
             var minimum = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.NewSenderMinVolume);
-            var result = await ResultAsync(newDays, minimum, settings.UnauthorisedDeliveredMinVolume, needsNewIps: true).ConfigureAwait(false);
+            var result = await ResultAsync(newDays, minimum, settings.UnauthorisedDeliveredMinVolume, rule.Parameters.UnderReview(), needsNewIps: true).ConfigureAwait(false);
             if (result.NewUnreviewed.Count > 0)
             {
                 await EnsureAlertAsync(db, settings, rule, domain.Name, SenderAlertMessages.NewSendersTitle,
@@ -337,7 +337,7 @@ public sealed class AlertingService : IAlertingService
         foreach (var rule in deliveredRules)
         {
             var minimum = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.UnauthorisedDeliveredMinVolume);
-            var result = await ResultAsync(defaultNewDays, settings.NewSenderMinVolume, minimum, needsNewIps: false).ConfigureAwait(false);
+            var result = await ResultAsync(defaultNewDays, settings.NewSenderMinVolume, minimum, UnderReviewHandling.Default, needsNewIps: false).ConfigureAwait(false);
             if (result.UnauthorisedDelivered.Count > 0)
             {
                 await EnsureAlertAsync(db, settings, rule, domain.Name, SenderAlertMessages.UnauthorisedDeliveredTitle,
