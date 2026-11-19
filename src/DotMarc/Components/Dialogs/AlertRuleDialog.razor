@@ -214,8 +214,16 @@
         var monitored = await db.Domains.AsNoTracking().Where(domain => domain.IsMonitored).Include(domain => domain.Groups).Include(domain => domain.Tags).AsSplitQuery().ToListAsync();
         _monitoredDomains = monitored.Select(domain => new DomainFacts(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet())).ToList();
 
-        if (RuleId is { } ruleId && _rulesOfKind.SingleOrDefault(rule => rule.Id == ruleId) is { } rule)
+        if (RuleId is { } wantedRuleId)
         {
+            // Someone else may have deleted the rule since the list was drawn. Say so rather than quietly becoming an Add dialog.
+            if (_rulesOfKind.SingleOrDefault(candidate => candidate.Id == wantedRuleId) is not { } rule)
+            {
+                Snackbar.Add("That rule no longer exists. The list has been refreshed.", Severity.Warning);
+                MudDialog.Close(DialogResult.Ok(true));
+                return;
+            }
+
             var input = AlertRulePresentation.ToInput(rule);
             (_name, _enabled, _severity, _stop, _cooldown, _autoCloseDays) = (input.Name, input.Enabled, input.Severity, input.StopProcessing, input.CooldownMinutes, input.AutoCloseDays);
             _parameters = input.Parameters.ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -228,7 +236,6 @@
         }
         else
         {
-            RuleId = null;
             _name = "";
             _severity = _kind.DefaultSeverity;
             _parameters = _kind.Parameters.ToDictionary(definition => definition.Key, definition => definition.Default);
