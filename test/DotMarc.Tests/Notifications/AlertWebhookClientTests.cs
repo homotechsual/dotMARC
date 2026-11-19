@@ -25,7 +25,7 @@ public sealed class AlertWebhookClientTests
     };
 
     private Task SendAsync(AlertWebhookClient client, NotificationSettings settings) =>
-        client.SendAlertAsync(settings, "contoso.io", "MissedReport", "Missing report", "contoso.io has not sent a report.", CancellationToken.None);
+        client.SendAlertAsync(settings, "contoso.io", "MissedReport", "Warning", "Missing report", "contoso.io has not sent a report.", CancellationToken.None);
 
     [Theory]
     [InlineData(true, false, false)]
@@ -115,7 +115,7 @@ public sealed class AlertWebhookClientTests
         public string LastTitle { get; private set; } = "";
         public Exception? Failure { get; set; }
 
-        public Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+        public Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
         {
             if (Failure is not null)
             {

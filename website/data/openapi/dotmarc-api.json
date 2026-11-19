@@ -1928,7 +1928,8 @@
               "items": {
                 "enum": [
                   "Info",
-                  "Warning"
+                  "Warning",
+                  "Critical"
                 ],
                 "type": "string"
               },

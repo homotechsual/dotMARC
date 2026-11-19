@@ -671,7 +671,7 @@ public sealed class AlertingService : IAlertingService
 
         try
         {
-            await _alertWebhookClient.SendAlertAsync(settings, domainName, alertType, title, message, cancellationToken).ConfigureAwait(false);
+            await _alertWebhookClient.SendAlertAsync(settings, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

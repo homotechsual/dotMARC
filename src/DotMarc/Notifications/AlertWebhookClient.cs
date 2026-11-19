@@ -6,7 +6,7 @@ public enum AlertChannel { Teams, Slack, GenericWebhook }
 
 public interface IAlertWebhookClient
 {
-    Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
+    Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default);
 
     /// <summary>Sends a clearly marked test alert to one channel's URL (saved or not), for the Send test button. Returns
     /// null when it was accepted, otherwise what went wrong.</summary>
@@ -19,7 +19,7 @@ public sealed class AlertWebhookClient(
     ITeamsWebhookClient teamsWebhookClient, ISlackWebhookClient slackWebhookClient, IGenericWebhookClient genericWebhookClient,
     ILogger<AlertWebhookClient> logger) : IAlertWebhookClient
 {
-    public async Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
     {
         if (!settings.Enabled)
         {
@@ -35,7 +35,7 @@ public sealed class AlertWebhookClient(
 
             try
             {
-                await SendAsync(channel, webhookUrl, domainName, alertType, title, message, cancellationToken).ConfigureAwait(false);
+                await SendAsync(channel, webhookUrl, domainName, alertType, severity, title, message, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -58,7 +58,7 @@ public sealed class AlertWebhookClient(
 
         try
         {
-            await SendAsync(channel, webhookUrl, "example.com", "Test", "Test alert from dotMARC",
+            await SendAsync(channel, webhookUrl, "example.com", "Test", AlertSeverities.Warning, "Test alert from dotMARC",
                 "This is a test from dotMARC's alert settings. If you can see it, alerts will reach this channel.", cancellationToken).ConfigureAwait(false);
             return null;
         }
@@ -68,11 +68,11 @@ public sealed class AlertWebhookClient(
         }
     }
 
-    private Task SendAsync(AlertChannel channel, string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken) => channel switch
+    private Task SendAsync(AlertChannel channel, string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken) => channel switch
     {
-        AlertChannel.Teams => teamsWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, title, message, cancellationToken),
-        AlertChannel.Slack => slackWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, title, message, cancellationToken),
-        _ => genericWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, title, message, cancellationToken),
+        AlertChannel.Teams => teamsWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, severity, title, message, cancellationToken),
+        AlertChannel.Slack => slackWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, severity, title, message, cancellationToken),
+        _ => genericWebhookClient.SendAlertAsync(webhookUrl, domainName, alertType, severity, title, message, cancellationToken),
     };
 
     private static IEnumerable<(AlertChannel Channel, bool Enabled, string? WebhookUrl)> Channels(NotificationSettings settings) =>

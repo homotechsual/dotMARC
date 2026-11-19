@@ -13,7 +13,7 @@ public static class AlertEndpoints
 {
     private const int DefaultPageSize = 50;
 
-    public static IReadOnlyList<string> Severities { get; } = ["Info", "Warning"];
+    public static IReadOnlyList<string> Severities { get; } = AlertSeverities.All;
 
     private static readonly IReadOnlyList<string> Statuses = ["open", "resolved", "all"];
 

@@ -165,6 +165,23 @@ public sealed class AlertEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ACriticalSeverityFilter_FindsCriticalAlerts_AndABogusOneIsRefusedNamingTheAllowedValues()
+    {
+        await _host.SeedDomainAsync("api-critical-alerts.example", monitored: false);
+        var critical = await SeedAlertAsync("api-critical-alerts.example", AlertTypes.MissedReport, severity: "Critical");
+        await SeedAlertAsync("api-critical-alerts.example", AlertTypes.TlsrptFailure, severity: "Warning");
+        var (_, secret) = await _host.CreateKeyAsync([Permission.AlertsView]);
+        using var client = _host.ClientFor(secret);
+
+        var found = await client.GetFromJsonAsync<ApiPage<ApiAlert>>("/api/v1/alerts?domain=api-critical-alerts.example&severity=critical");
+        var refused = await client.GetAsync("/api/v1/alerts?severity=Bogus");
+
+        Assert.Equal([critical], found!.Items.Select(alert => alert.Id));
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("Critical", await refused.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Status_Resolved_And_ResolvedDates_FindClosedAlerts()
     {
         await _host.SeedDomainAsync("api-filter-resolved.example", monitored: false);

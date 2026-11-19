@@ -240,7 +240,7 @@ else
 
     private static Color GetSeverityColor(string severity) => severity switch
     {
-        "Error" => Color.Error,
+        "Critical" or "Error" => Color.Error,
         "Warning" => Color.Warning,
         _ => Color.Info
     };

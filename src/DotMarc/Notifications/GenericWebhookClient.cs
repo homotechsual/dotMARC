@@ -4,7 +4,7 @@ namespace DotMarc.Notifications;
 
 public interface IGenericWebhookClient
 {
-    Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
+    Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default);
 }
 
 public sealed class GenericWebhookClient : IGenericWebhookClient
@@ -13,7 +13,7 @@ public sealed class GenericWebhookClient : IGenericWebhookClient
 
     public GenericWebhookClient(HttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
     {
         var payload = new
         {
@@ -21,7 +21,7 @@ public sealed class GenericWebhookClient : IGenericWebhookClient
             alertType,
             title,
             message,
-            severity = "Warning",
+            severity,
             createdUtc = DateTimeOffset.UtcNow
         };
 

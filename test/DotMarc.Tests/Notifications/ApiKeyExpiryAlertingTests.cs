@@ -68,7 +68,7 @@ public sealed class ApiKeyExpiryAlertingTests : IAsyncLifetime
         var alert = await context.AlertEvents.SingleAsync(candidate => candidate.AlertType == AlertTypes.ApiKeyExpiring);
         Assert.Equal(AlertingService.ApiKeyAlertSubject(soon), alert.DomainName);
         Assert.False(alert.IsResolved);
-        Assert.Contains((AlertingService.ApiKeyAlertSubject(soon), AlertTypes.ApiKeyExpiring), notifier.Sent);
+        Assert.Contains((AlertingService.ApiKeyAlertSubject(soon), AlertTypes.ApiKeyExpiring, "Warning"), notifier.Sent);
     }
 
     [Fact]

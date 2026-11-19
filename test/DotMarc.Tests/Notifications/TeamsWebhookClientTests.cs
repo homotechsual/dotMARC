@@ -17,7 +17,7 @@ public sealed class TeamsWebhookClientTests
     public async Task SendAlertAsync_PostsToTheConfiguredWebhookUrl()
     {
         var (client, handler) = CreateClient();
-        await client.SendAlertAsync("https://example.test/teams-webhook", "contoso.io", "MissedReport", "Missing report", "contoso.io has not sent a report.", CancellationToken.None);
+        await client.SendAlertAsync("https://example.test/teams-webhook", "contoso.io", "MissedReport", "Warning", "Missing report", "contoso.io has not sent a report.", CancellationToken.None);
 
         Assert.Single(handler.Requests);
         Assert.Equal("https://example.test/teams-webhook", handler.Requests[0].RequestUri!.ToString());
