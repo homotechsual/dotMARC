@@ -120,4 +120,28 @@ public sealed class DemoAlertRulesTests : IAsyncLifetime
             Assert.Equal(defined, stored);
         }
     }
+
+    [Fact]
+    public async Task ResettingTheDemo_ClearsDestinations_AndEveryDemoRuleSendsToAllAndFollowsTheTicketRules()
+    {
+        await SeedDemoAsync();
+        await using (var context = CreateContext())
+        {
+            var rule = await context.AlertRules.FirstAsync();
+            var destination = new AlertDestination { Name = "Left over", Kind = AlertChannel.Teams, Url = "https://example.test/hook" };
+            context.AlertDestinations.Add(destination);
+            await context.SaveChangesAsync();
+            rule.DestinationMode = AlertDestinationMode.Selected;
+            rule.Destinations.Add(new AlertRuleDestination { AlertDestinationId = destination.Id });
+            await context.SaveChangesAsync();
+        }
+
+        await SeedDemoAsync();
+
+        await using var verify = CreateContext();
+        Assert.Empty(await verify.AlertDestinations.ToListAsync());
+        Assert.Empty(await verify.AlertRuleDestinations.ToListAsync());
+        Assert.All(await verify.AlertRules.AsNoTracking().ToListAsync(),
+            rule => Assert.Equal((AlertDestinationMode.All, AlertTicketMode.FollowRules), (rule.DestinationMode, rule.TicketMode)));
+    }
 }

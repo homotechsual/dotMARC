@@ -46,17 +46,38 @@ Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge*
 ## Alert settings
 
 **Alert settings** (`/alerts/settings`) configures delivery. It requires the `AlertsManage`
-permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](#alert-rules).
+permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](#alert-rules), and
+where each rule's alerts go is chosen from the destinations set up here.
 
 | Setting | Description |
 | --- | --- |
 | Enable notifications | Master on/off switch. Disabled means no alerts are raised or delivered at all, not just silenced delivery. |
-| Teams, Slack, Generic | A switch and webhook URL for each channel. Alerts go to every channel that's switched on and has a URL. **Send test** posts a marked test alert to the URL as typed, before you save. |
+| Destinations | The places alerts are sent: any number of Teams channels, Slack channels and generic webhooks, each with a name, a webhook URL and an on/off switch. See [Destinations](#destinations). |
 | Cooldown (minutes) | Minimum time between repeat firings of the same open alert, unless its rule sets its own. Default `180`. |
 | Monitor interval (seconds) | How often the background check for missed reports runs. Default `300`. |
 
 Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
 `https://user:pass@host/...`); anything else is rejected on save, and **Send test** won't post to it.
+
+### Destinations
+
+A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you
+need under **Where alerts go** on Alert settings, for example one shared Teams channel and one Slack channel per client. A
+destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to
+the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
+
+Each [alert rule](#alert-rules) either sends to **all destinations** (the default) or only to the destinations you choose
+for it. A rule that sends to chosen destinations and has none ticked still raises and records its alerts, but doesn't send them
+anywhere, which is how to keep a kind of alert in the Alerts page without posting it. Deleting a destination removes it from
+every rule that chose it, and says how many did first. A rule that chose only that destination then sends nowhere.
+
+The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the
+[audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with
+`AlertsManage`. The Alert rules page shows destination names, never URLs.
+
+**Upgrading.** The Teams, Slack and generic webhook channels you had before become destinations on upgrade, named `Teams`,
+`Slack` and `Generic webhook`, keeping their URL and on/off switch. A channel with no URL becomes nothing. Every rule sends to
+all destinations until someone changes it, so alerts go to the same places as before.
 
 ## Alert rules
 
@@ -82,6 +103,8 @@ the Rule column on the Alerts page and the `rule` field in the API are empty for
 | Cooldown | Overrides the cooldown on Alert settings for this rule. Empty uses the global one. |
 | Close after (days) | For DMARC policy weakened and nameservers changed only: closes the alert by itself, as if acknowledged. Empty keeps it open until someone acknowledges it. |
 | Stop processing more rules | See below. |
+| Where it goes | All destinations, or only the destinations you choose. See [Destinations](#destinations). |
+| Ticket mode | Follow the ticket rules, never open a ticket, or always open one. See [Tickets](#tickets). |
 
 Alerts about the system itself (an expiring API key, a failed client report, a lost PSA connection) aren't about a domain,
 so their rules have no scope.
@@ -104,6 +127,19 @@ narrowed or put behind a stopping rule, closes the alerts it had open for that d
 A default rule can be switched off, edited and moved, but not deleted. **Reset to default values** in its dialog restores
 its name, severity, settings and scope. If a rule's scope names a group, tag or domain that has since been deleted, the
 page says so and offers **Clean up**, which removes those entries. A scope limited to something that is gone applies to nothing.
+
+### Tickets
+
+Each rule has a **Ticket mode** (for the kinds of alert that are about a domain):
+
+* **Follow the ticket rules** (the default): the group's ticket rule, then the global rule, then the alert type's default
+  decide, as described in [PSA integration](./psa-integration.mdx).
+* **Never open a ticket**: this rule's alerts open no ticket, whatever the ticket rules say.
+* **Always open a ticket**: this rule's alerts open a ticket whatever the ticket rules say, provided a PSA is connected
+  and the domain has a company there. With no company to put it under, no ticket is opened.
+
+Because tickets are opened per alert, two stacked rules that both apply can open two tickets unless one of them is set to
+**Never**.
 
 ### Under review on the new sender rule
 
@@ -205,7 +241,7 @@ these closes the alert and accepts the current policy or nameservers as the new 
 
 Delivery is best-effort: a failed webhook call is logged as a warning and does not stop the alert
 from being recorded or shown in the Alerts feed, and does not affect the rest of that check cycle.
-Each channel is sent separately, so one that's down doesn't stop the others.
+Each destination is sent separately, so one that's down doesn't stop the others.
 
 For syncing alerts to a PSA instead of (or alongside) Teams, Slack or webhook delivery, see [PSA
 integration](./psa-integration.mdx).
@@ -226,8 +262,8 @@ title, the domain and alert type side by side, then the message.
 
 1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
 2. Under **Incoming Webhooks**, turn them on, then **Add New Webhook to Workspace** and pick the channel.
-3. Copy the URL (it starts `https://hooks.slack.com/services/`) into **Slack webhook URL**, switch Slack on, and use
-   **Send test** to check it.
+3. On Alert settings, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts
+   `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
 
 </details>
 

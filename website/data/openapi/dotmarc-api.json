@@ -2308,7 +2308,10 @@
                   "alert_rule.deleted",
                   "alert_rule.moved",
                   "alert_rule.reset",
-                  "alert_rule.scope_pruned"
+                  "alert_rule.scope_pruned",
+                  "alert_destination.created",
+                  "alert_destination.changed",
+                  "alert_destination.deleted"
                 ],
                 "type": "string"
               },
