@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @using DotMarc.Demo
+@using DotMarc.Notifications
 @using DotMarc.Components.Shared
 @using DotMarc.Reporting
 @using Microsoft.Extensions.Options
@@ -46,6 +47,12 @@
             </AuthorizeView>
             <AuthorizeView Policy="DnsPushManage">
                 <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="AlertsView">
+                @if (AlertRuleAccess.MayView(context.User))
+                {
+                    <MudMenuItem Href="/alerts/rules" Icon="@Icons.Material.Filled.Rule">Alert rules</MudMenuItem>
+                }
             </AuthorizeView>
             <AuthorizeView Policy="AlertsManage">
                 <MudMenuItem Href="/alerts/settings" Icon="@Icons.Material.Filled.NotificationsActive">Alert settings</MudMenuItem>

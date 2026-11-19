@@ -1,0 +1,64 @@
+@* Picks groups, tags or domains by name for a rule's scope: type to search, pick one to add it, and the chips below show what is
+   chosen, each with a close button. An id that no longer exists shows as a deleted chip so it can be removed. *@
+<div>
+    <MudAutocomplete T="int" Label="@Label" Value="_pending" ValueChanged="AddAsync" SearchFunc="SearchAsync" ToStringFunc="NameOf"
+                     ResetValueOnEmptyText="true" CoerceText="false" CoerceValue="false" Clearable="false" MaxItems="30"
+                     Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="Disabled" />
+    @if (Selected.Count > 0)
+    {
+        <div class="d-flex flex-wrap mt-1" style="gap: 0.25rem;">
+            @foreach (var id in Selected.OrderBy(id => Options.ContainsKey(id) ? 0 : 1).ThenBy(id => NameOf(id), StringComparer.OrdinalIgnoreCase))
+            {
+                var exists = Options.ContainsKey(id);
+                <MudChip T="string" Size="Size.Small" Color="@(exists ? Color.Default : Color.Warning)" OnClose="@(() => RemoveAsync(id))" Disabled="Disabled"
+                         title="@(exists ? null : "This no longer exists. Remove it.")">@(exists ? Options[id] : $"Deleted ({id})")</MudChip>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>Everything that can be picked, by id.</summary>
+    [Parameter, EditorRequired] public IReadOnlyDictionary<int, string> Options { get; set; } = new Dictionary<int, string>();
+
+    [Parameter, EditorRequired] public HashSet<int> Selected { get; set; } = [];
+
+    /// <summary>Raised after an id is added or removed, so the parent can refresh anything that depends on the choice.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    private int _pending;
+
+    private string NameOf(int id) => Options.TryGetValue(id, out var name) ? name : string.Empty;
+
+    private Task<IEnumerable<int>> SearchAsync(string? text, CancellationToken cancellationToken)
+    {
+        var typed = text?.Trim() ?? "";
+        var matches = Options
+            .Where(option => !Selected.Contains(option.Key))
+            .Where(option => typed.Length == 0 || option.Value.Contains(typed, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(option => option.Value, StringComparer.OrdinalIgnoreCase)
+            .Select(option => option.Key);
+        return Task.FromResult(matches);
+    }
+
+    private async Task AddAsync(int id)
+    {
+        _pending = 0;
+        if (id != 0 && Selected.Add(id))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    private async Task RemoveAsync(int id)
+    {
+        if (Selected.Remove(id))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+}

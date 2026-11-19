@@ -1,0 +1,386 @@
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject ISnackbar Snackbar
+@inject ILogger<AlertRuleDialog> Logger
+
+@* Adds or edits one alert rule. What it shows for a kind (the settings, their ranges and help) comes from AlertRuleKinds, so a new
+   kind or setting needs no change here. The service validates every save; this only shows what it says. *@
+<MudDialog>
+    <TitleContent>@Title</TitleContent>
+    <DialogContent>
+        @if (_kind is null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@_kindDescription</MudText>
+
+            @if (_problems.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">
+                    @foreach (var problem in _problems)
+                    {
+                        <div>@problem</div>
+                    }
+                </MudAlert>
+            }
+
+            <MudGrid>
+                <MudItem xs="12" sm="8">
+                    <MudTextField T="string" Label="Name" @bind-Value="_name" Immediate="true" MaxLength="@AlertRuleValidator.MaxNameLength" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string" Label="Severity" @bind-Value="_severity" Variant="Variant.Outlined">
+                        @foreach (var severity in AlertSeverities.All)
+                        {
+                            <MudSelectItem T="string" Value="@severity">@severity</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <FieldWithHelp Topic="Enabled" Inline="true" Help="A rule that is off never raises an alert, and the alerts it has open are closed on the next check.">
+                        <MudSwitch T="bool" Value="_enabled" ValueChanged="@(value => { _enabled = value; Refresh(); })" Color="Color.Primary" Label="Enabled" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <FieldWithHelp Topic="Stop processing more rules" Inline="true"
+                                   Help="When on, rules after this one are skipped for the domains this rule applies to, so a rule for one client replaces the default for that client. Turn it off to raise this alert as well as the ones after it.">
+                        <MudSwitch T="bool" Value="_stop" ValueChanged="@(value => { _stop = value; Refresh(); })" Color="Color.Primary" Label="Stop processing more rules" />
+                    </FieldWithHelp>
+                </MudItem>
+            </MudGrid>
+
+            @if (_kind.HasDomainScope)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-4">Applies to</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">Leave these empty to apply to every domain. A domain matches if it is in any group or tag chosen, or is one of the domains chosen.</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4"><ScopeEntryPicker Label="Groups" Options="_groups" Selected="_includeGroups" Changed="Refresh" /></MudItem>
+                    <MudItem xs="12" md="4"><ScopeEntryPicker Label="Tags" Options="_tags" Selected="_includeTags" Changed="Refresh" /></MudItem>
+                    <MudItem xs="12" md="4"><ScopeEntryPicker Label="Domains" Options="_domains" Selected="_includeDomains" Changed="Refresh" /></MudItem>
+                </MudGrid>
+                <MudText Typo="Typo.subtitle2" Class="mt-3">Except</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4"><ScopeEntryPicker Label="Groups" Options="_groups" Selected="_excludeGroups" Changed="Refresh" /></MudItem>
+                    <MudItem xs="12" md="4"><ScopeEntryPicker Label="Tags" Options="_tags" Selected="_excludeTags" Changed="Refresh" /></MudItem>
+                    <MudItem xs="12" md="4"><ScopeEntryPicker Label="Domains" Options="_domains" Selected="_excludeDomains" Changed="Refresh" /></MudItem>
+                </MudGrid>
+
+                @if (_reach is { } reach)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                        @(_enabled ? $"Applies to {reach.AppliesTo} of {_monitoredDomains.Count} monitored domains." : "This rule is off, so it applies to no domains.")
+                    </MudAlert>
+                    @if (reach.Hidden > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                            @($"{reach.Hidden} more domain{(reach.Hidden == 1 ? "" : "s")} match this scope, but {string.Join(" and ", reach.HiddenByRuleNames)} {(reach.HiddenByRuleNames.Count == 1 ? "stops" : "stop")} processing first, so this rule never applies to {(reach.Hidden == 1 ? "it" : "them")}.")
+                        </MudAlert>
+                    }
+                    @if (_alsoHides.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                            @($"Because this rule stops processing, {string.Join(" and ", _alsoHides)} won't apply to the domains it covers.")
+                        </MudAlert>
+                    }
+                }
+            }
+
+            @if (_kind.Parameters.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-4">When it raises an alert</MudText>
+                <MudGrid>
+                    @foreach (var definition in _kind.Parameters.Where(IsVisible))
+                    {
+                        <MudItem xs="12" sm="6" @key="definition.Key">
+                            <FieldWithHelp Topic="@definition.Label" Help="@definition.Help">
+                                @if (definition.Type == AlertRuleParameterType.Integer)
+                                {
+                                    <MudNumericField T="int" Label="@definition.Label" Value="IntValue(definition)" ValueChanged="@(value => SetParameter(definition.Key, value.ToString()))"
+                                                     Min="@(definition.Min ?? 0)" Max="@(definition.Max ?? int.MaxValue)" Immediate="true" Variant="Variant.Outlined" />
+                                }
+                                else
+                                {
+                                    <MudSelect T="string" Label="@definition.Label" Value="TextValue(definition)" ValueChanged="@(value => SetParameter(definition.Key, value))" Variant="Variant.Outlined">
+                                        @foreach (var choice in definition.Choices!)
+                                        {
+                                            <MudSelectItem T="string" Value="@choice.Value">@choice.Label</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                }
+                            </FieldWithHelp>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4">What happens next</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <FieldWithHelp Topic="Cooldown" Help="The least time between repeat alerts for the same thing while it stays open. Leave it empty to use the cooldown on Alert settings.">
+                        <MudNumericField T="int?" Label="Cooldown (minutes)" @bind-Value="_cooldown" Min="0" Max="@AlertRuleValidator.MaxCooldownMinutes" Clearable="true" Variant="Variant.Outlined" />
+                    </FieldWithHelp>
+                </MudItem>
+                @if (_kind.HasAutoClose)
+                {
+                    <MudItem xs="12" sm="6">
+                        <FieldWithHelp Topic="Close after" Help="Closes this alert by itself, as if acknowledged, this many days after it was raised. Leave it empty to keep it open until someone acknowledges it or its PSA ticket is closed.">
+                            <MudNumericField T="int?" Label="Close after (days)" @bind-Value="_autoCloseDays" Min="0" Max="@AlertRuleValidator.MaxAutoCloseDays" Clearable="true" Variant="Variant.Outlined" />
+                        </FieldWithHelp>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_isDefault)
+        {
+            <MudButton Color="Color.Error" OnClick="ResetAsync" Disabled="_saving">Reset to default values</MudButton>
+        }
+        <MudSpacer />
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(_kind is null || _saving)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The kind of alert the rule is for. For an existing rule it is the rule's own kind.</summary>
+    [Parameter, EditorRequired] public string Kind { get; set; } = "";
+
+    /// <summary>The rule being edited, or null to add one.</summary>
+    [Parameter] public int? RuleId { get; set; }
+
+    private AlertRuleKind? _kind;
+    private string _kindDescription = "";
+    private List<AlertRule> _rulesOfKind = [];
+    private List<DomainFacts> _monitoredDomains = [];
+    private AlertScopeNames _names = new(new Dictionary<int, string>(), new Dictionary<int, string>(), new Dictionary<int, string>());
+    private Dictionary<int, string> _groups = [];
+    private Dictionary<int, string> _tags = [];
+    private Dictionary<int, string> _domains = [];
+
+    private string _name = "";
+    private bool _enabled = true;
+    private string _severity = AlertSeverities.Warning;
+    private bool _stop = true;
+    private int? _cooldown;
+    private int? _autoCloseDays;
+    private Dictionary<string, string> _parameters = [];
+    private int _position;
+    private bool _isDefault;
+    private bool _saving;
+    private List<string> _problems = [];
+
+    private readonly HashSet<int> _includeGroups = [];
+    private readonly HashSet<int> _includeTags = [];
+    private readonly HashSet<int> _includeDomains = [];
+    private readonly HashSet<int> _excludeGroups = [];
+    private readonly HashSet<int> _excludeTags = [];
+    private readonly HashSet<int> _excludeDomains = [];
+
+    private AlertRuleReach? _reach;
+    private List<string> _alsoHides = [];
+
+    private string Title => RuleId is null ? $"Add a rule: {_kind?.DisplayName}" : $"Edit rule: {_name}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _kind = AlertRuleKinds.Find(Kind);
+        if (_kind is null)
+        {
+            Snackbar.Add("That kind of alert no longer exists.", Severity.Error);
+            MudDialog.Cancel();
+            return;
+        }
+
+        _kindDescription = AlertTypes.Find(Kind)?.Description ?? "";
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _rulesOfKind = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Where(rule => rule.Kind == Kind).ToListAsync();
+        _groups = await db.Groups.AsNoTracking().ToDictionaryAsync(group => group.Id, group => group.Name);
+        _tags = await db.Tags.AsNoTracking().ToDictionaryAsync(tag => tag.Id, tag => tag.Name);
+        _domains = await db.Domains.AsNoTracking().ToDictionaryAsync(domain => domain.Id, domain => domain.Name);
+        _names = new AlertScopeNames(_groups, _tags, _domains);
+        var monitored = await db.Domains.AsNoTracking().Where(domain => domain.IsMonitored).Include(domain => domain.Groups).Include(domain => domain.Tags).AsSplitQuery().ToListAsync();
+        _monitoredDomains = monitored.Select(domain => new DomainFacts(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet())).ToList();
+
+        if (RuleId is { } ruleId && _rulesOfKind.SingleOrDefault(rule => rule.Id == ruleId) is { } rule)
+        {
+            var input = AlertRulePresentation.ToInput(rule);
+            (_name, _enabled, _severity, _stop, _cooldown, _autoCloseDays) = (input.Name, input.Enabled, input.Severity, input.StopProcessing, input.CooldownMinutes, input.AutoCloseDays);
+            _parameters = input.Parameters.ToDictionary(pair => pair.Key, pair => pair.Value);
+            _position = rule.Position;
+            _isDefault = rule.DefaultKey is not null;
+            foreach (var entry in input.Scope)
+            {
+                ScopeSet(entry.Target, entry.Exclude).Add(entry.TargetId);
+            }
+        }
+        else
+        {
+            RuleId = null;
+            _name = "";
+            _severity = _kind.DefaultSeverity;
+            _parameters = _kind.Parameters.ToDictionary(definition => definition.Key, definition => definition.Default);
+            _position = (_rulesOfKind.Count == 0 ? 10 : _rulesOfKind.Min(rule => rule.Position)) - 10;
+        }
+
+        Refresh();
+    }
+
+    private HashSet<int> ScopeSet(AlertRuleScopeTarget target, bool exclude) => (target, exclude) switch
+    {
+        (AlertRuleScopeTarget.Group, false) => _includeGroups,
+        (AlertRuleScopeTarget.Tag, false) => _includeTags,
+        (AlertRuleScopeTarget.Domain, false) => _includeDomains,
+        (AlertRuleScopeTarget.Group, true) => _excludeGroups,
+        (AlertRuleScopeTarget.Tag, true) => _excludeTags,
+        _ => _excludeDomains
+    };
+
+    private List<AlertRuleScopeInput> ScopeInputs() =>
+    [
+        .. _includeGroups.Select(id => new AlertRuleScopeInput(AlertRuleScopeTarget.Group, id, false)),
+        .. _includeTags.Select(id => new AlertRuleScopeInput(AlertRuleScopeTarget.Tag, id, false)),
+        .. _includeDomains.Select(id => new AlertRuleScopeInput(AlertRuleScopeTarget.Domain, id, false)),
+        .. _excludeGroups.Select(id => new AlertRuleScopeInput(AlertRuleScopeTarget.Group, id, true)),
+        .. _excludeTags.Select(id => new AlertRuleScopeInput(AlertRuleScopeTarget.Tag, id, true)),
+        .. _excludeDomains.Select(id => new AlertRuleScopeInput(AlertRuleScopeTarget.Domain, id, true)),
+    ];
+
+    /// <summary>Works out how many domains the rule as currently edited reaches, and what it hides or is hidden by.</summary>
+    private void Refresh()
+    {
+        if (_kind is null || !_kind.HasDomainScope)
+        {
+            return;
+        }
+
+        var editing = new AlertRule
+        {
+            Id = RuleId ?? -1, Kind = Kind, Name = string.IsNullOrWhiteSpace(_name) ? "this rule" : _name.Trim(), Severity = _severity, Enabled = _enabled,
+            StopProcessing = _stop, Position = _position,
+            Scope = [.. ScopeInputs().Select(entry => new AlertRuleScopeEntry { Target = entry.Target, TargetId = entry.TargetId, Exclude = entry.Exclude })]
+        };
+        var all = _rulesOfKind.Where(rule => rule.Id != editing.Id).Append(editing).ToList();
+        var reach = AlertRulePresentation.Reach(all, _monitoredDomains);
+        _reach = reach.Single(entry => entry.RuleId == editing.Id);
+        _alsoHides = reach.Where(entry => entry.RuleId != editing.Id && entry.HiddenByRuleNames.Contains(editing.Name)).Select(entry => all.Single(rule => rule.Id == entry.RuleId).Name).ToList();
+    }
+
+    private bool IsVisible(AlertRuleParameterDefinition definition) =>
+        definition.ShowWhenKey is null || TextValue(_kind!.Parameters.Single(other => other.Key == definition.ShowWhenKey)) == definition.ShowWhenValue;
+
+    private string TextValue(AlertRuleParameterDefinition definition) => _parameters.GetValueOrDefault(definition.Key, definition.Default);
+
+    private int IntValue(AlertRuleParameterDefinition definition) =>
+        int.TryParse(TextValue(definition), out var value) ? value : int.Parse(definition.Default);
+
+    private void SetParameter(string key, string value) => _parameters[key] = value;
+
+    private async Task<bool> MayManageAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        return AlertRuleAccess.MayView(user) && (await AuthorizationService.AuthorizeAsync(user, nameof(Permission.AlertRulesManage))).Succeeded;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_kind is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        _problems = [];
+        try
+        {
+            // The dialog only opens for people who may manage rules, but a session can outlive a change of role.
+            if (!await MayManageAsync())
+            {
+                Snackbar.Add("You don't have permission to change alert rules.", Severity.Error);
+                MudDialog.Cancel();
+                return;
+            }
+
+            var input = new AlertRuleInput(
+                _name, _enabled, _severity, _stop, _cooldown, _kind.HasAutoClose ? _autoCloseDays : null, _parameters, _kind.HasDomainScope ? ScopeInputs() : []);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actor = await AuditActorAccessor.GetAsync();
+            if (RuleId is { } ruleId)
+            {
+                await AlertRuleService.UpdateAsync(db, actor, ruleId, input);
+            }
+            else
+            {
+                await AlertRuleService.CreateAsync(db, actor, Kind, input);
+            }
+
+            Snackbar.Add("Alert rule saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (AlertRuleValidationException exception)
+        {
+            _problems = exception.Problems.ToList();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not save alert rule {RuleId}.", RuleId);
+            _problems = ["Could not save the rule. Try again, and check the server logs if it keeps happening."];
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        if (RuleId is not { } ruleId)
+        {
+            return;
+        }
+
+        _saving = true;
+        _problems = [];
+        try
+        {
+            if (!await MayManageAsync())
+            {
+                Snackbar.Add("You don't have permission to change alert rules.", Severity.Error);
+                MudDialog.Cancel();
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await AlertRuleService.ResetToDefaultAsync(db, await AuditActorAccessor.GetAsync(), ruleId);
+            Snackbar.Add("Alert rule reset to its default values.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (AlertRuleValidationException exception)
+        {
+            _problems = exception.Problems.ToList();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not reset alert rule {RuleId}.", ruleId);
+            _problems = ["Could not reset the rule. Try again, and check the server logs if it keeps happening."];
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

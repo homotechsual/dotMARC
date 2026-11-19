@@ -66,6 +66,19 @@ public static class AlertRulePresentation
         return ordered.Select(rule => new AlertRuleReach(rule.Id, appliesTo[rule.Id], hidden[rule.Id], hiddenBy[rule.Id])).ToList();
     }
 
+    /// <summary>A stored rule as an editable input: the same values, with every parameter the kind defines present (the kind's default
+    /// for one the rule leaves out), so the editor and a toggle both start from a complete, valid input.</summary>
+    public static AlertRuleInput ToInput(AlertRule rule)
+    {
+        var stored = string.IsNullOrWhiteSpace(rule.ParametersJson)
+            ? []
+            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(rule.ParametersJson) ?? [];
+        var parameters = (AlertRuleKinds.Find(rule.Kind)?.Parameters ?? []).ToDictionary(definition => definition.Key, definition => stored.GetValueOrDefault(definition.Key, definition.Default));
+        return new AlertRuleInput(
+            rule.Name, rule.Enabled, rule.Severity, rule.StopProcessing, rule.CooldownMinutes, rule.AutoCloseDays, parameters,
+            [.. rule.Scope.Select(entry => new AlertRuleScopeInput(entry.Target, entry.TargetId, entry.Exclude))]);
+    }
+
     public static bool IsDeadTarget(AlertRuleScopeEntry entry, AlertScopeNames names) => entry.Target switch
     {
         AlertRuleScopeTarget.Group => !names.Groups.ContainsKey(entry.TargetId),

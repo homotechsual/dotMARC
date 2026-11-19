@@ -90,6 +90,42 @@ public sealed class AlertRulePresentationTests
         Assert.Equal(dead, AlertRulePresentation.IsDeadTarget(Include(target, id), Names));
     }
 
+    // ---- ToInput ----
+
+    [Fact]
+    public void ToInput_CopiesTheRulesEditableFields_FillingMissingParametersWithDefaults()
+    {
+        var rule = Rule(1, "Mine", scope: [Include(AlertRuleScopeTarget.Group, 1), Exclude(AlertRuleScopeTarget.Domain, 9)]);
+        rule.Severity = "Critical";
+        rule.Enabled = false;
+        rule.StopProcessing = false;
+        rule.CooldownMinutes = 15;
+        rule.AutoCloseDays = null;
+        rule.ParametersJson = "{\"days\":\"5\"}";
+
+        var input = AlertRulePresentation.ToInput(rule);
+
+        Assert.Equal(("Mine", false, "Critical", false, 15, (int?)null), (input.Name, input.Enabled, input.Severity, input.StopProcessing, input.CooldownMinutes, input.AutoCloseDays));
+        Assert.Equal("5", input.Parameters[AlertRuleParameterKeys.MissingDays]);
+        Assert.Equal(
+            [new AlertRuleScopeInput(AlertRuleScopeTarget.Group, 1, false), new AlertRuleScopeInput(AlertRuleScopeTarget.Domain, 9, true)],
+            input.Scope);
+        Assert.Empty(AlertRuleValidator.Problems(AlertTypes.MissedReport, input));
+    }
+
+    [Fact]
+    public void ToInput_OfARuleWithNoParameters_UsesTheKindsDefaults()
+    {
+        var rule = Rule(1);
+        rule.Kind = AlertTypes.NewUnreviewedSender;
+        rule.ParametersJson = null;
+
+        var input = AlertRulePresentation.ToInput(rule);
+
+        Assert.Equal("7", input.Parameters[AlertRuleParameterKeys.NewDays]);
+        Assert.Equal("decided", input.Parameters[AlertRuleParameterKeys.UnderReview]);
+    }
+
     // ---- Reach ----
 
     [Fact]
