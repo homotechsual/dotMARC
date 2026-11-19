@@ -142,7 +142,7 @@ public static class ApiDocument
 
                 if (ApiExamples.For(context.JsonTypeInfo.Type) is { } example)
                 {
-                    schema.Example = example;
+                    schema.Examples = [example];
                 }
 
                 return Task.CompletedTask;

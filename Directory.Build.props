@@ -1,5 +1,10 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>0.13.0</VersionPrefix>
+    <!-- The build is warning-free, so keep it that way: a new warning (an obsolete API after a package update, a missing
+         @using in a Razor file) fails the build instead of scrolling past. NuGet vulnerability advisories stay warnings,
+         because one can appear with no fixed version to move to. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1900;NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 </Project>
