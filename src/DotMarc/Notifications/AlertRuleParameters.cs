@@ -20,6 +20,12 @@ public static class AlertRuleParameterKeys
 
     /// <summary>The seven DNS record kinds: a <see cref="DnsHealthAlertMode"/> name.</summary>
     public const string Mode = "mode";
+
+    /// <summary>New sender: what a sender marked Under review means for the alert: decided, unreviewed or afterDays.</summary>
+    public const string UnderReview = "underReview";
+
+    /// <summary>New sender: with <c>afterDays</c>, how many days Under review lasts before the alert is raised again.</summary>
+    public const string UnderReviewDays = "underReviewDays";
 }
 
 /// <summary>A rule's own parameter values. A value the rule does not set, or sets to something unreadable, falls back to the
