@@ -10,7 +10,8 @@ public sealed class NotificationSettings
 {
     public int Id { get; set; }
     public bool Enabled { get; set; } = true;
-    // Each channel has its own switch, so alerts can go to any combination of them.
+    // Retired: the three channels became AlertDestination rows (see AddAlertDestinations), and nothing reads these columns any more.
+    // They stay for one release so a downgrade still finds the values.
     public bool TeamsEnabled { get; set; } = true;
     public string? TeamsWebhookUrl { get; set; }
     public bool SlackEnabled { get; set; }
