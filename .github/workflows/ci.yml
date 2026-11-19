@@ -2,13 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths-ignore: [website/**]
   # No paths filter on pull requests: main requires the "test" check, and a workflow skipped by a path filter never
   # reports it, which would block a docs-only PR for good. Instead the job always runs and skips its steps when the PR
   # changes nothing outside website/.
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   test:

@@ -1,11 +1,12 @@
 # .github/workflows/next-deploy.yml
 name: Deploy next
 
+# Runs on a push to develop and calls CI itself, rather than waiting on a workflow_run of CI: GitHub only fires
+# workflow_run triggers from workflow files on the default branch, and this file lives on develop.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  push:
     branches: [develop]
+    paths-ignore: [website/**]
   workflow_dispatch:
 
 env:
@@ -13,8 +14,11 @@ env:
   DEPLOY_PATH: /opt/dotmarc-next
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   build-and-push:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: read
