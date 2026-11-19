@@ -18,6 +18,22 @@ in earlier versions.
 * **Prefer a release tag to `:latest`** in production. A tag such as <code>:<LatestVersion /></code> says exactly what
   is running and what to go back to. `:latest` moves under you and needs an extra step to pick up a new build.
 
+## Try upcoming changes with `:next`
+
+Every change merged to the `develop` branch is built and published as `ghcr.io/homotechsual/dotmarc:next` (also
+`homotechsual/dotmarc:next` on Docker Hub), for Linux on amd64 and arm64. It is the code being prepared for the next
+release, so it changes often and can break. Use it to try a feature early or to check a fix, never for production.
+
+* **It marks itself.** A `:next` container shows a "Dev build" banner at the top of every page, and the footer reads
+  <code>v&lt;version&gt; (dev)</code> with the version being worked towards. That version has no release notes yet, so it doesn't
+  link to any.
+* **Use a separate database.** `:next` can run migrations a released version doesn't understand, so don't point it at
+  data you want to keep. Moving back to a release afterwards means restoring a backup taken before.
+* **You can try it without installing.** [next.dotmarc.app](https://next.dotmarc.app) runs `:next` with the same simulated
+  data as the demo.
+* **Pull to update.** `:next` is replaced on every build, so `docker compose pull` fetches the latest.
+  Use `:next-<commit>` instead when you need to stay on one build.
+
 ## Choose how you run dotMARC
 
 | How you run dotMARC | Go to |

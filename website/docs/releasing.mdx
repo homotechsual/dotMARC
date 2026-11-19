@@ -9,6 +9,18 @@ This page is for maintainers. It covers how a release is cut and how the public 
 and roadmap) and Canny changelog fit around it, with an explicit split between what runs by itself
 and what you still do by hand.
 
+## Branches and the next build
+
+Work happens on `develop`, and `main` only ever holds released code. `main` is protected: a change reaches it by a
+pull request from `develop`, which must pass the `test` check and the `from-develop` check (that one fails any pull
+request into `main` from another branch). A pull request that changes only `website/` still passes `test`, because
+the job skips the .NET build when nothing else changed.
+
+Every push to `develop` runs CI and then publishes the `:next` image (multi-arch, to GHCR and Docker Hub) and
+redeploys [next.dotmarc.app](https://next.dotmarc.app). `Directory.Build.props` on `develop` holds the version being
+worked towards, and the image is built with `DEV_BUILD=true`, which turns on the dev banner and the `(dev)` footer.
+Pushes to `main` keep publishing `:edge` and redeploying the demo.
+
 ## What is automated
 
 | Step | Done by | Trigger |
@@ -135,7 +147,8 @@ entries cannot be listed, or Canny rejects the entry.
    Updates page sorts by date alone: two releases on the same day would otherwise list in the wrong order.
 4. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with
    unrelated working tree changes, a missing or placeholder post, an existing tag, or outdated or vulnerable packages.
-5. **Push.** `git push origin main v0.7.0`. Everything from here is automatic.
+5. **Push.** `git push origin develop v0.7.0`, then open a pull request from `develop` to `main` and merge it once
+   the checks pass. Everything from here is automatic.
 6. **Check the run.** In the `canny-changelog` job log, look for one `Linking "..."` line per shipped
    idea and a final `Published entry ... linkedIdeas=N` line. A `Not linking "..."` line means an
    idea was tagged for this version but was not complete at the time.
