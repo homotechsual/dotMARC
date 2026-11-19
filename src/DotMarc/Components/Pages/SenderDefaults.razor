@@ -14,6 +14,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject ILogger<SenderDefaults> Logger
+@implements IDisposable
 
 <PageTitle>dotMARC - @Title</PageTitle>
 
@@ -39,6 +40,7 @@
         <thead>
             <tr>
                 <th>Service</th>
+                <th title="Monitored domains whose last 30 days of reports show this service. Found means strong evidence. Likely means the service is attributed on weaker evidence.">Domains</th>
                 <th>Decision</th>
                 <th>Source</th>
                 <th>Note</th>
@@ -50,6 +52,16 @@
             {
                 <tr>
                     <td>@(row.InCatalogue ? row.Name : $"{row.Name} (no longer recognised)")</td>
+                    <td>
+                        @if (_counts is null)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" aria-label="Counting domains" />
+                        }
+                        else
+                        {
+                            @DomainsText(row.Name)
+                        }
+                    </td>
                     <td><MudChip T="string" Size="Size.Small" Color="@StatusColor(row.Status)">@SenderDecisionPresentation.StatusLabel(row.Status)</MudChip></td>
                     <td>@row.Source</td>
                     <td>@row.Note</td>
@@ -76,6 +88,64 @@
     private List<DefaultRow>? _rows;
     private List<SenderDecision> _decisions = [];
 
+    // How many domains show each service. Counted in the background, since it identifies the senders of every domain; the page
+    // shows its rows straight away and fills the column in when the count is ready.
+    private IReadOnlyDictionary<string, ServiceDomainCount>? _counts;
+    private CancellationTokenSource _countsCancellation = new();
+
+    public void Dispose()
+    {
+        _countsCancellation.Cancel();
+        _countsCancellation.Dispose();
+    }
+
+    private static string DomainsText(string name, IReadOnlyDictionary<string, ServiceDomainCount> counts)
+    {
+        if (!counts.TryGetValue(name, out var count))
+        {
+            return "None";
+        }
+
+        return (count.Found, count.Likely) switch
+        {
+            (> 0, > 0) => $"{count.Found} found, {count.Likely} likely",
+            (> 0, _) => $"{count.Found} found",
+            _ => $"{count.Likely} likely"
+        };
+    }
+
+    private bool _countsFailed;
+
+    private string DomainsText(string name) => _countsFailed ? "Unavailable" : DomainsText(name, _counts!);
+
+    private async Task LoadCountsAsync(int? groupId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync(cancellationToken);
+            var counts = await SenderServiceDomainCounts.LoadAsync(db, groupId, cancellationToken);
+            await InvokeAsync(() =>
+            {
+                _counts = counts;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // The page was left before the count finished.
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Could not count the domains for each sending service.");
+            await InvokeAsync(() =>
+            {
+                _countsFailed = true;
+                _counts = new Dictionary<string, ServiceDomainCount>();
+                StateHasChanged();
+            });
+        }
+    }
+
     private string Title => GroupId is null ? "Sender baseline" : $"Sender defaults for {_groupName}";
 
     protected override async Task OnParametersSetAsync()
@@ -99,6 +169,13 @@
         }
 
         await ReloadAsync();
+
+        _countsCancellation.Cancel();
+        _countsCancellation.Dispose();
+        _countsCancellation = new CancellationTokenSource();
+        _counts = null;
+        _countsFailed = false;
+        _ = LoadCountsAsync(GroupId, _countsCancellation.Token);
     }
 
     private async Task ReloadAsync()

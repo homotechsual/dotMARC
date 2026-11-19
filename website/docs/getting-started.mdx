@@ -189,6 +189,11 @@ the row falls back to the level below.
 
 * A baseline or group decision only matters on a domain whose reports show that service. Nothing is
   added to domains that don't use it.
+* The **Domains** column on the baseline and group defaults pages says how many monitored domains show each
+  service in their last 30 days of reports, so you can see how far a decision reaches. **Found** means strong
+  evidence and **likely** means the service is attributed on weaker evidence. It uses the same evidence as the
+  Senders table, and the owner of an address only counts once that address has been looked up, so a likely
+  count can rise as lookups finish. On a group's page it counts only that group's domains.
 * If a domain is in several groups that disagree, the most cautious decision wins: Unauthorised, then
   Under review, then Authorised. The row says which groups disagree, and a decision on the domain itself
   settles it.
