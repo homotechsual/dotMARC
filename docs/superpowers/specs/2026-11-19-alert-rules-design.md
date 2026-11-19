@@ -46,7 +46,7 @@ No two MSPs work the same way, and dotMARC is also used for internal IT. One MSP
 
 ## What a rule is
 
-```
+```text
 New sender to review            on    Warning
 Applies to    Group "Aurora Retail", Tag "Finance"     except shop.aurora-retail.example
 Raise when    first seen within 7 days, at least 20 messages

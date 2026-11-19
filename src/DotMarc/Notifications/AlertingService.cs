@@ -183,11 +183,21 @@ public sealed class AlertingService : IAlertingService
 
     /// <summary>Which alerts of some kinds are open, read once per cycle so a quiet cycle costs one query rather than one per
     /// domain and kind.</summary>
-    private sealed class OpenAlertIndex(IReadOnlyList<OpenAlert> alerts)
+    private sealed class OpenAlertIndex
     {
-        public IReadOnlyList<OpenAlert> All => alerts;
-        public bool Has(string subject, string kind, int ruleId) => alerts.Any(alert => alert.Subject == subject && alert.Kind == kind && alert.RuleId == ruleId);
-        public bool HasAny(string subject, string kind) => alerts.Any(alert => alert.Subject == subject && alert.Kind == kind);
+        private readonly HashSet<(string Subject, string Kind, int? RuleId)> _exact;
+        private readonly HashSet<(string Subject, string Kind)> _any;
+
+        public OpenAlertIndex(IReadOnlyList<OpenAlert> alerts)
+        {
+            All = alerts;
+            _exact = alerts.Select(alert => (alert.Subject, alert.Kind, alert.RuleId)).ToHashSet();
+            _any = alerts.Select(alert => (alert.Subject, alert.Kind)).ToHashSet();
+        }
+
+        public IReadOnlyList<OpenAlert> All { get; }
+        public bool Has(string subject, string kind, int ruleId) => _exact.Contains((subject, kind, ruleId));
+        public bool HasAny(string subject, string kind) => _any.Contains((subject, kind));
     }
 
     private static async Task<OpenAlertIndex> LoadOpenAlertsAsync(DotMarcDbContext db, IReadOnlyCollection<string> kinds, CancellationToken cancellationToken)
