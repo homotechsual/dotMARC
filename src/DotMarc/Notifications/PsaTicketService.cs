@@ -25,11 +25,16 @@ public sealed class PsaTicketService(IEnumerable<IPsaProvider> providers, ILogge
             return;
         }
 
+        // The rule that raised the alert may override the ticket rules. An alert whose rule was deleted follows them.
+        var mode = alert.AlertRuleId is null
+            ? AlertTicketMode.FollowRules
+            : await context.AlertRules.AsNoTracking().Where(rule => rule.Id == alert.AlertRuleId).Select(rule => rule.TicketMode).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
         foreach (var provider in _providers)
         {
             try
             {
-                await CreateTicketAsync(context, provider, domain, alert, cancellationToken).ConfigureAwait(false);
+                await CreateTicketAsync(context, provider, domain, alert, mode, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -38,7 +43,7 @@ public sealed class PsaTicketService(IEnumerable<IPsaProvider> providers, ILogge
         }
     }
 
-    private static async Task CreateTicketAsync(DotMarcDbContext context, IPsaProvider provider, Domain domain, AlertEvent alert, CancellationToken cancellationToken)
+    private static async Task CreateTicketAsync(DotMarcDbContext context, IPsaProvider provider, Domain domain, AlertEvent alert, AlertTicketMode mode, CancellationToken cancellationToken)
     {
         if (!(await provider.GetReadinessAsync(context, cancellationToken).ConfigureAwait(false)).IsReady)
         {
@@ -57,7 +62,7 @@ public sealed class PsaTicketService(IEnumerable<IPsaProvider> providers, ILogge
             .Where(rule => rule.AlertType == alert.AlertType && (rule.GroupId == null || rule.GroupId == decidingGroupId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (!AlertTicketPolicy.ShouldCreateTicket(alert.AlertType, domain, provider.Kind, rules))
+        if (!AlertTicketPolicy.ShouldCreateTicket(alert.AlertType, domain, provider.Kind, rules, mode))
         {
             return;
         }

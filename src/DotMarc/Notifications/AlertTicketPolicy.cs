@@ -4,14 +4,20 @@ using DotMarc.Psa;
 namespace DotMarc.Notifications;
 
 /// <summary>Decides whether an alert creates a ticket in one PSA. Pure, so every case is a plain unit test.
-/// Order: the deciding group's rule, then the global rule, then the alert type's registry default.</summary>
+/// Order: the alert rule's ticket mode (Never or Always settles it), then the deciding group's rule, then the global rule, then
+/// the alert type's registry default.</summary>
 public static class AlertTicketPolicy
 {
     /// <param name="domain">Must have its links, its <c>Groups</c> and their links loaded (see <see cref="PsaCompanyResolver.IncludeLinks"/>).</param>
     /// <param name="rules">The global rules and the deciding group's rules for this alert type. Rules for other
     /// groups or other alert types are ignored, so passing more than needed is harmless.</param>
-    public static bool ShouldCreateTicket(string alertType, Domain domain, PsaKind psa, IReadOnlyCollection<AlertTicketRule> rules)
+    public static bool ShouldCreateTicket(string alertType, Domain domain, PsaKind psa, IReadOnlyCollection<AlertTicketRule> rules, AlertTicketMode mode = AlertTicketMode.FollowRules)
     {
+        if (mode != AlertTicketMode.FollowRules)
+        {
+            return mode == AlertTicketMode.Always;
+        }
+
         var decidingGroup = PsaCompanyResolver.ResolveGroup(domain, psa);
         if (decidingGroup is not null)
         {
