@@ -197,6 +197,8 @@ the row falls back to the level below.
 * If a domain is in several groups that disagree, the most cautious decision wins: Unauthorised, then
   Under review, then Authorised. The row says which groups disagree, and a decision on the domain itself
   settles it.
+* A sender left Under review can be reminded about. The new sender [alert rule](./alerts.mdx#alert-rules) can count Under
+  review as undecided, or alert again after a number of days. By default Under review stops the alert.
 * The baseline can be changed only by someone who isn't limited to particular groups. A person limited to
   some groups can change the defaults of their own groups, and no others.
 * If a service later leaves dotMARC's list of known services, its decision is kept and shown as "no longer

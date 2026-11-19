@@ -364,6 +364,24 @@ public static class DemoDataSeeder
             ParametersJson = "{\"days\":\"5\"}",
             Scope = [new AlertRuleScopeEntry { Target = AlertRuleScopeTarget.Group, TargetId = groupsByName[ViewerScopedGroupName].Id }],
         });
+
+        // And an Under review example: Cobalt Freight's senders sit Under review for weeks, so it is reminded after 14 days.
+        context.AlertRules.Add(new AlertRule
+        {
+            Kind = AlertTypes.NewUnreviewedSender,
+            Name = "New sender: Cobalt Freight reviews slowly",
+            Severity = "Warning",
+            Position = -10,
+            StopProcessing = true,
+            ParametersJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                [AlertRuleParameterKeys.NewDays] = "7",
+                [AlertRuleParameterKeys.MinimumMessages] = "20",
+                [AlertRuleParameterKeys.UnderReview] = "afterDays",
+                [AlertRuleParameterKeys.UnderReviewDays] = "14",
+            }),
+            Scope = [new AlertRuleScopeEntry { Target = AlertRuleScopeTarget.Group, TargetId = groupsByName["Cobalt Freight"].Id }],
+        });
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

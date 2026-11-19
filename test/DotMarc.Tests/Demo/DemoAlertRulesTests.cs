@@ -7,7 +7,8 @@ using Xunit;
 
 namespace DotMarc.Tests.Demo;
 
-/// <summary>The demo shows alert rules: the default pack, plus one rule scoped to the Aurora Retail group.</summary>
+/// <summary>The demo shows alert rules: the default pack, plus a rule scoped to the Aurora Retail group and one that nags about senders left
+/// Under review for Cobalt Freight.</summary>
 [Collection("Postgres")]
 public sealed class DemoAlertRulesTests : IAsyncLifetime
 {
@@ -51,7 +52,8 @@ public sealed class DemoAlertRulesTests : IAsyncLifetime
         var auroraGroupId = await context.Groups.Where(group => group.Name == DemoDataSeeder.ViewerScopedGroupName).Select(group => group.Id).SingleAsync();
 
         Assert.Equal(AlertRuleKinds.All.Count, rules.Count(rule => rule.DefaultKey is not null));
-        var scoped = Assert.Single(rules, rule => rule.DefaultKey is null);
+        Assert.Equal(2, rules.Count(rule => rule.DefaultKey is null));
+        var scoped = Assert.Single(rules, rule => rule.DefaultKey is null && rule.Kind == AlertTypes.MissedReport);
         Assert.Equal(AlertTypes.MissedReport, scoped.Kind);
         Assert.Equal("{\"days\":\"5\"}", scoped.ParametersJson);
         Assert.True(scoped.StopProcessing);
@@ -80,7 +82,42 @@ public sealed class DemoAlertRulesTests : IAsyncLifetime
         await SeedDemoAsync();
 
         await using var context = CreateContext();
-        Assert.Equal(AlertRuleKinds.All.Count + 1, await context.AlertRules.CountAsync());
-        Assert.Equal(1, await context.AlertRuleScopeEntries.CountAsync());
+        Assert.Equal(AlertRuleKinds.All.Count + 2, await context.AlertRules.CountAsync());
+        Assert.Equal(2, await context.AlertRuleScopeEntries.CountAsync());
+    }
+
+    [Fact]
+    public async Task TheDemoHasAnUnderReviewExample_ForCobaltFreight()
+    {
+        await SeedDemoAsync();
+
+        await using var context = CreateContext();
+        var rules = await context.AlertRules.AsNoTracking().Include(rule => rule.Scope).Where(rule => rule.Kind == AlertTypes.NewUnreviewedSender).OrderBy(rule => rule.Position).ToListAsync();
+        var cobaltGroupId = await context.Groups.Where(group => group.Name == "Cobalt Freight").Select(group => group.Id).SingleAsync();
+
+        Assert.Equal(2, rules.Count);
+        var nag = rules[0];
+        Assert.Null(nag.DefaultKey);
+        Assert.True(nag.StopProcessing);
+        var parameters = new AlertRuleParameters(nag.ParametersJson).UnderReview();
+        Assert.Equal(new DotMarc.Reporting.UnderReviewHandling(DotMarc.Reporting.UnderReviewMode.AlertAgainAfterDays, 14), parameters);
+        var entry = Assert.Single(nag.Scope);
+        Assert.Equal((AlertRuleScopeTarget.Group, cobaltGroupId, false), (entry.Target, entry.TargetId, entry.Exclude));
+        var defaultParameters = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(rules[1].ParametersJson!)!;
+        Assert.Equal("decided", defaultParameters[AlertRuleParameterKeys.UnderReview]);
+    }
+
+    [Fact]
+    public async Task EveryDemoRuleThatHasParameters_StoresThemAll()
+    {
+        await SeedDemoAsync();
+
+        await using var context = CreateContext();
+        foreach (var rule in await context.AlertRules.AsNoTracking().ToListAsync())
+        {
+            var defined = AlertRuleKinds.Find(rule.Kind)!.Parameters.Select(parameter => parameter.Key).Order().ToList();
+            var stored = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(rule.ParametersJson!)!.Keys.Order().ToList();
+            Assert.Equal(defined, stored);
+        }
     }
 }
