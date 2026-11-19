@@ -1,0 +1,11 @@
+@using DotMarc.DevBuild
+@using Microsoft.Extensions.Options
+@inject IOptions<DevBuildOptions> DevBuild
+
+@* Shown at the top of every page on the hosted "next" build, so nobody mistakes unreleased code for the released product. *@
+@if (DevBuild.Value.Enabled)
+{
+    <div class="dev-build-banner" role="status">
+        <strong>Dev build.</strong>&nbsp;This is unreleased dotMARC code. It changes often, may break, and is not the released product.
+    </div>
+}

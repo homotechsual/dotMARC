@@ -71,3 +71,40 @@ html {
 .reason-list .reason-none {
     color: var(--mud-palette-text-secondary);
 }
+
+/* The "next" build's banner (see DevBuildBanner.razor). Fixed to the top, so it stays in view; the app bar and page content
+   are pushed down by its height. A loud amber so it can't be mistaken for part of the product's own chrome. */
+.dev-build-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    height: var(--dev-banner-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 1rem;
+    background: #b45309;
+    color: #fff;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+html:has(.dev-build-banner) {
+    --dev-banner-height: 2rem;
+}
+
+html:has(.dev-build-banner) .mud-appbar {
+    top: var(--dev-banner-height);
+}
+
+html:has(.dev-build-banner) .mud-main-content {
+    padding-top: calc(var(--mud-appbar-height) + var(--dev-banner-height));
+}
+
+@media (max-width: 600px) {
+    html:has(.dev-build-banner) {
+        --dev-banner-height: 3.25rem;
+    }
+}

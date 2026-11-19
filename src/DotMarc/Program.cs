@@ -94,6 +94,9 @@ builder.Services.AddOptions<DotMarc.Demo.DemoOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<DotMarc.DevBuild.DevBuildOptions>()
+    .Bind(builder.Configuration.GetSection(DotMarc.DevBuild.DevBuildOptions.SectionName));
+
 var demoOptions = new DotMarc.Demo.DemoOptions();
 builder.Configuration.GetSection(DotMarc.Demo.DemoOptions.SectionName).Bind(demoOptions);
 
