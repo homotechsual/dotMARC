@@ -57,6 +57,10 @@ public sealed class AlertRuleSet
 
     public AlertRule? Find(int ruleId) => _rulesById.GetValueOrDefault(ruleId);
 
+    /// <summary>Whether any rule of the kind is on, for any domain. Lets a cycle skip loading data a kind needs when nothing will use it.</summary>
+    public bool Any(string kind) =>
+        AlertRuleKinds.IsEnabledBySettings(kind, _settings) && _rulesByKind.TryGetValue(kind, out var rules) && rules.Any(rule => rule.Enabled);
+
     /// <summary>The rules of <paramref name="kind"/> that apply to a domain, in order, up to and including the first that stops
     /// processing. <paramref name="facts"/> is null for a kind that is not about a domain.</summary>
     public IReadOnlyList<ResolvedAlertRule> For(string kind, DomainFacts? facts)

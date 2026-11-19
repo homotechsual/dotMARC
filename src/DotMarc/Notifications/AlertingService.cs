@@ -50,12 +50,14 @@ public sealed class AlertingService : IAlertingService
             return;
         }
 
-        var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.MissingReportThresholdDays);
+        var rules = await AlertRuleSet.LoadAsync(db, settings, cancellationToken).ConfigureAwait(false);
+        var defaultCutoffUtc = DateTimeOffset.UtcNow.AddDays(-settings.MissingReportThresholdDays);
         var reasonWindowCutoffUtc = DomainStatistics.GetWindowCutoffUtc();
         var domains = await db.Domains
             .AsNoTracking()
             .Where(d => d.IsMonitored)
             .Include(d => d.Groups)
+            .Include(d => d.Tags)
             .Include(d => d.Reports.Where(r => r.ReceivedUtc >= reasonWindowCutoffUtc))
             .ThenInclude(r => r.Records)
             .ThenInclude(rec => rec.OverrideReasons)
@@ -68,10 +70,14 @@ public sealed class AlertingService : IAlertingService
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var senderAlerts = await LoadSenderAlertContextAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
+        var openAlerts = await LoadOpenAlertsAsync(db, CycleKinds, cancellationToken).ConfigureAwait(false);
+        var senderAlerts = await LoadSenderAlertContextAsync(db, rules, domains, cancellationToken).ConfigureAwait(false);
+        var applicable = new ApplicableRules();
 
         foreach (var domain in domains)
         {
+            var facts = FactsFor(domain);
+            var missedRules = applicable.Record(domain.Name, AlertTypes.MissedReport, rules.For(AlertTypes.MissedReport, facts));
             if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
             {
                 // Null-routed (SPF v=spf1 -all): no reports is the expected, healthy state, not a
@@ -87,75 +93,154 @@ public sealed class AlertingService : IAlertingService
                 // see. Same threshold semantics as MissedReport, just inverted: fires when a
                 // report unexpectedly arrives, stays open while reports keep arriving within the
                 // threshold window, auto-resolves once activity stops for the threshold period.
-                if (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < cutoffUtc)
+                if (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < defaultCutoffUtc)
                 {
                     await ResolveAlertAsync(domain.Name, AlertTypes.UnexpectedActivityOnNullRoutedDomain, cancellationToken).ConfigureAwait(false);
                 }
             }
-            else if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
+            else if (missedRules.Count == 0)
             {
-                await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                // No rule applies to this domain, so nothing may stay open for it.
+                if (openAlerts.HasAny(domain.Name, AlertTypes.MissedReport))
+                {
+                    await ResolveDomainAlertAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+                }
             }
             else
             {
-                var message = domain.LastReportReceivedUtc is { } receivedUtc
-                    ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
-                    : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
-                await EnsureAlertAsync(db, settings, domain.Name, AlertTypes.MissedReport, "Warning", "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
+                foreach (var rule in missedRules)
+                {
+                    var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-rule.Parameters.Int(AlertRuleParameterKeys.MissingDays, settings.MissingReportThresholdDays));
+                    if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
+                    {
+                        if (openAlerts.Has(domain.Name, AlertTypes.MissedReport, rule.RuleId))
+                        {
+                            await ResolveAlertAsync(domain.Name, AlertTypes.MissedReport, rule.RuleId, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        var message = domain.LastReportReceivedUtc is { } receivedUtc
+                            ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
+                            : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
+                        await EnsureAlertAsync(db, settings, rule, domain.Name, "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
+                    }
+                }
             }
 
             // Independent of the report-freshness branch above - a domain can be reporting fine
             // AND have a reject mix worth flagging, so this always runs.
-            await CheckSuspiciousRejectActivityAsync(db, settings, domain, cancellationToken).ConfigureAwait(false);
+            await CheckSuspiciousRejectActivityAsync(db, settings, rules, domain, facts, openAlerts, applicable, cancellationToken).ConfigureAwait(false);
 
-            await CheckSenderAlertsAsync(db, settings, domain, senderAlerts, cancellationToken).ConfigureAwait(false);
+            await CheckSenderAlertsAsync(db, settings, rules, domain, facts, senderAlerts, openAlerts, applicable, cancellationToken).ConfigureAwait(false);
         }
+
+        // A rule that was disabled, moved out of scope or put behind a rule that stops processing no longer applies to a
+        // domain, so what it left open there closes. Only for domains still monitored: the rest keep their alerts as before.
+        var monitoredNames = domains.Select(domain => domain.Name).ToHashSet(StringComparer.Ordinal);
+        await ResolveOrphanedAlertsAsync(openAlerts.All.Where(alert => monitoredNames.Contains(alert.Subject)), applicable, cancellationToken).ConfigureAwait(false);
 
         await CheckDnsHealthAsync(db, settings, domains, cancellationToken).ConfigureAwait(false);
         await CheckApiKeyExpiryAsync(db, settings, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>What the sender alerts need that is the same for every domain in a cycle: every decision (a small table), the cached
-    /// IP owners for the IPs in the window, and which sender alerts are already open, so a quiet cycle costs one query for that.</summary>
-    private sealed record SenderAlertContext(
-        List<SenderDecision> Decisions, Dictionary<string, IpInfo> CachedInfo, List<IpRange> Ranges, HashSet<(string DomainName, string AlertType)> OpenAlerts);
+    private static readonly string[] CycleKinds =
+    [
+        AlertTypes.MissedReport, AlertTypes.SuspiciousRejectActivity, AlertTypes.NewUnreviewedSender, AlertTypes.UnauthorisedSenderDelivered
+    ];
 
-    private async Task<SenderAlertContext> LoadSenderAlertContextAsync(DotMarcDbContext db, NotificationSettings settings, List<Domain> domains, CancellationToken cancellationToken)
+    private static DomainFacts FactsFor(Domain domain) =>
+        new(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet());
+
+    /// <summary>The rule ids that applied to each domain and kind in this cycle, for finding the alerts whose rule no longer does.</summary>
+    private sealed class ApplicableRules
     {
-        var openAlerts = (await db.AlertEvents.AsNoTracking()
-                .Where(alert => !alert.IsResolved && (alert.AlertType == AlertTypes.NewUnreviewedSender || alert.AlertType == AlertTypes.UnauthorisedSenderDelivered))
-                .Select(alert => new { alert.DomainName, alert.AlertType })
-                .ToListAsync(cancellationToken).ConfigureAwait(false))
-            .Select(alert => (alert.DomainName, alert.AlertType))
-            .ToHashSet();
-        if (!settings.NewSenderAlertEnabled && !settings.UnauthorisedDeliveredAlertEnabled)
+        private readonly Dictionary<(string Subject, string Kind), HashSet<int>> _ids = [];
+
+        public IReadOnlyList<ResolvedAlertRule> Record(string subject, string kind, IReadOnlyList<ResolvedAlertRule> resolved)
         {
-            return new SenderAlertContext([], [], [], openAlerts);
+            _ids[(subject, kind)] = resolved.Select(rule => rule.RuleId).ToHashSet();
+            return resolved;
+        }
+
+        public bool Contains(string subject, string kind, int ruleId) => _ids.TryGetValue((subject, kind), out var ids) && ids.Contains(ruleId);
+    }
+
+    private sealed record OpenAlert(string Subject, string Kind, int? RuleId);
+
+    /// <summary>Which alerts of some kinds are open, read once per cycle so a quiet cycle costs one query rather than one per
+    /// domain and kind.</summary>
+    private sealed class OpenAlertIndex(IReadOnlyList<OpenAlert> alerts)
+    {
+        public IReadOnlyList<OpenAlert> All => alerts;
+        public bool Has(string subject, string kind, int ruleId) => alerts.Any(alert => alert.Subject == subject && alert.Kind == kind && alert.RuleId == ruleId);
+        public bool HasAny(string subject, string kind) => alerts.Any(alert => alert.Subject == subject && alert.Kind == kind);
+    }
+
+    private static async Task<OpenAlertIndex> LoadOpenAlertsAsync(DotMarcDbContext db, IReadOnlyCollection<string> kinds, CancellationToken cancellationToken)
+    {
+        var open = await db.AlertEvents.AsNoTracking()
+            .Where(alert => !alert.IsResolved && kinds.Contains(alert.AlertType))
+            .Select(alert => new OpenAlert(alert.DomainName, alert.AlertType, alert.AlertRuleId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new OpenAlertIndex(open);
+    }
+
+    /// <summary>Closes every open alert whose rule did not apply to its subject in this cycle. Alerts with no rule are left to the
+    /// code that raised them.</summary>
+    private async Task ResolveOrphanedAlertsAsync(IEnumerable<OpenAlert> openAlerts, ApplicableRules applicable, CancellationToken cancellationToken)
+    {
+        var orphans = openAlerts
+            .Where(alert => alert.RuleId is { } ruleId && !applicable.Contains(alert.Subject, alert.Kind, ruleId))
+            .Distinct()
+            .ToList();
+        foreach (var orphan in orphans)
+        {
+            await ResolveAllCopiesAsync(orphan.Subject, orphan.Kind, orphan.RuleId, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>What the sender alerts need that is the same for every domain in a cycle: every decision (a small table) and the
+    /// cached IP owners for the IPs in the window. Nothing is loaded when no sender rule is on.</summary>
+    private sealed record SenderAlertContext(List<SenderDecision> Decisions, Dictionary<string, IpInfo> CachedInfo, List<IpRange> Ranges);
+
+    private async Task<SenderAlertContext> LoadSenderAlertContextAsync(DotMarcDbContext db, AlertRuleSet rules, List<Domain> domains, CancellationToken cancellationToken)
+    {
+        if (!rules.Any(AlertTypes.NewUnreviewedSender) && !rules.Any(AlertTypes.UnauthorisedSenderDelivered))
+        {
+            return new SenderAlertContext([], [], []);
         }
 
         var decisions = await db.SenderDecisions.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
         var ips = domains.SelectMany(domain => domain.Reports).SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct().ToList();
         var cached = ips.Count == 0 ? [] : await IpInfoService.GetCachedAsync(db, ips, cancellationToken).ConfigureAwait(false);
         var ranges = await IpInfoService.GetCachedRangesAsync(db, cancellationToken).ConfigureAwait(false);
-        return new SenderAlertContext(decisions, cached, ranges, openAlerts);
+        return new SenderAlertContext(decisions, cached, ranges);
     }
 
-    /// <summary>Raises or resolves the two sender alerts for one domain. A new sender is one first seen within the configured number
-    /// of days, so a domain's existing senders never alert. Null-routed domains get neither, since they have their own alert.</summary>
-    private async Task CheckSenderAlertsAsync(DotMarcDbContext db, NotificationSettings settings, Domain domain, SenderAlertContext context, CancellationToken cancellationToken)
+    /// <summary>Raises or resolves the two sender alerts for one domain, once per rule that applies. A new sender is one first seen
+    /// within the rule's number of days, so a domain's existing senders never alert. Null-routed domains get neither, since they
+    /// have their own alert.</summary>
+    private async Task CheckSenderAlertsAsync(
+        DotMarcDbContext db, NotificationSettings settings, AlertRuleSet rules, Domain domain, DomainFacts facts, SenderAlertContext context,
+        OpenAlertIndex openAlerts, ApplicableRules applicable, CancellationToken cancellationToken)
     {
         var applies = domain.SpfCheckStatus != SpfCheckStatus.NullSpf;
-        var newEnabled = applies && settings.NewSenderAlertEnabled;
-        var deliveredEnabled = applies && settings.UnauthorisedDeliveredAlertEnabled;
+        var newRules = applicable.Record(domain.Name, AlertTypes.NewUnreviewedSender, applies ? rules.For(AlertTypes.NewUnreviewedSender, facts) : []);
+        var deliveredRules = applicable.Record(domain.Name, AlertTypes.UnauthorisedSenderDelivered, applies ? rules.For(AlertTypes.UnauthorisedSenderDelivered, facts) : []);
 
-        var result = new SenderAlertResult([], []);
-        if (newEnabled || deliveredEnabled)
+        var nowUtc = DateTimeOffset.UtcNow;
+        var results = new Dictionary<(int NewDays, int NewMinimum, int DeliveredMinimum, bool NeedsNewIps), SenderAlertResult>();
+        var newIpsByDays = new Dictionary<int, HashSet<string>>();
+        Dictionary<string, string?>? ownerByIp = null;
+
+        async Task<HashSet<string>> NewIpsAsync(int newDays)
         {
-            var nowUtc = DateTimeOffset.UtcNow;
-            var newSinceUtc = nowUtc.AddDays(-Math.Clamp(settings.NewSenderDays, 1, 30));
-            var newIps = new HashSet<string>(StringComparer.Ordinal);
-            if (newEnabled)
+            if (!newIpsByDays.TryGetValue(newDays, out var newIps))
             {
+                var newSinceUtc = nowUtc.AddDays(-newDays);
+                newIps = new HashSet<string>(StringComparer.Ordinal);
                 // A source that looks new inside the window may have reported before it. Only these few candidates cost a query.
                 foreach (var ip in SenderAlertEvaluator.NewSourceCandidates(domain.Reports.ToList(), newSinceUtc))
                 {
@@ -167,34 +252,78 @@ public sealed class AlertingService : IAlertingService
                         newIps.Add(ip);
                     }
                 }
+
+                newIpsByDays[newDays] = newIps;
             }
 
-            var ownerByIp = IpInfoService.OwnerByIp(
-                context.CachedInfo, context.Ranges, domain.Reports.SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct(), nowUtc);
-            result = SenderAlertEvaluator.Evaluate(new SenderAlertInputs(
-                domain.Id, domain.Groups.Select(group => group.Id).ToList(), domain.Reports.ToList(), context.Decisions, ownerByIp, newIps,
-                new SenderAlertSettings(settings.NewSenderMinVolume, settings.UnauthorisedDeliveredMinVolume),
-                SpfServiceRanges.Parse(domain.SpfRangesJson)));
+            return newIps;
         }
 
-        if (newEnabled && result.NewUnreviewed.Count > 0)
+        async Task<SenderAlertResult> ResultAsync(int newDays, int newMinimum, int deliveredMinimum, bool needsNewIps)
         {
-            await EnsureAlertAsync(db, settings, domain.Name, AlertTypes.NewUnreviewedSender, "Warning", SenderAlertMessages.NewSendersTitle,
-                SenderAlertMessages.NewSenders(domain.Name, result.NewUnreviewed), cancellationToken).ConfigureAwait(false);
+            // A result that also worked out the new senders answers a delivered-only question too, so reuse it.
+            if (results.TryGetValue((newDays, newMinimum, deliveredMinimum, true), out var withNewIps))
+            {
+                return withNewIps;
+            }
+
+            if (results.TryGetValue((newDays, newMinimum, deliveredMinimum, needsNewIps), out var existing))
+            {
+                return existing;
+            }
+
+            ownerByIp ??= IpInfoService.OwnerByIp(
+                context.CachedInfo, context.Ranges, domain.Reports.SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct(), nowUtc);
+            var newIps = needsNewIps ? await NewIpsAsync(newDays).ConfigureAwait(false) : new HashSet<string>(StringComparer.Ordinal);
+            var result = SenderAlertEvaluator.Evaluate(new SenderAlertInputs(
+                domain.Id, domain.Groups.Select(group => group.Id).ToList(), domain.Reports.ToList(), context.Decisions, ownerByIp, newIps,
+                new SenderAlertSettings(newMinimum, deliveredMinimum),
+                SpfServiceRanges.Parse(domain.SpfRangesJson)));
+            results[(newDays, newMinimum, deliveredMinimum, needsNewIps)] = result;
+            return result;
         }
-        else if (context.OpenAlerts.Contains((domain.Name, AlertTypes.NewUnreviewedSender)))
+
+        var defaultNewDays = Math.Clamp(settings.NewSenderDays, 1, 30);
+
+        if (newRules.Count == 0 && openAlerts.HasAny(domain.Name, AlertTypes.NewUnreviewedSender))
         {
             await ResolveAlertAsync(domain.Name, AlertTypes.NewUnreviewedSender, cancellationToken).ConfigureAwait(false);
         }
 
-        if (deliveredEnabled && result.UnauthorisedDelivered.Count > 0)
+        foreach (var rule in newRules)
         {
-            await EnsureAlertAsync(db, settings, domain.Name, AlertTypes.UnauthorisedSenderDelivered, "Warning", SenderAlertMessages.UnauthorisedDeliveredTitle,
-                SenderAlertMessages.UnauthorisedDelivered(domain.Name, result.UnauthorisedDelivered, domain.DmarcPolicy ?? DmarcPolicyLevel.None), cancellationToken).ConfigureAwait(false);
+            var newDays = Math.Clamp(rule.Parameters.Int(AlertRuleParameterKeys.NewDays, settings.NewSenderDays), 1, 30);
+            var minimum = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.NewSenderMinVolume);
+            var result = await ResultAsync(newDays, minimum, settings.UnauthorisedDeliveredMinVolume, needsNewIps: true).ConfigureAwait(false);
+            if (result.NewUnreviewed.Count > 0)
+            {
+                await EnsureAlertAsync(db, settings, rule, domain.Name, SenderAlertMessages.NewSendersTitle,
+                    SenderAlertMessages.NewSenders(domain.Name, result.NewUnreviewed), cancellationToken).ConfigureAwait(false);
+            }
+            else if (openAlerts.Has(domain.Name, AlertTypes.NewUnreviewedSender, rule.RuleId))
+            {
+                await ResolveAlertAsync(domain.Name, AlertTypes.NewUnreviewedSender, rule.RuleId, cancellationToken).ConfigureAwait(false);
+            }
         }
-        else if (context.OpenAlerts.Contains((domain.Name, AlertTypes.UnauthorisedSenderDelivered)))
+
+        if (deliveredRules.Count == 0 && openAlerts.HasAny(domain.Name, AlertTypes.UnauthorisedSenderDelivered))
         {
             await ResolveAlertAsync(domain.Name, AlertTypes.UnauthorisedSenderDelivered, cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var rule in deliveredRules)
+        {
+            var minimum = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.UnauthorisedDeliveredMinVolume);
+            var result = await ResultAsync(defaultNewDays, settings.NewSenderMinVolume, minimum, needsNewIps: false).ConfigureAwait(false);
+            if (result.UnauthorisedDelivered.Count > 0)
+            {
+                await EnsureAlertAsync(db, settings, rule, domain.Name, SenderAlertMessages.UnauthorisedDeliveredTitle,
+                    SenderAlertMessages.UnauthorisedDelivered(domain.Name, result.UnauthorisedDelivered, domain.DmarcPolicy ?? DmarcPolicyLevel.None), cancellationToken).ConfigureAwait(false);
+            }
+            else if (openAlerts.Has(domain.Name, AlertTypes.UnauthorisedSenderDelivered, rule.RuleId))
+            {
+                await ResolveAlertAsync(domain.Name, AlertTypes.UnauthorisedSenderDelivered, rule.RuleId, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -258,21 +387,38 @@ public sealed class AlertingService : IAlertingService
         }
     }
 
-    private async Task CheckSuspiciousRejectActivityAsync(DotMarcDbContext context, NotificationSettings settings, Domain domain, CancellationToken cancellationToken)
+    private async Task CheckSuspiciousRejectActivityAsync(
+        DotMarcDbContext context, NotificationSettings settings, AlertRuleSet rules, Domain domain, DomainFacts facts, OpenAlertIndex openAlerts, ApplicableRules applicable, CancellationToken cancellationToken)
     {
+        var suspiciousRules = applicable.Record(domain.Name, AlertTypes.SuspiciousRejectActivity, rules.For(AlertTypes.SuspiciousRejectActivity, facts));
+        if (suspiciousRules.Count == 0)
+        {
+            if (openAlerts.HasAny(domain.Name, AlertTypes.SuspiciousRejectActivity))
+            {
+                await ResolveAlertAsync(domain.Name, AlertTypes.SuspiciousRejectActivity, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
         var breakdown = DomainStatistics.GetReasonBreakdown(domain.Reports);
         var nonBenign = breakdown.LocalPolicy + breakdown.Other + breakdown.InferredSpfFailure + breakdown.InferredDkimFailure + breakdown.InferredBothFailure + breakdown.NoReasonGiven;
         var nonBenignPercent = breakdown.Total == 0 ? 0 : (double)nonBenign / breakdown.Total * 100;
 
-        if (breakdown.Total >= settings.SuspiciousRejectMinVolume && nonBenignPercent >= settings.SuspiciousRejectNonBenignPercent)
+        foreach (var rule in suspiciousRules)
         {
-            var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding." +
-                BuildInferredBreakdownClause(breakdown);
-            await EnsureAlertAsync(context, settings, domain.Name, AlertTypes.SuspiciousRejectActivity, "Warning", "Reject activity looks like more than benign forwarding", message, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await ResolveAlertAsync(domain.Name, AlertTypes.SuspiciousRejectActivity, cancellationToken).ConfigureAwait(false);
+            var minimumVolume = rule.Parameters.Int(AlertRuleParameterKeys.MinimumMessages, settings.SuspiciousRejectMinVolume);
+            var minimumPercent = rule.Parameters.Int(AlertRuleParameterKeys.NonBenignPercent, settings.SuspiciousRejectNonBenignPercent);
+            if (breakdown.Total >= minimumVolume && nonBenignPercent >= minimumPercent)
+            {
+                var message = $"'{domain.Name}' rejected/quarantined {breakdown.Total} message(s) in the last 30 days, and {nonBenignPercent:F0}% of those had no benign override reason (forwarder/mailing list/sampling) - this looks like more than benign forwarding." +
+                    BuildInferredBreakdownClause(breakdown);
+                await EnsureAlertAsync(context, settings, rule, domain.Name, "Reject activity looks like more than benign forwarding", message, cancellationToken).ConfigureAwait(false);
+            }
+            else if (openAlerts.Has(domain.Name, AlertTypes.SuspiciousRejectActivity, rule.RuleId))
+            {
+                await ResolveAlertAsync(domain.Name, AlertTypes.SuspiciousRejectActivity, rule.RuleId, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -357,10 +503,14 @@ public sealed class AlertingService : IAlertingService
     /// row with its own ticket, so after a long outage there can be several; they all close once the condition clears,
     /// not one per cycle.</summary>
     private async Task ResolveAllCopiesAsync(string domainName, string alertType, CancellationToken cancellationToken)
+        => await ResolveAllCopiesAsync(domainName, alertType, ruleId: null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>As above, for one rule, or for every rule when the rule id is null.</summary>
+    private async Task ResolveAllCopiesAsync(string domainName, string alertType, int? ruleId, CancellationToken cancellationToken)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var openCopies = await db.AlertEvents
-            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
+            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved && (ruleId == null || e.AlertRuleId == ruleId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -383,38 +533,63 @@ public sealed class AlertingService : IAlertingService
     }
 
     private async Task ResolveAlertAsync(string domainName, string alertType, CancellationToken cancellationToken)
+        => await ResolveAlertAsync(domainName, alertType, ruleId: null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Resolves the latest open alert of the type for a subject, for one rule or (rule id null) for each rule.</summary>
+    private async Task ResolveAlertAsync(string domainName, string alertType, int? ruleId, CancellationToken cancellationToken)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
 
-        var activeAlert = await db.AlertEvents
-            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
+        var openAlerts = await db.AlertEvents
+            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved && (ruleId == null || e.AlertRuleId == ruleId))
             .OrderByDescending(e => e.CreatedUtc)
-            .FirstOrDefaultAsync(cancellationToken)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-
-        if (activeAlert is null)
+        var latestPerRule = openAlerts.GroupBy(alert => alert.AlertRuleId).Select(group => group.First()).ToList();
+        if (latestPerRule.Count == 0)
         {
             return;
         }
 
-        activeAlert.IsResolved = true;
-        activeAlert.ResolvedUtc = DateTimeOffset.UtcNow;
+        foreach (var activeAlert in latestPerRule)
+        {
+            activeAlert.IsResolved = true;
+            activeAlert.ResolvedUtc = DateTimeOffset.UtcNow;
 
-        try
-        {
-            await _psaTicketService.CloseTicketsAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to close PSA ticket for {DomainName} alert {AlertType}.", activeAlert.DomainName, activeAlert.AlertType);
+            try
+            {
+                await _psaTicketService.CloseTicketsAsync(db, activeAlert, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to close PSA ticket for {DomainName} alert {AlertType}.", activeAlert.DomainName, activeAlert.AlertType);
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Raises an alert unless the same one is open and younger than the cooldown, which is the settings' cooldown
-    /// unless <paramref name="cooldown"/> overrides it.</summary>
+    /// <summary>Raises an alert for a rule unless the same one is open and younger than the cooldown. The cooldown is the rule's
+    /// own, else <paramref name="defaultCooldown"/>, else the settings' cooldown. The alert takes the rule's severity.</summary>
+    private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, ResolvedAlertRule rule, string subject, string title, string message, CancellationToken cancellationToken, TimeSpan? defaultCooldown = null)
+    {
+        var cooldown = rule.Rule.CooldownMinutes is { } ruleCooldownMinutes ? TimeSpan.FromMinutes(ruleCooldownMinutes) : defaultCooldown;
+        await EnsureAlertCoreAsync(context, settings, rule.RuleId, rule.Severity, subject, rule.Rule.Kind, title, message, cancellationToken, cooldown).ConfigureAwait(false);
+    }
+
+    /// <summary>Raises an alert that is not yet driven by a rule, as the type's default rule, with the given severity. Each caller
+    /// moves to the rule overload above as its alert kind is converted.</summary>
     private async Task EnsureAlertAsync(DotMarcDbContext context, NotificationSettings settings, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken, TimeSpan? cooldown = null)
+    {
+        var defaultRuleId = await context.AlertRules.AsNoTracking()
+            .Where(rule => rule.DefaultKey == alertType)
+            .Select(rule => (int?)rule.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await EnsureAlertCoreAsync(context, settings, defaultRuleId, severity, domainName, alertType, title, message, cancellationToken, cooldown).ConfigureAwait(false);
+    }
+
+    private async Task EnsureAlertCoreAsync(DotMarcDbContext context, NotificationSettings settings, int? ruleId, string severity, string domainName, string alertType, string title, string message, CancellationToken cancellationToken, TimeSpan? cooldown)
     {
         if (AlertTypes.Find(alertType) is null)
         {
@@ -424,7 +599,7 @@ public sealed class AlertingService : IAlertingService
         }
 
         var activeAlert = await context.AlertEvents
-            .Where(e => e.DomainName == domainName && e.AlertType == alertType && !e.IsResolved)
+            .Where(e => e.DomainName == domainName && e.AlertType == alertType && e.AlertRuleId == ruleId && !e.IsResolved)
             .OrderByDescending(e => e.CreatedUtc)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -444,8 +619,10 @@ public sealed class AlertingService : IAlertingService
             Severity = severity,
             Title = title,
             Message = message,
-            CreatedUtc = DateTimeOffset.UtcNow
+            CreatedUtc = DateTimeOffset.UtcNow,
+            AlertRuleId = ruleId
         };
+
 
         context.AlertEvents.Add(alert);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

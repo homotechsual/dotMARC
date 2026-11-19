@@ -167,6 +167,17 @@ public sealed class AlertRuleSetTests
     }
 
     [Fact]
+    public void Any_IsTrueOnlyWhileAnEnabledRuleOfTheKindIsOn()
+    {
+        var rules = new AlertRuleSet([Rule(1, 10, AlertTypes.NewUnreviewedSender, enabled: false), Rule(2, 10, AlertTypes.TlsrptFailure)], Settings);
+
+        Assert.False(rules.Any(AlertTypes.NewUnreviewedSender));
+        Assert.True(rules.Any(AlertTypes.TlsrptFailure));
+        Assert.False(rules.Any(AlertTypes.MissedReport));
+        Assert.False(new AlertRuleSet([Rule(3, 10, AlertTypes.NewUnreviewedSender)], new NotificationSettings { NewSenderAlertEnabled = false }).Any(AlertTypes.NewUnreviewedSender));
+    }
+
+    [Fact]
     public void Find_ReturnsARuleById()
     {
         var rules = new AlertRuleSet([Rule(1, 10), Rule(2, 20)], Settings);
