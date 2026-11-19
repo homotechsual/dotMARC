@@ -38,6 +38,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AlertTicketRule> AlertTicketRules => Set<AlertTicketRule>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
     public DbSet<AlertRuleScopeEntry> AlertRuleScopeEntries => Set<AlertRuleScopeEntry>();
+    public DbSet<AlertDestination> AlertDestinations => Set<AlertDestination>();
+    public DbSet<AlertRuleDestination> AlertRuleDestinations => Set<AlertRuleDestination>();
     public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
     public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
@@ -352,6 +354,23 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(rule => rule.DefaultKey).IsUnique();
             entity.HasIndex(rule => new { rule.Kind, rule.Position });
             entity.HasMany(rule => rule.Scope).WithOne().HasForeignKey(entry => entry.AlertRuleId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(rule => rule.DestinationMode).HasConversion<string>().HasMaxLength(20).HasDefaultValue(AlertDestinationMode.All);
+            entity.Property(rule => rule.TicketMode).HasConversion<string>().HasMaxLength(20).HasDefaultValue(AlertTicketMode.FollowRules);
+            entity.HasMany(rule => rule.Destinations).WithOne().HasForeignKey(link => link.AlertRuleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AlertDestination>(entity =>
+        {
+            entity.Property(destination => destination.Name).HasMaxLength(100);
+            entity.Property(destination => destination.Kind).HasConversion<string>().HasMaxLength(20);
+            entity.Property(destination => destination.Url).HasMaxLength(2000);
+            // Names are unique ignoring case. EF can't declare an index on lower("Name"), so the migration creates it in SQL.
+        });
+
+        modelBuilder.Entity<AlertRuleDestination>(entity =>
+        {
+            entity.HasKey(link => new { link.AlertRuleId, link.AlertDestinationId });
+            entity.HasOne<AlertDestination>().WithMany().HasForeignKey(link => link.AlertDestinationId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AlertRuleScopeEntry>(entity =>

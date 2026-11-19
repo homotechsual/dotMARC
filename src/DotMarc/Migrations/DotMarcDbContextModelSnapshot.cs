@@ -1140,6 +1140,40 @@ namespace DotMarc.Migrations
                         });
                 });
 
+            modelBuilder.Entity("DotMarc.Notifications.AlertDestination", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AlertDestinations");
+                });
+
             modelBuilder.Entity("DotMarc.Notifications.AlertEvent", b =>
                 {
                     b.Property<int>("Id")
@@ -1209,6 +1243,13 @@ namespace DotMarc.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("DestinationMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("All");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
@@ -1236,6 +1277,13 @@ namespace DotMarc.Migrations
                     b.Property<bool>("StopProcessing")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("TicketMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("FollowRules");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DefaultKey")
@@ -1244,6 +1292,21 @@ namespace DotMarc.Migrations
                     b.HasIndex("Kind", "Position");
 
                     b.ToTable("AlertRules");
+                });
+
+            modelBuilder.Entity("DotMarc.Notifications.AlertRuleDestination", b =>
+                {
+                    b.Property<int>("AlertRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AlertDestinationId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AlertRuleId", "AlertDestinationId");
+
+                    b.HasIndex("AlertDestinationId");
+
+                    b.ToTable("AlertRuleDestinations");
                 });
 
             modelBuilder.Entity("DotMarc.Notifications.AlertRuleScopeEntry", b =>
@@ -2492,6 +2555,21 @@ namespace DotMarc.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
+            modelBuilder.Entity("DotMarc.Notifications.AlertRuleDestination", b =>
+                {
+                    b.HasOne("DotMarc.Notifications.AlertDestination", null)
+                        .WithMany()
+                        .HasForeignKey("AlertDestinationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DotMarc.Notifications.AlertRule", null)
+                        .WithMany("Destinations")
+                        .HasForeignKey("AlertRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DotMarc.Notifications.AlertRuleScopeEntry", b =>
                 {
                     b.HasOne("DotMarc.Notifications.AlertRule", null)
@@ -2623,6 +2701,8 @@ namespace DotMarc.Migrations
 
             modelBuilder.Entity("DotMarc.Notifications.AlertRule", b =>
                 {
+                    b.Navigation("Destinations");
+
                     b.Navigation("Scope");
                 });
 #pragma warning restore 612, 618

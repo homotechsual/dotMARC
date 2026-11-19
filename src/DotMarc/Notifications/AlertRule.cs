@@ -50,5 +50,11 @@ public sealed class AlertRule
     /// <summary>{"key":"value"} overrides of the kind's parameters. Null means every parameter is inherited from the global settings.</summary>
     public string? ParametersJson { get; set; }
 
+    public AlertDestinationMode DestinationMode { get; set; } = AlertDestinationMode.All;
+    public AlertTicketMode TicketMode { get; set; } = AlertTicketMode.FollowRules;
+
     public List<AlertRuleScopeEntry> Scope { get; set; } = [];
+
+    /// <summary>The destinations a rule in Selected mode sends to. Ignored in All mode.</summary>
+    public List<AlertRuleDestination> Destinations { get; set; } = [];
 }
