@@ -4,8 +4,10 @@ on:
   push:
     branches: [main, develop]
     paths-ignore: [website/**]
+  # No paths filter on pull requests: main requires the "test" check, and a workflow skipped by a path filter never
+  # reports it, which would block a docs-only PR for good. Instead the job always runs and skips its steps when the PR
+  # changes nothing outside website/.
   pull_request:
-    paths-ignore: [website/**]
   workflow_dispatch:
 
 jobs:
@@ -15,17 +17,34 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check whether the change needs the test suite
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] \
+            && ! git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -qv '^website/'; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Only website/ changed, so the .NET build and tests are skipped (the website has its own CI)."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up .NET
+        if: steps.scope.outputs.needed == 'true'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
       - name: Restore dependencies
+        if: steps.scope.outputs.needed == 'true'
         run: dotnet restore dotMARC.sln
 
       - name: Build solution
+        if: steps.scope.outputs.needed == 'true'
         run: dotnet build dotMARC.sln -c Release --no-restore
 
       - name: Run tests
+        if: steps.scope.outputs.needed == 'true'
         run: dotnet test dotMARC.sln -c Release --no-build
