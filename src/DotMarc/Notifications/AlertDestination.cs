@@ -34,6 +34,24 @@ public enum AlertDestinationMode
     Selected
 }
 
+/// <summary>Links a rule to a destination that is also told when the rule's alert stays open past its escalation time.</summary>
+public sealed class AlertRuleEscalationDestination
+{
+    public int AlertRuleId { get; set; }
+    public int AlertDestinationId { get; set; }
+}
+
+public enum AlertQuietMode
+{
+    Off,
+
+    /// <summary>The alert is recorded straight away and its notification waits until the quiet window ends, if it is still open then.</summary>
+    Hold,
+
+    /// <summary>The alert is recorded and shown, but never notified.</summary>
+    Mute
+}
+
 public enum AlertTicketMode
 {
     /// <summary>The ticket rules decide, as they always have.</summary>

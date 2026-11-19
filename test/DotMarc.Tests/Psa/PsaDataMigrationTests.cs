@@ -35,6 +35,8 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
                 // on. The old Halo columns are set in SQL, because they leave the model in a later change.
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"SpfRangesJson\" text");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"AlertRuleId\" integer");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"NotifiedUtc\" timestamp with time zone");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"EscalatedUtc\" timestamp with time zone");
                 var group = new Group { Name = "Client A" };
                 var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
                 var openAlert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "open", Message = "m" };
@@ -51,6 +53,8 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
 
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"SpfRangesJson\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"AlertRuleId\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"NotifiedUtc\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"EscalatedUtc\"");
                 await context.Database.MigrateAsync();
             }
 

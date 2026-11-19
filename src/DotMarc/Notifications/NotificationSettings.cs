@@ -22,6 +22,9 @@ public sealed class NotificationSettings
     // They live on the alert rules now (see AlertRule). The columns stay for one release so a downgrade still finds the values; a
     // new default rule is created from them once (AlertRuleSeeder), and nothing else uses them.
     public int MissingReportThresholdDays { get; set; } = 2;
+    /// <summary>The IANA time zone the quiet hours on rules are read in. An id dotMARC does not know behaves as UTC.</summary>
+    public string TimeZoneId { get; set; } = "UTC";
+
     public int CooldownMinutes { get; set; } = 180;
     public int MonitorIntervalSeconds { get; set; } = 300;
     public int SuspiciousRejectMinVolume { get; set; } = 10;

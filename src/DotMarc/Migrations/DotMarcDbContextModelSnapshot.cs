@@ -1196,12 +1196,18 @@ namespace DotMarc.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("EscalatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsResolved")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("NotifiedUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("ResolvedUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1253,6 +1259,9 @@ namespace DotMarc.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("EscalateAfterMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1267,6 +1276,24 @@ namespace DotMarc.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QuietEndMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("QuietIgnoredForCritical")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("QuietMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Off");
+
+                    b.Property<int?>("QuietStartMinutes")
                         .HasColumnType("integer");
 
                     b.Property<string>("Severity")
@@ -1307,6 +1334,21 @@ namespace DotMarc.Migrations
                     b.HasIndex("AlertDestinationId");
 
                     b.ToTable("AlertRuleDestinations");
+                });
+
+            modelBuilder.Entity("DotMarc.Notifications.AlertRuleEscalationDestination", b =>
+                {
+                    b.Property<int>("AlertRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AlertDestinationId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AlertRuleId", "AlertDestinationId");
+
+                    b.HasIndex("AlertDestinationId");
+
+                    b.ToTable("AlertRuleEscalationDestinations");
                 });
 
             modelBuilder.Entity("DotMarc.Notifications.AlertRuleScopeEntry", b =>
@@ -1657,6 +1699,13 @@ namespace DotMarc.Migrations
                     b.Property<string>("TeamsWebhookUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("UTC");
+
                     b.Property<string>("TlsrptAlertMode")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1697,6 +1746,7 @@ namespace DotMarc.Migrations
                             SuspiciousRejectMinVolume = 10,
                             SuspiciousRejectNonBenignPercent = 50,
                             TeamsEnabled = true,
+                            TimeZoneId = "UTC",
                             TlsrptAlertMode = "WhenItBreaks",
                             UnauthorisedDeliveredAlertEnabled = true,
                             UnauthorisedDeliveredMinVolume = 10
@@ -2570,6 +2620,21 @@ namespace DotMarc.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DotMarc.Notifications.AlertRuleEscalationDestination", b =>
+                {
+                    b.HasOne("DotMarc.Notifications.AlertDestination", null)
+                        .WithMany()
+                        .HasForeignKey("AlertDestinationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DotMarc.Notifications.AlertRule", null)
+                        .WithMany("EscalationDestinations")
+                        .HasForeignKey("AlertRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DotMarc.Notifications.AlertRuleScopeEntry", b =>
                 {
                     b.HasOne("DotMarc.Notifications.AlertRule", null)
@@ -2702,6 +2767,8 @@ namespace DotMarc.Migrations
             modelBuilder.Entity("DotMarc.Notifications.AlertRule", b =>
                 {
                     b.Navigation("Destinations");
+
+                    b.Navigation("EscalationDestinations");
 
                     b.Navigation("Scope");
                 });

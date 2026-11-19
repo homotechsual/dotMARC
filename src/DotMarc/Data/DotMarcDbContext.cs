@@ -40,6 +40,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AlertRuleScopeEntry> AlertRuleScopeEntries => Set<AlertRuleScopeEntry>();
     public DbSet<AlertDestination> AlertDestinations => Set<AlertDestination>();
     public DbSet<AlertRuleDestination> AlertRuleDestinations => Set<AlertRuleDestination>();
+    public DbSet<AlertRuleEscalationDestination> AlertRuleEscalationDestinations => Set<AlertRuleEscalationDestination>();
     public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
     public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
@@ -357,7 +358,18 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(rule => rule.DestinationMode).HasConversion<string>().HasMaxLength(20).HasDefaultValue(AlertDestinationMode.All);
             entity.Property(rule => rule.TicketMode).HasConversion<string>().HasMaxLength(20).HasDefaultValue(AlertTicketMode.FollowRules);
             entity.HasMany(rule => rule.Destinations).WithOne().HasForeignKey(link => link.AlertRuleId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(rule => rule.QuietMode).HasConversion<string>().HasMaxLength(20).HasDefaultValue(AlertQuietMode.Off);
+            entity.Property(rule => rule.QuietIgnoredForCritical).HasDefaultValue(true);
+            entity.HasMany(rule => rule.EscalationDestinations).WithOne().HasForeignKey(link => link.AlertRuleId).OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<AlertRuleEscalationDestination>(entity =>
+        {
+            entity.HasKey(link => new { link.AlertRuleId, link.AlertDestinationId });
+            entity.HasOne<AlertDestination>().WithMany().HasForeignKey(link => link.AlertDestinationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationSettings>().Property(settings => settings.TimeZoneId).HasMaxLength(100).HasDefaultValue("UTC");
 
         modelBuilder.Entity<AlertDestination>(entity =>
         {

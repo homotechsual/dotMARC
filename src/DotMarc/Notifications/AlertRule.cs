@@ -53,7 +53,23 @@ public sealed class AlertRule
     public AlertDestinationMode DestinationMode { get; set; } = AlertDestinationMode.All;
     public AlertTicketMode TicketMode { get; set; } = AlertTicketMode.FollowRules;
 
+    public AlertQuietMode QuietMode { get; set; } = AlertQuietMode.Off;
+
+    /// <summary>The quiet window, as minutes after local midnight (0 to 1439) in the time zone set on Alert settings. A start after the
+    /// end crosses midnight.</summary>
+    public int? QuietStartMinutes { get; set; }
+
+    public int? QuietEndMinutes { get; set; }
+
+    /// <summary>When true (the default) a Critical alert is notified straight away even inside the quiet window.</summary>
+    public bool QuietIgnoredForCritical { get; set; } = true;
+
+    /// <summary>Null means no escalation. Otherwise an alert still open this long after it was notified is also sent to the escalation destinations, once.</summary>
+    public int? EscalateAfterMinutes { get; set; }
+
     public List<AlertRuleScopeEntry> Scope { get; set; } = [];
+
+    public List<AlertRuleEscalationDestination> EscalationDestinations { get; set; } = [];
 
     /// <summary>The destinations a rule in Selected mode sends to. Ignored in All mode.</summary>
     public List<AlertRuleDestination> Destinations { get; set; } = [];
