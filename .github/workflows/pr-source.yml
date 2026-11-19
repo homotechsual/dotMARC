@@ -1,0 +1,22 @@
+# .github/workflows/pr-source.yml
+name: PR source
+
+# Pull requests into main may only come from develop. GitHub's branch protection can't restrict a PR's source branch, so
+# this check does it and main requires it before merging.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  from-develop:
+    name: from-develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop as the source
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::Pull requests into main must come from develop (this one is from '$HEAD_REF')."
+            exit 1
+          fi

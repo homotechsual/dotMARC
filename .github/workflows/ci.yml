@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths-ignore: [website/**]
   pull_request:
     paths-ignore: [website/**]
