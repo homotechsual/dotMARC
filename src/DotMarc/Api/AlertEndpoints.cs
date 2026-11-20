@@ -2,6 +2,7 @@ using System.Security.Claims;
 using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Notifications;
+using DotMarc.Psa;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
@@ -157,7 +158,10 @@ public static class AlertEndpoints
 
         if (hasOpenTicket is { } wantsOpenTicket)
         {
-            query = query.Where(alert => context.AlertTickets.Any(ticket => ticket.AlertEventId == alert.Id && ticket.IsOpen) == wantsOpenTicket);
+            // An open alert also has the open ticket of an earlier open copy of itself, as AlertTicketLinks shows it.
+            query = query.Where(alert => (context.AlertTickets.Any(ticket => ticket.AlertEventId == alert.Id && ticket.IsOpen)
+                || (!alert.IsResolved && context.AlertTickets.Any(ticket => ticket.IsOpen
+                    && context.AlertEvents.Any(other => other.Id == ticket.AlertEventId && !other.IsResolved && other.DomainName == alert.DomainName && other.AlertType == alert.AlertType)))) == wantsOpenTicket);
         }
 
         if (raisedAfter is { } raisedFrom)
@@ -187,10 +191,7 @@ public static class AlertEndpoints
             .Skip((pageNumber - 1) * size)
             .Take(size)
             .ToListAsync(cancellationToken);
-        var alertIds = alerts.Select(alert => alert.Id).ToList();
-        var tickets = (await context.AlertTickets.AsNoTracking().Where(ticket => alertIds.Contains(ticket.AlertEventId))
-                .OrderBy(ticket => ticket.CreatedUtc).ToListAsync(cancellationToken))
-            .ToLookup(ticket => ticket.AlertEventId);
+        var tickets = await AlertTicketLinks.LoadAsync(context, alerts, cancellationToken);
         var subjects = alerts.Select(alert => alert.DomainName).Distinct().ToList();
         var domainIds = await scope.Domains(context.Domains.AsNoTracking())
             .Where(domain => subjects.Contains(domain.Name))
