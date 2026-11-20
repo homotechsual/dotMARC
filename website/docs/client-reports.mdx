@@ -5,27 +5,17 @@ description: Send each client a branded PDF report of their email security, week
 
 # Client reports
 
-dotMARC can send each client a regular report of their email security: a branded PDF, emailed weekly, monthly or
-quarterly, or on demand. It's built for the conversation an MSP has with a client: what's protected, what changed since
-last time, and what to do next.
+dotMARC can send each client a regular report of their email security: a branded PDF, emailed weekly, monthly or quarterly, or on demand. It's built for the conversation an MSP has with a client: what's protected, what changed since last time, and what to do next.
 
 ## What's in a report
 
 A report covers one Group (one client) and every monitored domain in it, for one week, month, quarter or a custom range:
 
-- **Cover:** your logo or product name, the client's name (their Group branding, if set), the period, and a one-line
-  verdict such as "2 of 3 domains are fully protected. 1 needs attention."
-- **Summary:** each domain's status (Protected, Monitoring only, Needs attention, No reports yet), messages seen, DMARC
-  pass rate, and the change from the previous week, month or quarter.
+- **Cover:** your logo or product name, the client's name (their Group branding, if set), the period, and a one-line verdict such as "2 of 3 domains are fully protected. 1 needs attention."
+- **Summary:** each domain's status (Protected, Monitoring only, Needs attention, No reports yet), messages seen, DMARC pass rate, and the change from the previous week, month or quarter.
 - **Pass rate trend:** a daily line per domain (weekly for ranges over three months), for up to six domains.
-- **Each domain:** its policy in plain words, its health checks, the top ten senders with who owns them, how much of
-  their mail passed and failed, what receivers did with the mail (delivered, sent to spam, rejected), and alerts raised
-  or resolved in the period. If you have marked senders Unauthorised (see
-  [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised)) and any of their mail
-  was sent in the period, it also says how much was blocked and how much was delivered. Nothing is added for a domain
-  with no mail from unauthorised senders.
-- **What to do next:** a short list built from fixed rules, such as moving a domain from monitoring to a quarantine
-  policy, publishing a missing SPF record, or a named sender that is failing DMARC.
+- **Each domain:** its policy in plain words, its health checks, the top ten senders with who owns them, how much of their mail passed and failed, what receivers did with the mail (delivered, sent to spam, rejected), and alerts raised or resolved in the period. If you have marked senders Unauthorised (see [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised)) and any of their mail was sent in the period, it also says how much was blocked and how much was delivered. Nothing is added for a domain with no mail from unauthorised senders.
+- **What to do next:** a short list built from fixed rules, such as moving a domain from monitoring to a quarantine policy, publishing a missing SPF record, or a named sender that is failing DMARC.
 
 The sentences about unauthorised senders read, for example:
 
@@ -34,14 +24,11 @@ The sentences about unauthorised senders read, for example:
 > 40 messages from senders you haven't authorised were still delivered. Moving the DMARC policy to quarantine or reject
 > would block them.
 
-If the delivered mail passes DMARC, the second sentence says so instead and that you are checking whether the sender
-should be authorised, because a policy change would not block it.
+If the delivered mail passes DMARC, the second sentence says so instead and that you are checking whether the sender should be authorised, because a policy change would not block it.
 
-The email itself is short: the verdict and summary table in your colours, your support details, and the PDF attached.
-It contains no remote images, so nothing is blocked or tracked.
+The email itself is short: the verdict and summary table in your colours, your support details, and the PDF attached. It contains no remote images, so nothing is blocked or tracked.
 
-Reports use your branding from **Manage > Branding** and the Group's own branding where it has one. PDFs can only
-include PNG or JPEG logos; with only an SVG logo, the report shows your product name instead.
+Reports use your branding from **Manage > Branding** and the Group's own branding where it has one. PDFs can only include PNG or JPEG logos; with only an SVG logo, the report shows your product name instead.
 
 ## Setting up email
 
@@ -49,73 +36,53 @@ Open **Manage > Email & reports** and choose how dotMARC sends email.
 
 ### Microsoft Graph
 
-Graph sends from a mailbox in your Microsoft 365 tenant, using the app registration dotMARC already uses to read DMARC
-reports:
+Graph sends from a mailbox in your Microsoft 365 tenant, using the app registration dotMARC already uses to read DMARC reports:
 
-1. Give the app permission to send. With [RBAC for Applications](./deploy-with-docker.mdx#mailbox-app-registration-app-only),
-   which is how the mailbox app should be set up, assign the `Application Mail.Send` role to it in Exchange Online, with
-   the same scope as its read access (or use `Application Mail Full Access`, which covers reading and sending, in place
-   of `Application Mail.ReadWrite`):
+1. Give the app permission to send. With [RBAC for Applications](./deploy-with-docker.mdx#mailbox-app-registration-app-only), which is how the mailbox app should be set up, assign the `Application Mail.Send` role to it in Exchange Online, with the same scope as its read access (or use `Application Mail Full Access`, which covers reading and sending, in place of `Application Mail.ReadWrite`):
 
    ```powershell
    New-ManagementRoleAssignment -App <service-principal-object-id> -Role "Application Mail.Send" -CustomResourceScope "dotMARC mailboxes"
    ```
 
-   If the app is set up with an Application Access Policy instead, add the Microsoft Graph **Application** permission
-   `Mail.Send` in the app registration's **API permissions** and grant admin consent.
-2. The scope already limits the app to the mailboxes in its security group. To send from the DMARC reports mailbox,
-   nothing more is needed. To send from another mailbox, such as `reports@your-msp.example`, add that mailbox to the
-   same group:
+   If the app is set up with an Application Access Policy instead, add the Microsoft Graph **Application** permission `Mail.Send` in the app registration's **API permissions** and grant admin consent.
+2. The scope already limits the app to the mailboxes in its security group. To send from the DMARC reports mailbox, nothing more is needed. To send from another mailbox, such as `reports@your-msp.example`, add that mailbox to the same group:
 
    ```powershell
    Add-DistributionGroupMember -Identity "dotMARC DMARC Reports Scope" -Member "reports@your-msp.example"
    ```
 
-   The mailbox must be a direct member of the group; membership through a nested group doesn't count. Check it with
-   dotMARC's app client ID (or, with an Application Access Policy, `Test-ApplicationAccessPolicy` with the same
-   identity and `-AppId`):
+   The mailbox must be a direct member of the group; membership through a nested group doesn't count. Check it with dotMARC's app client ID (or, with an Application Access Policy, `Test-ApplicationAccessPolicy` with the same identity and `-AppId`):
 
    ```powershell
    Test-ServicePrincipalAuthorization -Identity <dotMARC's app client id> -Resource "reports@your-msp.example"
    ```
 
-   Each `InScope` should say **True**. Exchange can take up to two hours to apply a change to the role assignment or the
-   group, so a send may still be refused for a while after this says True. Wait, then use **Send a test email** again.
-   dotMARC fetches a fresh sign-in each time you save the email settings, so a restart isn't needed.
+   Each `InScope` should say **True**. Exchange can take up to two hours to apply a change to the role assignment or the group, so a send may still be refused for a while after this says True. Wait, then use **Send a test email** again. dotMARC fetches a fresh sign-in each time you save the email settings, so a restart isn't needed.
 
 3. Choose **Microsoft Graph** and set the **From address** to that mailbox. It's prefilled with the reports mailbox.
 
 <details>
 <summary>Large reports and Graph's 4 MB request limit</summary>
 
-Reports are normally well under 1 MB and go in a single request. Graph caps a request at 4 MB, so a report larger than
-about 3 MB (only likely with a very large logo) is sent differently: dotMARC creates it as a draft in the sending mailbox,
-uploads the PDF in pieces, then sends it. Creating the draft uses the `Mail.ReadWrite` (Application) permission the
-mailbox app already needs for reading reports, so an install still on the older `Mail.Read` sends smaller reports but
-not large ones, with a message saying the permission is missing. Reports are limited to 25 MB whichever way they're sent.
+Reports are normally well under 1 MB and go in a single request. Graph caps a request at 4 MB, so a report larger than about 3 MB (only likely with a very large logo) is sent differently: dotMARC creates it as a draft in the sending mailbox, uploads the PDF in pieces, then sends it. Creating the draft uses the `Mail.ReadWrite` (Application) permission the mailbox app already needs for reading reports, so an install still on the older `Mail.Read` sends smaller reports but not large ones, with a message saying the permission is missing. Reports are limited to 25 MB whichever way they're sent.
 
 </details>
 
 ### SMTP
 
-SMTP works with any mail server or relay service (Microsoft 365, Google Workspace, SendGrid, Mailgun and so on). Enter
-the host, port, security (STARTTLS on port 587 is the usual choice), username and password, and the from address and
-name. The password is stored encrypted and never shown again.
+SMTP works with any mail server or relay service (Microsoft 365, Google Workspace, SendGrid, Mailgun and so on). Enter the host, port, security (STARTTLS on port 587 is the usual choice), username and password, and the from address and name. The password is stored encrypted and never shown again.
 
 ### Test email
 
-After saving, use **Send a test email** to check the settings. If it fails, the page shows the error from Graph or the
-SMTP server, such as a missing permission or a rejected sign-in.
+After saving, use **Send a test email** to check the settings. If it fails, the page shows the error from Graph or the SMTP server, such as a missing permission or a rejected sign-in.
 
 ## When reports go out
 
 Also on **Email & reports**:
 
 - **Time zone:** weeks (Monday to Sunday), months and quarters start at midnight in this time zone. It defaults to UTC.
-- **Send hour:** scheduled reports go out at this hour on the first day after the period ends, for example 06:00 on
-  1 April for March.
-- **Number format:** how numbers and percentages are written, for example 1,200 and 99.5% for the United Kingdom, or
-  1.200 and 99,5 % for Germany. The report's words and dates stay in English.
+- **Send hour:** scheduled reports go out at this hour on the first day after the period ends, for example 06:00 on 1 April for March.
+- **Number format:** how numbers and percentages are written, for example 1,200 and 99.5% for the United Kingdom, or 1.200 and 99,5 % for Germany. The report's words and dates stay in English.
 
 Turning a schedule on doesn't send a backlog: the first report is the first period that ends after you turned it on.
 
@@ -124,28 +91,19 @@ Turning a schedule on doesn't send a backlog: the first report is the first peri
 On **Manage groups**, each Group has a **Reports** button:
 
 - **Schedule:** Off, weekly, monthly or quarterly.
-- **Recipients:** type addresses, or pick from the people who already have access limited to that Group (its client
-  portal users and other Group-scoped grants). A report can go to at most 25 recipients, all on one email.
+- **Recipients:** type addresses, or pick from the people who already have access limited to that Group (its client portal users and other Group-scoped grants). A report can go to at most 25 recipients, all on one email.
 - The dialog shows when the next report goes out, and a history of the last ten reports for the Group.
 
 The Group's row shows a chip with its schedule, or **Report failed** in red when its latest scheduled report failed.
 
 ## Sending or downloading on demand
 
-The same dialog can send or download a report for any past week, month or quarter, or a custom range of up to 366
-days, for example for a quarterly business review. **Send now** goes to the recipients you choose there, and
-**Download PDF** sends nothing. Reports sent this way are recorded in the history and the audit log, and never affect
-the schedule.
+The same dialog can send or download a report for any past week, month or quarter, or a custom range of up to 366 days, for example for a quarterly business review. **Send now** goes to the recipients you choose there, and **Download PDF** sends nothing. Reports sent this way are recorded in the history and the audit log, and never affect the schedule.
 
 ## When sending fails
 
-A scheduled report that can't be sent is retried every hour. After 24 hours dotMARC stops trying for that period, marks
-it failed, and raises a **Client report failed** alert through your alert channels (Teams, Slack, webhook). It doesn't
-create a PSA ticket unless you turn that on in the ticket rules. The alert closes once a later report for the Group is
-sent. If email is off when a report is due, that period is skipped without an alert.
+A scheduled report that can't be sent is retried every hour. After 24 hours dotMARC stops trying for that period, marks it failed, and raises a **Client report failed** alert through your alert channels (Teams, Slack, webhook). It doesn't create a PSA ticket unless you turn that on in the ticket rules. The alert closes once a later report for the Group is sent. If email is off when a report is due, that period is skipped without an alert.
 
 ## Who can manage reports
 
-Reports need the **ReportsManage** permission, which the Admin role has. Give it to a custom role on the Access page to
-let others manage reports. Staff limited to some Groups can only manage reports for those Groups. Client portal users
-never see reports settings.
+Reports need the **ReportsManage** permission, which the Admin role has. Give it to a custom role on the Access page to let others manage reports. Staff limited to some Groups can only manage reports for those Groups. Client portal users never see reports settings.

@@ -5,8 +5,7 @@ description: Raise PSA tickets from dotMARC alerts in HaloPSA, NinjaOne, Connect
 
 # PSA integration
 
-dotMARC can open a ticket in your PSA when an alert fires, close it when the alert resolves, and resolve the alert when
-a tech closes the ticket in the PSA. See [Alerts](./alerts.mdx) for how alerting itself works.
+dotMARC can open a ticket in your PSA when an alert fires, close it when the alert resolves, and resolve the alert when a tech closes the ticket in the PSA. See [Alerts](./alerts.mdx) for how alerting itself works.
 
 It works with the following PSAs, documentation for each is on its own page:
 
@@ -16,68 +15,40 @@ It works with the following PSAs, documentation for each is on its own page:
 - [Autotask](./psa/autotask.mdx)
 - [SuperOps](./psa/superops.mdx)
 
-Each has a tab under **Manage > PSA settings**. You can turn on more than one, for example while you move from one PSA
-to another: each PSA gets its own ticket for an alert, and each is opened and closed independently, so one PSA being
-down never stops another from getting its ticket.
+Each has a tab under **Manage > PSA settings**. You can turn on more than one, for example while you move from one PSA to another: each PSA gets its own ticket for an alert, and each is opened and closed independently, so one PSA being down never stops another from getting its ticket.
 
 ## Link Groups to companies
 
-Tickets need to land against the right customer: a client in HaloPSA or SuperOps, an organisation in NinjaOne, a company in ConnectWise or Autotask. On
-**Manage > Groups**, each Group has a column for each PSA that's turned on and set up. Set it once per Group (usually
-once per client), and every domain in the Group routes there.
+Tickets need to land against the right customer: a client in HaloPSA or SuperOps, an organisation in NinjaOne, a company in ConnectWise or Autotask. On **Manage > Groups**, each Group has a column for each PSA that's turned on and set up. Set it once per Group (usually once per client), and every domain in the Group routes there.
 
-- If a Group's name matches a company's, a suggested match appears. Review it and click **Use it**; it's never
-  applied for you. Names are compared loosely: case, punctuation and endings such as Limited, Ltd or LLC are ignored,
-  so a Group called "McGarvey" is offered the client "McGarvey Immigration & Asylum Practitioners".
-- **Companies without a group** lists a PSA's companies that no Group is linked to or named after, with a picker to
-  switch between PSAs. **Create group** makes a Group with the company's name, already linked, and **Create all**
-  does the same for every company listed, after asking you to confirm. HaloPSA's built-in "Unknown" client is left
-  out. Add the domains to the new Groups afterwards, from **Manage > Domains** or with an
-  [import](./import-domains.mdx).
-- A domain that needs to route differently from its Group can be overridden on **Manage > Domains**, which has an
-  override column for each PSA.
-- A domain in several Groups uses, for each PSA, the oldest of its Groups that's linked in that PSA. So a domain can
-  take its Halo client from one Group and its ConnectWise company from another.
+- If a Group's name matches a company's, a suggested match appears. Review it and click **Use it**; it's never applied for you. Names are compared loosely: case, punctuation and endings such as Limited, Ltd or LLC are ignored, so a Group called "McGarvey" is offered the client "McGarvey Immigration & Asylum Practitioners".
+- **Companies without a group** lists a PSA's companies that no Group is linked to or named after, with a picker to switch between PSAs. **Create group** makes a Group with the company's name, already linked, and **Create all** does the same for every company listed, after asking you to confirm. HaloPSA's built-in "Unknown" client is left out. Add the domains to the new Groups afterwards, from **Manage > Domains** or with an [import](./import-domains.mdx).
+- A domain that needs to route differently from its Group can be overridden on **Manage > Domains**, which has an override column for each PSA.
+- A domain in several Groups uses, for each PSA, the oldest of its Groups that's linked in that PSA. So a domain can take its Halo client from one Group and its ConnectWise company from another.
 
 A domain with no company in a PSA simply doesn't get a ticket there. That isn't an error.
 
-If a PSA's companies can't be loaded, the page says which PSA and why, and that PSA's column shows the saved companies
-without letting you change them until it loads again. The other PSAs carry on as normal.
+If a PSA's companies can't be loaded, the page says which PSA and why, and that PSA's column shows the saved companies without letting you change them until it loads again. The other PSAs carry on as normal.
 
 ## Choose which alerts create tickets
 
-By default every alert type opens a ticket, apart from nameserver changes. To change that, open
-**Manage > Alert settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every
-PSA. Turning a type off stops it opening tickets. The alert is still recorded, and any Teams, Slack or webhook
-notification still goes out.
+By default every alert type opens a ticket, apart from nameserver changes. To change that, open **Manage > Alert settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every PSA. Turning a type off stops it opening tickets. The alert is still recorded, and any Teams, Slack or webhook notification still goes out.
 
-A Group can override this for its own domains. On **Manage > Groups**, a Group linked to a company has a **Ticket
-rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create tickets* or *Never
-create tickets*. A Group with overrides shows a badge such as "2 overrides".
+A Group can override this for its own domains. On **Manage > Groups**, a Group linked to a company has a **Ticket rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create tickets* or *Never create tickets*. A Group with overrides shows a badge such as "2 overrides".
 
-- For each PSA, the rules of the Group whose company the ticket goes to apply. Other Groups' rules are ignored for that
-  PSA.
+- For each PSA, the rules of the Group whose company the ticket goes to apply. Other Groups' rules are ignored for that PSA.
 - A domain with its own company set on **Manage > Domains** follows Alert settings for that PSA.
 
-Changing a rule affects alerts raised from then on. It doesn't create tickets for alerts that are already open, and it
-doesn't stop an existing ticket from closing when its alert resolves.
+Changing a rule affects alerts raised from then on. It doesn't create tickets for alerts that are already open, and it doesn't stop an existing ticket from closing when its alert resolves.
 
 ## What syncs, and what doesn't
 
-- **Alert fires:** a ticket is created in each PSA the domain is linked in (unless its alert type is turned off), using
-  the alert's title and message, with the ticket settings you chose for that PSA.
-- **Alert resolves in dotMARC:** each of its open tickets is closed. If a PSA can't be reached, dotMARC keeps trying
-  at each regular check until it succeeds.
-- **Ticket closed in the PSA:** the alert resolves in dotMARC. dotMARC checks its open tickets every few minutes
-  (every 5 by default, set with the `Psa:PollIntervalMinutes` setting), and HaloPSA can also tell dotMARC straight
-  away through its webhook. A policy or nameserver alert closed this way accepts the change, the same as
-  acknowledging it.
+- **Alert fires:** a ticket is created in each PSA the domain is linked in (unless its alert type is turned off), using the alert's title and message, with the ticket settings you chose for that PSA.
+- **Alert resolves in dotMARC:** each of its open tickets is closed. If a PSA can't be reached, dotMARC keeps trying at each regular check until it succeeds.
+- **Ticket closed in the PSA:** the alert resolves in dotMARC. dotMARC checks its open tickets every few minutes (every 5 by default, set with the `Psa:PollIntervalMinutes` setting), and HaloPSA can also tell dotMARC straight away through its webhook. A policy or nameserver alert closed this way accepts the change, the same as acknowledging it.
 - **Ticket deleted in the PSA:** dotMARC stops checking it and leaves the alert open.
 - **Nothing else syncs:** no comments, priority changes, reassignments or notes flow back to dotMARC.
 
-If the underlying problem is still there after a ticket is closed early, the next monitor cycle raises the alert again,
-with a new ticket. While an alert stays open past its cooldown, dotMARC records it again but doesn't open a second
-ticket in a PSA where the earlier one is still open.
+If the underlying problem is still there after a ticket is closed early, the next monitor cycle raises the alert again, with a new ticket. While an alert stays open past its cooldown, dotMARC records it again but doesn't open a second ticket in a PSA where the earlier one is still open.
 
-The **Alerts** page shows each alert's tickets: a filled chip is open, an outlined chip is closed, and where dotMARC
-knows the PSA's web address the chip links to the ticket.
+The **Alerts** page shows each alert's tickets: a filled chip is open, an outlined chip is closed, and where dotMARC knows the PSA's web address the chip links to the ticket.

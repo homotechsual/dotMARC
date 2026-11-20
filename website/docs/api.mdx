@@ -8,30 +8,21 @@ import TabItem from '@theme/TabItem';
 
 # API
 
-dotMARC has a JSON API for the things MSPs most often script: listing domains and their DNS health, pulling DMARC report
-summaries for client reporting, adding or importing domains, organising them into groups and tags, and acknowledging
-alerts. Everything else stays in the web app for now.
+dotMARC has a JSON API for the things MSPs most often script: listing domains and their DNS health, pulling DMARC report summaries for client reporting, adding or importing domains, organising them into groups and tags, and acknowledging alerts. Everything else stays in the web app for now.
 
-The [API reference](/api/dotmarc-api) lists every endpoint with its request and response shapes and examples. The
-same OpenAPI document is served by your dotMARC at `/api/v1/openapi.json`,
-which most API tools (Postman, Insomnia, Bruno and the like) can import directly.
+The [API reference](/api/dotmarc-api) lists every endpoint with its request and response shapes and examples. The same OpenAPI document is served by your dotMARC at `/api/v1/openapi.json`, which most API tools (Postman, Insomnia, Bruno and the like) can import directly.
 
 <Link className="button button--primary button--lg margin-vert--md" to="/api/dotmarc-api">API reference</Link>
 
 ## Create a key
 
-On the **Access** page's **API keys** tab, give the key a name, choose a role and how long it lasts (30, 90, 180 or 365
-days), and select **Create key**. Copy the key straight away: dotMARC keeps only a hash of it, so it can't be shown again.
+On the **Access** page's **API keys** tab, give the key a name, choose a role and how long it lasts (30, 90, 180 or 365 days), and select **Create key**. Copy the key straight away: dotMARC keeps only a hash of it, so it can't be shown again.
 
-* A key can do what its role allows. For a Viewer you can also limit the key to certain groups, so it only sees those
-  clients' domains.
+* A key can do what its role allows. For a Viewer you can also limit the key to certain groups, so it only sees those clients' domains.
 * Roles that can manage access aren't offered. Keys can't create keys or change who has access.
 * A key can't be edited. To change what it can do, create a new key and revoke the old one.
-* Two weeks before a key expires, dotMARC raises an **API key expiring** alert through your [alert](./alerts.mdx)
-  channels, once rather than every cooldown, while alerting is turned on. It doesn't open a ticket unless you turn that
-  on.
-* Changes made with a key appear in the [audit log](./audit-log.mdx) as the key, with the name of the person who created
-  it.
+* Two weeks before a key expires, dotMARC raises an **API key expiring** alert through your [alert](./alerts.mdx) channels, once rather than every cooldown, while alerting is turned on. It doesn't open a ticket unless you turn that on.
+* Changes made with a key appear in the [audit log](./audit-log.mdx) as the key, with the name of the person who created it.
 
 ## Authenticate
 
@@ -56,13 +47,11 @@ curl https://dotmarc.example.com/api/v1/domains \
 </TabItem>
 </Tabs>
 
-A missing, expired or revoked key gets `401`. A key whose role lacks the permission an endpoint needs gets `403`. The
-API ignores browser sign-ins: it only accepts keys.
+A missing, expired or revoked key gets `401`. A key whose role lacks the permission an endpoint needs gets `403`. The API ignores browser sign-ins: it only accepts keys.
 
 ## Finding a domain
 
-Anywhere a path takes a domain, such as `/api/v1/domains/{domain}`, you can give its id or its name, so a script that
-knows the name doesn't need to look up the id first:
+Anywhere a path takes a domain, such as `/api/v1/domains/{domain}`, you can give its id or its name, so a script that knows the name doesn't need to look up the id first:
 
 <Tabs groupId="shell" queryString="shell">
 <TabItem value="powershell" label="PowerShell" default>
@@ -83,23 +72,17 @@ curl https://dotmarc.example.com/api/v1/domains/contoso.example \
 </TabItem>
 </Tabs>
 
-Names match however they're written: any case, with or without a trailing dot. A domain name can never be all digits,
-so a number is always read as an id.
+Names match however they're written: any case, with or without a trailing dot. A domain name can never be all digits, so a number is always read as an id.
 
 ## Filtering
 
-The list endpoints take filters as query parameters, so a script asks for just what it needs. Every filter is in the
-[API reference](/api/dotmarc-api) with the values it accepts.
+The list endpoints take filters as query parameters, so a script asks for just what it needs. Every filter is in the [API reference](/api/dotmarc-api) with the values it accepts.
 
-- **Several values:** give a filter more than one value with commas (`type=SpfRecordBroken,DkimRecordBroken`) or by
-  repeating it (`type=SpfRecordBroken&type=DkimRecordBroken`). A record matches if it matches any of them.
+- **Several values:** give a filter more than one value with commas (`type=SpfRecordBroken,DkimRecordBroken`) or by repeating it (`type=SpfRecordBroken&type=DkimRecordBroken`). A record matches if it matches any of them.
 - **Several filters:** a record must match every filter you give.
 - **Letter case doesn't matter:** `spf=toomanylookups` works.
 - **Domains** can be given by id or name. A domain the key can't see is a 404.
-- **Dates** are a day (`2026-10-01`, from midnight UTC) or a time with its zone (`2026-10-01T09:30:00Z`). Filters ending
-  `After` include the time you give; filters ending `Before` don't, so back-to-back ranges never overlap. In a URL a `+`
-  offset should be sent as `%2B` (`2026-10-01T10:30:00%2B01:00`); dotMARC also reads an unencoded `+`, which arrives as a
-  space, the same way.
+- **Dates** are a day (`2026-10-01`, from midnight UTC) or a time with its zone (`2026-10-01T09:30:00Z`). Filters ending `After` include the time you give; filters ending `Before` don't, so back-to-back ranges never overlap. In a URL a `+` offset should be sent as `%2B` (`2026-10-01T10:30:00%2B01:00`); dotMARC also reads an unencoded `+`, which arrives as a space, the same way.
 - **A value dotMARC doesn't recognise** is a 400 that names the filter and lists the values it accepts.
 
 <details>
@@ -117,36 +100,22 @@ The list endpoints take filters as query parameters, so a script asks for just w
 
 ### Alert rules
 
-`GET /api/v1/alert-rules` and `GET /api/v1/alert-rules/{id}` need the AlertsView permission and return the
-[alert rules](./alerts.mdx#alert-rules): kind, name, whether it is on, severity, order, settings, where it sends
-(`destinationMode` and `destinations`), `ticketMode`, `quietHours` (times as `HH:mm` in the time zone set on Alert
-settings), `escalation`, and the groups, tags and domains it applies to. Filter the list by `kind` and `enabled`.
-`GET /api/v1/alert-destinations` lists the destinations' ids, names, kinds and whether they are on. A destination's
-webhook URL is a secret and is never returned. These endpoints read only: rules and destinations are changed in dotMARC.
+`GET /api/v1/alert-rules` and `GET /api/v1/alert-rules/{id}` need the AlertsView permission and return the [alert rules](./alerts.mdx#alert-rules): kind, name, whether it is on, severity, order, settings, where it sends (`destinationMode` and `destinations`), `ticketMode`, `quietHours` (times as `HH:mm` in the time zone set on Alert settings), `escalation`, and the groups, tags and domains it applies to. Filter the list by `kind` and `enabled`. `GET /api/v1/alert-destinations` lists the destinations' ids, names, kinds and whether they are on. A destination's webhook URL is a secret and is never returned. These endpoints read only: rules and destinations are changed in dotMARC.
 
-Rules name groups, tags and domains across the whole estate, so a key limited to groups gets a `404` on the rule endpoints
-and an empty list of destinations.
+Rules name groups, tags and domains across the whole estate, so a key limited to groups gets a `404` on the rule endpoints and an empty list of destinations.
 
 ### The audit log
 
-`GET /api/v1/audit` needs the AuditView permission. It returns changes and sign-ins by default; add `kind=pageView` or
-`kind=all` for pages people opened. A key limited to certain groups sees only entries about its own domains, its groups
-and their alerts, never sign-ins, settings or access changes.
+`GET /api/v1/audit` needs the AuditView permission. It returns changes and sign-ins by default; add `kind=pageView` or `kind=all` for pages people opened. A key limited to certain groups sees only entries about its own domains, its groups and their alerts, never sign-ins, settings or access changes.
 
 ## Reports and downloads
 
-- **Sending sources:** `GET /api/v1/domains/{domain}/sources` lists every IP that sent as the domain, busiest first, with
-  its pass rate and, once dotMARC has looked it up, who owns it. The report summary only shows the top few.
-- **Individual reports:** `GET /api/v1/domains/{domain}/reports` and `.../tls-reports` list the DMARC and TLS reports
-  received. Add `/{id}/raw` to one report's address for the original file, exactly as the receiver sent it.
+- **Sending sources:** `GET /api/v1/domains/{domain}/sources` lists every IP that sent as the domain, busiest first, with its pass rate and, once dotMARC has looked it up, who owns it. The report summary only shows the top few.
+- **Individual reports:** `GET /api/v1/domains/{domain}/reports` and `.../tls-reports` list the DMARC and TLS reports received. Add `/{id}/raw` to one report's address for the original file, exactly as the receiver sent it.
 - **The dashboard's figures:** `GET /api/v1/summary` gives the headline numbers over every domain the key can see.
-- **Client reports:** `GET /api/v1/groups/{group}/report?period=month&of=2026-09-15` downloads a group's report as a
-  PDF, and `POST /api/v1/groups/{group}/report/send` sends one now, as the Reports dialog does. There is an example
-  of the download below.
-- **Parse failures:** `GET /api/v1/parse-failures` lists report emails dotMARC couldn't read, for a key with the
-  DomainsEdit permission that isn't limited to groups.
-- **PSA tickets:** each alert lists its tickets, and `hasOpenTicket=false` finds alerts without an open ticket: ones no
-  ticket has been raised for, and ones whose tickets are all closed.
+- **Client reports:** `GET /api/v1/groups/{group}/report?period=month&of=2026-09-15` downloads a group's report as a PDF, and `POST /api/v1/groups/{group}/report/send` sends one now, as the Reports dialog does. There is an example of the download below.
+- **Parse failures:** `GET /api/v1/parse-failures` lists report emails dotMARC couldn't read, for a key with the DomainsEdit permission that isn't limited to groups.
+- **PSA tickets:** each alert lists its tickets, and `hasOpenTicket=false` finds alerts without an open ticket: ones no ticket has been raised for, and ones whose tickets are all closed.
 
 To download a group's quarterly client report as a PDF:
 
@@ -171,22 +140,17 @@ curl -H "Authorization: Bearer dmk_..." -o report.pdf \
 
 ## Keys limited to groups
 
-A key limited to groups sees only domains in at least one of its groups, and only those groups. A domain or alert outside
-them is reported as not found (`404`). It can't add or import domains, since a new domain isn't in any group yet. When it
-sets a domain's groups, groups outside its own are kept.
+A key limited to groups sees only domains in at least one of its groups, and only those groups. A domain or alert outside them is reported as not found (`404`). It can't add or import domains, since a new domain isn't in any group yet. When it sets a domain's groups, groups outside its own are kept.
 
 ## Limits
 
-Each key can make 120 requests a minute. Over that, dotMARC answers `429` with a `Retry-After` header giving the seconds
-to wait. Lists return 50 items a page by default and at most 200; use `page` and `pageSize`.
+Each key can make 120 requests a minute. Over that, dotMARC answers `429` with a `Retry-After` header giving the seconds to wait. Lists return 50 items a page by default and at most 200; use `page` and `pageSize`.
 
-Health comes from dotMARC's own scheduled checks, so reading it is quick and never queries DNS; each check says when it
-last ran.
+Health comes from dotMARC's own scheduled checks, so reading it is quick and never queries DNS; each check says when it last ran.
 
 ## Errors
 
-Errors use the standard problem details format (`application/problem+json`), with a `title`, a `detail` saying what to
-do, and for invalid input an `errors` object naming each field.
+Errors use the standard problem details format (`application/problem+json`), with a `title`, a `detail` saying what to do, and for invalid input an `errors` object naming each field.
 
 <details>
 <summary>Status codes</summary>
@@ -205,8 +169,4 @@ do, and for invalid input an `errors` object naming each field.
 
 ## Importing domains
 
-`POST /api/v1/domains/import` takes up to 500 domains and behaves like the [Import domains](./import-domains.mdx) page.
-`existingDomains` is `skip` (default), `add` or `match`, and `unknownNames` is `skip` (default) or `create`. In `match`
-mode, send `groups` and `tags` on every domain or on none: an empty list clears them, and a domain that left them out
-while others sent them would otherwise be cleared by mistake, so that's refused. Add `?dryRun=true` to see what would
-happen without changing anything.
+`POST /api/v1/domains/import` takes up to 500 domains and behaves like the [Import domains](./import-domains.mdx) page. `existingDomains` is `skip` (default), `add` or `match`, and `unknownNames` is `skip` (default) or `create`. In `match` mode, send `groups` and `tags` on every domain or on none: an empty list clears them, and a domain that left them out while others sent them would otherwise be cleared by mistake, so that's refused. Add `?dryRun=true` to see what would happen without changing anything.

@@ -10,19 +10,13 @@ import ConfigReference from './_partials/config-reference.mdx';
 
 # Getting Started
 
-dotMARC needs **two separate** Microsoft Entra app registrations, one to read the DMARC reports
-mailbox and one to sign people in to the dashboard. Do not reuse one for both purposes. Each
-deployment guide below walks you through creating them at the point you need them, so pick how you
-want to run dotMARC first.
+dotMARC needs **two separate** Microsoft Entra app registrations, one to read the DMARC reports mailbox and one to sign people in to the dashboard. Do not reuse one for both purposes. Each deployment guide below walks you through creating them at the point you need them, so pick how you want to run dotMARC first.
 
 ## Configure
 
 :::warning[This is a reference, not a setup guide]
 
-This table only explains what each setting means. It is not the place to set dotMARC up, and following it
-on its own will leave you with a half-configured install. All setup instructions, including creating the
-Entra app registrations and supplying these values, are in the deployment guides:
-[Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx).
+This table only explains what each setting means. It is not the place to set dotMARC up, and following it on its own will leave you with a half-configured install. All setup instructions, including creating the Entra app registrations and supplying these values, are in the deployment guides: [Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx).
 
 :::
 
@@ -32,8 +26,7 @@ Everything dotMARC reads is set through configuration. Both deployment guides se
 
 ## Choose how to run it
 
-Both paths run the exact same product image and cover the same ground end to end - pick whichever
-fits how you already operate:
+Both paths run the exact same product image and cover the same ground end to end - pick whichever fits how you already operate:
 
 | | [Deploy with Docker](./deploy-with-docker.mdx) | [Deploy to Azure](./deploy-to-azure.mdx) |
 | --- | --- | --- |
@@ -42,9 +35,7 @@ fits how you already operate:
 | Database | PostgreSQL container, your own volume/backups | Managed Azure Database for PostgreSQL Flexible Server |
 | Cost model | Whatever your own hardware/VPS costs | Pay-as-you-go Azure resources |
 
-Not sure? [**Deploy with Docker**](./deploy-with-docker.mdx) is the faster path to a first working instance - a single
-`docker compose` command gets you a complete stack, including HTTPS. [**Deploy to Azure**](./deploy-to-azure.mdx) trades a
-bit more setup for infrastructure you don't have to maintain yourself.
+Not sure? [**Deploy with Docker**](./deploy-with-docker.mdx) is the faster path to a first working instance - a single `docker compose` command gets you a complete stack, including HTTPS. [**Deploy to Azure**](./deploy-to-azure.mdx) trades a bit more setup for infrastructure you don't have to maintain yourself.
 
 <div style={{display: 'flex', flexWrap: 'wrap', gap: '1rem', margin: '1.5rem 0'}}>
   <Link className="button button--primary button--lg" to="/docs/deploy-with-docker">Deploy with Docker</Link>
@@ -53,9 +44,7 @@ bit more setup for infrastructure you don't have to maintain yourself.
 
 ## What you'll see
 
-Once your first DMARC report arrives (this looks the same regardless of which path you chose
-above), the dashboard shows pass/fail rates, DNS status, and polling status across every monitored
-domain:
+Once your first DMARC report arrives (this looks the same regardless of which path you chose above), the dashboard shows pass/fail rates, DNS status, and polling status across every monitored domain:
 
 <ThemedImage
   alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
@@ -65,9 +54,7 @@ domain:
   }}
 />
 
-Drill into any domain for a 30-day pass/quarantine/reject chart, its DMARC record status, and a
-breakdown of why any rejected/quarantined mail happened - a benign forwarder tripping alignment
-reads very differently from no reason given at all:
+Drill into any domain for a 30-day pass/quarantine/reject chart, its DMARC record status, and a breakdown of why any rejected/quarantined mail happened - a benign forwarder tripping alignment reads very differently from no reason given at all:
 
 <ThemedImage
   alt="dotMARC domain detail page showing a 30-day pass/fail chart and reject/quarantine reason breakdown for cobalt-freight.example"
@@ -77,8 +64,7 @@ reads very differently from no reason given at all:
   }}
 />
 
-The Sources tab breaks that down further per source IP, with the actual SPF/DKIM domain and result
-behind each pass/fail on hover, plus who owns the IP:
+The Sources tab breaks that down further per source IP, with the actual SPF/DKIM domain and result behind each pass/fail on hover, plus who owns the IP:
 
 <ThemedImage
   alt="dotMARC Sources tab showing per-source volume, SPF/DKIM results, reject reason, and IP ownership"
@@ -90,41 +76,26 @@ behind each pass/fail on hover, plus who owns the IP:
 
 ### Which services are sending
 
-Above the per-IP table, the Sources tab has a **Senders** table with one row per sending service your
-reports point to, such as Microsoft 365, Google Workspace or Mailchimp:
+Above the per-IP table, the Sources tab has a **Senders** table with one row per sending service your reports point to, such as Microsoft 365, Google Workspace or Mailchimp:
 
 * **Messages and Share** are how much of the domain's mail the service sent in the last 30 days.
-* **Evidence** is a score of the signals dotMARC found for that service, with a label of strong,
-  moderate or weak. It is not a probability, and it never reaches 100%. Open a row to see the signals
-  behind it.
-* **Pass rate and Failing** show how much of its mail passed DMARC, and how much was quarantined or
-  rejected.
-* **Fix** says what is failing and what to do about it, naming the service. It appears only when some
-  of that service's mail is failing.
+* **Evidence** is a score of the signals dotMARC found for that service, with a label of strong, moderate or weak. It is not a probability, and it never reaches 100%. Open a row to see the signals behind it.
+* **Pass rate and Failing** show how much of its mail passed DMARC, and how much was quarantined or rejected.
+* **Fix** says what is failing and what to do about it, naming the service. It appears only when some of that service's mail is failing.
 
 The signals are:
 
 * an SPF or DKIM domain in the report that belongs to the service
 * the DKIM selector the service is known to use
 * who owns the sending IP
-* the sending IP falling inside an IP range your domain's own SPF record authorises for the service,
-  which is a strong signal
-* the service being included in the domain's own SPF record without a matching IP, which is the
-  weakest signal because it shows what is allowed to send, not what did
+* the sending IP falling inside an IP range your domain's own SPF record authorises for the service, which is a strong signal
+* the service being included in the domain's own SPF record without a matching IP, which is the weakest signal because it shows what is allowed to send, not what did
 
-dotMARC reads those SPF ranges when it runs the daily SPF check, by following the record's `include:`
-and `redirect=` entries. The evidence says "Your SPF record authorises this IP for" the service. It
-does not say confirmed: a range shared by many customers of a service shows the service, not that this
-particular sender is yours. Only entries that authorise count, so a `-ip4:` or `~ip4:` entry is ignored.
-If the check can't read the record, the last ranges dotMARC read are kept.
+dotMARC reads those SPF ranges when it runs the daily SPF check, by following the record's `include:` and `redirect=` entries. The evidence says "Your SPF record authorises this IP for" the service. It does not say confirmed: a range shared by many customers of a service shows the service, not that this particular sender is yours. Only entries that authorise count, so a `-ip4:` or `~ip4:` entry is ignored. If the check can't read the record, the last ranges dotMARC read are kept.
 
-Mail from a properly set up Microsoft 365 or Google Workspace signs as your own domain, so it is
-recognised by its IP owner and DKIM selector instead.
+Mail from a properly set up Microsoft 365 or Google Workspace signs as your own domain, so it is recognised by its IP owner and DKIM selector instead.
 
-Sources that match no known service are listed last as **Not matched to a known service**. That means
-dotMARC could not match them, not that they are bad. The matching is worked out each time you open
-the page, so it improves as dotMARC learns more services, and it also names the service in failure
-recommendations, client reports, the client portal and the `service` field of the sources API.
+Sources that match no known service are listed last as **Not matched to a known service**. That means dotMARC could not match them, not that they are bad. The matching is worked out each time you open the page, so it improves as dotMARC learns more services, and it also names the service in failure recommendations, client reports, the client portal and the `service` field of the sources API.
 
 ### Decide which senders are authorised
 
@@ -135,11 +106,9 @@ The **Decision** column is where your team records what it has decided about a s
 * **Under review**: you are still finding out, for example waiting for the client to answer.
 * **Unreviewed**: nobody has decided yet. This is the default.
 
-Select **Decide** (or **Change**, once there is a decision) beside the status, pick a new one, add an optional note, and save. Hover over a status to see where it came from: this domain, its group, or the baseline. A decision never changes DNS and
-never blocks mail, because your DMARC policy decides what receivers do. It does change what dotMARC tells you:
+Select **Decide** (or **Change**, once there is a decision) beside the status, pick a new one, add an optional note, and save. Hover over a status to see where it came from: this domain, its group, or the baseline. A decision never changes DNS and never blocks mail, because your DMARC policy decides what receivers do. It does change what dotMARC tells you:
 
-* A sender with no decision raises a **new sender** alert when it first appears, and counts towards "senders need a
-  decision" on the Overview. Authorised and Under review both stop the alert and the count.
+* A sender with no decision raises a **new sender** alert when it first appears, and counts towards "senders need a decision" on the Overview. Authorised and Under review both stop the alert and the count.
 * An **Unauthorised** sender whose mail is still being delivered raises an alert (see [Alerts](./alerts.mdx)).
 * The **Fix** column changes, as described below.
 * Client reports summarise the decisions, and the [API](./api.mdx) returns each sender's decision.
@@ -148,63 +117,33 @@ The row shows who decided and when, and every change is recorded in the [audit l
 
 The **Fix** column changes with the decision:
 
-* An **Unauthorised** sender is not asked to be fixed. If its failing mail is all blocked, the row says
-  your policy is blocking it. If some was still delivered, it says how much and what your policy
-  means for that: at `none` nothing is blocked, at `quarantine` it goes to spam, and at `reject`
-  receivers should refuse it.
-* An **Unauthorised** sender whose mail passes DMARC is flagged first, because it means the sender
-  authenticates as your domain. Decide whether it should be authorised, or remove its access.
-* An **Authorised** sender gets no fix while its mail passes. If some of it fails, the row says you
-  authorised it but it is failing, and keeps the fix.
+* An **Unauthorised** sender is not asked to be fixed. If its failing mail is all blocked, the row says your policy is blocking it. If some was still delivered, it says how much and what your policy means for that: at `none` nothing is blocked, at `quarantine` it goes to spam, and at `reject` receivers should refuse it.
+* An **Unauthorised** sender whose mail passes DMARC is flagged first, because it means the sender authenticates as your domain. Decide whether it should be authorised, or remove its access.
+* An **Authorised** sender gets no fix while its mail passes. If some of it fails, the row says you authorised it but it is failing, and keeps the fix.
 
-Open a service row to decide on a single IP address. An IP decision overrides the decision on its
-service, and the other IPs show "same as the service". A source in the Not matched row has no
-service, so you decide on its IPs.
+Open a service row to decide on a single IP address. An IP decision overrides the decision on its service, and the other IPs show "same as the service". A source in the Not matched row has no service, so you decide on its IPs.
 
-Changing decisions needs the **SenderReview** permission, which the Admin role has. Custom roles can be
-given it on the Access page. Anyone who can see the domain can see the decisions.
+Changing decisions needs the **SenderReview** permission, which the Admin role has. Custom roles can be given it on the Access page. Anyone who can see the domain can see the decisions.
 
-The domain's Overview tab shows how many senders still have no decision, with a **Review** button that opens the
-Sources tab, and it goes away once every sender has one. The sources API returns each source's decision in a read-only
-`decision` field: `Authorised`, `UnderReview`, `Unauthorised` or `Unreviewed`. [Client reports](./client-reports.mdx)
-say how much mail from unauthorised senders was blocked or delivered.
+The domain's Overview tab shows how many senders still have no decision, with a **Review** button that opens the Sources tab, and it goes away once every sender has one. The sources API returns each source's decision in a read-only `decision` field: `Authorised`, `UnderReview`, `Unauthorised` or `Unreviewed`. [Client reports](./client-reports.mdx) say how much mail from unauthorised senders was blocked or delivered.
 
-dotMARC also raises two [sender alerts](./alerts.mdx#sender-alerts): one when a new sender appears
-that nobody has reviewed, and one when mail from a sender you marked Unauthorised is being delivered.
+dotMARC also raises two [sender alerts](./alerts.mdx#sender-alerts): one when a new sender appears that nobody has reviewed, and one when mail from a sender you marked Unauthorised is being delivered.
 
 #### Set an answer once for many domains
 
-You don't have to decide the same sender on every domain. Decisions can be made at three levels, and the
-most specific one wins:
+You don't have to decide the same sender on every domain. Decisions can be made at three levels, and the most specific one wins:
 
 1. **The domain's own decision**, on the service or on a single IP. It overrides everything below.
 2. **The group's defaults**, set from **Manage > Groups** with the **Sender defaults** button on a group.
 3. **The baseline**, set from **Manage > Sender baseline**. It applies to every domain.
 
-For example, authorise Microsoft 365 in the baseline, mark it Unauthorised in the defaults of a client
-group that has moved away from it, and authorise it again on one domain of that client that still uses
-it. Each row in the Senders table says where its decision came from: set on this domain, from a group,
-or from the baseline. Choosing **Reset to inherited** in the dialog removes the domain's own decision, so
-the row falls back to the level below.
+For example, authorise Microsoft 365 in the baseline, mark it Unauthorised in the defaults of a client group that has moved away from it, and authorise it again on one domain of that client that still uses it. Each row in the Senders table says where its decision came from: set on this domain, from a group, or from the baseline. Choosing **Reset to inherited** in the dialog removes the domain's own decision, so the row falls back to the level below.
 
-* A baseline or group decision only matters on a domain whose reports show that service. Nothing is
-  added to domains that don't use it.
-* The **Domains** column on the baseline and group defaults pages says how many monitored domains show each
-  service in their last 30 days of reports, so you can see how far a decision reaches. **Found** means strong
-  evidence and **likely** means the service is attributed on weaker evidence. It uses the same evidence as the
-  Senders table, and the owner of an address only counts once that address has been looked up, so a likely
-  count can rise as lookups finish. On a group's page it counts only that group's domains.
-* If a domain is in several groups that disagree, the most cautious decision wins: Unauthorised, then
-  Under review, then Authorised. The row says which groups disagree, and a decision on the domain itself
-  settles it.
-* A sender left Under review can be reminded about. The new sender [alert rule](./alerts.mdx#alert-rules) can count Under
-  review as undecided, or alert again after a number of days. By default Under review stops the alert.
-* The baseline can be changed only by someone who isn't limited to particular groups. A person limited to
-  some groups can change the defaults of their own groups, and no others.
-* If a service later leaves dotMARC's list of known services, its decision is kept and shown as "no longer
-  recognised", with a button to remove it.
+* A baseline or group decision only matters on a domain whose reports show that service. Nothing is added to domains that don't use it.
+* The **Domains** column on the baseline and group defaults pages says how many monitored domains show each service in their last 30 days of reports, so you can see how far a decision reaches. **Found** means strong evidence and **likely** means the service is attributed on weaker evidence. It uses the same evidence as the Senders table, and the owner of an address only counts once that address has been looked up, so a likely count can rise as lookups finish. On a group's page it counts only that group's domains.
+* If a domain is in several groups that disagree, the most cautious decision wins: Unauthorised, then Under review, then Authorised. The row says which groups disagree, and a decision on the domain itself settles it.
+* A sender left Under review can be reminded about. The new sender [alert rule](./alerts.mdx#alert-rules) can count Under review as undecided, or alert again after a number of days. By default Under review stops the alert.
+* The baseline can be changed only by someone who isn't limited to particular groups. A person limited to some groups can change the defaults of their own groups, and no others.
+* If a service later leaves dotMARC's list of known services, its decision is kept and shown as "no longer recognised", with a button to remove it.
 
-Next: [Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx) to
-run it in production, or [Local Development](./local-development.mdx) to run and test from source.
-Once you're up and running, [DNS Provider Push](./dns-provider-push.mdx) lets dotMARC fix DNS
-records for you instead of copying them in by hand.
+Next: [Deploy with Docker](./deploy-with-docker.mdx) or [Deploy to Azure](./deploy-to-azure.mdx) to run it in production, or [Local Development](./local-development.mdx) to run and test from source. Once you're up and running, [DNS Provider Push](./dns-provider-push.mdx) lets dotMARC fix DNS records for you instead of copying them in by hand.

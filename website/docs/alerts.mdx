@@ -5,9 +5,7 @@ description: How dotMARC's alerting works, the alert types it raises, delivery c
 
 # Alerts
 
-dotMARC raises an alert when something about a monitored domain needs attention, delivers it
-through Teams, Slack and/or a generic webhook, and shows the same event in the **Alerts** feed. An alert
-resolves itself automatically once the underlying condition clears, no manual dismissal needed.
+dotMARC raises an alert when something about a monitored domain needs attention, delivers it through Teams, Slack and/or a generic webhook, and shows the same event in the **Alerts** feed. An alert resolves itself automatically once the underlying condition clears, no manual dismissal needed.
 
 ## Alert types
 
@@ -22,35 +20,23 @@ resolves itself automatically once the underlying condition clears, no manual di
 | `VolumeChanged` | A domain's message volume has dropped or risen by a percentage compared with the period before. See [Metric alerts](#metric-alerts). It is off until you switch its rule on, and doesn't raise tickets by default. | The change is smaller again, or the rule is switched off. |
 | `RejectedMessagesHigh` | A domain had at least a number of rejected or quarantined messages over the last few days. See [Metric alerts](#metric-alerts). It is off until you switch its rule on, and doesn't raise tickets by default. | The count falls below the number, or the rule is switched off. |
 
-Each of these is a kind of alert with its own [rules](#alert-rules). By default they are raised at `Warning` severity, and
-the DNS health alerts below have their own default severities. A rule can change the severity to `Info`, `Warning` or `Critical`.
+Each of these is a kind of alert with its own [rules](#alert-rules). By default they are raised at `Warning` severity, and the DNS health alerts below have their own default severities. A rule can change the severity to `Info`, `Warning` or `Critical`.
 
 ## Cooldown and re-firing
 
-Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for
-a domain, a new occurrence of the same condition is suppressed until the configured **cooldown**
-elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle. A rule can set its
-own cooldown instead of the one on Alert settings. The cooldown applies per rule, so two rules that both apply to a
-domain each keep their own.
+Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for a domain, a new occurrence of the same condition is suppressed until the configured **cooldown** elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle. A rule can set its own cooldown instead of the one on Alert settings. The cooldown applies per rule, so two rules that both apply to a domain each keep their own.
 
 ## The Alerts page
 
-**Alerts** (`/alerts`) is the event feed, every alert ever raised, most recent first, with its
-domain, type, the rule that raised it, severity, created/resolved timestamps, and message. It requires the `AlertsView`
-permission, which is part of the built-in Viewer role by default. The Rule column is shown only to people with no group limit.
+**Alerts** (`/alerts`) is the event feed, every alert ever raised, most recent first, with its domain, type, the rule that raised it, severity, created/resolved timestamps, and message. It requires the `AlertsView` permission, which is part of the built-in Viewer role by default. The Rule column is shown only to people with no group limit.
 
-Click an alert's domain name to open that domain's detail page. Open and resolved alerts both link to the domain.
-Alerts for a removed domain or an application-wide issue (such as a PSA connection) have no domain link.
-The domain page still requires the `DomainsView` permission and access to that domain.
+Click an alert's domain name to open that domain's detail page. Open and resolved alerts both link to the domain. Alerts for a removed domain or an application-wide issue (such as a PSA connection) have no domain link. The domain page still requires the `DomainsView` permission and access to that domain.
 
-Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge** button for anyone with the
-`AlertsManage` permission. See [Closing policy and nameserver alerts](#closing-policy-and-nameserver-alerts).
+Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge** button for anyone with the `AlertsManage` permission. See [Closing policy and nameserver alerts](#closing-policy-and-nameserver-alerts).
 
 ## Alert settings
 
-**Alert settings** (`/alerts/settings`) configures delivery. It requires the `AlertsManage`
-permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](#alert-rules), and
-where each rule's alerts go is chosen from the destinations set up here.
+**Alert settings** (`/alerts/settings`) configures delivery. It requires the `AlertsManage` permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](#alert-rules), and where each rule's alerts go is chosen from the destinations set up here.
 
 | Setting | Description |
 | --- | --- |
@@ -60,41 +46,23 @@ where each rule's alerts go is chosen from the destinations set up here.
 | Cooldown (minutes) | Minimum time between repeat firings of the same open alert, unless its rule sets its own. Default `180`. |
 | Monitor interval (seconds) | How often the background check for missed reports runs. Default `300`. |
 
-Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no
-`https://user:pass@host/...`); anything else is rejected on save, and **Send test** won't post to it.
+Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no `https://user:pass@host/...`); anything else is rejected on save, and **Send test** won't post to it.
 
 ### Destinations
 
-A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you
-need under **Where alerts go** on Alert settings, for example one shared Teams channel and one Slack channel per client. A
-destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to
-the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
+A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you need under **Where alerts go** on Alert settings, for example one shared Teams channel and one Slack channel per client. A destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
 
-Each [alert rule](#alert-rules) either sends to **all destinations** (the default) or only to the destinations you choose
-for it. A rule that sends to chosen destinations and has none ticked still raises and records its alerts, but doesn't send them
-anywhere, which is how to keep a kind of alert in the Alerts page without posting it. Deleting a destination removes it from
-every rule that chose it, and says how many did first. A rule that chose only that destination then sends nowhere.
+Each [alert rule](#alert-rules) either sends to **all destinations** (the default) or only to the destinations you choose for it. A rule that sends to chosen destinations and has none ticked still raises and records its alerts, but doesn't send them anywhere, which is how to keep a kind of alert in the Alerts page without posting it. Deleting a destination removes it from every rule that chose it, and says how many did first. A rule that chose only that destination then sends nowhere.
 
-The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the
-[audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with
-`AlertsManage`. The Alert rules page shows destination names, never URLs.
+The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the [audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with `AlertsManage`. The Alert rules page shows destination names, never URLs.
 
-**Upgrading.** Alerts raised before quiet hours existed count as already notified, so an upgrade never sends them again, and
-every existing rule has quiet hours and escalation switched off. The Teams, Slack and generic webhook channels you had before become destinations on upgrade, named `Teams`,
-`Slack` and `Generic webhook`, keeping their URL and on/off switch. A channel with no URL becomes nothing. Every rule sends to
-all destinations until someone changes it, so alerts go to the same places as before.
+**Upgrading.** Alerts raised before quiet hours existed count as already notified, so an upgrade never sends them again, and every existing rule has quiet hours and escalation switched off. The Teams, Slack and generic webhook channels you had before become destinations on upgrade, named `Teams`, `Slack` and `Generic webhook`, keeping their URL and on/off switch. A channel with no URL becomes nothing. Every rule sends to all destinations until someone changes it, so alerts go to the same places as before.
 
 ## Alert rules
 
-Each kind of alert is controlled by **alert rules**, under **Manage > Alert rules** (`/alerts/rules`). A rule decides
-when that kind of alert is raised, for which domains, how serious it is and how it behaves. dotMARC ships one **default
-rule** for every kind of alert, applying to every domain, so alerting works the same as always until someone changes a rule.
+Each kind of alert is controlled by **alert rules**, under **Manage > Alert rules** (`/alerts/rules`). A rule decides when that kind of alert is raised, for which domains, how serious it is and how it behaves. dotMARC ships one **default rule** for every kind of alert, applying to every domain, so alerting works the same as always until someone changes a rule.
 
-Anyone with `AlertsView` and no group limit can read the rules. Creating, changing, ordering, deleting and resetting them
-needs the `AlertRulesManage` permission, which the Admin role has. A custom role has to be given it on the Access page.
-Rules name groups, tags and domains across your whole estate, so someone limited to some groups doesn't see the page, and
-the Rule column on the Alerts page and the `rule` field in the API are empty for them. Every change is recorded in the
-[audit log](./audit-log.mdx).
+Anyone with `AlertsView` and no group limit can read the rules. Creating, changing, ordering, deleting and resetting them needs the `AlertRulesManage` permission, which the Admin role has. A custom role has to be given it on the Access page. Rules name groups, tags and domains across your whole estate, so someone limited to some groups doesn't see the page, and the Rule column on the Alerts page and the `rule` field in the API are empty for them. Every change is recorded in the [audit log](./audit-log.mdx).
 
 ### What a rule sets
 
@@ -113,73 +81,48 @@ the Rule column on the Alerts page and the `rule` field in the API are empty for
 | Quiet hours | A daily window in which this rule's notifications are held or muted. See [Quiet hours](#quiet-hours). |
 | Escalation | Extra destinations told when the alert is still open after a time. See [Escalation](#escalation). |
 
-Alerts about the system itself (an expiring API key, a failed client report, a lost PSA connection) aren't about a domain,
-so their rules have no scope.
+Alerts about the system itself (an expiring API key, a failed client report, a lost PSA connection) aren't about a domain, so their rules have no scope.
 
 ### Order and stopping
 
-For one domain, the rules of a kind are tried from top to bottom. A rule that applies raises its own alert, and if it has
-**Stop processing more rules** on (the default) the rules after it are skipped for that domain. So a rule for one client,
-placed above the default, replaces the default for that client and leaves everyone else alone. A new rule is added at the
-top for exactly this reason. Turn **Stop processing more rules** off to raise an alert from this rule as well as from the
-ones after it. Two rules that both apply raise two alerts, each with its own cooldown and, if tickets are on for that kind,
-its own ticket.
+For one domain, the rules of a kind are tried from top to bottom. A rule that applies raises its own alert, and if it has **Stop processing more rules** on (the default) the rules after it are skipped for that domain. So a rule for one client, placed above the default, replaces the default for that client and leaves everyone else alone. A new rule is added at the top for exactly this reason. Turn **Stop processing more rules** off to raise an alert from this rule as well as from the ones after it. Two rules that both apply raise two alerts, each with its own cooldown and, if tickets are on for that kind, its own ticket.
 
-The page shows how many domains each rule reaches, and warns when a rule is hidden behind an earlier one that stops
-processing. Use the arrows to move a rule. A rule that no longer applies to a domain, because it was switched off,
-narrowed or put behind a stopping rule, closes the alerts it had open for that domain on the next check.
+The page shows how many domains each rule reaches, and warns when a rule is hidden behind an earlier one that stops processing. Use the arrows to move a rule. A rule that no longer applies to a domain, because it was switched off, narrowed or put behind a stopping rule, closes the alerts it had open for that domain on the next check.
 
 ### Default rules
 
-A default rule can be switched off, edited and moved, but not deleted. **Reset to default values** in its dialog restores
-its name, severity, settings and scope. If a rule's scope names a group, tag or domain that has since been deleted, the
-page says so and offers **Clean up**, which removes those entries. A scope limited to something that is gone applies to nothing.
+A default rule can be switched off, edited and moved, but not deleted. **Reset to default values** in its dialog restores its name, severity, settings and scope. If a rule's scope names a group, tag or domain that has since been deleted, the page says so and offers **Clean up**, which removes those entries. A scope limited to something that is gone applies to nothing.
 
 ### Tickets
 
 Each rule has a **Ticket mode** (for the kinds of alert that are about a domain):
 
-* **Follow the ticket rules** (the default): the group's ticket rule, then the global rule, then the alert type's default
-  decide, as described in [PSA integration](./psa-integration.mdx).
+* **Follow the ticket rules** (the default): the group's ticket rule, then the global rule, then the alert type's default decide, as described in [PSA integration](./psa-integration.mdx).
 * **Never open a ticket**: this rule's alerts open no ticket, whatever the ticket rules say.
-* **Always open a ticket**: this rule's alerts open a ticket whatever the ticket rules say, provided a PSA is connected
-  and the domain has a company there. With no company to put it under, no ticket is opened.
+* **Always open a ticket**: this rule's alerts open a ticket whatever the ticket rules say, provided a PSA is connected and the domain has a company there. With no company to put it under, no ticket is opened.
 
-Because tickets are opened per alert, two stacked rules that both apply can open two tickets unless one of them is set to
-**Never**.
+Because tickets are opened per alert, two stacked rules that both apply can open two tickets unless one of them is set to **Never**.
 
 ### Quiet hours
 
-A rule can keep its notifications back during a daily window, for example 22:00 to 07:00. Choose what happens in the window
-under **During quiet hours** in the rule's dialog:
+A rule can keep its notifications back during a daily window, for example 22:00 to 07:00. Choose what happens in the window under **During quiet hours** in the rule's dialog:
 
 * **Send as usual** (the default): no quiet hours.
-* **Hold, then send when it ends**: the alert is recorded and shown on the Alerts page straight away, but its notification
-  waits. When the window ends it is sent, if the alert is still open. An alert that was resolved or acknowledged in the
-  meantime is never sent.
+* **Hold, then send when it ends**: the alert is recorded and shown on the Alerts page straight away, but its notification waits. When the window ends it is sent, if the alert is still open. An alert that was resolved or acknowledged in the meantime is never sent.
 * **Mute (never send)**: the alert is recorded and shown, and its notification is never sent.
 
-The window runs from the start time up to, but not including, the end time, in the **Time zone** set on Alert settings
-(`UTC` until you change it). A window that ends earlier than it starts runs overnight, so 22:00 to 07:00 covers the night.
-Clocks changing for daylight saving are followed, because the window is read in local time.
+The window runs from the start time up to, but not including, the end time, in the **Time zone** set on Alert settings (`UTC` until you change it). A window that ends earlier than it starts runs overnight, so 22:00 to 07:00 covers the night. Clocks changing for daylight saving are followed, because the window is read in local time.
 
-**Critical alerts ignore quiet hours** is on by default, so a Critical alert is sent straight away even inside a window. Turn
-it off on a rule to hold or mute its Critical alerts like the rest.
+**Critical alerts ignore quiet hours** is on by default, so a Critical alert is sent straight away even inside a window. Turn it off on a rule to hold or mute its Critical alerts like the rest.
 
-Quiet hours affect notifications only. Alerts are still raised and recorded, and tickets still open. A held alert shows
-"Notification held until the quiet window ends" on the Alerts page, and a muted one shows "Muted by quiet hours". Held
-notifications go out on the next check after the window ends, so the timing is as precise as the monitor interval (5 minutes by
-default).
+Quiet hours affect notifications only. Alerts are still raised and recorded, and tickets still open. A held alert shows "Notification held until the quiet window ends" on the Alerts page, and a muted one shows "Muted by quiet hours". Held notifications go out on the next check after the window ends, so the timing is as precise as the monitor interval (5 minutes by default).
 
 ### Escalation
 
-A rule can tell more people when an alert is not being dealt with. Under **Escalation**, set **Escalate after (minutes)**
-(from 5 to 10080) and tick the destinations to tell. If the alert is still open that long after its notification went out, it
-is also sent to those destinations, with "Escalated:" at the start of its title. It happens once per alert.
+A rule can tell more people when an alert is not being dealt with. Under **Escalation**, set **Escalate after (minutes)** (from 5 to 10080) and tick the destinations to tell. If the alert is still open that long after its notification went out, it is also sent to those destinations, with "Escalated:" at the start of its title. It happens once per alert.
 
 * Acknowledging an alert, or it clearing by itself, closes it, so an alert that was dealt with is never escalated.
-* Escalation ignores quiet hours, which is the point of it. It never happens to an alert that is still being held, because that
-  alert hasn't been sent yet. A muted alert can still escalate.
+* Escalation ignores quiet hours, which is the point of it. It never happens to an alert that is still being held, because that alert hasn't been sent yet. A muted alert can still escalate.
 * A rule with an escalation time and no destinations ticked escalates to nobody.
 * Like held notifications, escalation is checked on each monitor cycle.
 
@@ -189,52 +132,35 @@ The **New sender to review** rule has an **Under review counts as** setting for 
 
 * **Counts as decided** (the default): Under review stops the alert, as Authorised and Unauthorised do.
 * **Counts as unreviewed**: Under review changes nothing, so a new sender alerts whether or not someone has started reviewing it.
-* **Counts as decided for a while, then alert again**: the alert stays quiet for the number of days you set, counted from when
-  the decision that applies was made (a group or baseline decision counts from its own date). After that the sender alerts
-  again, whether or not it is still new, so a review left hanging gets a reminder. Deciding on it ends the reminders.
+* **Counts as decided for a while, then alert again**: the alert stays quiet for the number of days you set, counted from when the decision that applies was made (a group or baseline decision counts from its own date). After that the sender alerts again, whether or not it is still new, so a review left hanging gets a reminder. Deciding on it ends the reminders.
 
 ## Sender alerts
 
-Two alerts watch the services that send as a domain, using the decisions your team records on the
-domain's Sources tab (see [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised)).
+Two alerts watch the services that send as a domain, using the decisions your team records on the domain's Sources tab (see [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised)).
 
 **New sender to review** (`NewUnreviewedSender`) is raised once for a domain, listing its new senders:
 
 > shop.example has 1 new sender that nobody has reviewed: SendGrid (274 messages). Open the domain's
 > Sources tab and mark it Authorised, Unauthorised or Under review.
 
-* A sender is **new** only if it first appeared on that domain within the configured number of days.
-  A domain's existing senders never alert, so turning this on doesn't flood you. A sender that
-  returns after a quiet spell isn't new either, because new means the first time ever.
-* A service is new only if all of its sending IPs are new, so a known service gaining an IP isn't a
-  new sender. A source dotMARC can't match to a service is judged on its own, by its IP.
-* **Unreviewed** means no decision applies at any level, domain, group or baseline. By default **Under review**
-  counts as a decision, so it closes the alert, and a rule can change that: see
-  [Under review on the new sender rule](#under-review-on-the-new-sender-rule). A baseline entry for a service silences this
-  alert for that service on every domain.
+* A sender is **new** only if it first appeared on that domain within the configured number of days. A domain's existing senders never alert, so turning this on doesn't flood you. A sender that returns after a quiet spell isn't new either, because new means the first time ever.
+* A service is new only if all of its sending IPs are new, so a known service gaining an IP isn't a new sender. A source dotMARC can't match to a service is judged on its own, by its IP.
+* **Unreviewed** means no decision applies at any level, domain, group or baseline. By default **Under review** counts as a decision, so it closes the alert, and a rule can change that: see [Under review on the new sender rule](#under-review-on-the-new-sender-rule). A baseline entry for a service silences this alert for that service on every domain.
 
-**Unauthorised sender mail delivered** (`UnauthorisedSenderDelivered`) is raised when mail from a
-sender whose decision is Unauthorised is reaching inboxes:
+**Unauthorised sender mail delivered** (`UnauthorisedSenderDelivered`) is raised when mail from a sender whose decision is Unauthorised is reaching inboxes:
 
 > Mail from a sender marked unauthorised is being delivered for cobalt-freight.example: Mailchimp
 > (5,162 messages). Your policy is none, so this mail is still delivered. Move to quarantine or reject
 > to block it.
 
-* **Delivered** means receivers didn't quarantine or reject it, whether it passes DMARC or fails it.
-  An unauthorised sender whose mail passes DMARC is the more serious case, because it authenticates
-  as your domain.
-* It closes when the delivered volume falls below the minimum, for example after the policy moves to
-  quarantine or reject.
+* **Delivered** means receivers didn't quarantine or reject it, whether it passes DMARC or fails it. An unauthorised sender whose mail passes DMARC is the more serious case, because it authenticates as your domain.
+* It closes when the delivered volume falls below the minimum, for example after the policy moves to quarantine or reject.
 
-Neither alert is raised for a null-routed domain, which has its own unexpected-activity alert. Switch a rule
-off, or change its thresholds, under [Alert rules](#alert-rules). Switching a rule off closes the alerts it has open. The new sender alert doesn't create tickets by default, and the delivered alert does.
+Neither alert is raised for a null-routed domain, which has its own unexpected-activity alert. Switch a rule off, or change its thresholds, under [Alert rules](#alert-rules). Switching a rule off closes the alerts it has open. The new sender alert doesn't create tickets by default, and the delivered alert does.
 
 ## Metric alerts
 
-Three alerts watch a number in the DMARC reports a monitored domain has received. They suit the things only you know are
-worth hearing about, such as one client's pass rate or a sudden quiet spell. All three are **off until you switch their rule
-on** under [Alert rules](#alert-rules), so upgrading never starts raising alerts you didn't ask for. Each has a default rule
-for every domain, and you can add scoped copies, for example a stricter pass rate for one client.
+Three alerts watch a number in the DMARC reports a monitored domain has received. They suit the things only you know are worth hearing about, such as one client's pass rate or a sudden quiet spell. All three are **off until you switch their rule on** under [Alert rules](#alert-rules), so upgrading never starts raising alerts you didn't ask for. Each has a default rule for every domain, and you can add scoped copies, for example a stricter pass rate for one client.
 
 | Alert | Raised when | Settings |
 | --- | --- | --- |
@@ -244,24 +170,17 @@ for every domain, and you can add scoped copies, for example a stricter pass rat
 
 > contoso.io: DMARC pass rate was 71% over the last 7 days (threshold 90%, 420 messages).
 
-* Counts are of messages, not of reports, so one report covering a thousand messages counts a thousand times. A message
-  passes if SPF or DKIM passes, as everywhere else in dotMARC.
-* **Minimum messages** stops a quiet domain alerting on a handful of messages. A pass rate or volume rule never fires below
-  it, and the volume rule counts it against the earlier period, so a domain that was already quiet never alerts.
-* dotMARC keeps 30 days of reports for these checks, so a volume rule can look back at most 15 days: it compares two periods
-  of that length. A report belongs to a period by when dotMARC received it.
-* The alert closes by itself on the next check once the number recovers, or when you switch the rule off or the domain stops
-  being covered by it.
+* Counts are of messages, not of reports, so one report covering a thousand messages counts a thousand times. A message passes if SPF or DKIM passes, as everywhere else in dotMARC.
+* **Minimum messages** stops a quiet domain alerting on a handful of messages. A pass rate or volume rule never fires below it, and the volume rule counts it against the earlier period, so a domain that was already quiet never alerts.
+* dotMARC keeps 30 days of reports for these checks, so a volume rule can look back at most 15 days: it compares two periods of that length. A report belongs to a period by when dotMARC received it.
+* The alert closes by itself on the next check once the number recovers, or when you switch the rule off or the domain stops being covered by it.
 * A domain with no reports raises none of the three. A missing report has its own [alert](#alert-types).
-* Like every alert they follow the rule's severity, cooldown, destinations, quiet hours and escalation, appear in the ticket
-  rules and, once one has been raised, in the Alerts page's Type filter, and can be filtered by type in the [API](./api.mdx#alert-rules).
+* Like every alert they follow the rule's severity, cooldown, destinations, quiet hours and escalation, appear in the ticket rules and, once one has been raised, in the Alerts page's Type filter, and can be filtered by type in the [API](./api.mdx#alert-rules).
 * Resetting one of these default rules to its default values leaves it switched off.
 
 ## DNS health alerts
 
-dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM and MTA-STS records about once a
-day. It raises an alert when one of those checks fails, when a domain's DMARC policy gets weaker, or when its
-nameservers change.
+dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM and MTA-STS records about once a day. It raises an alert when one of those checks fails, when a domain's DMARC policy gets weaker, or when its nameservers change.
 
 | Type | Raised when | Resolves when | Severity |
 | --- | --- | --- | --- |
@@ -275,33 +194,26 @@ nameservers change.
 | `DmarcPolicyWeakened` | `p`, `sp` or `pct` went down, for example from `p=reject` to `p=quarantine`. | The policy goes back up, or the alert is closed (see below). | Warning |
 | `NameserversChanged` | The domain's nameservers changed, often the start of a DNS migration. | They change back, or the alert is closed (see below). | Info |
 
-A check that hasn't run yet, or doesn't apply (no DKIM selectors, MTA-STS turned off or still being set up), never
-alerts.
+A check that hasn't run yet, or doesn't apply (no DKIM selectors, MTA-STS turned off or still being set up), never alerts.
 
 ### When a check alerts
 
 The rule for each check has an **Alert when** setting:
 
-* **When it breaks** (the default): alerts only once the check has passed at least once. A domain that was never
-  set up, for example one with no TLS-RPT record, stays quiet.
+* **When it breaks** (the default): alerts only once the check has passed at least once. A domain that was never set up, for example one with no TLS-RPT record, stays quiet.
 * **Whenever it fails**: alerts whenever the check fails.
 
-To stop a check alerting, switch its rule off: that never alerts, and closes any open alert. Different rules can use
-different modes for different domains, for example **Whenever it fails** for one client that must have every record in place.
+To stop a check alerting, switch its rule off: that never alerts, and closes any open alert. Different rules can use different modes for different domains, for example **Whenever it fails** for one client that must have every record in place.
 
-When a check first fails, nothing is sent. dotMARC checks it again about 15 minutes later and only alerts if it's
-still failing, so a brief DNS hiccup doesn't page anyone. The same applies to policy and nameserver changes.
+When a check first fails, nothing is sent. dotMARC checks it again about 15 minutes later and only alerts if it's still failing, so a brief DNS hiccup doesn't page anyone. The same applies to policy and nameserver changes.
 
-Upgrading to a version with DNS health alerts doesn't raise a flood of alerts: on its first run dotMARC notes which
-checks pass and the current policy and nameservers, and only alerts on changes from there.
+Upgrading to a version with DNS health alerts doesn't raise a flood of alerts: on its first run dotMARC notes which checks pass and the current policy and nameservers, and only alerts on changes from there.
 
-Nameservers changed alerts don't open a PSA ticket by default. Change that with the ticket rules, like any other
-alert type.
+Nameservers changed alerts don't open a PSA ticket by default. Change that with the ticket rules, like any other alert type.
 
 ### Closing policy and nameserver alerts
 
-A weaker DMARC policy or new nameservers may be deliberate, so these alerts compare against an accepted value. Any of
-these closes the alert and accepts the current policy or nameservers as the new normal:
+A weaker DMARC policy or new nameservers may be deliberate, so these alerts compare against an accepted value. Any of these closes the alert and accepts the current policy or nameservers as the new normal:
 
 * **Acknowledge** on the Alerts page (needs `AlertsManage`). It's recorded in the [audit log](./audit-log.mdx).
 * **Closing its PSA ticket** in HaloPSA, NinjaOne, ConnectWise, Autotask or SuperOps.
@@ -309,31 +221,24 @@ these closes the alert and accepts the current policy or nameservers as the new 
 
 ## Delivery channels
 
-Delivery is best-effort: a failed webhook call is logged as a warning and does not stop the alert
-from being recorded or shown in the Alerts feed, and does not affect the rest of that check cycle.
-Each destination is sent separately, so one that's down doesn't stop the others.
+Delivery is best-effort: a failed webhook call is logged as a warning and does not stop the alert from being recorded or shown in the Alerts feed, and does not affect the rest of that check cycle. Each destination is sent separately, so one that's down doesn't stop the others.
 
-For syncing alerts to a PSA instead of (or alongside) Teams, Slack or webhook delivery, see [PSA
-integration](./psa-integration.mdx).
+For syncing alerts to a PSA instead of (or alongside) Teams, Slack or webhook delivery, see [PSA integration](./psa-integration.mdx).
 
 ### Teams
 
-Sent as an Adaptive Card (`application/vnd.microsoft.card.adaptive`, schema version 1.5) via
-`POST` to the Teams webhook URL, with the domain, alert type, and message as a fact set under the
-alert title.
+Sent as an Adaptive Card (`application/vnd.microsoft.card.adaptive`, schema version 1.5) via `POST` to the Teams webhook URL, with the domain, alert type, and message as a fact set under the alert title.
 
 ### Slack
 
-Sent as a `POST` to a Slack incoming webhook, using Slack's Block Kit layout: a "dotMARC alert" header, the alert
-title, the domain and alert type side by side, then the message.
+Sent as a `POST` to a Slack incoming webhook, using Slack's Block Kit layout: a "dotMARC alert" header, the alert title, the domain and alert type side by side, then the message.
 
 <details>
 <summary>How to get a Slack webhook URL</summary>
 
 1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
 2. Under **Incoming Webhooks**, turn them on, then **Add New Webhook to Workspace** and pick the channel.
-3. On Alert settings, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts
-   `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
+3. On Alert settings, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
 
 </details>
 
@@ -361,6 +266,4 @@ Sent as a `POST` with a JSON body to the generic webhook URL:
 | `severity` | string | `Info`, `Warning` or `Critical`: the severity of the rule that raised the alert. |
 | `createdUtc` | string | ISO 8601 timestamp (UTC) of when the alert was raised. |
 
-There's no signature or shared secret on these requests, treat the webhook URL itself as the
-credential and keep it private. Your endpoint should return a 2xx status; a non-2xx or unreachable
-endpoint is logged and otherwise ignored.
+There's no signature or shared secret on these requests, treat the webhook URL itself as the credential and keep it private. Your endpoint should return a 2xx status; a non-2xx or unreachable endpoint is logged and otherwise ignored.

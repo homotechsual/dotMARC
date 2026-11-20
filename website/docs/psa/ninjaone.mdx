@@ -6,12 +6,9 @@ description: Raise and resolve NinjaOne tickets from dotMARC alerts, and resolve
 
 # NinjaOne
 
-dotMARC can open a NinjaOne ticket when an alert fires, resolve it when the alert resolves, and resolve the alert when a
-tech resolves or closes the ticket in NinjaOne. It can do this alongside HaloPSA, ConnectWise and Autotask: see
-[PSA integration](../psa-integration.mdx) for how several PSAs work together.
+dotMARC can open a NinjaOne ticket when an alert fires, resolve it when the alert resolves, and resolve the alert when a tech resolves or closes the ticket in NinjaOne. It can do this alongside HaloPSA, ConnectWise and Autotask: see [PSA integration](../psa-integration.mdx) for how several PSAs work together.
 
-NinjaOne only lets a signed-in person raise tickets, so dotMARC connects as a NinjaOne user, not as an app on its own.
-Tickets show that user as the requester. A NinjaOne technician account kept for dotMARC is the tidiest choice.
+NinjaOne only lets a signed-in person raise tickets, so dotMARC connects as a NinjaOne user, not as an app on its own. Tickets show that user as the requester. A NinjaOne technician account kept for dotMARC is the tidiest choice.
 
 ## 1. Add a client app
 
@@ -19,11 +16,9 @@ In NinjaOne, go to **Administration > Apps > API > Client app IDs** and select *
 
 - **Application platform:** Web (PHP, Java, .Net Core, etc.)
 - **Name:** dotMARC
-- **Redirect URIs:** your dotMARC address followed by `/psa/ninjaone/callback`, such as
-  `https://dotmarc.example.com/psa/ninjaone/callback`. The NinjaOne tab in dotMARC shows the exact address.
+- **Redirect URIs:** your dotMARC address followed by `/psa/ninjaone/callback`, such as `https://dotmarc.example.com/psa/ninjaone/callback`. The NinjaOne tab in dotMARC shows the exact address.
 - **Scopes:** Monitoring and Management. dotMARC doesn't need Control.
-- **Allowed grant types:** Authorization code and Refresh token. Leave Client credentials unticked: NinjaOne refuses to
-  raise tickets for an app signed in without a user.
+- **Allowed grant types:** Authorization code and Refresh token. Leave Client credentials unticked: NinjaOne refuses to raise tickets for an app signed in without a user.
 
 Save it, then copy the client ID and the client secret. NinjaOne shows the secret once.
 
@@ -32,14 +27,11 @@ Save it, then copy the client ID and the client secret. NinjaOne shows the secre
 1. In dotMARC, go to **Manage > PSA settings** and open the **NinjaOne** tab.
 2. Choose your **Instance**, the region in your NinjaOne address (eu, app for the US, us2, ca, oc or fed).
 3. Enter the **Client ID** and **Client secret**, and select **Save NinjaOne settings**.
-4. Select **Connect to NinjaOne** and sign in as the user dotMARC should raise tickets as. NinjaOne sends you back to
-   dotMARC, which shows who connected and when.
+4. Select **Connect to NinjaOne** and sign in as the user dotMARC should raise tickets as. NinjaOne sends you back to dotMARC, which shows who connected and when.
 
-dotMARC asks for the `monitoring`, `management` and `offline_access` scopes. `offline_access` is what lets dotMARC keep
-working after you close the page.
+dotMARC asks for the `monitoring`, `management` and `offline_access` scopes. `offline_access` is what lets dotMARC keep working after you close the page.
 
-Changing the instance, client ID or client secret disconnects dotMARC, because the saved sign-in belongs to the old app.
-Connect again afterwards.
+Changing the instance, client ID or client secret disconnects dotMARC, because the saved sign-in belongs to the old app. Connect again afterwards.
 
 ## 3. Choose how tickets are raised
 
@@ -53,38 +45,26 @@ Save, then use **Test the integration** at the bottom of the tab to raise and re
 
 ## Keeping the connection alive
 
-NinjaOne's refresh tokens last an hour unless they're used. dotMARC uses its token when it starts and every 20 minutes
-after, even when no alerts are firing and while NinjaOne tickets are switched off, so the connection stays alive while
-dotMARC is running.
+NinjaOne's refresh tokens last an hour unless they're used. dotMARC uses its token when it starts and every 20 minutes after, even when no alerts are firing and while NinjaOne tickets are switched off, so the connection stays alive while dotMARC is running.
 
-If dotMARC is stopped for more than an hour, for a long upgrade or an outage, NinjaOne forgets the sign-in. dotMARC then
-raises a **PSA connection lost** alert and stops raising NinjaOne tickets until someone selects **Reconnect** on the
-NinjaOne tab.
+If dotMARC is stopped for more than an hour, for a long upgrade or an outage, NinjaOne forgets the sign-in. dotMARC then raises a **PSA connection lost** alert and stops raising NinjaOne tickets until someone selects **Reconnect** on the NinjaOne tab.
 
 <details>
 <summary>Surviving longer gaps with sliding refresh tokens</summary>
 
-To survive longer gaps, ask NinjaOne for sliding refresh tokens, which last longer and renew as they're used. Email
-NinjaOne support at [support@ninjaone.com](mailto:support@ninjaone.com), or
-[support.eu@ninjaone.com](mailto:support.eu@ninjaone.com) for EU instances, and give them your client app's client ID.
+To survive longer gaps, ask NinjaOne for sliding refresh tokens, which last longer and renew as they're used. Email NinjaOne support at [support@ninjaone.com](mailto:support@ninjaone.com), or [support.eu@ninjaone.com](mailto:support.eu@ninjaone.com) for EU instances, and give them your client app's client ID.
 
 </details>
 
 ## How tickets are resolved
 
-When an alert resolves, dotMARC adds a private comment saying why and sets the ticket to **Resolved**. NinjaOne doesn't
-let other apps close a ticket directly, so its own rules close resolved tickets in time, the same as when a tech resolves
-one.
+When an alert resolves, dotMARC adds a private comment saying why and sets the ticket to **Resolved**. NinjaOne doesn't let other apps close a ticket directly, so its own rules close resolved tickets in time, the same as when a tech resolves one.
 
-dotMARC checks open tickets every few minutes. A ticket a tech resolves or closes, or moves to a custom status under
-Resolved or Closed, resolves its alert.
+dotMARC checks open tickets every few minutes. A ticket a tech resolves or closes, or moves to a custom status under Resolved or Closed, resolves its alert.
 
 ## Troubleshooting
 
-- **PSA connection lost:** NinjaOne refused dotMARC's saved sign-in, usually because dotMARC was stopped for over an
-  hour, or the client app was changed or deleted. Reconnect on the NinjaOne tab. The alert resolves once you do.
-- **"NinjaOne didn't give dotMARC a refresh token":** the client app doesn't allow the Refresh token grant type. Tick it,
-  save the app, and connect again.
+- **PSA connection lost:** NinjaOne refused dotMARC's saved sign-in, usually because dotMARC was stopped for over an hour, or the client app was changed or deleted. Reconnect on the NinjaOne tab. The alert resolves once you do.
+- **"NinjaOne didn't give dotMARC a refresh token":** the client app doesn't allow the Refresh token grant type. Tick it, save the app, and connect again.
 - **"NinjaOne refused the sign-in":** the client ID, client secret or redirect URI doesn't match the client app.
-- **`user_context_required`:** NinjaOne got a request from an app signed in without a user. Make sure the client app
-  allows Authorization code, and connect with **Connect to NinjaOne**.
+- **`user_context_required`:** NinjaOne got a request from an app signed in without a user. Make sure the client app allows Authorization code, and connect with **Connect to NinjaOne**.

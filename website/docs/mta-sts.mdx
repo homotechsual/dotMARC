@@ -7,46 +7,25 @@ import Checklist from '@site/src/components/Checklist';
 
 # MTA-STS
 
-[MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) tells receiving mail servers to require a
-valid, verified TLS connection when delivering to a domain. dotMARC can host the policy file on a
-domain's behalf, so nobody has to stand up their own hosting for it, serving
-`https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain that opts in below.
+[MTA-STS](https://www.rfc-editor.org/rfc/rfc8461) tells receiving mail servers to require a valid, verified TLS connection when delivering to a domain. dotMARC can host the policy file on a domain's behalf, so nobody has to stand up their own hosting for it, serving `https://mta-sts.<domain>/.well-known/mta-sts.txt` for any domain that opts in below.
 
-This deployment needs to have MTA-STS hosting set up first (see below) - one-time infrastructure
-work, done once regardless of how many domains later opt in. If it isn't done yet, the domain's
-**MTA-STS** tab will tell you.
+This deployment needs to have MTA-STS hosting set up first (see below) - one-time infrastructure work, done once regardless of how many domains later opt in. If it isn't done yet, the domain's **MTA-STS** tab will tell you.
 
 ## Hosting infrastructure (one-time)
 
-This needs a small amount of extra infrastructure, since it means serving valid TLS for an
-open-ended, admin-growing set of hostnames dotMARC doesn't know about until a customer enables it.
-What's needed depends on how this deployment runs:
+This needs a small amount of extra infrastructure, since it means serving valid TLS for an open-ended, admin-growing set of hostnames dotMARC doesn't know about until a customer enables it. What's needed depends on how this deployment runs:
 
-**With [Docker](./deploy-with-docker.mdx):** if you used `docker-compose.selfhosted.yml`, there's
-nothing more to do - `Caddyfile.selfhosted` already includes the on-demand-TLS block this feature
-needs, permanently, whether or not you ever turn the feature on. If you're using your own reverse
-proxy instead, add the `on_demand_tls`/`:443` blocks from `Caddyfile.selfhosted` to your own Caddy
-config - or the equivalent on-demand-certificate feature if you're not using Caddy.
+**With [Docker](./deploy-with-docker.mdx):** if you used `docker-compose.selfhosted.yml`, there's nothing more to do - `Caddyfile.selfhosted` already includes the on-demand-TLS block this feature needs, permanently, whether or not you ever turn the feature on. If you're using your own reverse proxy instead, add the `on_demand_tls`/`:443` blocks from `Caddyfile.selfhosted` to your own Caddy config - or the equivalent on-demand-certificate feature if you're not using Caddy.
 
-**On [Azure](./deploy-to-azure.mdx):** the Container App needs extra permissions to manage its own
-custom domains and certificates. On a new deployment, set `enableMtaStsHosting` to `true` in the
-template. On one that's already running, use the targeted script in
-[step 8 of the Azure guide](./deploy-to-azure.mdx#8-turn-on-mta-sts-hosting-for-an-existing-install),
-which changes nothing else.
+**On [Azure](./deploy-to-azure.mdx):** the Container App needs extra permissions to manage its own custom domains and certificates. On a new deployment, set `enableMtaStsHosting` to `true` in the template. On one that's already running, use the targeted script in [step 8 of the Azure guide](./deploy-to-azure.mdx#8-turn-on-mta-sts-hosting-for-an-existing-install), which changes nothing else.
 
 :::danger[On Azure, rebuilding dotMARC can change the hosting hostname]
 
-Customers' CNAMEs point at the Container App's generated `azurecontainerapps.io` hostname, and that
-changes if the Container Apps environment (or the whole resource group) is deleted and recreated.
-Every hosted domain's records then need updating. See the warning in
-[step 8 of the Azure guide](./deploy-to-azure.mdx#8-turn-on-mta-sts-hosting-for-an-existing-install)
-for what to note beforehand and what to do afterwards.
+Customers' CNAMEs point at the Container App's generated `azurecontainerapps.io` hostname, and that changes if the Container Apps environment (or the whole resource group) is deleted and recreated. Every hosted domain's records then need updating. See the warning in [step 8 of the Azure guide](./deploy-to-azure.mdx#8-turn-on-mta-sts-hosting-for-an-existing-install) for what to note beforehand and what to do afterwards.
 
 :::
 
-Either way, set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to -
-typically this deployment's own hostname (its `*.azurecontainerapps.io` hostname on Azure - see the
-note further down on why).
+Either way, set `MtaSts__HostingHostname` to the hostname you'll tell customers to CNAME to - typically this deployment's own hostname (its `*.azurecontainerapps.io` hostname on Azure - see the note further down on why).
 
 <Checklist id="mta-sts-hosting-infrastructure" items={[
   "Set MtaSts__HostingHostname",
@@ -62,19 +41,11 @@ From a domain's **MTA-STS** tab, enable it and add a CNAME for it:
 mta-sts.<domain> CNAME <the hosting hostname shown on the MTA-STS tab>
 ```
 
-dotMARC verifies it, provisions a certificate, and starts serving the policy automatically once
-it resolves. If this deployment runs on Azure, one more record is needed before Azure will bind
-the custom domain. The MTA-STS tab shows its exact value once you're viewing it, right below the
-CNAME instructions. Self-hosted deployments need only the CNAME above.
+dotMARC verifies it, provisions a certificate, and starts serving the policy automatically once it resolves. If this deployment runs on Azure, one more record is needed before Azure will bind the custom domain. The MTA-STS tab shows its exact value once you're viewing it, right below the CNAME instructions. Self-hosted deployments need only the CNAME above.
 
 ## TLS reporting
 
-[SMTP TLS Reporting (TLSRPT)](https://www.rfc-editor.org/rfc/rfc8460) complements MTA-STS by
-asking sending mail systems to report TLS delivery failures. Configure a separate mailbox for
-these reports with `Graph__TlsrptMailboxAddress`. Once it is set, dotMARC checks every domain's
-TLSRPT record daily, polls that mailbox for aggregate JSON reports, and shows the DNS status on
-the domain overview. Received reports appear in the domain's **TLS reports** tab with per-policy
-successful and failed session totals plus the reported failure reasons.
+[SMTP TLS Reporting (TLSRPT)](https://www.rfc-editor.org/rfc/rfc8460) complements MTA-STS by asking sending mail systems to report TLS delivery failures. Configure a separate mailbox for these reports with `Graph__TlsrptMailboxAddress`. Once it is set, dotMARC checks every domain's TLSRPT record daily, polls that mailbox for aggregate JSON reports, and shows the DNS status on the domain overview. Received reports appear in the domain's **TLS reports** tab with per-policy successful and failed session totals plus the reported failure reasons.
 
 The expected record is:
 
@@ -82,80 +53,43 @@ The expected record is:
 _smtp._tls.<domain> TXT "v=TLSRPTv1; rua=mailto:<your TLSRPT mailbox>"
 ```
 
-For a missing or misconfigured record, users with domain-edit access can use **Push via your DNS
-provider** from the domain overview. The Cloudflare and Azure DNS flows create the record when it
-is absent or update only its `rua` tag when it is already a valid TLSRPT record, preserving other
-tags. A record that does not start with `v=TLSRPTv1` is left for manual review rather than being
-overwritten.
+For a missing or misconfigured record, users with domain-edit access can use **Push via your DNS provider** from the domain overview. The Cloudflare and Azure DNS flows create the record when it is absent or update only its `rua` tag when it is already a valid TLSRPT record, preserving other tags. A record that does not start with `v=TLSRPTv1` is left for manual review rather than being overwritten.
 
-When a received TLSRPT report contains failed TLS delivery sessions, dotMARC creates a warning in
-**Alerts** and sends it through the configured notification channel. Repeated reports are subject
-to the existing alert cooldown. A later TLSRPT report with no failed sessions resolves the alert
-automatically. See [Alerts](./alerts.mdx) for how delivery and the webhook payload work.
+When a received TLSRPT report contains failed TLS delivery sessions, dotMARC creates a warning in **Alerts** and sends it through the configured notification channel. Repeated reports are subject to the existing alert cooldown. A later TLSRPT report with no failed sessions resolves the alert automatically. See [Alerts](./alerts.mdx) for how delivery and the webhook payload work.
 
-If this deployment has [DNS provider push](./dns-provider-push.mdx) configured, a small push button also appears in
-the row for any domain waiting on DNS, in addition to (not instead of) the manual CNAME
-instructions above. Clicking it detects the domain's DNS provider and either starts the push flow,
-authorizing via that provider's own consent screen with nothing stored, or shows a message
-explaining why it couldn't: the domain's provider wasn't recognized, or that provider's OAuth app
-isn't configured on this deployment.
+If this deployment has [DNS provider push](./dns-provider-push.mdx) configured, a small push button also appears in the row for any domain waiting on DNS, in addition to (not instead of) the manual CNAME instructions above. Clicking it detects the domain's DNS provider and either starts the push flow, authorizing via that provider's own consent screen with nothing stored, or shows a message explaining why it couldn't: the domain's provider wasn't recognized, or that provider's OAuth app isn't configured on this deployment.
 
 <details>
 <summary>Why the Azure hosting hostname is the generated azurecontainerapps.io one</summary>
 
-On the Azure deployment, that hosting hostname is the Container App's own generated
-`*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't
-a choice dotMARC makes: Azure's free managed certificates require the CNAME to point directly at
-that generated domain, and explicitly refuse to issue or renew a certificate through any
-intermediate CNAME, including another custom domain on the same app (see [Azure's own
-requirements](https://learn.microsoft.com/azure/container-apps/custom-domains-managed-certificates#free-certificate-requirements)).
-The self-hosted Caddy path doesn't have this restriction, since it isn't using Azure's managed
-certificates.
+On the Azure deployment, that hosting hostname is the Container App's own generated `*.azurecontainerapps.io` domain, not a nicer custom domain you might have bound to it. This isn't a choice dotMARC makes: Azure's free managed certificates require the CNAME to point directly at that generated domain, and explicitly refuse to issue or renew a certificate through any intermediate CNAME, including another custom domain on the same app (see [Azure's own requirements](https://learn.microsoft.com/azure/container-apps/custom-domains-managed-certificates#free-certificate-requirements)). The self-hosted Caddy path doesn't have this restriction, since it isn't using Azure's managed certificates.
 
 </details>
 
 <details>
 <summary>A note on scale (Azure)</summary>
 
-Every domain you enable adds one custom domain, and one managed certificate, to the same shared
-Container App. Azure doesn't publish a hard limit on how many of either a single Container App (or
-its environment) can hold, unlike App Service, which documents a cap of 1,000 public certificates
-per plan. There's no equivalent number for Container Apps in Microsoft's docs, so growth here is
-soft-bounded rather than capped: each certificate is issued and renewed independently, so a large
-domain count means more independent renewals to track, not a ceiling you hit. This isn't something
-to plan around for a typical list of domains; it'd only be worth revisiting if the enabled-domain
-count ran into the hundreds.
+Every domain you enable adds one custom domain, and one managed certificate, to the same shared Container App. Azure doesn't publish a hard limit on how many of either a single Container App (or its environment) can hold, unlike App Service, which documents a cap of 1,000 public certificates per plan. There's no equivalent number for Container Apps in Microsoft's docs, so growth here is soft-bounded rather than capped: each certificate is issued and renewed independently, so a large domain count means more independent renewals to track, not a ceiling you hit. This isn't something to plan around for a typical list of domains; it'd only be worth revisiting if the enabled-domain count ran into the hundreds.
 
 </details>
 
 ### Mode
 
-* **Testing**: the policy is published, but recommends senders only report failures rather than
-  reject mail. Use this while you confirm everything's working before enforcing.
+* **Testing**: the policy is published, but recommends senders only report failures rather than reject mail. Use this while you confirm everything's working before enforcing.
 * **Enforce**: senders are told to actually require the connection to be secure.
-* **None**: publishes a policy that asserts no strictness, effectively opting out while still
-  responding at the well-known URL.
+* **None**: publishes a policy that asserts no strictness, effectively opting out while still responding at the well-known URL.
 
 ### Max age and MX hosts
 
-**Max age** is how long (in seconds) a receiving server should cache the policy before re-checking
-it. The default (7 days) is fine for most domains; lower it temporarily while you're actively
-changing MX records. **MX hosts** should list every hostname mail for this domain is actually
-delivered to, one per line. A receiving server rejects the connection if the live MX record
-points somewhere not on this list.
+**Max age** is how long (in seconds) a receiving server should cache the policy before re-checking it. The default (7 days) is fine for most domains; lower it temporarily while you're actively changing MX records. **MX hosts** should list every hostname mail for this domain is actually delivered to, one per line. A receiving server rejects the connection if the live MX record points somewhere not on this list.
 
-MX hosts are fetched automatically from DNS when you enable MTA-STS for a domain, and whenever the
-field is empty, they're filled in from DNS for you to review. **Look up from DNS** fetches them again at any time.
-Nothing changes until you select **Save**, since what's live in DNS right now might not match what you actually want
-published.
+MX hosts are fetched automatically from DNS when you enable MTA-STS for a domain, and whenever the field is empty, they're filled in from DNS for you to review. **Look up from DNS** fetches them again at any time. Nothing changes until you select **Save**, since what's live in DNS right now might not match what you actually want published.
 
-MTA-STS can't be on with no MX hosts: the policy would list no mail servers, and senders that check it could refuse
-to deliver. If a domain is ever in that state, its MTA-STS tab says so and fills in the hosts from DNS, ready to save.
+MTA-STS can't be on with no MX hosts: the policy would list no mail servers, and senders that check it could refuse to deliver. If a domain is ever in that state, its MTA-STS tab says so and fills in the hosts from DNS, ready to save.
 
 ## Status
 
-The domain detail page's MTA-STS tab shows live status alongside the enable and configuration
-controls.
+The domain detail page's MTA-STS tab shows live status alongside the enable and configuration controls.
 
 | Status | Meaning |
 | --- | --- |
@@ -165,12 +99,6 @@ controls.
 | Active | The policy is live and serving correctly. |
 | Failed | Something regressed after being Active, or provisioning failed. Check the detail message on the domain's MTA-STS tab. |
 
-When a domain stops working, the detail message first says whether its CNAME still points at this deployment. If it
-now points somewhere else (typically the old hostname after the deployment was rebuilt on Azure), or has gone, the
-message names where it points and what to change it to, instead of just saying the policy stopped being served. Fix
-the record (**Push DNS Records** does it where your DNS provider is supported) and the domain should recover on its next
-check, with no need to disable and re-enable it.
+When a domain stops working, the detail message first says whether its CNAME still points at this deployment. If it now points somewhere else (typically the old hostname after the deployment was rebuilt on Azure), or has gone, the message names where it points and what to change it to, instead of just saying the policy stopped being served. Fix the record (**Push DNS Records** does it where your DNS provider is supported) and the domain should recover on its next check, with no need to disable and re-enable it.
 
-A domain re-checks automatically on a schedule (faster while onboarding, slower once Active). The refresh button
-beside **Policy hosting status** checks it straight away. Give it a few minutes after a DNS change before assuming
-something's wrong.
+A domain re-checks automatically on a schedule (faster while onboarding, slower once Active). The refresh button beside **Policy hosting status** checks it straight away. Give it a few minutes after a DNS change before assuming something's wrong.
