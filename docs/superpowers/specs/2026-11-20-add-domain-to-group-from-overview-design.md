@@ -35,7 +35,7 @@ Someone with permission to edit domains, looking at a domain, should be able to 
 
 ## A separate gap this turned up
 
-The rule above is not enforced for the one place group-limited writers exist, API keys. A key limited to groups can remove a domain from the last of its own groups and then loses sight of it, with nothing in the response or the docs saying so. Enforcing it means `SetGroupsAsync` returns an error ("this would take the domain out of every group this key can see") when the resulting groups would include none of the key's own, with a test beside the existing scoped-key tests, and a line in `api.mdx` under Keys limited to groups. It changes documented API behaviour a little, so it is better as its own small change than folded into this one, and could ship as a patch since nothing else depends on it.
+The rule above is not enforced for the one place group-limited writers exist, API keys. A key limited to groups can remove a domain from the last of its own groups and then loses sight of it, with nothing in the response or the docs saying so. Enforcing it means `SetGroupsAsync` returns an error ("this would take the domain out of every group this key can see") when the resulting groups would include none of the key's own, with a test beside the existing scoped-key tests, and a line in `api.mdx` under Keys limited to groups. It changes documented API behaviour a little, so it is its own small change and not folded into the Overview work. Decided: it targets 0.14, not a patch.
 
 ## Left to the builder
 
@@ -53,6 +53,5 @@ A change that leaves the page stale. A group-limited person removing their own a
 
 ## Open questions
 
-* Should the API's last-group rule be fixed now, as the small separate change described above?
 * Should the control offer **Create group** to people who also have `GroupsOrTagsWrite`?
 * Should a chip open the Dashboard filtered to the group, or Manage groups?
