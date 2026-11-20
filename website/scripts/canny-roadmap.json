@@ -265,5 +265,59 @@
       "The DMARC check showed a plain tick whenever dotMARC's mailbox was anywhere in rua=, however many other addresses sat beside it. That hid a real risk, because receivers may only send reports to the first couple of addresses, and it gave no way to drop a second address once a trial of another tool was over.",
       "The DMARC record check now reads every rua= address. dotMARC's mailbox beside one other address shows as OK, other rua: information that never raises an alert. dotMARC's mailbox beside two or more others shows as Too many rua addresses and does alert. Push via your DNS provider stays available in both cases, so you can rewrite rua= to dotMARC's mailbox alone when you are ready, after confirming the change."
     ]
+  },
+  {
+    "title": "Alert rules: set thresholds, scope and severity per client",
+    "version": "v0.13.0",
+    "status": "complete",
+    "details": [
+      "Every client got the same alert thresholds, severity and cooldown, with no way to say that one client needs a stricter or looser setting, or that an alert should be left off for one group.",
+      "A new Alert rules page holds one default rule per kind of alert, carrying the values you already had, and lets you add your own. A rule can apply to chosen groups, tags and domains and leave some out, runs in order, and can stop later rules for the domains it covers, so a stricter threshold for one client sits above the default without touching it. Severity (now including Critical), cooldown and close-after are set per rule, and the Alerts page shows which rule raised each alert. A Manage alert rules permission controls who can change them, and the API can read them."
+    ]
+  },
+  {
+    "title": "Choose where each alert goes and whether it opens a ticket",
+    "version": "v0.13.0",
+    "status": "complete",
+    "details": [
+      "Alerts went to one Teams channel, one Slack channel and one webhook for everything, and the ticket rules were separate from them.",
+      "Destinations are now named, as many as you like, each with its own on/off switch, and a rule sends to all of them or only the ones you choose. A rule can also follow the ticket rules, never open a ticket, or always open one. The channels you had are copied across on upgrade, and an alert raised again while its ticket is still open now shows that ticket on the Alerts page instead of none."
+    ]
+  },
+  {
+    "title": "Quiet hours and escalation for alerts",
+    "version": "v0.13.0",
+    "status": "complete",
+    "details": [
+      "An alert found at 3am was sent at 3am, and an alert nobody picked up stayed as quiet as the first message.",
+      "A rule can hold its notifications until a daily quiet window ends, or mute them, in the time zone you set on Alert settings, with Critical alerts able to ignore the window. A rule can also escalate: if the alert is still open after a time you choose, it is sent to extra destinations. The alert is recorded and shown either way, and acknowledging or resolving it stops the escalation."
+    ]
+  },
+  {
+    "title": "Alert on pass rate, message volume and rejected mail",
+    "version": "v0.13.0",
+    "status": "complete",
+    "details": [
+      "Alerts covered missing reports, broken records and senders, but not a number in the reports crossing a line, such as a client's pass rate falling or their mail volume dropping off.",
+      "Three new kinds of alert, each off until you switch its rule on: DMARC pass rate low, Message volume changed (a drop, a rise or either, compared with the period before) and Rejected or quarantined messages high. Each has a minimum message count so a quiet domain never alerts on a handful of messages, closes by itself when the number recovers, and can have a scoped copy with a different threshold for one client."
+    ]
+  },
+  {
+    "title": "Record which senders are authorised, and alert on the rest",
+    "version": "v0.13.0",
+    "status": "complete",
+    "details": [
+      "dotMARC showed who was sending as a domain but had no place to record what your team decided about each sender, so every review started again.",
+      "The Sources tab has a Decision column: Authorised, Unauthorised or Under review, with a note, set for one domain, for a group or as a baseline for every domain, with an IP able to override its service. A sender nobody has decided on raises a new sender alert and counts on the domain's Overview, and an Unauthorised sender whose mail is still delivered raises an alert. Client reports say how much mail from unauthorised senders was blocked, the API returns each decision, and a Review senders permission controls who can change them."
+    ]
+  },
+  {
+    "title": "See which services are sending as a domain",
+    "version": "v0.13.0",
+    "status": "complete",
+    "details": [
+      "The Sources tab listed individual IP addresses, which left you to work out that a dozen of them were all Microsoft 365 or Mailchimp.",
+      "A Senders table groups a domain's sources by sending service, with its share of mail, pass rate, and a Fix that names the service. Each row shows an evidence score and the signals behind it, including whether the sending IP falls in a range your own SPF record authorises for that service. The service is also named in failure recommendations, client reports, the client portal and the sources API."
+    ]
   }
 ]
