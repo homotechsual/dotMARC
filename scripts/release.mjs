@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {tagBranchProblem, tagProblem} from './release-tags.mjs';
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const projectVersionFile = join(repositoryRoot, 'Directory.Build.props');
@@ -171,6 +172,11 @@ function prepare(version) {
 }
 
 function tag(version, allowOutdated = false) {
+  const branchProblem = tagBranchProblem(run('git', ['rev-parse', '--abbrev-ref', 'HEAD']));
+  if (branchProblem) {
+    fail(branchProblem);
+  }
+
   check(version);
   dependencies(allowOutdated);
   const slug = slugFor(version);
@@ -191,6 +197,7 @@ function tag(version, allowOutdated = false) {
   run('git', ['commit', '-m', `Release v${version}`]);
   run('git', ['tag', '-a', `v${version}`, '-m', `Release v${version}`]);
   console.log(`[release] Created commit and tag v${version}`);
+  console.log(`[release] Push the branch, merge it into main, and only then push the tag: git push origin v${version}. The release workflow refuses a release tag whose commit is not on main.`);
 }
 
 const [command, rawVersion, option] = process.argv.slice(2);
@@ -198,8 +205,19 @@ if (command === 'deps') {
   dependencies(rawVersion === '--allow-outdated');
   process.exit(0);
 }
+if (command === 'verify-tag') {
+  // verify-tag <tag> [commit]: the commit (default HEAD) must be on the branch the tag's kind belongs to. The release workflow runs
+  // this before anything is built, and it can be run by hand before pushing a tag.
+  const problem = tagProblem(rawVersion ?? '', option ? run('git', ['rev-parse', option]) : run('git', ['rev-parse', 'HEAD']), repositoryRoot);
+  if (problem) {
+    fail(problem);
+  }
+
+  console.log(`[release] ${rawVersion} may be cut from this commit.`);
+  process.exit(0);
+}
 if (!command || !rawVersion || !['prepare', 'check', 'tag', 'deps'].includes(command)) {
-  fail('Usage: node scripts/release.mjs <prepare|check|tag> <version> | deps');
+  fail('Usage: node scripts/release.mjs <prepare|check|tag> <version> | deps | verify-tag <tag> [commit]');
 }
 
 const version = normalizeVersion(rawVersion);

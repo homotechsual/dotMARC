@@ -49,7 +49,7 @@ Each workflow serializes its builds and deployments and deploys the image by dig
 | Step | Done by | Trigger |
 | --- | --- | --- |
 | Bump the version, draft and tag the release post | You, with `scripts/release.mjs` | Manual |
-| Validate metadata, test, build and publish images, create the GitHub release | `release.yml` | Automatic on a `v*.*.*` tag push |
+| Check the tag is on the right branch, validate metadata, test, build and publish images, create the GitHub release | `release.yml` | Automatic on a `v*.*.*` tag push |
 | Publish the Canny changelog entry | `release.yml`, job `canny-changelog` | Automatic, after the images and GitHub release succeed |
 | Link shipped ideas to that entry | Same job | Automatic, using each idea's tag and status in Canny at that moment |
 | Mark an idea complete | You | Manual: in Canny, or via the roadmap sync workflow |
@@ -170,11 +170,36 @@ entries cannot be listed, or Canny rejects the entry.
    Updates page sorts by date alone: two releases on the same day would otherwise list in the wrong order.
 4. **Write the post**, then `node scripts/release.mjs tag 0.7.0`, which refuses to run with
    unrelated working tree changes, a missing or placeholder post, an existing tag, or outdated or vulnerable packages.
-5. **Push.** `git push origin develop v0.7.0`, then open a pull request from `develop` to `main` and merge it once
-   the checks pass. Everything from here is automatic.
+5. **Merge, then push the tag.** `git push origin develop`, open a pull request from `develop` to `main`, and merge it
+   once the checks pass, using **Create a merge commit**. Then `git push origin v0.7.0`. The tag goes last because the
+   release workflow refuses a release tag whose commit isn't on `main` (see
+   [Which branch a tag comes from](#which-branch-a-tag-comes-from)). Everything from here is automatic.
 6. **Check the run.** In the `canny-changelog` job log, look for one `Linking "..."` line per shipped
    idea and a final `Published entry ... linkedIdeas=N` line. A `Not linking "..."` line means an
    idea was tagged for this version but was not complete at the time.
+
+## Which branch a tag comes from
+
+GitHub's settings can't restrict a tag to a branch, so `release.yml` does it. Its first job, `verify-tag`, runs before
+anything is built, tested or published:
+
+| Tag | Shape | Its commit must be on |
+| --- | --- | --- |
+| Release | `v1.2.3` | `main` |
+| Pre-release | `v1.2.3-beta.1`, `v1.2.3-rc.1` | `develop` |
+
+"On" means reachable: the commit is on the branch or in its history. A release commit made on `develop` becomes
+reachable from `main` once the pull request is merged with a merge commit. A squash or rebase merge makes new commits on
+`main` and leaves the tagged one off it, so the tag is refused. Any other tag shape is refused too.
+
+If a release tag is pushed too early, the run fails at `verify-tag` and nothing is published. Merge the pull request
+into `main` and re-run the workflow; the check reads `main` again when it re-runs. To check a tag before pushing it, run
+`node scripts/release.mjs verify-tag v0.7.0` (add a commit as a third argument to check one other than `HEAD`, after
+`git fetch origin`).
+
+`release.mjs tag` also refuses to run anywhere but `develop`, or `main` for a fix to the released product. Pre-release
+tags are checked this way, but the pipeline doesn't publish them yet: `release.mjs` and the image steps accept only
+`vX.Y.Z`, so a pre-release tag that passes `verify-tag` stops at the next check.
 
 ## The website follows the latest release
 

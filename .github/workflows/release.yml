@@ -16,7 +16,29 @@ env:
   DOCKERHUB_IMAGE: homotechsual/dotmarc
 
 jobs:
+  # Nothing is built or published until the tagged commit is on the branch its kind of tag belongs to: a release tag (v1.2.3)
+  # on main, a pre-release tag (v1.2.3-beta.1) on develop. Tags can't be restricted that way in GitHub's settings, so the
+  # workflow does it. If a release tag is pushed before its pull request is merged into main, merge it and re-run this workflow.
+  verify-tag:
+    name: Check the tag is on the right branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require the tagged commit to be on main (release) or develop (pre-release)
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG="${INPUT_VERSION:-$REF_NAME}"
+          node scripts/release.mjs verify-tag "v${TAG#v}" "$GITHUB_SHA"
+
   test:
+    needs: verify-tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,6 +67,7 @@ jobs:
   publish-images:
     # Builds alongside the tests rather than after them. It only pushes the commit-sha tag: the version tags and
     # `latest` are applied by the promote job below, once the tests have passed.
+    needs: verify-tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
