@@ -65,9 +65,14 @@ Pushing a record that was not reviewed. One domain's failure hiding the others' 
 * Audit: one entry per domain and one for the batch, with previous values.
 * Browser check on the demo, if the demo has a fake provider: select domains, review, push, see per-domain results. If it has none, add a demo provider first.
 
+## Settled in planning (my calls, to be corrected if wrong)
+
+* The batch size limit starts at 50.
+* `dmarc-auth` is not in the first version.
+* Failed domains are retried with a fresh sign-in. The provider session is never kept past the batch.
+* A domain that would lose a CNAME delegation is unticked by default in the review and needs an explicit tick.
+* The demo has no DNS push provider (only Cloudflare, Azure DNS and Google Cloud DNS are registered), so a fake demo provider is part of this work, in the same way as `DemoPsaProvider`.
+
 ## Open questions
 
-* The batch size limit, and whether `dmarc-auth` belongs in the first version.
-* Should the session be kept in memory for the life of the batch so failed domains can be retried without signing in again, or is a fresh sign-in acceptable?
-* Does a lost delegation (a CNAME replaced) need an explicit extra confirmation per domain in a batch?
-* Does the demo have a fake DNS push provider to drive this, and if not should one be added with it?
+* Does one token serve several zones on each of the three providers? Slice C answers this against real test zones. Until then the design assumes it does and keeps the single-domain path untouched.
