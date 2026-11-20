@@ -117,7 +117,7 @@ else
                 }
             </MudTd>
             <MudTd DataLabel="Tickets">
-                @foreach (var ticket in context.Tickets.OrderBy(ticket => ticket.Psa))
+                @foreach (var ticket in _tickets[context.Id].OrderBy(ticket => ticket.Psa))
                 {
                     var label = $"{ticket.Psa.DisplayName()} #{ticket.TicketId}";
                     var state = ticket.IsOpen ? "Open" : "Closed";
@@ -149,6 +149,7 @@ else
     private List<AlertEvent>? _alerts;
     private HashSet<string> _domainNames = [];
     private Dictionary<PsaKind, string?> _ticketUrlTemplates = [];
+    private ILookup<int, AlertTicket> _tickets = Array.Empty<AlertTicket>().ToLookup(ticket => ticket.AlertEventId);
 
     private string? _domainFilter;
     private string? _typeFilter;
@@ -207,10 +208,12 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _alerts = await db.AlertEvents
             .AsNoTracking()
-            .Include(e => e.Tickets)
             .OrderByDescending(e => e.CreatedUtc)
             .Take(100)
             .ToListAsync();
+
+        // An alert raised again while an earlier copy's ticket is open shows that ticket too, rather than none.
+        _tickets = await AlertTicketLinks.LoadAsync(db, _alerts);
 
         _showRule = AlertRuleAccess.MayView((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
         _rulesById = _showRule ? await db.AlertRules.AsNoTracking().ToDictionaryAsync(rule => rule.Id) : [];

@@ -302,4 +302,28 @@ public sealed class AlertEndpointTests : IAsyncLifetime
         Assert.Equal([ticketed], withTicket!.Items.Select(alert => alert.Id));
         Assert.Equal([bare], without!.Items.Select(alert => alert.Id));
     }
+
+    [Fact]
+    public async Task ARaisedAgainAlert_CarriesTheOpenTicketOfItsEarlierCopy_AndCountsAsHavingOne()
+    {
+        await _host.SeedDomainAsync("api-reraised.example", monitored: false);
+        var earlier = await SeedAlertAsync("api-reraised.example", AlertTypes.SuspiciousRejectActivity);
+        var reRaised = await SeedAlertAsync("api-reraised.example", AlertTypes.SuspiciousRejectActivity);
+        await using (var context = _host.CreateContext())
+        {
+            context.AlertTickets.Add(new DotMarc.Psa.AlertTicket { AlertEventId = earlier, Psa = DotMarc.Psa.PsaKind.HaloPsa, TicketId = "T-2001", IsOpen = true, CreatedUtc = DateTimeOffset.UtcNow });
+            await context.SaveChangesAsync();
+        }
+
+        var (_, secret) = await _host.CreateKeyAsync([Permission.AlertsView]);
+        using var client = _host.ClientFor(secret);
+
+        var all = await client.GetFromJsonAsync<ApiPage<ApiAlert>>("/api/v1/alerts?domain=api-reraised.example");
+        var withTicket = await client.GetFromJsonAsync<ApiPage<ApiAlert>>("/api/v1/alerts?domain=api-reraised.example&hasOpenTicket=true");
+        var without = await client.GetFromJsonAsync<ApiPage<ApiAlert>>("/api/v1/alerts?domain=api-reraised.example&hasOpenTicket=false");
+
+        Assert.Equal("T-2001", Assert.Single(all!.Items.Single(alert => alert.Id == reRaised).Tickets).TicketId);
+        Assert.Equal([earlier, reRaised], withTicket!.Items.Select(alert => alert.Id).Order());
+        Assert.Empty(without!.Items);
+    }
 }
