@@ -48,7 +48,7 @@ public sealed class AlertRuleSeederTests : IAsyncLifetime
             Assert.Equal(rule.Kind, rule.DefaultKey);
             Assert.Equal(kind.DisplayName, rule.Name);
             Assert.Equal(kind.DefaultSeverity, rule.Severity);
-            Assert.True(rule.Enabled);
+            Assert.Equal(kind.EnabledByDefault, rule.Enabled);
             Assert.True(rule.StopProcessing);
             Assert.NotNull(rule.ParametersJson);
         });

@@ -27,6 +27,21 @@ public static class AlertRuleParameterKeys
 
     /// <summary>New sender: with <c>afterDays</c>, how many days Under review lasts before the alert is raised again.</summary>
     public const string UnderReviewDays = "underReviewDays";
+
+    /// <summary>Pass rate low: the percentage passing DMARC that the rate must stay at or above.</summary>
+    public const string BelowPercent = "belowPercent";
+
+    /// <summary>The three metric kinds: how many days back the numbers are counted over.</summary>
+    public const string WindowDays = "windowDays";
+
+    /// <summary>Message volume changed: drop, rise or either.</summary>
+    public const string Direction = "direction";
+
+    /// <summary>Message volume changed: the percentage the volume must move by.</summary>
+    public const string ChangePercent = "changePercent";
+
+    /// <summary>Rejected or quarantined messages high: how many messages in the window raise the alert.</summary>
+    public const string MessagesAtLeast = "messagesAtLeast";
 }
 
 /// <summary>A rule's own parameter values. A value the rule does not set, or sets to something unreadable, falls back to the
@@ -44,6 +59,9 @@ public sealed class AlertRuleParameters
         _values.TryGetValue(key, out var text) && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value
             : fallback;
+
+    public string Text(string key, string fallback) =>
+        _values.TryGetValue(key, out var text) && !string.IsNullOrWhiteSpace(text) ? text : fallback;
 
     /// <summary>What Under review means for a new sender rule: decided unless the rule says otherwise. Alerting again after some days
     /// uses the rule's days, or 14 when it sets none.</summary>

@@ -75,7 +75,7 @@ public sealed class AlertRuleMaterialisationTests : IAsyncLifetime
             var stored = Parameters(rule);
             Assert.Equal(kind.Parameters.Select(parameter => parameter.Key).Order(), stored.Keys.Order());
             Assert.All(kind.Parameters, parameter => Assert.Equal(parameter.Default, stored[parameter.Key]));
-            Assert.True(rule.Enabled);
+            Assert.Equal(kind.EnabledByDefault, rule.Enabled);
             Assert.Null(rule.AutoCloseDays);
         }
     }

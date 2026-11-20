@@ -2217,7 +2217,10 @@
                   "ClientReportFailed",
                   "PsaConnectionLost",
                   "NewUnreviewedSender",
-                  "UnauthorisedSenderDelivered"
+                  "UnauthorisedSenderDelivered",
+                  "PassRateLow",
+                  "VolumeChanged",
+                  "RejectedMessagesHigh"
                 ],
                 "type": "string"
               },
@@ -2454,7 +2457,10 @@
                   "ClientReportFailed",
                   "PsaConnectionLost",
                   "NewUnreviewedSender",
-                  "UnauthorisedSenderDelivered"
+                  "UnauthorisedSenderDelivered",
+                  "PassRateLow",
+                  "VolumeChanged",
+                  "RejectedMessagesHigh"
                 ],
                 "type": "string"
               },

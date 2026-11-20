@@ -26,6 +26,9 @@ public static class AlertTypes
     public const string PsaConnectionLost = "PsaConnectionLost";
     public const string NewUnreviewedSender = "NewUnreviewedSender";
     public const string UnauthorisedSenderDelivered = "UnauthorisedSenderDelivered";
+    public const string PassRateLow = "PassRateLow";
+    public const string VolumeChanged = "VolumeChanged";
+    public const string RejectedMessagesHigh = "RejectedMessagesHigh";
 
     public static IReadOnlyList<AlertTypeInfo> All { get; } =
     [
@@ -47,6 +50,9 @@ public static class AlertTypes
         new(PsaConnectionLost, "PSA connection lost", "dotMARC can no longer sign in to a PSA, so it isn't raising tickets there until someone reconnects.", CreatesTicketByDefault: false),
         new(NewUnreviewedSender, "New sender to review", "A sender that nobody has decided on has started sending as a domain. Mark it Authorised, Unauthorised or Under review.", CreatesTicketByDefault: false),
         new(UnauthorisedSenderDelivered, "Unauthorised sender mail delivered", "Mail from a sender marked Unauthorised is reaching inboxes. Your DMARC policy isn't blocking it."),
+        new(PassRateLow, "DMARC pass rate low", "The share of a domain's mail passing DMARC over the last few days is below the level the rule sets.", CreatesTicketByDefault: false),
+        new(VolumeChanged, "Message volume changed", "A domain's mail volume has dropped or risen sharply compared with the period before.", CreatesTicketByDefault: false),
+        new(RejectedMessagesHigh, "Rejected or quarantined messages high", "A domain had more rejected or quarantined messages over the last few days than the rule allows.", CreatesTicketByDefault: false),
     ];
 
     /// <summary>The DNS health alert types (see DnsHealthAlertEvaluator), which close themselves when the domain stops

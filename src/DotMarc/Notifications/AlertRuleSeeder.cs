@@ -20,7 +20,7 @@ public static class AlertRuleSeeder
                 Kind = kind.Key,
                 Name = kind.DisplayName,
                 Severity = kind.DefaultSeverity,
-                Enabled = AlertRuleLegacySettings.IsEnabled(kind.Key, settings),
+                Enabled = kind.EnabledByDefault && AlertRuleLegacySettings.IsEnabled(kind.Key, settings),
                 Position = index * 10,
                 StopProcessing = true,
                 DefaultKey = kind.Key,

@@ -20,6 +20,8 @@ public sealed record ResolvedAlertRule(AlertRule Rule, AlertRuleParameters Param
 
     public int Int(string key) => Parameters.Int(key, AlertRuleKinds.DefaultInt(Rule.Kind, key));
 
+    public string Text(string key) => Parameters.Text(key, AlertRuleKinds.DefaultOf(Rule.Kind, key));
+
     public DnsHealthAlertMode Mode() => Parameters.Mode(DnsHealthAlertMode.WhenItBreaks);
 
     public UnderReviewHandling UnderReview() => Parameters.UnderReview();

@@ -178,7 +178,7 @@ public static class AlertRuleService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Puts a default rule back to what dotMARC ships: its name, severity, switched on, stopping processing, no cooldown or
+    /// <summary>Puts a default rule back to what dotMARC ships: its name, severity, switched on (or off, for the metric kinds), stopping processing, no cooldown or
     /// auto-close override, no scope, and every parameter at its default. Its place in the order stays.</summary>
     public static async Task ResetToDefaultAsync(DotMarcDbContext context, AuditActor actor, int ruleId, CancellationToken cancellationToken = default)
     {
@@ -189,7 +189,7 @@ public static class AlertRuleService
         }
 
         var kind = AlertRuleKinds.Find(rule.Kind)!;
-        var shipped = new AlertRuleInput(kind.DisplayName, Enabled: true, kind.DefaultSeverity, StopProcessing: true, CooldownMinutes: null, AutoCloseDays: null,
+        var shipped = new AlertRuleInput(kind.DisplayName, Enabled: kind.EnabledByDefault, kind.DefaultSeverity, StopProcessing: true, CooldownMinutes: null, AutoCloseDays: null,
             kind.Parameters.ToDictionary(definition => definition.Key, definition => definition.Default), []);
         var oldParameters = ParseParameters(rule.ParametersJson);
         var oldDestinationIds = rule.Destinations.Select(link => link.AlertDestinationId).ToList();
@@ -216,7 +216,7 @@ public static class AlertRuleService
         changes.Set("Scope", rule.Scope.Select(entry => Describe(entry.Target, entry.TargetId, entry.Exclude, names)), []);
 
         rule.Name = shipped.Name;
-        rule.Enabled = true;
+        rule.Enabled = shipped.Enabled;
         rule.Severity = shipped.Severity;
         rule.StopProcessing = true;
         rule.CooldownMinutes = null;
