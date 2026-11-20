@@ -326,6 +326,8 @@ builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts
 });
 
 builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushStateProtector>();
+// Transient, not singleton: it holds the typed HTTP client of the provider detector, which should not live for ever.
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushPlanner>();
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {
@@ -710,7 +712,7 @@ app.MapGet("/dns-push/{provider}/start", async (
 app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
-    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDnsProviderDetector dnsProviderDetector,
+    IDbContextFactory<DotMarcDbContext> dbContextFactory, DnsPushPlanner planner,
     IAuthorizationService authorizationService, DotMarc.Audit.AuditRecorder auditRecorder, ILogger<Program> logger, AppTitle appTitle) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -747,42 +749,15 @@ app.MapGet("/dns-push/{provider}/callback", async (
         return DnsPushPopupResult.Close("cancelled", appTitle, decodedState.PushId);
     }
 
-    // Every push target except dmarc-auth writes into domain.Name's own zone; dmarc-auth writes
-    // into the mailbox's domain's zone instead and resolves that separately below. Resolving here
-    // (rather than trusting whatever the UI's cached provider chip showed when the page loaded)
-    // catches the case where DNS moved provider between page load and the user clicking push -
-    // treated the same as ZoneNotFound rather than silently pushing to the wrong provider.
-    string? domainZone = null;
-    if (changeBuilder.WritesToDomainZone)
+    // The zone is found again now, and the plan built now, by the same planner a batch uses: see DnsPushPlanner for why (a domain whose DNS
+    // moved provider since the page loaded is zone not found, never pushed to the wrong provider).
+    var planning = await planner.PlanAsync(domain, changeBuilder, provider, decodedState.Payload, CancellationToken.None);
+    if (planning.Flag is not null)
     {
-        DnsProviderDetectionResult domainZoneDetection;
-        try
-        {
-            domainZoneDetection = await dnsProviderDetector.DetectAsync(domain.Name, CancellationToken.None);
-        }
-        catch (HttpRequestException)
-        {
-            // A transient DNS lookup failure here is not the same as "zone not found" (which
-            // means the lookup succeeded but no configured account owns that zone) - report it
-            // as a generic error instead of implying a permissions/configuration problem that
-            // doesn't exist.
-            return DnsPushPopupResult.Close("error", appTitle, decodedState.PushId);
-        }
-        var domainProviderKey = domainZoneDetection.Provider.ToProviderKey();
-        if (!string.Equals(domainProviderKey, provider, StringComparison.OrdinalIgnoreCase))
-        {
-            return DnsPushPopupResult.Close("zone-not-found", appTitle, decodedState.PushId);
-        }
-        domainZone = domainZoneDetection.ZoneName;
+        return DnsPushPopupResult.Close(planning.Flag, appTitle, decodedState.PushId);
     }
 
-    var plan = await changeBuilder.BuildAsync(new DnsPushRequest(domain, provider, domainZone, decodedState.Payload), CancellationToken.None);
-    if (plan.Refusal is not null)
-    {
-        return DnsPushPopupResult.Close(plan.Refusal, appTitle, decodedState.PushId);
-    }
-
-    var changes = plan.Changes;
+    var changes = planning.Plan!.Changes;
 
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
     var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, changes, CancellationToken.None);
