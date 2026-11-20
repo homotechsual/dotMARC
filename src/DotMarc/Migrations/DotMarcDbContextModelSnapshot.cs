@@ -1085,6 +1085,99 @@ namespace DotMarc.Migrations
                     b.ToTable("UserDashboardPreferences");
                 });
 
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("StartedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("StartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.ToTable("DnsPushBatches");
+                });
+
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatchDomain", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("DomainId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DomainName")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<DateTimeOffset?>("FinishedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Included")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlanFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId", "Position");
+
+                    b.ToTable("DnsPushBatchDomains");
+                });
+
             modelBuilder.Entity("DotMarc.Email.EmailSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -2597,6 +2690,15 @@ namespace DotMarc.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatchDomain", b =>
+                {
+                    b.HasOne("DotMarc.DnsPush.DnsPushBatch", null)
+                        .WithMany("Domains")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DotMarc.Notifications.AlertEvent", b =>
                 {
                     b.HasOne("DotMarc.Notifications.AlertRule", null)
@@ -2757,6 +2859,11 @@ namespace DotMarc.Migrations
             modelBuilder.Entity("DotMarc.Data.TlsrptReportPolicy", b =>
                 {
                     b.Navigation("FailureDetails");
+                });
+
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatch", b =>
+                {
+                    b.Navigation("Domains");
                 });
 
             modelBuilder.Entity("DotMarc.Notifications.AlertEvent", b =>

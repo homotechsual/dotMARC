@@ -43,6 +43,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AlertRuleEscalationDestination> AlertRuleEscalationDestinations => Set<AlertRuleEscalationDestination>();
     public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
     public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
+    public DbSet<DotMarc.DnsPush.DnsPushBatch> DnsPushBatches => Set<DotMarc.DnsPush.DnsPushBatch>();
+    public DbSet<DotMarc.DnsPush.DnsPushBatchDomain> DnsPushBatchDomains => Set<DotMarc.DnsPush.DnsPushBatchDomain>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
     public DbSet<DomainDkimRecord> DomainDkimRecords => Set<DomainDkimRecord>();
     public DbSet<DnsRecordSettings> DnsRecordSettings => Set<DnsRecordSettings>();
@@ -370,6 +372,26 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         });
 
         modelBuilder.Entity<NotificationSettings>().Property(settings => settings.TimeZoneId).HasMaxLength(100).HasDefaultValue("UTC");
+
+        modelBuilder.Entity<DotMarc.DnsPush.DnsPushBatch>(entity =>
+        {
+            entity.Property(batch => batch.StartedBy).HasMaxLength(UserDashboardPreference.MaxUserKeyLength);
+            entity.Property(batch => batch.Provider).HasMaxLength(50);
+            entity.Property(batch => batch.Target).HasMaxLength(50);
+            entity.Property(batch => batch.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(batch => batch.ExpiresUtc);
+            entity.HasMany(batch => batch.Domains).WithOne().HasForeignKey(row => row.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // No foreign key to Domains on purpose: a batch row keeps the domain's name and outlives the domain if it is deleted.
+        modelBuilder.Entity<DotMarc.DnsPush.DnsPushBatchDomain>(entity =>
+        {
+            entity.Property(row => row.DomainName).HasMaxLength(253);
+            entity.Property(row => row.Status).HasConversion<string>().HasMaxLength(30);
+            entity.Property(row => row.PlanFingerprint).HasMaxLength(64);
+            entity.Property(row => row.Detail).HasMaxLength(500);
+            entity.HasIndex(row => new { row.BatchId, row.Position });
+        });
 
         modelBuilder.Entity<AlertDestination>(entity =>
         {

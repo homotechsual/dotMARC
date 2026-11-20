@@ -328,6 +328,7 @@ builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts
 builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushStateProtector>();
 // Transient, not singleton: it holds the typed HTTP client of the provider detector, which should not live for ever.
 builder.Services.AddTransient<DotMarc.DnsPush.DnsPushPlanner>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchService>();
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {
