@@ -23,7 +23,7 @@ public static class DomainWriteEndpoints
             .WithTags(ApiTags.Domains)
             .WithName("SetDomainGroups")
             .WithSummary("Set a domain's groups")
-            .WithDescription($"Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. {ApiDomainKey.Description}")
+            .WithDescription($"Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. Such a key cannot take the domain out of the last of its own groups, because it would then no longer see it (a 400 naming groupIds). {ApiDomainKey.Description}")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapPut("/domains/{domain}/tags", SetTagsAsync)
@@ -108,7 +108,16 @@ public static class DomainWriteEndpoints
 
         // A scoped key can't see the domain's other groups, so it can't remove them either.
         var keptOutsideScope = domain.Groups.Where(group => !scope.Includes(group.Id)).Select(group => group.Id);
-        await GroupManagementService.SetDomainGroupsAsync(context, AuditActor.FromPrincipal(user), domain.Id, distinctIds.Concat(keptOutsideScope).Distinct().ToList(), cancellationToken);
+        var resultingIds = distinctIds.Concat(keptOutsideScope).Distinct().ToList();
+
+        // A key limited to groups sees a domain only through its own groups, so a change that leaves the domain in none of them
+        // would take it out of the key's sight. That is refused, whatever other groups the domain stays in.
+        if (scope.IsScoped && !resultingIds.Any(scope.Includes))
+        {
+            return ApiProblems.Validation("groupIds", "This would take the domain out of every group this key can see.");
+        }
+
+        await GroupManagementService.SetDomainGroupsAsync(context, AuditActor.FromPrincipal(user), domain.Id, resultingIds, cancellationToken);
         return TypedResults.NoContent();
     }
 

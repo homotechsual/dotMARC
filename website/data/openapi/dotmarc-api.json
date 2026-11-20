@@ -3681,7 +3681,7 @@
     },
     "/api/v1/domains/{domain}/groups": {
       "put": {
-        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
+        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. Such a key cannot take the domain out of the last of its own groups, because it would then no longer see it (a 400 naming groupIds). Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
         "operationId": "SetDomainGroups",
         "parameters": [
           {

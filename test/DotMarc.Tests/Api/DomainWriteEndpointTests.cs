@@ -146,6 +146,89 @@ public sealed class DomainWriteEndpointTests : IAsyncLifetime
         Assert.Equal(new[] { secondOwnGroupId, otherGroupId }.Order(), domain.Groups.Select(group => group.Id).Order());
     }
 
+    private async Task<List<int>> GroupIdsOfAsync(int domainId)
+    {
+        await using var context = _host.CreateContext();
+        var domain = await context.Domains.AsNoTracking().Include(candidate => candidate.Groups).SingleAsync(candidate => candidate.Id == domainId);
+        return domain.Groups.Select(group => group.Id).Order().ToList();
+    }
+
+    [Fact]
+    public async Task AScopedKey_RemovingTheDomainFromItsOnlyGroup_IsRefused_AndNothingChanges()
+    {
+        var ownGroupId = await _host.SeedGroupAsync("api-last-group-only");
+        var domainId = await _host.SeedDomainAsync("api-last-group-only.example", groupIds: [ownGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsEdit], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/domains/{domainId}/groups", new { groupIds = Array.Empty<int>() });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("groupIds", body);
+        Assert.Contains("every group this key can see", body);
+        Assert.Equal([ownGroupId], await GroupIdsOfAsync(domainId));
+    }
+
+    [Fact]
+    public async Task AScopedKey_RemovingItsLastGroup_IsRefused_EvenWhenTheDomainKeepsGroupsItCantSee()
+    {
+        var ownGroupId = await _host.SeedGroupAsync("api-last-group-hidden-own");
+        var hiddenGroupId = await _host.SeedGroupAsync("api-last-group-hidden-other");
+        var domainId = await _host.SeedDomainAsync("api-last-group-hidden.example", groupIds: [ownGroupId, hiddenGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsEdit], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/domains/{domainId}/groups", new { groupIds = Array.Empty<int>() });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(new[] { ownGroupId, hiddenGroupId }.Order(), await GroupIdsOfAsync(domainId));
+    }
+
+    [Fact]
+    public async Task AScopedKey_MovingTheDomainFromItsOnlyGroupToAnotherOfItsOwn_IsAllowed()
+    {
+        var firstOwnGroupId = await _host.SeedGroupAsync("api-last-group-move-first");
+        var secondOwnGroupId = await _host.SeedGroupAsync("api-last-group-move-second");
+        var domainId = await _host.SeedDomainAsync("api-last-group-move.example", groupIds: [firstOwnGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsEdit], scopedGroupIds: [firstOwnGroupId, secondOwnGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/domains/{domainId}/groups", new { groupIds = new[] { secondOwnGroupId } });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal([secondOwnGroupId], await GroupIdsOfAsync(domainId));
+    }
+
+    [Fact]
+    public async Task AScopedKey_KeepingItsGroup_WhileTheDomainAlsoSitsInAHiddenGroup_IsAllowed_AndTheHiddenGroupStays()
+    {
+        var ownGroupId = await _host.SeedGroupAsync("api-last-group-keep-own");
+        var hiddenGroupId = await _host.SeedGroupAsync("api-last-group-keep-hidden");
+        var domainId = await _host.SeedDomainAsync("api-last-group-keep.example", groupIds: [ownGroupId, hiddenGroupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsEdit], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/domains/{domainId}/groups", new { groupIds = new[] { ownGroupId } });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(new[] { ownGroupId, hiddenGroupId }.Order(), await GroupIdsOfAsync(domainId));
+    }
+
+    [Fact]
+    public async Task AnUnscopedKey_CanStillRemoveEveryGroup()
+    {
+        var groupId = await _host.SeedGroupAsync("api-last-group-unscoped");
+        var domainId = await _host.SeedDomainAsync("api-last-group-unscoped.example", groupIds: [groupId]);
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsEdit]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/domains/{domainId}/groups", new { groupIds = Array.Empty<int>() });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Empty(await GroupIdsOfAsync(domainId));
+    }
+
     [Fact]
     public async Task AScopedKey_NamingAGroupOutsideItsScope_Is403()
     {

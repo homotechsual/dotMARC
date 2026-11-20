@@ -140,7 +140,7 @@ curl -H "Authorization: Bearer dmk_..." -o report.pdf \
 
 ## Keys limited to groups
 
-A key limited to groups sees only domains in at least one of its groups, and only those groups. A domain or alert outside them is reported as not found (`404`). It can't add or import domains, since a new domain isn't in any group yet. When it sets a domain's groups, groups outside its own are kept.
+A key limited to groups sees only domains in at least one of its groups, and only those groups. A domain or alert outside them is reported as not found (`404`). It can't add or import domains, since a new domain isn't in any group yet. When it sets a domain's groups, groups outside its own are kept. It can't take a domain out of the last of its own groups, because it would then no longer see the domain: that request is refused with a `400` naming `groupIds`.
 
 ## Limits
 
