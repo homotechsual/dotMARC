@@ -49,7 +49,7 @@ public static class DemoDataSeeder
             TRUNCATE TABLE
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
-                "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates", "DomainDkimRecords",
+                "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "AlertTickets", "DomainAlertStates", "DomainDkimRecords",
                 "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions", "AlertRules", "AlertRuleScopeEntries", "AlertDestinations", "AlertRuleDestinations", "AlertRuleEscalationDestinations"
             RESTART IDENTITY CASCADE
             """,
@@ -239,6 +239,13 @@ public static class DemoDataSeeder
                 // Seeded alerts count as already notified, so none of them shows as held by a quiet window.
                 NotifiedUtc = alertSeed.CreatedUtc
             });
+        }
+
+        // A ticket in each PSA, so the Alerts page shows them all. Raised a couple of minutes after the alert, as the real flow does.
+        foreach (var sample in DemoTickets.Samples)
+        {
+            var alert = context.AlertEvents.Local.Single(candidate => candidate.DomainName == sample.DomainName && candidate.AlertType == sample.AlertType);
+            alert.Tickets.Add(new DotMarc.Psa.AlertTicket { Psa = sample.Psa, TicketId = sample.TicketId, IsOpen = sample.IsOpen, CreatedUtc = alert.CreatedUtc.AddMinutes(2) });
         }
 
         foreach (var pollCycle in dataset.PollCycles)

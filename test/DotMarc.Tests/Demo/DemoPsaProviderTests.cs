@@ -24,6 +24,31 @@ public sealed class DemoPsaProviderTests
     }
 
     [Fact]
+    public async Task ASeededOpenTicket_StaysOpen_HoweverLongItIsLeft_SoTheDemoPollerNeverClosesIt()
+    {
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
+        foreach (var sample in DemoTickets.Samples.Where(sample => sample.IsOpen))
+        {
+            var provider = new DemoPsaProvider(sample.Psa, clock);
+
+            Assert.Equal(PsaTicketState.Open, await provider.GetTicketStateAsync(null!, sample.TicketId));
+            clock.Advance(TimeSpan.FromDays(30));
+            Assert.Equal(PsaTicketState.Open, await provider.GetTicketStateAsync(null!, sample.TicketId));
+        }
+    }
+
+    [Fact]
+    public async Task ASeededTicketsId_IsOnlyOpenInItsOwnPsa()
+    {
+        var sample = DemoTickets.Samples.First(sample => sample.IsOpen);
+        var otherPsa = Enum.GetValues<PsaKind>().First(psa => psa != sample.Psa);
+
+        var state = await new DemoPsaProvider(otherPsa, new FixedTimeProvider(DateTimeOffset.UnixEpoch)).GetTicketStateAsync(null!, sample.TicketId);
+
+        Assert.Equal(PsaTicketState.Missing, state);
+    }
+
+    [Fact]
     public async Task ClosingADemoTicket_ClosesItStraightAway()
     {
         var provider = new DemoPsaProvider(PsaKind.Autotask, new FixedTimeProvider(DateTimeOffset.UnixEpoch));
