@@ -329,6 +329,8 @@ builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushStateProtector>();
 // Transient, not singleton: it holds the typed HTTP client of the provider detector, which should not live for ever.
 builder.Services.AddTransient<DotMarc.DnsPush.DnsPushPlanner>();
 builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchService>();
+builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushBatchQueue>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchCallback>();
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {
@@ -710,10 +712,54 @@ app.MapGet("/dns-push/{provider}/start", async (
     return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
 });
 
+// The same sign-in as /start, for a batch of domains reviewed beforehand (see DnsPushBatchService). Only the batch id travels in the state.
+app.MapGet("/dns-push/{provider}/start-batch", async (
+    string provider, Guid batchId, HttpContext httpContext,
+    IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
+    IAuthorizationService authorizationService, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    // Only from dotMARC's own pages: see DnsPushStartGuard for why a link from elsewhere mustn't start a push.
+    if (!DnsPushStartGuard.IsFromThisSite(httpContext.Request))
+    {
+        return Results.BadRequest();
+    }
+
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var check = await DnsPushBatchGate.CheckAsync(
+        context, batchId, DotMarc.Reporting.DashboardPreferencesStore.UserKeyOf(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User)), provider, DateTimeOffset.UtcNow, CancellationToken.None);
+    if (check.Problem is { } problem)
+    {
+        return problem switch
+        {
+            DnsPushBatchProblem.NotFound => Results.NotFound(),
+            DnsPushBatchProblem.SomeoneElses => Results.Forbid(),
+            _ => Results.BadRequest()
+        };
+    }
+
+    var batch = check.Batch!;
+    if (changeBuilders.Find(batch.Target) is not { } changeBuilder || !(await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy)).Succeeded)
+    {
+        return Results.Forbid();
+    }
+
+    var pushProvider = await pushProviders.FindConfiguredAsync(provider);
+    if (pushProvider is null)
+    {
+        return Results.NotFound();
+    }
+
+    var (codeVerifier, codeChallenge) = PkceGenerator.Generate();
+    var state = stateProtector.Protect(0, batch.Target, codeVerifier, DateTimeOffset.UtcNow, pushId: batchId.ToString(), batchId: batchId);
+    var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
+
+    return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
+});
+
 app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
-    IDbContextFactory<DotMarcDbContext> dbContextFactory, DnsPushPlanner planner,
+    IDbContextFactory<DotMarcDbContext> dbContextFactory, DnsPushPlanner planner, DnsPushBatchCallback batchCallback,
     IAuthorizationService authorizationService, DotMarc.Audit.AuditRecorder auditRecorder, ILogger<Program> logger, AppTitle appTitle) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -721,6 +767,16 @@ app.MapGet("/dns-push/{provider}/callback", async (
     if (pushProvider is null || decodedState is null)
     {
         return DnsPushPopupResult.Close("invalid", appTitle, decodedState?.PushId);
+    }
+
+    // A batch of domains: the batch has its own checks and runs in the background. Anything without a batch id is a single-domain push, below.
+    if (decodedState.BatchId is not null)
+    {
+        await using var batchContext = await dbContextFactory.CreateDbContextAsync();
+        var batchRedirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
+        var batchFlag = await batchCallback.HandleAsync(
+            batchContext, pushProvider, decodedState, code, error, batchRedirectUri, httpContext.User, DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), CancellationToken.None);
+        return DnsPushPopupResult.Close(batchFlag, appTitle, decodedState.PushId);
     }
 
     // The signed state proves the /start redirect was legitimate, but says nothing about whether

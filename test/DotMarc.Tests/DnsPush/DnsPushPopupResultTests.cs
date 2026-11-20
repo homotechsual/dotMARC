@@ -23,6 +23,7 @@ public sealed class DnsPushPopupResultTests
     [InlineData("spf-duplicate", "two SPF records")]
     [InlineData("error", "push failed")]
     [InlineData("nothing-to-push", "already matches")]
+    [InlineData("batch-started", "Batch started")]
     public void EachOutcome_IsSaidInWords(string outcome, string words)
     {
         var html = System.Net.WebUtility.HtmlDecode(DnsPushPopupResult.Html(outcome, PushId, Title));

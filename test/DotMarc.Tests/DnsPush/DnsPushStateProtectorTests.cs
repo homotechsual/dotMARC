@@ -25,6 +25,32 @@ public sealed class DnsPushStateProtectorTests
     }
 
     [Fact]
+    public void ABatchId_RoundTrips_AndASingleDomainStateHasNone()
+    {
+        var protector = CreateProtector();
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var batchId = Guid.NewGuid();
+
+        var batchState = protector.Unprotect(protector.Protect(0, "dmarc", "verifier", now, pushId: batchId.ToString(), batchId: batchId), now);
+        var singleState = protector.Unprotect(protector.Protect(42, "dmarc", "verifier", now), now);
+
+        Assert.Equal(batchId, batchState!.BatchId);
+        Assert.Equal(batchId.ToString(), batchState.PushId);
+        Assert.Null(singleState!.BatchId);
+    }
+
+    [Fact]
+    public void ABatchState_ExpiresLikeAnyOther_AndIsRejectedWhenTampered()
+    {
+        var protector = CreateProtector();
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var protectedState = protector.Protect(0, "dmarc", "verifier", now, batchId: Guid.NewGuid());
+
+        Assert.Null(protector.Unprotect(protectedState, now.AddMinutes(6)));
+        Assert.Null(protector.Unprotect(protectedState + "tampered", now));
+    }
+
+    [Fact]
     public void Unprotect_ReturnsNull_ForATamperedValue()
     {
         var protector = CreateProtector();

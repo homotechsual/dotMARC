@@ -52,6 +52,7 @@ public static class DnsPushPopupResult
     private static (string Heading, string Detail) Describe(string outcome) => outcome switch
     {
         "pushed" => ("Records pushed", "dotMARC updated the DNS records. It can take a few minutes for the change to be seen everywhere."),
+        "batch-started" => ("Batch started", "dotMARC is pushing the records to each domain now. You can close this window and follow the results in dotMARC."),
         "cancelled" => ("Push cancelled", "The sign-in at your DNS provider was cancelled, so nothing was changed."),
         "invalid" => ("Push not started", "This push expired or couldn't be checked, so nothing was changed. Start it again from dotMARC."),
         "zone-not-found" => ("Couldn't find the domain", "Couldn't find the domain in the DNS account you signed in to, so nothing was changed."),
