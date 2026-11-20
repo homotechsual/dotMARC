@@ -62,25 +62,34 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         return AuthorizationEndpoint + "?" + string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
-    public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    /// <summary>Holds the access token between pushes. In memory only; never stored, logged or put in a message.</summary>
+    private sealed record CloudflareSession(string AccessToken) : IDnsPushSession;
+
+    public async Task<DnsPushSessionResult> ExchangeAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(CloudflareDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare push is not configured for this deployment.");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare push is not configured for this deployment."));
         }
 
         var accessToken = await ExchangeCodeForTokenAsync(settings.ClientId, clientSecret, code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
-        if (accessToken is null)
+        return accessToken is null
+            ? new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare rejected the authorization code exchange."))
+            : new DnsPushSessionResult(new CloudflareSession(accessToken), null);
+    }
+
+    public async Task<DnsPushResult> PushAsync(IDnsPushSession session, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        if (session is not CloudflareSession cloudflareSession)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare rejected the authorization code exchange.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "That sign-in is not a Cloudflare sign-in.");
         }
 
         foreach (var change in changes)
         {
-            var result = await PushOneChangeAsync(change, accessToken, cancellationToken).ConfigureAwait(false);
+            var result = await PushOneChangeAsync(change, cloudflareSession.AccessToken, cancellationToken).ConfigureAwait(false);
             if (result.Outcome != DnsPushOutcome.Pushed)
             {
                 return result;

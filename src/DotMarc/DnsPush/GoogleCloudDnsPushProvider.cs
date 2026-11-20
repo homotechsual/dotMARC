@@ -68,35 +68,50 @@ public sealed class GoogleCloudDnsPushProvider : IDnsPushProvider
         return AuthorizationEndpoint + "?" + string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
-    public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    /// <summary>Holds the access token between pushes. In memory only; never stored, logged or put in a message.</summary>
+    private sealed record GoogleSession(string AccessToken) : IDnsPushSession;
+
+    public async Task<DnsPushSessionResult> ExchangeAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(GoogleCloudDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Google Cloud DNS push is not configured for this deployment.");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Google Cloud DNS push is not configured for this deployment."));
         }
 
-        // Everything below is network calls: token exchange, then for each change a
-        // projects.list/managedZones.list zone search, an rrsets lookup, and a changes POST.
+        // The token exchange and, in PushAsync, the zone search, rrsets lookup and changes POST for each change are all network calls.
         // Unlike Cloudflare/Azure - which need narrower, carefully placed catches around their
         // non-atomic delete-then-create window so a mid-operation failure can be reported as
         // ReplaceFailedAfterDelete rather than a plain error - every mutation here goes through
-        // Cloud DNS's atomic Change API, so no matter which call below fails, nothing was ever
-        // half-applied. That means one outer catch is sufficient: there is no partial-failure
+        // Cloud DNS's atomic Change API, so no matter which call fails, nothing was ever
+        // half-applied. That means one outer catch in each method is sufficient: there is no partial-failure
         // state to distinguish.
         try
         {
             var accessToken = await ExchangeCodeForTokenAsync(settings.ClientId, clientSecret, code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
-            if (accessToken is null)
-            {
-                return new DnsPushResult(DnsPushOutcome.ProviderError, "Google rejected the authorization code exchange.");
-            }
+            return accessToken is null
+                ? new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Google rejected the authorization code exchange."))
+                : new DnsPushSessionResult(new GoogleSession(accessToken), null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, $"Couldn't reach Google to push the DNS record: {ex.Message} - nothing was changed."));
+        }
+    }
 
+    public async Task<DnsPushResult> PushAsync(IDnsPushSession session, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        if (session is not GoogleSession googleSession)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "That sign-in is not a Google sign-in.");
+        }
+
+        try
+        {
             foreach (var change in changes)
             {
-                var result = await PushOneChangeAsync(change, accessToken, cancellationToken).ConfigureAwait(false);
+                var result = await PushOneChangeAsync(change, googleSession.AccessToken, cancellationToken).ConfigureAwait(false);
                 if (result.Outcome != DnsPushOutcome.Pushed)
                 {
                     return result;

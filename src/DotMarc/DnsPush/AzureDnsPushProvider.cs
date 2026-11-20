@@ -64,14 +64,17 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
-    public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    /// <summary>Holds the Azure Resource Manager client built from the signed-in user's token between pushes. In memory only; never stored,
+    /// logged or put in a message.</summary>
+    private sealed record AzureSession(ArmClient ArmClient) : IDnsPushSession;
+
+    public async Task<DnsPushSessionResult> ExchangeAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(AzureDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Azure DNS push is not configured for this deployment.");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Azure DNS push is not configured for this deployment."));
         }
 
         // Must match BuildAuthorizationUrlAsync's authority exactly (MSAL requires the same
@@ -95,14 +98,22 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
         catch (MsalException ex)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the authorization code exchange: {ex.Message}");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the authorization code exchange: {ex.Message}"));
         }
 
-        var armClient = new ArmClient(new FixedTokenCredential(authResult.AccessToken, authResult.ExpiresOn));
+        return new DnsPushSessionResult(new AzureSession(new ArmClient(new FixedTokenCredential(authResult.AccessToken, authResult.ExpiresOn))), null);
+    }
+
+    public async Task<DnsPushResult> PushAsync(IDnsPushSession session, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        if (session is not AzureSession azureSession)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "That sign-in is not an Azure sign-in.");
+        }
 
         foreach (var change in changes)
         {
-            var result = await PushOneChangeAsync(armClient, change, cancellationToken).ConfigureAwait(false);
+            var result = await PushOneChangeAsync(azureSession.ArmClient, change, cancellationToken).ConfigureAwait(false);
             if (result.Outcome != DnsPushOutcome.Pushed)
             {
                 return result;

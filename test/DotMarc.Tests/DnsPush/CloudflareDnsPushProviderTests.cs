@@ -47,6 +47,107 @@ public sealed class CloudflareDnsPushProviderTests : IAsyncLifetime
         return new CloudflareDnsPushProvider(new FakeDbContextFactory(_connectionString), secrets, new HttpClient(handler));
     }
 
+    private sealed record ForeignSession : IDnsPushSession;
+
+    private static DnsRecordChange DmarcCreate(string zoneName) =>
+        new(DnsRecordChangeKind.Create, "TXT", $"_dmarc.{zoneName}", "v=DMARC1; p=none", null, zoneName);
+
+    [Fact]
+    public async Task OneExchange_ServesPushesToSeveralZones_WithOneTokenRequest()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"zone1"}]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"zone2"}]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        var provider = await CreateProviderAsync(handler);
+
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+        var first = await provider.PushAsync(exchange.Session!, [DmarcCreate("contoso.com")], CancellationToken.None);
+        var second = await provider.PushAsync(exchange.Session!, [DmarcCreate("fabrikam.com")], CancellationToken.None);
+
+        Assert.Null(exchange.Failure);
+        Assert.Equal(DnsPushOutcome.Pushed, first.Outcome);
+        Assert.Equal(DnsPushOutcome.Pushed, second.Outcome);
+        Assert.Single(handler.Requests, request => request.RequestUri!.Host == "dash.cloudflare.com");
+        Assert.Equal(5, handler.Requests.Count);
+        Assert.EndsWith("/zones/zone1/dns_records", handler.Requests[2].RequestUri!.AbsolutePath);
+        Assert.EndsWith("/zones/zone2/dns_records", handler.Requests[4].RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task APushToAZoneTheAccountDoesntHave_IsZoneNotFound_AndALaterPushToAnotherZoneStillWorks()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"result":[]}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"zone2"}]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        var provider = await CreateProviderAsync(handler);
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        var missing = await provider.PushAsync(exchange.Session!, [DmarcCreate("missing.example")], CancellationToken.None);
+        var present = await provider.PushAsync(exchange.Session!, [DmarcCreate("fabrikam.com")], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.ZoneNotFound, missing.Outcome);
+        Assert.Equal(DnsPushOutcome.Pushed, present.Outcome);
+    }
+
+    [Fact]
+    public async Task OnePush_StillStopsAtItsFirstFailingChange()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"result":[]}""");
+        var provider = await CreateProviderAsync(handler);
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        var result = await provider.PushAsync(exchange.Session!, [DmarcCreate("missing.example"), DmarcCreate("fabrikam.com")], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.ZoneNotFound, result.Outcome);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task ARejectedAuthorizationCode_IsAFailureWithNoSession()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.StatusCodes.Enqueue(System.Net.HttpStatusCode.BadRequest);
+        var provider = await CreateProviderAsync(handler);
+
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        Assert.Null(exchange.Session);
+        Assert.Equal(DnsPushOutcome.ProviderError, exchange.Failure!.Outcome);
+        Assert.Contains("rejected the authorization code", exchange.Failure.DetailMessage);
+    }
+
+    [Fact]
+    public async Task WhenCloudflarePushIsNotConfigured_ExchangeIsAFailure_AndNothingIsSent()
+    {
+        var handler = new FakeHttpMessageHandler();
+        var provider = new CloudflareDnsPushProvider(new FakeDbContextFactory(_connectionString), new FakeSecretStore(), new HttpClient(handler));
+
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        Assert.Null(exchange.Session);
+        Assert.Contains("not configured", exchange.Failure!.DetailMessage);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ASessionFromAnotherProvider_IsRefused_AndNothingIsSent()
+    {
+        var handler = new FakeHttpMessageHandler();
+        var provider = await CreateProviderAsync(handler);
+
+        var result = await provider.PushAsync(new ForeignSession(), [DmarcCreate("contoso.com")], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.ProviderError, result.Outcome);
+        Assert.Empty(handler.Requests);
+    }
+
     [Fact]
     public async Task ReplaceTxtValues_KeepsOtherValuesAtTheName()
     {
