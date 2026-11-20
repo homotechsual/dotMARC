@@ -2823,6 +2823,7 @@
                   "settings.audit.saved",
                   "dns.pushed",
                   "dns.push_failed",
+                  "dns.push_batch_started",
                   "halo.integration_tested",
                   "connectwise.integration_tested",
                   "autotask.integration_tested",

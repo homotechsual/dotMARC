@@ -100,6 +100,34 @@ public sealed class DnsPushBatchCallbackTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task StartingABatch_RecordsOneAuditEntry_WithTheCounts_AndNothingSecret()
+    {
+        var batchId = await AddBatchAsync();
+
+        await HandleAsync(batchId, code: "secret-code-123");
+
+        await using var context = CreateContext();
+        var entry = Assert.Single(await context.AuditEntries.AsNoTracking().ToListAsync());
+        Assert.Equal((AuditActions.DnsPushBatchStarted, AuditEntryKind.Change, null), (entry.Action, entry.Kind, entry.TargetType));
+        Assert.Equal("Started a DNS push of 1 domain to cloudflare (dmarc)", entry.Summary);
+        Assert.Empty(entry.Changes);
+        Assert.DoesNotContain("secret-code-123", entry.Summary);
+        Assert.DoesNotContain("verifier", entry.Summary);
+    }
+
+    [Fact]
+    public async Task ABatchThatIsRefused_RecordsNoAuditEntry()
+    {
+        var batchId = await AddBatchAsync();
+
+        await HandleAsync(batchId, actor: AnotherPerson);
+        await HandleAsync(batchId, code: null);
+
+        await using var context = CreateContext();
+        Assert.Empty(await context.AuditEntries.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
     public async Task ASecondCallbackForTheSameBatch_IsInvalid_AndExchangesNothingMore()
     {
         var batchId = await AddBatchAsync();

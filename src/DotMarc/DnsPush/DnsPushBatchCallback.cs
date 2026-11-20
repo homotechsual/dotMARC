@@ -49,6 +49,12 @@ public sealed class DnsPushBatchCallback(
             return "invalid";
         }
 
+        // About no one entity, so no target. Counts and names only: nothing from the sign-in.
+        var included = check.Batch.Domains.Count(row => row.Included);
+        AuditLog.Record(context, actor, AuditActions.DnsPushBatchStarted, null,
+            $"Started a DNS push of {included} {(included == 1 ? "domain" : "domains")} to {check.Batch.Provider} ({check.Batch.Target})");
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
         var exchange = await pushProvider.ExchangeAsync(code, state.CodeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
         if (exchange.Session is not { } session)
         {
