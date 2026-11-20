@@ -21,6 +21,10 @@ A fix to the released product's docs doesn't have to wait for unreleased code on
 because every file is under `website/`, and `test` passes without building. Afterwards merge `main` back into `develop`
 so the next release doesn't conflict with it.
 
+A fix to the released product's code works the same way. Branch from `main` as `fix/<topic>`, make the fix with its
+tests, and open the pull request into `main`: `from-develop` accepts any `fix/*` branch, and `test` runs the full build and
+tests. Then bring the fix onto `develop` (cherry-pick it, or merge `main` back) so the next release carries it.
+
 Every push to `develop` runs CI and then publishes the `:next` image (multi-arch, to GHCR and Docker Hub) and
 redeploys [next.dotmarc.app](https://next.dotmarc.app). `Directory.Build.props` on `develop` holds the version being
 worked towards, and the image is built with `DEV_BUILD=true`, which turns on the dev banner and the `(dev)` footer.
