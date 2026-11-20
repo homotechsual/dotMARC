@@ -13,7 +13,7 @@ public sealed class AuditCoverageTests
     private static readonly Type[] AuditedServices =
     [
         typeof(DomainManagementService), typeof(GroupManagementService), typeof(TagManagementService),
-        typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(ApiKeyManagementService), typeof(AlertTicketRuleService),
+        typeof(RoleManagementService), typeof(UserAccessManagementService), typeof(ApiKeyManagementService), typeof(AlertTicketRuleService), typeof(AlertRuleService), typeof(AlertDestinationService),
         typeof(NotificationSettingsService), typeof(HaloPsaSettingsService), typeof(DotMarc.Psa.ConnectWise.ConnectWiseSettingsService), typeof(DotMarc.Psa.Autotask.AutotaskSettingsService), typeof(DotMarc.Psa.NinjaOne.NinjaOneSettingsService), typeof(DotMarc.Psa.SuperOps.SuperOpsSettingsService), typeof(CloudflareDnsSettingsService),
         typeof(AzureDnsSettingsService), typeof(GoogleCloudDnsSettingsService), typeof(AuditSettingsService), typeof(DotMarc.Portal.BrandingSettingsService), typeof(DotMarc.Email.EmailSettingsService), typeof(DotMarc.Reporting.ClientReports.ReportSettingsService), typeof(DotMarc.Reporting.ClientReports.ClientReportService),
     ];

@@ -1,5 +1,6 @@
 using DotMarc.Data;
 using DotMarc.Demo;
+using DotMarc.Psa;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -47,6 +48,37 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         Assert.Equal(12, await verify.Groups.CountAsync());
         Assert.True(await verify.Reports.CountAsync() > 0);
         Assert.True(await verify.ReportRecords.CountAsync() > 0);
+    }
+
+    [Fact]
+    public async Task ResetAsync_SeedsAnOpenTicketForEveryPsa_EachOnADifferentOpenAlert()
+    {
+        using var context = CreateContext();
+
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        var openTickets = await verify.AlertTickets.AsNoTracking().Where(ticket => ticket.IsOpen).ToListAsync();
+        Assert.Equal(Enum.GetValues<PsaKind>().Order(), openTickets.Select(ticket => ticket.Psa).Order());
+        var alertIds = openTickets.Select(ticket => ticket.AlertEventId).ToList();
+        var alerts = await verify.AlertEvents.AsNoTracking().Where(alert => alertIds.Contains(alert.Id)).ToListAsync();
+        Assert.Equal(openTickets.Count, alerts.Count);
+        Assert.All(alerts, alert => Assert.False(alert.IsResolved));
+    }
+
+    [Fact]
+    public async Task ResetAsync_SeedsAClosedTicketOnAResolvedAlert_AndReseedingDoesNotDuplicateTickets()
+    {
+        using var context = CreateContext();
+        await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+        using var secondContext = CreateContext();
+        await DemoDataSeeder.ResetAsync(secondContext, SampleDataset(), CancellationToken.None);
+
+        using var verify = CreateContext();
+        var closed = await verify.AlertTickets.AsNoTracking().Where(ticket => !ticket.IsOpen).ToListAsync();
+        var resolvedAlert = await verify.AlertEvents.AsNoTracking().SingleAsync(alert => alert.Id == closed.Single().AlertEventId);
+        Assert.True(resolvedAlert.IsResolved);
+        Assert.Equal(DemoTickets.Samples.Count, await verify.AlertTickets.CountAsync());
     }
 
     [Fact]

@@ -10,8 +10,11 @@ WORKDIR "/src/src/DotMarc"
 RUN dotnet publish "DotMarc.csproj" -c Release -a $TARGETARCH -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+# Set true for the "next" image so it shows the dev banner and a (dev) version wherever it runs. Released images leave it false.
+ARG DEV_BUILD=false
 WORKDIR /app
 COPY --from=build /app/publish .
+ENV DevBuild__Enabled=$DEV_BUILD
 ENV ConnectionStrings__DotMarc="Host=postgres;Database=dotmarc;Username=dotmarc;Password=dotmarc"
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "DotMarc.dll"]

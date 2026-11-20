@@ -10,10 +10,7 @@ import AzureDetails from '@site/src/components/AzureDetails';
 
 # Deploy to Azure
 
-This page takes you from nothing to a running dotMARC on Azure Container Apps, in order. Every value
-the deployment form asks for is explained in [step 2](#2-deploy), next to the button that opens it, so
-you don't need to jump between pages. Start with [what you'll need](#what-youll-need), including an Azure subscription
-with billing set up.
+This page takes you from nothing to a running dotMARC on Azure Container Apps, in order. Every value the deployment form asks for is explained in [step 2](#2-deploy), next to the button that opens it, so you don't need to jump between pages. Start with [what you'll need](#what-youll-need), including an Azure subscription with billing set up.
 
 <Checklist id="deploy-to-azure" items={[
   {text: "Created the mailbox and dashboard Entra app registrations (Microsoft Entra setup)", step: "microsoft-entra-setup"},
@@ -27,37 +24,23 @@ with billing set up.
 
 ## What you'll need
 
-- **An Azure subscription with billing set up.** dotMARC runs on paid Azure services (a Container App, a
-  PostgreSQL Flexible Server, a Key Vault and a Log Analytics workspace), so the subscription needs a valid payment
-  method or an invoiced agreement behind it. Check the cost for your region in the
-  [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) before you deploy, and be aware that
-  some free-trial, sponsorship and student subscriptions restrict which services or regions you can use.
-- **Permission to create resources and role assignments** in that subscription: **Owner** on the resource group you
-  deploy into is enough. [Azure permissions and shell](#azure-permissions-and-shell) below explains the other
-  permissions involved.
+- **An Azure subscription with billing set up.** dotMARC runs on paid Azure services (a Container App, a PostgreSQL Flexible Server, a Key Vault and a Log Analytics workspace), so the subscription needs a valid payment method or an invoiced agreement behind it. Check the cost for your region in the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) before you deploy, and be aware that some free-trial, sponsorship and student subscriptions restrict which services or regions you can use.
+- **Permission to create resources and role assignments** in that subscription: **Owner** on the resource group you deploy into is enough. [Azure permissions and shell](#azure-permissions-and-shell) below explains the other permissions involved.
 - **A region** that offers both Azure Container Apps and Azure Database for PostgreSQL Flexible Server.
-- **Microsoft Entra and Exchange Online access** to create the two app registrations, an administrator who can
-  grant them admin consent, and someone who can restrict the mailbox app to the DMARC reports mailbox in Exchange
-  Online. These can be different people. The [Microsoft Entra setup](#microsoft-entra-setup) below covers each step.
+- **Microsoft Entra and Exchange Online access** to create the two app registrations, an administrator who can grant them admin consent, and someone who can restrict the mailbox app to the DMARC reports mailbox in Exchange Online. These can be different people. The [Microsoft Entra setup](#microsoft-entra-setup) below covers each step.
 - **A shared mailbox** to receive DMARC reports, in Microsoft 365 / Exchange Online.
-- **A way to run Azure CLI commands.** [Azure Cloud Shell](https://learn.microsoft.com/azure/cloud-shell/overview)
-  needs nothing installed, or use PowerShell 7 with the
-  [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) on your own computer.
-- **About 30 minutes.** Azure gives the app its own hostname. A custom domain is optional and can be added
-  afterwards.
+- **A way to run Azure CLI commands.** [Azure Cloud Shell](https://learn.microsoft.com/azure/cloud-shell/overview) needs nothing installed, or use PowerShell 7 with the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) on your own computer.
+- **About 30 minutes.** Azure gives the app its own hostname. A custom domain is optional and can be added afterwards.
 
 ## Microsoft Entra setup
 
 <EntraSetup />
 
-Azure assigns the app's hostname during deployment, so you add the dashboard's redirect URI afterwards, in
-[step 4](#4-register-the-deployed-hostname-as-an-oidc-redirect-uri). The client IDs go into the deployment form in
-[step 2](#2-deploy) and the client secrets go into Key Vault in [step 5](#5-populate-key-vault).
+Azure assigns the app's hostname during deployment, so you add the dashboard's redirect URI afterwards, in [step 4](#4-register-the-deployed-hostname-as-an-oidc-redirect-uri). The client IDs go into the deployment form in [step 2](#2-deploy) and the client secrets go into Key Vault in [step 5](#5-populate-key-vault).
 
 ## Azure permissions and shell
 
-Before you deploy, check you have the right permissions in Azure and that you are working in PowerShell. The next two
-parts cover each.
+Before you deploy, check you have the right permissions in Azure and that you are working in PowerShell. The next two parts cover each.
 
 ### Check your Azure permissions
 
@@ -71,25 +54,17 @@ Two different things need permission, and they are easy to mix up:
 
 ### Use PowerShell
 
-The commands on this page are PowerShell, including the app registration script above (which also has a Bash
-version if you prefer it). In Azure Cloud Shell, switch the shell type from **Bash** to **PowerShell** using
-the dropdown at the top left of the Cloud Shell window before you run the commands below. On your own computer
-(Windows, macOS or Linux), use PowerShell 7 with the
-[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed.
+The commands on this page are PowerShell, including the app registration script above (which also has a Bash version if you prefer it). In Azure Cloud Shell, switch the shell type from **Bash** to **PowerShell** using the dropdown at the top left of the Cloud Shell window before you run the commands below. On your own computer (Windows, macOS or Linux), use PowerShell 7 with the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed.
 
 :::note[Replace the values in angle brackets]
 
-Anything written like `<this>` is specific to you and must be replaced. Every other name in the
-commands (the resource group variable aside) is found for you by the commands themselves, so you don't
-need to know the deployment name, the Key Vault name or the Container App name in advance.
+Anything written like `<this>` is specific to you and must be replaced. Every other name in the commands (the resource group variable aside) is found for you by the commands themselves, so you don't need to know the deployment name, the Key Vault name or the Container App name in advance.
 
 :::
 
 ## 1. Choose the subscription and resource group
 
-Azure Cloud Shell and the Azure CLI each have a *current* subscription, and it is often not the one you
-intend to deploy into. Resources in another subscription are invisible, which looks like "not found".
-Check which one is selected, and select the right one:
+Azure Cloud Shell and the Azure CLI each have a *current* subscription, and it is often not the one you intend to deploy into. Resources in another subscription are invisible, which looks like "not found". Check which one is selected, and select the right one:
 
 ```powershell
 az account list --query "[].{Name:name,Id:id,Selected:isDefault}" --output table
@@ -97,8 +72,7 @@ az account set --subscription '<subscription-id>'
 az account show --query "{Name:name,Id:id}" --output table
 ```
 
-Pick a **new resource group** name and a region that supports Container Apps and PostgreSQL Flexible
-Server (for example `uksouth`). The portal form creates the group for you; for the CLI, create it now:
+Pick a **new resource group** name and a region that supports Container Apps and PostgreSQL Flexible Server (for example `uksouth`). The portal form creates the group for you; for the CLI, create it now:
 
 ```powershell
 $RG = '<your-resource-group>'
@@ -109,13 +83,11 @@ Remember the name you chose, you will use it in every later step.
 
 ## 2. Deploy
 
-This step has three parts: the values the deployment form asks for, then one of two ways to run the deployment, the
-portal button or the command line. Use whichever you prefer, not both.
+This step has three parts: the values the deployment form asks for, then one of two ways to run the deployment, the portal button or the command line. Use whichever you prefer, not both.
 
 ### Fill in the deployment form
 
-Whether you use the portal button or the command line, these are the values to supply. Each row says
-where to find the value and which app registration it belongs to.
+Whether you use the portal button or the command line, these are the values to supply. Each row says where to find the value and which app registration it belongs to.
 
 | Field | What to enter | Where to find it |
 | --- | --- | --- |
@@ -132,15 +104,11 @@ where to find the value and which app registration it belongs to.
 
 :::danger[initialAdminEmails is required]
 
-Without it nobody can sign in to a fresh installation, so the form won't submit with it empty. Use the same email
-address you will sign in with. The setting only takes effect on the very first start, but the form asks for it every
-time, including when you redeploy over an existing deployment. The portal fills in most fields from the previous
-deployment but not this one, so check it before you deploy.
+Without it nobody can sign in to a fresh installation, so the form won't submit with it empty. Use the same email address you will sign in with. The setting only takes effect on the very first start, but the form asks for it every time, including when you redeploy over an existing deployment. The portal fills in most fields from the previous deployment but not this one, so check it before you deploy.
 
 :::
 
-The client **secrets** are deliberately not part of the form. They would end up in deployment history,
-so you put them in Key Vault yourself in step 5.
+The client **secrets** are deliberately not part of the form. They would end up in deployment history, so you put them in Key Vault yourself in step 5.
 
 ### Deploy with the portal button
 
@@ -148,15 +116,11 @@ Sign in to the Azure portal with the same account and subscription you chose in 
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fdotmarc.app%2Fazuredeploy.json)
 
-Choose the subscription, the resource group you created (or create a new one), a region, then fill in
-the fields from the table above. The portal names the deployment `CustomDeployment-<something>`, not
-`main`. You don't need to remember it, step 3 finds it for you.
+Choose the subscription, the resource group you created (or create a new one), a region, then fill in the fields from the table above. The portal names the deployment `CustomDeployment-<something>`, not `main`. You don't need to remember it, step 3 finds it for you.
 
 ### Or deploy with the command line
 
-Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders using the table above. As
-checked in the file contains placeholders only and is **not meant to be deployed as is**. Then, with
-`$RG` set as in step 1:
+Copy `infra/main.parameters.json` and replace the `REPLACE_ME` placeholders using the table above. As checked in the file contains placeholders only and is **not meant to be deployed as is**. Then, with `$RG` set as in step 1:
 
 ```powershell
 az deployment group create `
@@ -166,15 +130,12 @@ az deployment group create `
   --parameters infra/main.parameters.json
 ```
 
-You can pass single values inline instead of editing the file, for example
-`--parameters postgresAdminPassword='<password>'`.
+You can pass single values inline instead of editing the file, for example `--parameters postgresAdminPassword='<password>'`.
 
 <details>
 <summary>Where the portal's template comes from, and building it yourself</summary>
 
-The portal uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), compiled from
-`infra/main.bicep` during every website build. Bicep is the source of truth; the generated JSON is not
-checked in. Local website builds need the same Bicep compiler as CI (no Azure sign-in needed):
+The portal uses [dotmarc.app/azuredeploy.json](https://dotmarc.app/azuredeploy.json), compiled from `infra/main.bicep` during every website build. Bicep is the source of truth; the generated JSON is not checked in. Local website builds need the same Bicep compiler as CI (no Azure sign-in needed):
 
 ```powershell
 az bicep install --version v0.46.1
@@ -187,44 +148,29 @@ yarn gen-azure-template
 <details>
 <summary>What gets created</summary>
 
-* A **Container Apps environment** (backed by a Log Analytics workspace) and a **Container App**
-  running the published dotMARC image, with a system-assigned managed identity, sticky sessions
-  (required for Blazor Server), and a single replica.
-* An **Azure Database for PostgreSQL Flexible Server** (`Standard_B1ms`, PostgreSQL 18) with a
-  `dotmarc` database and a firewall rule allowing Azure services.
-* A **Key Vault** (RBAC-authorized), with the Container App's managed identity granted the
-  `Key Vault Secrets User` role.
-* Optionally (`enableMtaStsHosting`), two narrowly-scoped custom RBAC roles letting the Container
-  App manage its own custom domains and managed certificates, for [MTA-STS policy
-  hosting](./mta-sts.mdx#hosting-infrastructure-one-time). Exact permissions:
+* A **Container Apps environment** (backed by a Log Analytics workspace) and a **Container App** running the published dotMARC image, with a system-assigned managed identity, sticky sessions (required for Blazor Server), and a single replica.
+* An **Azure Database for PostgreSQL Flexible Server** (`Standard_B1ms`, PostgreSQL 18) with a `dotmarc` database and a firewall rule allowing Azure services.
+* A **Key Vault** (RBAC-authorized), with the Container App's managed identity granted the `Key Vault Secrets User` role.
+* Optionally (`enableMtaStsHosting`), two narrowly-scoped custom RBAC roles letting the Container App manage its own custom domains and managed certificates, for [MTA-STS policy hosting](./mta-sts.mdx#hosting-infrastructure-one-time). Exact permissions:
 
   | Role | Scope | Actions |
   | --- | --- | --- |
   | Container App role | the Container App itself | `containerApps/read`, `containerApps/write` |
   | Managed Environment role | the Container Apps environment | `managedEnvironments/read`, `managedEnvironments/join/action`, `managedEnvironments/managedCertificates/read`, `managedEnvironments/managedCertificates/write` |
 
-  `managedEnvironments/join/action` is easy to leave out and easy to miss when you do: Azure
-  requires it on *any* update to the Container App's ingress/custom-domain config, not just when
-  first attaching the app to the environment, and its own error
-  (`LinkedAuthorizationFailed`/`403`) reads like a Container-App-scoped permission problem rather
-  than pointing at the environment-scoped role that's actually missing it.
+  `managedEnvironments/join/action` is easy to leave out and easy to miss when you do: Azure requires it on *any* update to the Container App's ingress/custom-domain config, not just when first attaching the app to the environment, and its own error (`LinkedAuthorizationFailed`/`403`) reads like a Container-App-scoped permission problem rather than pointing at the environment-scoped role that's actually missing it.
 
 </details>
 
 :::important[The deployment is not finished yet]
 
-The button provisions infrastructure only. The app cannot start properly until you complete steps 4 and
-5: register the redirect URI and put the secrets in Key Vault. Until then the site may show a timeout.
-That is expected.
+The button provisions infrastructure only. The app cannot start properly until you complete steps 4 and 5: register the redirect URI and put the secrets in Key Vault. Until then the site may show a timeout. That is expected.
 
 :::
 
 ## 3. Find the resources this deployment created
 
-You may not know your deployment's name (the portal calls it `CustomDeployment-<something>`), and you
-don't need it. This finds everything by looking at what is in the resource group, and stops with a
-clear message if anything is missing. Run it in the same PowerShell session as the later steps, with
-`$RG` set to your resource group:
+You may not know your deployment's name (the portal calls it `CustomDeployment-<something>`), and you don't need it. This finds everything by looking at what is in the resource group, and stops with a clear message if anything is missing. Run it in the same PowerShell session as the later steps, with `$RG` set to your resource group:
 
 ```powershell
 function Get-Required($What, $Value) {
@@ -254,33 +200,23 @@ If you're configuring a custom domain in the Azure Portal for your container app
 
 :::
 
-The Container App's hostname isn't known until after deployment (Container Apps assigns its FQDN
-from the environment's own DNS suffix), so the redirect URI in the dashboard sign-in app registration
-can't be filled in ahead of time. Print the value to add:
+The Container App's hostname isn't known until after deployment (Container Apps assigns its FQDN from the environment's own DNS suffix), so the redirect URI in the dashboard sign-in app registration can't be filled in ahead of time. Print the value to add:
 
 ```powershell
 "$APP_URL/signin-oidc"
 ```
 
-Then, in the `dotmarc-dashboard` app registration's **Authentication** blade, add a **Web**
-platform redirect URI of that value (alongside or replacing the placeholder one added during
-one-time setup). Sign-in will fail with AADSTS50011 until this is done.
+Then, in the `dotmarc-dashboard` app registration's **Authentication** blade, add a **Web** platform redirect URI of that value (alongside or replacing the placeholder one added during one-time setup). Sign-in will fail with AADSTS50011 until this is done.
 
 ## 5. Populate Key Vault
 
-The template deliberately provisions three Key Vault secrets (`Graph-ClientSecret`,
-`EntraId-ClientSecret` and `ConnectionStrings-DotMarc`) with empty values, rather than accepting secret
-material as deployment parameters (which would put it on the command line or in a parameters
-file). Until they are set, the app can't sign in or reach Postgres.
+The template deliberately provisions three Key Vault secrets (`Graph-ClientSecret`, `EntraId-ClientSecret` and `ConnectionStrings-DotMarc`) with empty values, rather than accepting secret material as deployment parameters (which would put it on the command line or in a parameters file). Until they are set, the app can't sign in or reach Postgres.
 
-There are four parts: give yourself permission, write the secrets, re-apply the Container App's
-references to them, then restart. **Do all four.** Writing the secrets and restarting alone is not
-enough, see the note after the script.
+There are four parts: give yourself permission, write the secrets, re-apply the Container App's references to them, then restart. **Do all four.** Writing the secrets and restarting alone is not enough, see the note after the script.
 
 ### 5a. Give yourself permission to write secrets
 
-Owner on the resource group does not include permission to write Key Vault secrets. Grant yourself
-**Key Vault Secrets Officer** on the vault:
+Owner on the resource group does not include permission to write Key Vault secrets. Grant yourself **Key Vault Secrets Officer** on the vault:
 
 ```powershell
 $ME = az ad signed-in-user show --query id -o tsv
@@ -291,13 +227,11 @@ az role assignment create `
   --scope $KV_ID
 ```
 
-Azure can take a few minutes to apply the new role. If the next command answers `Forbidden`, wait two
-or three minutes and run it again.
+Azure can take a few minutes to apply the new role. If the next command answers `Forbidden`, wait two or three minutes and run it again.
 
 ### 5b. Write the three secrets
 
-Substitute the `dotmarc-mailbox` and `dotmarc-dashboard` client secrets you created during setup, and
-the database user name and password from the form:
+Substitute the `dotmarc-mailbox` and `dotmarc-dashboard` client secrets you created during setup, and the database user name and password from the form:
 
 ```powershell
 az keyvault secret set --vault-name $KV --name Graph-ClientSecret --value '<mailbox app client secret>'
@@ -306,16 +240,11 @@ az keyvault secret set --vault-name $KV --name ConnectionStrings-DotMarc `
   --value "Host=$PG_FQDN;Database=dotmarc;Username=<postgresAdminUsername>;Password=<postgresAdminPassword>;Ssl Mode=Require"
 ```
 
-Use single quotes around the client secrets so PowerShell doesn't treat characters such as `$` in them
-specially.
+Use single quotes around the client secrets so PowerShell doesn't treat characters such as `$` in them specially.
 
 ### 5c. Re-apply the secret references and restart
 
-In practice the Container App resolves its Key Vault references when the revision is created, which happens before you
-have written them. Setting new values in Key Vault does **not** make a running revision pick them up,
-and restarting it doesn't either. Re-apply all three references together (Azure validates the whole
-configuration, so setting one on its own fails with `SecretRef 'entraid-client-secret' ... not found`),
-then restart:
+In practice the Container App resolves its Key Vault references when the revision is created, which happens before you have written them. Setting new values in Key Vault does **not** make a running revision pick them up, and restarting it doesn't either. Re-apply all three references together (Azure validates the whole configuration, so setting one on its own fails with `SecretRef 'entraid-client-secret' ... not found`), then restart:
 
 ```powershell
 $VAULT = "https://$KV.vault.azure.net/secrets"
@@ -333,27 +262,20 @@ az containerapp revision restart --resource-group $RG --name $APP --revision $RE
 
 :::note[Why all three, every time]
 
-Without this step a new deployment can sit with the revision in **Activating**, with no replicas
-running and a browser `stream timeout`. The system log then shows `KEDAScalerFailed ... error resolving
-secret name graph-client-secret`, even though the secrets exist and the managed identity has the right
-role. See [Troubleshooting](#troubleshooting). Use the same re-apply command whenever you replace a secret value in
-Key Vault later (for example when a client secret expires).
+Without this step a new deployment can sit with the revision in **Activating**, with no replicas running and a browser `stream timeout`. The system log then shows `KEDAScalerFailed ... error resolving secret name graph-client-secret`, even though the secrets exist and the managed identity has the right role. See [Troubleshooting](#troubleshooting). Use the same re-apply command whenever you replace a secret value in Key Vault later (for example when a client secret expires).
 
 :::
 
 :::danger[Don't forget InitialAdmins\_\_Emails]
 
-Set `InitialAdmins__Emails` (the `initialAdminEmails` form field, see [Getting Started](./getting-started.mdx#configure)) before this
-deployment's first startup. Without it the tightened authorization policy locks out every user,
-including you.
+Set `InitialAdmins__Emails` (the `initialAdminEmails` form field, see [Getting Started](./getting-started.mdx#configure)) before this deployment's first startup. Without it the tightened authorization policy locks out every user, including you.
 
 :::
 
 <details>
 <summary>How the three layers of names line up</summary>
 
-The same secret has a different name at each layer. Don't rename the Key Vault secrets to match the
-environment variables:
+The same secret has a different name at each layer. Don't rename the Key Vault secrets to match the environment variables:
 
 | Layer | Graph secret | Dashboard secret | Database connection |
 | --- | --- | --- | --- |
@@ -361,8 +283,7 @@ environment variables:
 | Container App secret reference (lowercase) | `graph-client-secret` | `entraid-client-secret` | `connectionstrings-dotmarc` |
 | Environment variable in the app (double underscore) | `Graph__ClientSecret` | `EntraId__ClientSecret` | `ConnectionStrings__DotMarc` |
 
-The double underscore maps to ASP.NET Core's configuration hierarchy and only applies to the
-environment variable. Key Vault secret names can't contain underscores.
+The double underscore maps to ASP.NET Core's configuration hierarchy and only applies to the environment variable. Key Vault secret names can't contain underscores.
 
 </details>
 
@@ -378,65 +299,41 @@ az containerapp revision list `
   --output table
 ```
 
-A healthy revision shows `Healthy` and `Running` (or `RunningAtMaxScale`, which just means it is at the
-configured replica count). It can take a minute or two after the restart. Then open `$APP_URL`, sign in,
-and check **Poll status** for a successful first cycle.
+A healthy revision shows `Healthy` and `Running` (or `RunningAtMaxScale`, which just means it is at the configured replica count). It can take a minute or two after the restart. Then open `$APP_URL`, sign in, and check **Poll status** for a successful first cycle.
 
 ### Troubleshooting
 
-**The site shows `stream timeout`, or the revision stays on `Activating` with health `None`.** The
-container never started. Console logs don't exist yet (`az containerapp logs show` answers `Could not
-find container`), so read the **system** log:
+**The site shows `stream timeout`, or the revision stays on `Activating` with health `None`.** The container never started. Console logs don't exist yet (`az containerapp logs show` answers `Could not find container`), so read the **system** log:
 
 ```powershell
 az containerapp logs show --resource-group $RG --name $APP --type system --tail 50 --follow false
 ```
 
-* `KEDAScalerFailed` or `error resolving secret name ...`: the Key Vault secret references didn't
-  resolve. Do [step 5c](#5c-re-apply-the-secret-references-and-restart) again (all three references, then
-  restart). If it still fails, check the Container App's identity really has `Key Vault Secrets User`
-  on the vault (Access control (IAM) on the Key Vault, then Role assignments) and that all three
-  secrets are enabled and not empty.
-* `ContainerAppSecretRefNotFound`: you set one reference on its own. Set all three together, as in
-  step 5c.
+* `KEDAScalerFailed` or `error resolving secret name ...`: the Key Vault secret references didn't resolve. Do [step 5c](#5c-re-apply-the-secret-references-and-restart) again (all three references, then restart). If it still fails, check the Container App's identity really has `Key Vault Secrets User` on the vault (Access control (IAM) on the Key Vault, then Role assignments) and that all three secrets are enabled and not empty.
+* `ContainerAppSecretRefNotFound`: you set one reference on its own. Set all three together, as in step 5c.
 
-**`Forbidden` ... `setSecret/action` when writing a secret.** You don't have **Key Vault Secrets
-Officer** yet. Do [step 5a](#5a-give-yourself-permission-to-write-secrets) and wait a few minutes.
+**`Forbidden` ... `setSecret/action` when writing a secret.** You don't have **Key Vault Secrets Officer** yet. Do [step 5a](#5a-give-yourself-permission-to-write-secrets) and wait a few minutes.
 
-**`DeploymentNotFound` or an empty value from one of the discovery commands.** Wrong subscription or
-resource group. Repeat [step 1](#1-choose-the-subscription-and-resource-group). To see what is deployed
-in the group you chose:
+**`DeploymentNotFound` or an empty value from one of the discovery commands.** Wrong subscription or resource group. Repeat [step 1](#1-choose-the-subscription-and-resource-group). To see what is deployed in the group you chose:
 
 ```powershell
 az deployment group list --resource-group $RG --query "[].{Name:name,State:properties.provisioningState}" --output table
 ```
 
-**`argument --vault-name: expected one argument`.** `$KV` is empty because step 3 found nothing. Fix the
-subscription or resource group and run step 3 again.
+**`argument --vault-name: expected one argument`.** `$KV` is empty because step 3 found nothing. Fix the subscription or resource group and run step 3 again.
 
 ## Optional: Key Vault-backed secret storage
 
-By default, runtime-editable secrets (the HaloPSA API client secret, Cloudflare/Azure DNS push
-OAuth client secrets - anything configured through an in-app settings page rather than a deployment
-parameter) are encrypted and stored in Postgres. To store them in this deployment's Key Vault
-instead, redeploy with `enableKeyVaultWrite` set to `true` - this grants the container app's
-managed identity a narrowly-scoped write role on the vault (see `infra/main.bicep`'s
-`keyVaultWriteRole`, it adds only `secrets/setSecret`, read is already covered by the existing
-`Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app
-writes each secret itself the first time you save it from the relevant settings page.
+By default, runtime-editable secrets (the HaloPSA API client secret, Cloudflare/Azure DNS push OAuth client secrets - anything configured through an in-app settings page rather than a deployment parameter) are encrypted and stored in Postgres. To store them in this deployment's Key Vault instead, redeploy with `enableKeyVaultWrite` set to `true` - this grants the container app's managed identity a narrowly-scoped write role on the vault (see `infra/main.bicep`'s `keyVaultWriteRole`, it adds only `secrets/setSecret`, read is already covered by the existing `Key Vault Secrets User` assignment). No manual `az keyvault secret set` needed here, the app writes each secret itself the first time you save it from the relevant settings page.
 
 ## 7. Update or redeploy dotMARC
 
-This is the Azure part of [Update or redeploy dotMARC](./updating.mdx), which also covers what to check before
-and after an update.
+This is the Azure part of [Update or redeploy dotMARC](./updating.mdx), which also covers what to check before and after an update.
 
 Updating is two steps, run in the same PowerShell window:
 
-1. **Set your variables.** Fill in the form below and run the block it gives you. It sets `$RG`, `$APP` and
-   `$VERSION` for that window, so you only do this once per sitting. Nothing is sent anywhere, and the resource group
-   and subscription are remembered in this browser.
-2. **Run the update.** Pick the update command that matches how your app is configured (a release tag, `:latest`, or
-   Bicep) and run it. Each one uses the variables from step 1.
+1. **Set your variables.** Fill in the form below and run the block it gives you. It sets `$RG`, `$APP` and `$VERSION` for that window, so you only do this once per sitting. Nothing is sent anywhere, and the resource group and subscription are remembered in this browser.
+2. **Run the update.** Pick the update command that matches how your app is configured (a release tag, `:latest`, or Bicep) and run it. Each one uses the variables from step 1.
 
 <AzureDetails />
 
@@ -445,8 +342,7 @@ Updating is two steps, run in the same PowerShell window:
 
 You don't need this to update. Use it to check which image is deployed or to look back at earlier revisions.
 
-Container Apps stores the image reference in a **revision**. Check the image configured on the
-currently active app, then list its revision history:
+Container Apps stores the image reference in a **revision**. Check the image configured on the currently active app, then list its revision history:
 
 ```powershell
 az containerapp show `
@@ -462,18 +358,13 @@ az containerapp revision list `
   --output table
 ```
 
-For an immutable release reference such as <code>ghcr.io/homotechsual/dotmarc:<LatestVersion /></code>, the tag identifies
-the version. If the configured image is `:latest`, Azure only reports `:latest` - that mutable tag
-does not reveal which build was pulled. Check the version shown in dotMARC's footer, or compare the
-deployment time with the image published by the relevant release. Prefer release tags for
-production so the deployed version and rollback target are unambiguous.
+For an immutable release reference such as <code>ghcr.io/homotechsual/dotmarc:<LatestVersion /></code>, the tag identifies the version. If the configured image is `:latest`, Azure only reports `:latest` - that mutable tag does not reveal which build was pulled. Check the version shown in dotMARC's footer, or compare the deployment time with the image published by the relevant release. Prefer release tags for production so the deployed version and rollback target are unambiguous.
 
 </details>
 
 ### Update to a specific release (recommended)
 
-Use an immutable release tag. `az containerapp update` creates a new revision and, because this
-template uses single-revision mode, moves traffic to it after it becomes ready:
+Use an immutable release tag. `az containerapp update` creates a new revision and, because this template uses single-revision mode, moves traffic to it after it becomes ready:
 
 ```powershell
 # Step 2. Needs the variables from step 1 ($RG, $APP, $VERSION) in this window.
@@ -487,17 +378,13 @@ az containerapp update `
   --revision-suffix $REVISION_SUFFIX
 ```
 
-The app runs EF Core migrations during startup. Do not run a separate migration command; wait for
-the new revision to become ready before considering the update complete.
+The app runs EF Core migrations during startup. Do not run a separate migration command; wait for the new revision to become ready before considering the update complete.
 
 ### Redeploy when the app is configured with `:latest`
 
-Publishing a new image under `:latest` does **not** automatically update a running Container App.
-Running `az containerapp revision restart` only restarts the existing revision; use it for refreshed
-Key Vault references or a stuck replica, not as the image-update mechanism.
+Publishing a new image under `:latest` does **not** automatically update a running Container App. Running `az containerapp revision restart` only restarts the existing revision; use it for refreshed Key Vault references or a stuck replica, not as the image-update mechanism.
 
-If the configured image string remains exactly the same, force a new revision by supplying a unique
-revision suffix:
+If the configured image string remains exactly the same, force a new revision by supplying a unique revision suffix:
 
 ```powershell
 # Step 2. Needs the variables from step 1 ($RG, $APP) in this window.
@@ -511,17 +398,11 @@ az containerapp update `
   --revision-suffix $REVISION_SUFFIX
 ```
 
-The unique suffix makes this a new revision even though the image reference is still `:latest`, so
-Container Apps resolves and pulls the tag again. This is inherently less auditable than deploying
-a release tag: the revision records `:latest`, not the release version it represented at that time.
+The unique suffix makes this a new revision even though the image reference is still `:latest`, so Container Apps resolves and pulls the tag again. This is inherently less auditable than deploying a release tag: the revision records `:latest`, not the release version it represented at that time.
 
 ### Update through Bicep
 
-If the deployment is intentionally managed through `infra/main.bicep`, set `containerImage` to the
-new immutable release tag, run the `--what-if` check in the next section, then apply the template.
-A Bicep redeploy with `containerImage` still set to the same `:latest` string may show no template
-change and therefore may not create a new revision. In that case, either change to a release tag or
-use the forced-revision command above.
+If the deployment is intentionally managed through `infra/main.bicep`, set `containerImage` to the new immutable release tag, run the `--what-if` check in the next section, then apply the template. A Bicep redeploy with `containerImage` still set to the same `:latest` string may show no template change and therefore may not create a new revision. In that case, either change to a release tag or use the forced-revision command above.
 
 ### Verify the update
 
@@ -546,13 +427,11 @@ az containerapp logs show `
   --tail 100
 ```
 
-Then load the dashboard, confirm the expected version in its footer, sign in, and check **Poll
-status** for a successful post-deployment cycle.
+Then load the dashboard, confirm the expected version in its footer, sign in, and check **Poll status** for a successful post-deployment cycle.
 
 ### Roll back
 
-Create another revision using the previous immutable release tag. Fill in **Version to roll back to** in your
-details above so `$PREVIOUS_VERSION` is set:
+Create another revision using the previous immutable release tag. Fill in **Version to roll back to** in your details above so `$PREVIOUS_VERSION` is set:
 
 ```powershell
 # Needs the variables from step 1 ($RG, $APP, $PREVIOUS_VERSION) in this window.
@@ -566,67 +445,43 @@ az containerapp update `
   --revision-suffix $REVISION_SUFFIX
 ```
 
-Do not roll back blindly after a release that applied database migrations: application rollback is
-only safe when the older release remains compatible with the current schema. A deployment that
-only ever recorded `:latest` also has no reliable historical image target; choose the previous
-release tag explicitly.
+Do not roll back blindly after a release that applied database migrations: application rollback is only safe when the older release remains compatible with the current schema. A deployment that only ever recorded `:latest` also has no reliable historical image target; choose the previous release tag explicitly.
 
 ## 8. Turn on MTA-STS hosting for an existing install
 
 Hosting [MTA-STS policies](./mta-sts.mdx) for your domains has two stages, and this step is the first:
 
-1. **In Azure (this step).** Give dotMARC the two narrow permissions it needs to manage its own custom domains and
-   certificates, and tell it its hosting hostname. You do this once per deployment.
-2. **In dotMARC.** Enable MTA-STS for each domain and push its DNS records. See
-   [MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain).
+1. **In Azure (this step).** Give dotMARC the two narrow permissions it needs to manage its own custom domains and certificates, and tell it its hosting hostname. You do this once per deployment.
+2. **In dotMARC.** Enable MTA-STS for each domain and push its DNS records. See [MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain).
 
 :::danger[If you tear down or redeploy dotMARC on Azure, the hostname can change and every MTA-STS record breaks]
 
-Customers' `mta-sts.<domain>` CNAME records point at the Container App's generated hostname
-(`<app>.<code>.<region>.azurecontainerapps.io`). The `<code>` part belongs to the **Container Apps environment**. Delete
-and recreate the environment (or the whole resource group) and you get a **new hostname**, even with the same names and
-region. The `asuid.mta-sts.<domain>` ownership TXT records are also tied to the environment, so their values change too.
+Customers' `mta-sts.<domain>` CNAME records point at the Container App's generated hostname (`<app>.<code>.<region>.azurecontainerapps.io`). The `<code>` part belongs to the **Container Apps environment**. Delete and recreate the environment (or the whole resource group) and you get a **new hostname**, even with the same names and region. The `asuid.mta-sts.<domain>` ownership TXT records are also tied to the environment, so their values change too.
 
-Every domain you host then needs its records updated, because the old CNAMEs point at a hostname that no longer serves
-dotMARC. Until they are updated, policies stop being served for those domains, and a CNAME left behind is a record
-pointing at a name you don't own any more. Deleting only the Container App keeps the hostname, but its custom domain
-bindings and certificates are lost until dotMARC re-creates them.
+Every domain you host then needs its records updated, because the old CNAMEs point at a hostname that no longer serves dotMARC. Until they are updated, policies stop being served for those domains, and a CNAME left behind is a record pointing at a name you don't own any more. Deleting only the Container App keeps the hostname, but its custom domain bindings and certificates are lost until dotMARC re-creates them.
 
-**Before you tear anything down,** note the hosting hostname (the script below prints it), and list the domains with
-MTA-STS enabled. **After you redeploy,** run the script in this step again, then update the records for every hosted
-domain (a domain's **MTA-STS** tab shows the new target, and **Push DNS Records** updates it where dotMARC supports
-your DNS provider). You can't avoid this with your own custom domain in front: Azure's free managed certificates
-require the CNAME to point directly at the generated hostname.
+**Before you tear anything down,** note the hosting hostname (the script below prints it), and list the domains with MTA-STS enabled. **After you redeploy,** run the script in this step again, then update the records for every hosted domain (a domain's **MTA-STS** tab shows the new target, and **Push DNS Records** updates it where dotMARC supports your DNS provider). You can't avoid this with your own custom domain in front: Azure's free managed certificates require the CNAME to point directly at the generated hostname.
 
 :::
 
 ### Can I reuse the Azure Portal deployment?
 
-You can, but it isn't the easiest route. The template has the `enableMtaStsHosting` and `mtaStsHostingHostname`
-parameters, so redeploying it with `enableMtaStsHosting` set to `true` and the same values you used before does work.
-But a redeploy re-applies **everything** the template declares (PostgreSQL, the Container App, its ingress, Key Vault
-references), which can undo changes you made after the first deployment, and can trigger the Key Vault problem
-described in [step 5c](#5c-re-apply-the-secret-references-and-restart). The script here changes only what MTA-STS needs.
+You can, but it isn't the easiest route. The template has the `enableMtaStsHosting` and `mtaStsHostingHostname` parameters, so redeploying it with `enableMtaStsHosting` set to `true` and the same values you used before does work. But a redeploy re-applies **everything** the template declares (PostgreSQL, the Container App, its ingress, Key Vault references), which can undo changes you made after the first deployment, and can trigger the Key Vault problem described in [step 5c](#5c-re-apply-the-secret-references-and-restart). The script here changes only what MTA-STS needs.
 
 ### Run the script
 
-Use Azure Cloud Shell with the **PowerShell** shell type (see [Use PowerShell](#use-powershell)), signed in to the
-subscription that holds dotMARC. You need **Owner** on the resource group.
+Use Azure Cloud Shell with the **PowerShell** shell type (see [Use PowerShell](#use-powershell)), signed in to the subscription that holds dotMARC. You need **Owner** on the resource group.
 
-This script creates role definitions and role assignments and changes your Container App, so **download it and read it
-before you run it**. It is a plain PowerShell script that only calls `az`, and the full text is also under
-[The script](#the-script-and-its-template) below if you would rather read it here first.
+This script creates role definitions and role assignments and changes your Container App, so **download it and read it before you run it**. It is a plain PowerShell script that only calls `az`, and the full text is also under [The script](#the-script-and-its-template) below if you would rather read it here first.
 
-Download the script and the Bicep template it deploys, side by side. Downloading the template yourself means the script
-doesn't fetch anything else when it runs:
+Download the script and the Bicep template it deploys, side by side. Downloading the template yourself means the script doesn't fetch anything else when it runs:
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/scripts/azure/enable-mta-sts-hosting.ps1 -OutFile enable-mta-sts-hosting.ps1
 Invoke-WebRequest https://raw.githubusercontent.com/homotechsual/dotMARC/main/infra/mta-sts-hosting.bicep -OutFile mta-sts-hosting.bicep
 ```
 
-Open both files and check what they do (in Cloud Shell, use `code enable-mta-sts-hosting.ps1` or `cat`). When you are
-happy with them, replace `<your-resource-group>` and run the script, previewing first:
+Open both files and check what they do (in Cloud Shell, use `code enable-mta-sts-hosting.ps1` or `cat`). When you are happy with them, replace `<your-resource-group>` and run the script, previewing first:
 
 ```powershell
 $RG = '<your-resource-group>'
@@ -638,20 +493,13 @@ $RG = '<your-resource-group>'
 ./enable-mta-sts-hosting.ps1 -ResourceGroup $RG
 ```
 
-On Windows PowerShell, run `Unblock-File ./enable-mta-sts-hosting.ps1` first. It removes the "downloaded from the
-internet" mark that PowerShell's default `RemoteSigned` policy would otherwise refuse to run, so only do it once you have
-read the script. Cloud Shell doesn't need it.
+On Windows PowerShell, run `Unblock-File ./enable-mta-sts-hosting.ps1` first. It removes the "downloaded from the internet" mark that PowerShell's default `RemoteSigned` policy would otherwise refuse to run, so only do it once you have read the script. Cloud Shell doesn't need it.
 
 If you didn't deploy with the default name, add `-Name <your-app-name>`. The script:
 
-1. Checks the subscription, resource group, Container App and its managed identity, and shows the current revision's
-   health.
-2. Creates the two custom roles and assigns them to the app's managed identity
-   ([`infra/mta-sts-hosting.bicep`](https://github.com/homotechsual/dotMARC/blob/main/infra/mta-sts-hosting.bicep)).
-   Nothing else is touched. The roles get the same names the full template would give them, so a later full redeploy
-   adopts them instead of clashing.
-3. Sets the `MtaSts__*` environment variables, including `MtaSts__HostingHostname`, which defaults to the app's own
-   hostname. This creates a new revision.
+1. Checks the subscription, resource group, Container App and its managed identity, and shows the current revision's health.
+2. Creates the two custom roles and assigns them to the app's managed identity ([`infra/mta-sts-hosting.bicep`](https://github.com/homotechsual/dotMARC/blob/main/infra/mta-sts-hosting.bicep)). Nothing else is touched. The roles get the same names the full template would give them, so a later full redeploy adopts them instead of clashing.
+3. Sets the `MtaSts__*` environment variables, including `MtaSts__HostingHostname`, which defaults to the app's own hostname. This creates a new revision.
 4. Waits for that revision to be healthy, and prints the hostname customers' CNAMEs must point at.
 
 It is safe to run again. It doesn't write any DNS records or touch your domains: that is stage 2, inside dotMARC.
@@ -676,11 +524,7 @@ https://github.com/homotechsual/dotMARC/blob/main/infra/mta-sts-hosting.bicep
 <details>
 <summary>If the new revision can't read its secrets</summary>
 
-Creating a revision can fail with `Unable to get value using Managed identity System for secret ...`, even though the
-identity, the secrets and the Key Vault role are all fine. The script spots this, re-applies the Key Vault references
-and tries once more. If you are doing it by hand, or the script gives up, this is the same fix as
-[step 5c](#5c-re-apply-the-secret-references-and-restart): re-apply all three references together, restart the latest
-revision, then repeat the change that failed.
+Creating a revision can fail with `Unable to get value using Managed identity System for secret ...`, even though the identity, the secrets and the Key Vault role are all fine. The script spots this, re-applies the Key Vault references and tries once more. If you are doing it by hand, or the script gives up, this is the same fix as [step 5c](#5c-re-apply-the-secret-references-and-restart): re-apply all three references together, restart the latest revision, then repeat the change that failed.
 
 </details>
 
@@ -714,21 +558,14 @@ Then check the revision is healthy before you change any DNS records:
 az containerapp revision list -g "$RG" -n "$APP" --output table
 ```
 
-If you run these from Git Bash on Windows, set `export MSYS_NO_PATHCONV=1` first, or any argument starting with `/` is
-turned into a Windows path.
+If you run these from Git Bash on Windows, set `export MSYS_NO_PATHCONV=1` first, or any argument starting with `/` is turned into a Windows path.
 
 </details>
 
 <details>
 <summary>Re-running the whole template later</summary>
 
-`enableMtaStsHosting` is off by default, so enabling it through the template (or making any other change) means
-re-running `az deployment group create` against a resource group that's no longer in exactly the state the template
-describes: you've likely since bound a custom domain to the Container App (through the Portal, or
-`az containerapp hostname add`), and Azure may have changed Postgres storage, tier or Entra-auth settings that aren't
-declared in `main.bicep` at all. ARM deployments only touch what's declared, but for a property Bicep declares as a
-whole object (this template's `ingress` block, or `flexibleServers`' `storage`/`authConfig`), a redeploy replaces that
-whole object with what the template says, silently dropping anything set outside it.
+`enableMtaStsHosting` is off by default, so enabling it through the template (or making any other change) means re-running `az deployment group create` against a resource group that's no longer in exactly the state the template describes: you've likely since bound a custom domain to the Container App (through the Portal, or `az containerapp hostname add`), and Azure may have changed Postgres storage, tier or Entra-auth settings that aren't declared in `main.bicep` at all. ARM deployments only touch what's declared, but for a property Bicep declares as a whole object (this template's `ingress` block, or `flexibleServers`' `storage`/`authConfig`), a redeploy replaces that whole object with what the template says, silently dropping anything set outside it.
 
 **Always run `--what-if` before the real deployment** once a resource group has any post-deploy customization:
 
@@ -739,21 +576,11 @@ az deployment group what-if `
   --parameters infra/main.parameters.json
 ```
 
-Read the diff carefully. A `~ Microsoft.App/containerApps/<name>` entry removing
-`properties.configuration.ingress.customDomains`, or a `~ Microsoft.DBforPostgreSQL/flexibleServers/<name>` entry
-removing `storage`/`authConfig` properties, means applying it would break your custom domain or reset database
-settings you configured after the original deployment. Don't proceed if you see that. Either update the template's
-parameters to match the current state first, or use the script above, which applies only the MTA-STS changes.
+Read the diff carefully. A `~ Microsoft.App/containerApps/<name>` entry removing `properties.configuration.ingress.customDomains`, or a `~ Microsoft.DBforPostgreSQL/flexibleServers/<name>` entry removing `storage`/`authConfig` properties, means applying it would break your custom domain or reset database settings you configured after the original deployment. Don't proceed if you see that. Either update the template's parameters to match the current state first, or use the script above, which applies only the MTA-STS changes.
 
-Keep the real values in your parameters file: the sample's `REPLACE_ME` placeholders must be replaced, the PostgreSQL
-administrator password has to be supplied again (Azure doesn't return it from deployment history), and
-`initialAdminEmails` is required every time. Save `enableMtaStsHosting` as `true` and the real
-`mtaStsHostingHostname` so later deployments keep them.
+Keep the real values in your parameters file: the sample's `REPLACE_ME` placeholders must be replaced, the PostgreSQL administrator password has to be supplied again (Azure doesn't return it from deployment history), and `initialAdminEmails` is required every time. Save `enableMtaStsHosting` as `true` and the real `mtaStsHostingHostname` so later deployments keep them.
 
-If you created the two roles by hand with `az role definition create` rather than with the script, they have random IDs
-instead of the ones the template expects, and a full redeploy with `enableMtaStsHosting` on will fail because a role
-with that name already exists. Delete the hand-made roles first, or use the script, which creates them the way the
-template does.
+If you created the two roles by hand with `az role definition create` rather than with the script, they have random IDs instead of the ones the template expects, and a full redeploy with `enableMtaStsHosting` on will fail because a role with that name already exists. Delete the hand-made roles first, or use the script, which creates them the way the template does.
 
 </details>
 
@@ -763,6 +590,4 @@ template does.
   "Noted the hosting hostname it printed, in case the deployment is ever rebuilt",
 ]} />
 
-Next, enable MTA-STS for a domain inside dotMARC: see
-[MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain). Each domain also needs the extra Azure domain-ownership TXT
-record, which dotMARC shows you there.
+Next, enable MTA-STS for a domain inside dotMARC: see [MTA-STS: enabling a domain](./mta-sts.mdx#enabling-a-domain). Each domain also needs the extra Azure domain-ownership TXT record, which dotMARC shows you there.

@@ -15,9 +15,6 @@ Set via environment variables (double-underscore nesting):
 
 :::danger[Set `InitialAdmins__Emails` before deploying this feature]
 
-Authorization is deny-by-default: with no existing access grants, the fallback policy locks out
-every user, including the operator, unless `InitialAdmins__Emails` seeds at least one Admin grant
-on that first startup. If you deploy without it, recovery requires direct database access to
-insert a `UserAccess` row pointing at a locked `Admin` role.
+Authorization is deny-by-default: with no existing access grants, the fallback policy locks out every user, including the operator, unless `InitialAdmins__Emails` seeds at least one Admin grant on that first startup. If you deploy without it, recovery requires direct database access to insert a `UserAccess` row pointing at a locked `Admin` role.
 
 :::

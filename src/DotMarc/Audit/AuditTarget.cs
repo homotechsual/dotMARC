@@ -14,6 +14,8 @@ public sealed record AuditTarget(string Type, string? Id, string? Name)
     public static AuditTarget For(UserAccess access) => new("UserAccess", IdText(access.Id), access.Email);
     public static AuditTarget For(ApiKey key) => new("ApiKey", IdText(key.Id), key.Name);
     public static AuditTarget For(AlertEvent alert) => new("Alert", IdText(alert.Id), alert.DomainName);
+    public static AuditTarget For(AlertRule rule) => new("AlertRule", IdText(rule.Id), rule.Name);
+    public static AuditTarget For(AlertDestination destination) => new("AlertDestination", IdText(destination.Id), destination.Name);
 
     /// <summary>A settings screen, such as "HaloPSA" or "Notifications". There is only one of each, so no id.</summary>
     public static AuditTarget Settings(string name) => new("Settings", null, name);

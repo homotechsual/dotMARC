@@ -154,4 +154,33 @@ public sealed class AlertTicketPolicyTests
         Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules));
         Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.ConnectWise, rules));
     }
+
+    [Fact]
+    public void NeverMode_CreatesNoTicket_EvenWhenAGroupRuleSaysCreate()
+    {
+        var domain = DomainIn(null, MakeGroup(1, 7));
+        AlertTicketRule[] rules = [GroupRule(1, AlertTypes.MissedReport, true)];
+
+        Assert.False(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules, AlertTicketMode.Never));
+    }
+
+    [Fact]
+    public void AlwaysMode_CreatesATicket_WhereTheGroupRuleAndTheTypeDefaultBothSayNo()
+    {
+        var domain = DomainIn(null, MakeGroup(1, 7));
+        AlertTicketRule[] rules = [GroupRule(1, AlertTypes.NameserversChanged, false)];
+
+        Assert.True(AlertTicketPolicy.ShouldCreateTicket(AlertTypes.NameserversChanged, domain, PsaKind.HaloPsa, rules, AlertTicketMode.Always));
+    }
+
+    [Fact]
+    public void FollowRulesMode_IsTheSameAsGivingNoMode()
+    {
+        var domain = DomainIn(null, MakeGroup(1, 7));
+        AlertTicketRule[] rules = [GroupRule(1, AlertTypes.MissedReport, false)];
+
+        Assert.Equal(
+            AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules),
+            AlertTicketPolicy.ShouldCreateTicket(AlertTypes.MissedReport, domain, PsaKind.HaloPsa, rules, AlertTicketMode.FollowRules));
+    }
 }

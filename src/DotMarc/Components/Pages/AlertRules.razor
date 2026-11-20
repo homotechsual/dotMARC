@@ -1,0 +1,302 @@
+@page "/alerts/rules"
+@attribute [Authorize(Policy = "AlertsView")]
+@using DotMarc.Audit
+@using DotMarc.Components.Dialogs
+@using DotMarc.Components.Shared
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<AlertRules> Logger
+@inject NavigationManager Navigation
+
+<AppPageTitle>dotMARC - Alert rules</AppPageTitle>
+
+<div class="d-flex align-center mb-1">
+    <MudText Typo="Typo.h4">Alert rules</MudText>
+    <DocsLink Href="https://dotmarc.app/docs/alerts#alert-rules" Text="How alert rules work" Class="ml-2" />
+</div>
+<MudText Typo="Typo.body1" Class="mb-4">
+    Each rule decides when one kind of alert is raised, for which domains, how serious it is, where it is sent and whether it opens a ticket. For a domain,
+    rules of a kind run in the order shown, top to bottom, and stop at the first one that stops processing. The destinations themselves and the global
+    cooldown are on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+</MudText>
+
+@if (!_loaded)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @if (_canManage && _deadCount > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+            <div class="d-flex align-center flex-wrap" style="gap: 0.5rem;">
+                <span>@($"{_deadCount} scope {(_deadCount == 1 ? "entry points" : "entries point")} at a group, tag or domain that no longer exists. A rule limited to something that is gone applies to nothing.")</span>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" OnClick="CleanUpAsync">Clean up</MudButton>
+            </div>
+        </MudAlert>
+    }
+
+    @foreach (var kind in _kinds)
+    {
+        var rules = RulesOf(kind);
+        var reach = kind.HasDomainScope ? AlertRulePresentation.Reach(rules, _domainFacts).ToDictionary(entry => entry.RuleId) : [];
+        var description = AlertTypes.Find(kind.Key)?.Description;
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <div class="d-flex align-center flex-wrap" style="gap: 0.5rem;">
+                <MudText Typo="Typo.h6">@kind.DisplayName</MudText>
+                <MudSpacer />
+                @if (_canManage)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAsync(kind.Key, null))">Add a rule</MudButton>
+                }
+            </div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@description</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
+                <thead>
+                    <tr>
+                        @if (_canManage)
+                        {
+                            <th style="width:88px;">Order</th>
+                        }
+                        <th>Rule</th>
+                        <th>Applies to</th>
+                        <th>Severity</th>
+                        <th>On</th>
+                        <th title="When a rule stops processing, the rules after it are skipped for the domains it applies to.">Stops</th>
+                        <th>Reaches</th>
+                        @if (_canManage)
+                        {
+                            <th></th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in rules)
+                    {
+                        var ruleReach = reach.GetValueOrDefault(rule.Id);
+                        <tr @key="rule.Id">
+                            @if (_canManage)
+                            {
+                                <td>
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@(rule == rules[0])" aria-label="@($"Move {rule.Name} earlier")"
+                                                   OnClick="@(() => MoveAsync(rule, -1))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(rule == rules[^1])" aria-label="@($"Move {rule.Name} later")"
+                                                   OnClick="@(() => MoveAsync(rule, 1))" />
+                                </td>
+                            }
+                            <td>
+                                @rule.Name
+                                @if (rule.DefaultKey is not null)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Class="ml-1">Default</MudChip>
+                                }
+                                @if (AlertRulePresentation.DescribeDelivery(rule, _destinationNames) is { } delivery)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@delivery</MudText>
+                                }
+                            </td>
+                            <td>@AlertRulePresentation.DescribeScope(rule, _names, kind.HasDomainScope)</td>
+                            <td><MudChip T="string" Size="Size.Small" Color="@SeverityColor(rule.Severity)">@rule.Severity</MudChip></td>
+                            <td>
+                                @if (_canManage)
+                                {
+                                    <MudSwitch T="bool" Value="rule.Enabled" ValueChanged="@(enabled => SetEnabledAsync(rule, enabled))" Color="Color.Primary" Size="Size.Small"
+                                               aria-label="@($"{rule.Name}: {(rule.Enabled ? "on" : "off")}")" />
+                                }
+                                else
+                                {
+                                    <span>@(rule.Enabled ? "On" : "Off")</span>
+                                }
+                            </td>
+                            <td>@(rule.StopProcessing ? "Yes" : "No")</td>
+                            <td>
+                                @if (!kind.HasDomainScope)
+                                {
+                                    <span class="mud-text-secondary">Not about a domain</span>
+                                }
+                                else if (!rule.Enabled)
+                                {
+                                    <span class="mud-text-secondary">Off</span>
+                                }
+                                else
+                                {
+                                    <span>@($"{ruleReach?.AppliesTo ?? 0} of {_domainFacts.Count} domains")</span>
+                                    @if (ruleReach is { Hidden: > 0 })
+                                    {
+                                        <MudTooltip Text="@($"{ruleReach.Hidden} more match, but {string.Join(" and ", ruleReach.HiddenByRuleNames)} stop{(ruleReach.HiddenByRuleNames.Count == 1 ? "s" : "")} processing first.")" Arrow="true">
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">@($"{ruleReach.Hidden} hidden")</MudChip>
+                                        </MudTooltip>
+                                    }
+                                }
+                            </td>
+                            @if (_canManage)
+                            {
+                                <td style="white-space:nowrap;">
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(kind.Key, rule.Id))">Edit</MudButton>
+                                    @if (rule.DefaultKey is null)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Class="ml-1" OnClick="@(() => DeleteAsync(rule))">Delete</MudButton>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+}
+
+@code {
+    private bool _loaded;
+    private bool _canManage;
+    private List<AlertRuleKind> _kinds = [];
+    private List<AlertRule> _rules = [];
+    private List<DomainFacts> _domainFacts = [];
+    private AlertScopeNames _names = new(new Dictionary<int, string>(), new Dictionary<int, string>(), new Dictionary<int, string>());
+    private int _deadCount;
+
+    /// <summary>Destination names by id, for the "Sends to" line. Only names: the URLs are never loaded on this page.</summary>
+    private Dictionary<int, string> _destinationNames = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Domain alerts first, in the order the Alerts page lists them, then the ones about the system itself.
+        _kinds = [.. AlertRuleKinds.All.Where(kind => kind.HasDomainScope), .. AlertRuleKinds.All.Where(kind => !kind.HasDomainScope)];
+
+        // Rules name groups, tags and domains across the whole estate, so staff limited to some groups don't see them.
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (!AlertRuleAccess.MayView(user))
+        {
+            Navigation.NavigateTo("/AccessDenied");
+            return;
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _canManage = AlertRuleAccess.MayView(user) && (await AuthorizationService.AuthorizeAsync(user, nameof(Permission.AlertRulesManage))).Succeeded;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        // Seeds the default pack the first time, so the page is never empty on an install that has not raised an alert yet.
+        await AlertRuleSeeder.EnsureDefaultPackAsync(db, CancellationToken.None);
+        _rules = await db.AlertRules.AsNoTracking().Include(rule => rule.Scope).Include(rule => rule.Destinations).Include(rule => rule.EscalationDestinations).AsSplitQuery().ToListAsync();
+        _destinationNames = (await AlertDestinationService.ListSummariesAsync(db)).ToDictionary(destination => destination.Id, destination => destination.Name);
+        var groups = await db.Groups.AsNoTracking().ToDictionaryAsync(group => group.Id, group => group.Name);
+        var tags = await db.Tags.AsNoTracking().ToDictionaryAsync(tag => tag.Id, tag => tag.Name);
+        var domains = await db.Domains.AsNoTracking().ToDictionaryAsync(domain => domain.Id, domain => domain.Name);
+        _names = new AlertScopeNames(groups, tags, domains);
+        var monitored = await db.Domains.AsNoTracking().Where(domain => domain.IsMonitored).Include(domain => domain.Groups).Include(domain => domain.Tags).AsSplitQuery().ToListAsync();
+        _domainFacts = monitored.Select(domain => new DomainFacts(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet())).ToList();
+        _deadCount = _rules.SelectMany(rule => rule.Scope).Count(entry => AlertRulePresentation.IsDeadTarget(entry, _names));
+        _loaded = true;
+    }
+
+    private List<AlertRule> RulesOf(AlertRuleKind kind) =>
+        _rules.Where(rule => rule.Kind == kind.Key).OrderBy(rule => rule.Position).ThenBy(rule => rule.Id).ToList();
+
+    private static Color SeverityColor(string severity) => severity switch
+    {
+        AlertSeverities.Critical => Color.Error,
+        AlertSeverities.Warning => Color.Warning,
+        _ => Color.Info
+    };
+
+    /// <summary>Every write re-checks the permission: a control only renders for someone who has it, but a circuit can outlive a change of role.</summary>
+    private async Task<bool> MayManageAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (AlertRuleAccess.MayView(user) && (await AuthorizationService.AuthorizeAsync(user, nameof(Permission.AlertRulesManage))).Succeeded)
+        {
+            return true;
+        }
+
+        Snackbar.Add("You don't have permission to change alert rules.", Severity.Error);
+        _canManage = false;
+        return false;
+    }
+
+    /// <summary>Runs a change to the rules, then reloads. A refused change shows what the service said; anything else is logged and
+    /// reported without ending the session.</summary>
+    private async Task ChangeAsync(Func<DotMarcDbContext, AuditActor, Task> change)
+    {
+        if (!await MayManageAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await change(db, await AuditActorAccessor.GetAsync());
+        }
+        catch (AlertRuleValidationException exception)
+        {
+            Snackbar.Add(exception.Message, Severity.Error);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not change the alert rules.");
+            Snackbar.Add("Could not change the alert rule. Check the server logs.", Severity.Error);
+        }
+
+        await ReloadAsync();
+    }
+
+    private Task SetEnabledAsync(AlertRule rule, bool enabled) =>
+        ChangeAsync((db, actor) => AlertRuleService.UpdateAsync(db, actor, rule.Id, AlertRulePresentation.ToInput(rule) with { Enabled = enabled }));
+
+    private Task MoveAsync(AlertRule rule, int direction) =>
+        ChangeAsync((db, actor) => AlertRuleService.MoveAsync(db, actor, rule.Id, direction));
+
+    private async Task EditAsync(string kind, int? ruleId)
+    {
+        if (!await MayManageAsync())
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<AlertRuleDialog>
+        {
+            { dialog => dialog.Kind, kind },
+            { dialog => dialog.RuleId, ruleId }
+        };
+        var dialog = await DialogService.ShowAsync<AlertRuleDialog>(ruleId is null ? "Add a rule" : "Edit rule", parameters, new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task DeleteAsync(AlertRule rule)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete rule", $"Delete the rule '{rule.Name}'? Alerts it already raised stay in the list. This can't be undone.", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            await ChangeAsync((db, actor) => AlertRuleService.DeleteAsync(db, actor, rule.Id));
+        }
+    }
+
+    private async Task CleanUpAsync()
+    {
+        await ChangeAsync(async (db, actor) =>
+        {
+            var removed = await AlertRuleService.PruneDeadScopeAsync(db, actor);
+            Snackbar.Add($"Removed {removed} scope {(removed == 1 ? "entry" : "entries")}.", Severity.Success);
+        });
+    }
+}

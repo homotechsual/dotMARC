@@ -16,62 +16,48 @@ public sealed class AlertWebhookClientTests
 
     private AlertWebhookClient CreateClient() => new(_teams, _slack, _generic, NullLogger<AlertWebhookClient>.Instance);
 
-    private static NotificationSettings Settings(bool teams, bool slack, bool generic) => new()
+    private static AlertDestination Teams() => new() { Name = "Teams", Kind = AlertChannel.Teams, Url = TeamsUrl };
+    private static AlertDestination Slack() => new() { Name = "Slack", Kind = AlertChannel.Slack, Url = SlackUrl };
+    private static AlertDestination Generic() => new() { Name = "Generic", Kind = AlertChannel.GenericWebhook, Url = GenericUrl };
+
+    private Task SendAsync(AlertWebhookClient client, params AlertDestination[] destinations) =>
+        client.SendAlertAsync(destinations, "contoso.io", "MissedReport", "Warning", "Missing report", "contoso.io has not sent a report.", CancellationToken.None);
+
+    [Fact]
+    public async Task SendAlertAsync_SendsToEachGivenDestination_ByItsKind()
     {
-        Enabled = true,
-        TeamsEnabled = teams, TeamsWebhookUrl = TeamsUrl,
-        SlackEnabled = slack, SlackWebhookUrl = SlackUrl,
-        GenericWebhookEnabled = generic, GenericWebhookUrl = GenericUrl,
-    };
+        await SendAsync(CreateClient(), Teams(), Generic());
 
-    private Task SendAsync(AlertWebhookClient client, NotificationSettings settings) =>
-        client.SendAlertAsync(settings, "contoso.io", "MissedReport", "Missing report", "contoso.io has not sent a report.", CancellationToken.None);
-
-    [Theory]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(false, false, true)]
-    [InlineData(true, true, true)]
-    [InlineData(false, true, true)]
-    [InlineData(false, false, false)]
-    public async Task SendAlertAsync_SendsToEachChannelThatsSwitchedOn(bool teams, bool slack, bool generic)
-    {
-        await SendAsync(CreateClient(), Settings(teams, slack, generic));
-
-        Assert.Equal(teams ? [TeamsUrl] : [], _teams.SentTo);
-        Assert.Equal(slack ? [SlackUrl] : [], _slack.SentTo);
-        Assert.Equal(generic ? [GenericUrl] : [], _generic.SentTo);
+        Assert.Equal([TeamsUrl], _teams.SentTo);
+        Assert.Empty(_slack.SentTo);
+        Assert.Equal([GenericUrl], _generic.SentTo);
     }
 
     [Fact]
-    public async Task SendAlertAsync_SendsNothing_WhenNotificationsAreOff()
+    public async Task SendAlertAsync_SendsNothing_WhenGivenNoDestinations()
     {
-        var settings = Settings(true, true, true);
-        settings.Enabled = false;
-
-        await SendAsync(CreateClient(), settings);
+        await SendAsync(CreateClient());
 
         Assert.Empty(_teams.SentTo.Concat(_slack.SentTo).Concat(_generic.SentTo));
     }
 
     [Fact]
-    public async Task SendAlertAsync_SkipsAChannelThatsOnButHasNoUrl()
+    public async Task SendAlertAsync_SendsToTwoDestinationsOfTheSameKind()
     {
-        var settings = Settings(true, true, false);
-        settings.SlackWebhookUrl = " ";
+        var second = Teams();
+        second.Url = "https://example.test/teams-two";
 
-        await SendAsync(CreateClient(), settings);
+        await SendAsync(CreateClient(), Teams(), second);
 
-        Assert.Single(_teams.SentTo);
-        Assert.Empty(_slack.SentTo);
+        Assert.Equal([TeamsUrl, "https://example.test/teams-two"], _teams.SentTo);
     }
 
     [Fact]
-    public async Task SendAlertAsync_StillSendsToTheOtherChannels_WhenOneFails()
+    public async Task SendAlertAsync_StillSendsToTheOtherDestinations_WhenOneFails()
     {
         _teams.Failure = new HttpRequestException("Teams is down.");
 
-        await SendAsync(CreateClient(), Settings(true, true, true));
+        await SendAsync(CreateClient(), Teams(), Slack(), Generic());
 
         Assert.Single(_slack.SentTo);
         Assert.Single(_generic.SentTo);
@@ -115,7 +101,7 @@ public sealed class AlertWebhookClientTests
         public string LastTitle { get; private set; } = "";
         public Exception? Failure { get; set; }
 
-        public Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+        public Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
         {
             if (Failure is not null)
             {

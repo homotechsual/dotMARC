@@ -49,8 +49,8 @@ public static class DemoDataSeeder
             TRUNCATE TABLE
                 "Domains", "Reports", "ReportRecords", "Groups", "Tags", "Roles", "UserAccesses",
                 "PollCycles", "PollCycleDailySummaries", "ParseFailures", "ProcessedMessages",
-                "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "DomainAlertStates", "DomainDkimRecords",
-                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions"
+                "UserAccessScopedGroups", "ApiKeys", "ApiKeyScopedGroups", "DomainGroup", "DomainTag", "AlertEvents", "AlertTickets", "DomainAlertStates", "DomainDkimRecords",
+                "TlsrptReports", "TlsrptReportPolicies", "TlsrptFailureDetails", "AuditEntries", "BrandingImages", "GroupBrandings", "GroupReportSchedules", "ClientReportDeliveries", "UserDashboardPreferences", "SenderDecisions", "AlertRules", "AlertRuleScopeEntries", "AlertDestinations", "AlertRuleDestinations", "AlertRuleEscalationDestinations"
             RESTART IDENTITY CASCADE
             """,
             cancellationToken);
@@ -235,8 +235,17 @@ public static class DemoDataSeeder
                 Message = alertSeed.Message,
                 IsResolved = alertSeed.IsResolved,
                 CreatedUtc = alertSeed.CreatedUtc,
-                ResolvedUtc = alertSeed.ResolvedUtc
+                ResolvedUtc = alertSeed.ResolvedUtc,
+                // Seeded alerts count as already notified, so none of them shows as held by a quiet window.
+                NotifiedUtc = alertSeed.CreatedUtc
             });
+        }
+
+        // A ticket in each PSA, so the Alerts page shows them all. Raised a couple of minutes after the alert, as the real flow does.
+        foreach (var sample in DemoTickets.Samples)
+        {
+            var alert = context.AlertEvents.Local.Single(candidate => candidate.DomainName == sample.DomainName && candidate.AlertType == sample.AlertType);
+            alert.Tickets.Add(new DotMarc.Psa.AlertTicket { Psa = sample.Psa, TicketId = sample.TicketId, IsOpen = sample.IsOpen, CreatedUtc = alert.CreatedUtc.AddMinutes(2) });
         }
 
         foreach (var pollCycle in dataset.PollCycles)
@@ -349,6 +358,43 @@ public static class DemoDataSeeder
             Recipients = ["reports@aurora-retail.example"], StartedUtc = DateTimeOffset.UtcNow,
         });
 
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The default pack of alert rules (which also hands the alerts above to their default rules), and one rule beside it for the
+        // demo to show: Aurora Retail reports weekly, so it is told about a missing report after 5 days, not the default 2.
+        await AlertRuleSeeder.EnsureDefaultPackAsync(context, cancellationToken).ConfigureAwait(false);
+        context.AlertRules.Add(new AlertRule
+        {
+            Kind = AlertTypes.MissedReport,
+            Name = "Missing report: Aurora Retail reports weekly",
+            Severity = "Warning",
+            Position = -10,
+            StopProcessing = true,
+            // Quiet overnight: a missing report found at 3am is held until 07:00 rather than posted then.
+            QuietMode = AlertQuietMode.Hold,
+            QuietStartMinutes = 22 * 60,
+            QuietEndMinutes = 7 * 60,
+            ParametersJson = "{\"days\":\"5\"}",
+            Scope = [new AlertRuleScopeEntry { Target = AlertRuleScopeTarget.Group, TargetId = groupsByName[ViewerScopedGroupName].Id }],
+        });
+
+        // And an Under review example: Cobalt Freight's senders sit Under review for weeks, so it is reminded after 14 days.
+        context.AlertRules.Add(new AlertRule
+        {
+            Kind = AlertTypes.NewUnreviewedSender,
+            Name = "New sender: Cobalt Freight reviews slowly",
+            Severity = "Warning",
+            Position = -10,
+            StopProcessing = true,
+            ParametersJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                [AlertRuleParameterKeys.NewDays] = "7",
+                [AlertRuleParameterKeys.MinimumMessages] = "20",
+                [AlertRuleParameterKeys.UnderReview] = "afterDays",
+                [AlertRuleParameterKeys.UnderReviewDays] = "14",
+            }),
+            Scope = [new AlertRuleScopeEntry { Target = AlertRuleScopeTarget.Group, TargetId = groupsByName["Cobalt Freight"].Id }],
+        });
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

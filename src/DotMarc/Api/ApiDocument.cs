@@ -142,7 +142,7 @@ public static class ApiDocument
 
                 if (ApiExamples.For(context.JsonTypeInfo.Type) is { } example)
                 {
-                    schema.Example = example;
+                    schema.Examples = [example];
                 }
 
                 return Task.CompletedTask;
@@ -172,7 +172,7 @@ internal static class ApiExamples
         [typeof(ApiSource)] = new ApiSource("203.0.113.25", 1480, "Pass", "Pass", "None"),
         [typeof(ApiAlert)] = new ApiAlert(901, "SpfRecordBroken", "SPF record broken", "contoso.example", new ApiNamedRef(42, "contoso.example"), "Warning",
             "SPF record broken", "contoso.example's SPF record has more than 10 DNS lookups.", ExampleTime, false, null, false,
-            [new ApiAlertTicket("HaloPsa", "T-1042", true, ExampleTime, ExampleTime)]),
+            [new ApiAlertTicket("HaloPsa", "T-1042", true, ExampleTime, ExampleTime)], new ApiNamedRef(8, "SPF record broken")),
         [typeof(ApiAddDomainRequest)] = new ApiAddDomainRequest("contoso.example"),
         [typeof(ApiSetGroupsRequest)] = new ApiSetGroupsRequest([3, 5]),
         [typeof(ApiSetTagsRequest)] = new ApiSetTagsRequest([7]),

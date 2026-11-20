@@ -4,7 +4,7 @@ namespace DotMarc.Notifications;
 
 public interface ISlackWebhookClient
 {
-    Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default);
+    Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Posts an alert to a Slack incoming webhook, laid out like the Teams card: a header, the title, the domain and
@@ -12,9 +12,9 @@ public interface ISlackWebhookClient
 /// that can't render blocks.</summary>
 public sealed class SlackWebhookClient(HttpClient httpClient) : ISlackWebhookClient
 {
-    public async Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string title, string message, CancellationToken cancellationToken = default)
+    public async Task SendAlertAsync(string webhookUrl, string domainName, string alertType, string severity, string title, string message, CancellationToken cancellationToken = default)
     {
-        using var response = await httpClient.PostAsJsonAsync(webhookUrl, BuildPayload(domainName, alertType, title, message), cancellationToken).ConfigureAwait(false);
+        using var response = await httpClient.PostAsJsonAsync(webhookUrl, BuildPayload(domainName, alertType, AlertSeverityText.Title(severity, title), message), cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 

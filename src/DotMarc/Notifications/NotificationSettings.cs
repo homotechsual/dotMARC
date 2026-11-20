@@ -10,14 +10,21 @@ public sealed class NotificationSettings
 {
     public int Id { get; set; }
     public bool Enabled { get; set; } = true;
-    // Each channel has its own switch, so alerts can go to any combination of them.
+    // Retired: the three channels became AlertDestination rows (see AddAlertDestinations), and nothing reads these columns any more.
+    // They stay for one release so a downgrade still finds the values.
     public bool TeamsEnabled { get; set; } = true;
     public string? TeamsWebhookUrl { get; set; }
     public bool SlackEnabled { get; set; }
     public string? SlackWebhookUrl { get; set; }
     public bool GenericWebhookEnabled { get; set; }
     public string? GenericWebhookUrl { get; set; }
+    // Retired: the thresholds, modes and switches from here down to UnauthorisedDeliveredMinVolume are no longer read by alerting.
+    // They live on the alert rules now (see AlertRule). The columns stay for one release so a downgrade still finds the values; a
+    // new default rule is created from them once (AlertRuleSeeder), and nothing else uses them.
     public int MissingReportThresholdDays { get; set; } = 2;
+    /// <summary>The IANA time zone the quiet hours on rules are read in. An id dotMARC does not know behaves as UTC.</summary>
+    public string TimeZoneId { get; set; } = "UTC";
+
     public int CooldownMinutes { get; set; } = 180;
     public int MonitorIntervalSeconds { get; set; } = 300;
     public int SuspiciousRejectMinVolume { get; set; } = 10;

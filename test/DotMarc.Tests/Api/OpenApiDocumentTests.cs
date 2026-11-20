@@ -81,7 +81,7 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
             .SelectMany(path => path.Value.EnumerateObject().Select(operation => (Name: $"{operation.Name.ToUpperInvariant()} {path.Name}", Body: operation.Value)))
             .ToList();
 
-        Assert.Equal(26, operations.Count);
+        Assert.Equal(29, operations.Count);
         Assert.All(operations, operation =>
         {
             Assert.True(operation.Body.TryGetProperty("summary", out _), $"{operation.Name} has no summary");
@@ -98,6 +98,8 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
         var particular = new Dictionary<string, int[]>
         {
             ["GET /api/v1/alerts"] = [400, 404],
+            ["GET /api/v1/alert-rules"] = [400, 404],
+            ["GET /api/v1/alert-rules/{id}"] = [404],
             ["GET /api/v1/audit"] = [400, 404],
             ["GET /api/v1/domains/{domain}/sources"] = [400, 404],
             ["GET /api/v1/domains/{domain}/reports"] = [400, 404],
@@ -121,6 +123,7 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
             ["PUT /api/v1/domains/{domain}/groups"] = [400, 404],
             ["PUT /api/v1/domains/{domain}/tags"] = [400, 404],
             ["PUT /api/v1/domains/{domain}/monitoring"] = [400, 404],
+            ["GET /api/v1/alert-destinations"] = [],
             ["GET /api/v1/groups"] = [],
             ["GET /api/v1/tags"] = [],
         };
@@ -148,7 +151,7 @@ public sealed partial class OpenApiDocumentTests : IAsyncLifetime
     [Fact]
     public async Task EveryOperation_IsInOneReadableSection_AndEverySectionIsDescribed()
     {
-        string[] sections = ["Domains", "Imports", "Groups and tags", "Alerts", "Audit log", "Reports", "Client reports", "Parse failures"];
+        string[] sections = ["Domains", "Imports", "Groups and tags", "Alerts", "Alert rules", "Audit log", "Reports", "Client reports", "Parse failures"];
         using var document = JsonDocument.Parse(await FetchDocumentAsync());
         var operationTags = document.RootElement.GetProperty("paths").EnumerateObject()
             .SelectMany(path => path.Value.EnumerateObject())

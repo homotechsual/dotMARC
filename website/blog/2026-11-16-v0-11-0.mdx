@@ -7,68 +7,40 @@ authors: [mikey]
 tags: [release]
 ---
 
-This release makes the DMARC record check honest about records that report to more than one address, explains what went
-wrong when an MTA-STS hosting record stops pointing at dotMARC, and gives an Azure install that is already running a way
-to turn on MTA-STS hosting without redeploying everything.
+This release makes the DMARC record check honest about records that report to more than one address, explains what went wrong when an MTA-STS hosting record stops pointing at dotMARC, and gives an Azure install that is already running a way to turn on MTA-STS hosting without redeploying everything.
 
 {/* truncate */}
 
 ## Several rua addresses
 
-The DMARC check used to show a tick as soon as dotMARC's mailbox appeared anywhere in the record's `rua=` tag, however
-many other addresses sat beside it. It also hid the DNS push once a domain had its tick, so there was no way to drop a
-second address after you had finished trialling another tool.
+The DMARC check used to show a tick as soon as dotMARC's mailbox appeared anywhere in the record's `rua=` tag, however many other addresses sat beside it. It also hid the DNS push once a domain had its tick, so there was no way to drop a second address after you had finished trialling another tool.
 
 It now reads every address:
 
 * **dotMARC's mailbox alone** is OK, as before.
-* **dotMARC's mailbox beside one other address** is **OK, other rua**. It is shown as information and never raises an
-  alert, so you can run another DMARC tool alongside dotMARC while you compare them.
-* **dotMARC's mailbox beside two or more others** is **Too many rua addresses**, and it does alert. Receivers can cap how
-  many report addresses they send to, and some only honour the first couple, so reports can stop reaching dotMARC without
-  anything looking broken.
-* **Push via your DNS provider** is offered in both of the new cases. It rewrites `rua=` to dotMARC's mailbox only, keeps
-  every other tag, and shows you the change to confirm before it is made.
+* **dotMARC's mailbox beside one other address** is **OK, other rua**. It is shown as information and never raises an alert, so you can run another DMARC tool alongside dotMARC while you compare them.
+* **dotMARC's mailbox beside two or more others** is **Too many rua addresses**, and it does alert. Receivers can cap how many report addresses they send to, and some only honour the first couple, so reports can stop reaching dotMARC without anything looking broken.
+* **Push via your DNS provider** is offered in both of the new cases. It rewrites `rua=` to dotMARC's mailbox only, keeps every other tag, and shows you the change to confirm before it is made.
 
-The limit is two addresses in total, counting dotMARC's own. The client portal and client reports treat too many
-addresses as a failing check, and the two new values can be used in the API's `dmarc` filter. The
-[DMARC and MTA-STS](/docs/dmarc-and-mta-sts) page has the full table.
+The limit is two addresses in total, counting dotMARC's own. The client portal and client reports treat too many addresses as a failing check, and the two new values can be used in the API's `dmarc` filter. The [DMARC and MTA-STS](/docs/dmarc-and-mta-sts) page has the full table.
 
 ## MTA-STS on Azure
 
-* **A moved hosting record is explained.** When a domain's MTA-STS check fails, dotMARC now looks at the `mta-sts`
-  CNAME and says whether it points somewhere else (typically the old hostname after the deployment was rebuilt) or has
-  gone, names where it points and what to change it to, and recovers on its next check once the record is fixed. A
-  domain that is healthy costs no extra lookup.
-* **A targeted way to turn hosting on.** An install that is already running can enable MTA-STS hosting with
-  `scripts/azure/enable-mta-sts-hosting.ps1`, which creates the two narrow roles dotMARC needs and sets the environment
-  variables, and changes nothing else. It has a preview mode, and the guide shows the script in full so you can read it
-  before you run it. The full template gets the same roles under the same names, so a later full redeploy adopts them.
-* **A warning about rebuilding.** Customers' CNAMEs point at the Container App's generated hostname, which changes if the
-  Container Apps environment is recreated. The guides now say so, and what to note beforehand and update afterwards.
-* **A fix for deployments that failed.** Azure rejects role descriptions that contain what looks like an HTML tag, and
-  the MTA-STS role's description contained `mta-sts.<domain>`. That failed any deployment with MTA-STS hosting on. The
-  description no longer does.
+* **A moved hosting record is explained.** When a domain's MTA-STS check fails, dotMARC now looks at the `mta-sts` CNAME and says whether it points somewhere else (typically the old hostname after the deployment was rebuilt) or has gone, names where it points and what to change it to, and recovers on its next check once the record is fixed. A domain that is healthy costs no extra lookup.
+* **A targeted way to turn hosting on.** An install that is already running can enable MTA-STS hosting with `scripts/azure/enable-mta-sts-hosting.ps1`, which creates the two narrow roles dotMARC needs and sets the environment variables, and changes nothing else. It has a preview mode, and the guide shows the script in full so you can read it before you run it. The full template gets the same roles under the same names, so a later full redeploy adopts them.
+* **A warning about rebuilding.** Customers' CNAMEs point at the Container App's generated hostname, which changes if the Container Apps environment is recreated. The guides now say so, and what to note beforehand and update afterwards.
+* **A fix for deployments that failed.** Azure rejects role descriptions that contain what looks like an HTML tag, and the MTA-STS role's description contained `mta-sts.<domain>`. That failed any deployment with MTA-STS hosting on. The description no longer does.
 
 ## Azure deployment
 
-* `initialAdminEmails` is now a required parameter. Left blank, nobody can sign in to a fresh install, and a redeploy
-  that dropped it would have looked fine until the next restart. Supply it every time you deploy the template.
-* The app registration scripts print the tenant ID as its own labelled value, with the deployment form field each value
-  goes into.
-* The RBAC mailbox step offers read only access and read and send access as separate options, with the send permission
-  as an add-on to the first.
+* `initialAdminEmails` is now a required parameter. Left blank, nobody can sign in to a fresh install, and a redeploy that dropped it would have looked fine until the next restart. Supply it every time you deploy the template.
+* The app registration scripts print the tenant ID as its own labelled value, with the deployment form field each value goes into.
+* The RBAC mailbox step offers read only access and read and send access as separate options, with the send permission as an add-on to the first.
 
 ## Easier setup guides
 
-* **One step at a time.** The setup guides have a **Whole guide / One step at a time** switch. In step mode each section
-  is one step, with a progress bar, a jump menu, Back and Next, and the checklist ticks at the end of the step they
-  belong to. Your progress is remembered.
-* **Less on the page at once.** Nice-to-know detail, such as what gets created, name mappings and error tables, is
-  collapsed into sections you can open.
-* **Read scripts before you run them.** Every script the guides ask you to download now has its full text on the page
-  too, so you can check it first.
+* **One step at a time.** The setup guides have a **Whole guide / One step at a time** switch. In step mode each section is one step, with a progress bar, a jump menu, Back and Next, and the checklist ticks at the end of the step they belong to. Your progress is remembered.
+* **Less on the page at once.** Nice-to-know detail, such as what gets created, name mappings and error tables, is collapsed into sections you can open.
+* **Read scripts before you run them.** Every script the guides ask you to download now has its full text on the page too, so you can check it first.
 
-Upgrading needs no action, and there are no database changes. After the upgrade, a domain whose record lists dotMARC's
-mailbox and one other address will show **OK, other rua** the next time its DMARC check runs. If you deploy the Azure
-template again, add `initialAdminEmails` to your parameters.
+Upgrading needs no action, and there are no database changes. After the upgrade, a domain whose record lists dotMARC's mailbox and one other address will show **OK, other rua** the next time its DMARC check runs. If you deploy the Azure template again, add `initialAdminEmails` to your parameters.

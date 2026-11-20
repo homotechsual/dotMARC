@@ -32,6 +32,10 @@ jobs:
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Test the release scripts
+        if: steps.scope.outputs.needed == 'true'
+        run: node --test scripts/release-tags.test.mjs
+
       - name: Set up .NET
         if: steps.scope.outputs.needed == 'true'
         uses: actions/setup-dotnet@v6

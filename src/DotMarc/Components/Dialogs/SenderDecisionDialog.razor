@@ -4,7 +4,7 @@
     <TitleContent>Decide on @SenderLabel</TitleContent>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mb-2">
-            This is a label for your team. It doesn't change DNS or block anything. Your DMARC policy decides what receivers do with the mail.
+            This is your team's record, and it changes what dotMARC tells you. It doesn't change DNS or block any mail: your DMARC policy decides what receivers do.
         </MudText>
         @if (!string.IsNullOrEmpty(InheritedText))
         {
@@ -15,6 +15,10 @@
             <MudRadio T="SenderDecisionStatus?" Value="_unauthorised">Unauthorised: it should not send as this domain</MudRadio>
             <MudRadio T="SenderDecisionStatus?" Value="_underReview">Under review: still finding out</MudRadio>
         </MudRadioGroup>
+        <MudText Typo="Typo.caption" Class="d-block mt-2 mud-text-secondary">
+            Until a sender is decided, dotMARC raises a new-sender alert for it and counts it as needing a decision. Authorised and Under review stop both.
+            If mail from an Unauthorised sender is still being delivered, you get an alert. Decisions also appear in client reports and the API.
+        </MudText>
         <MudTextField T="string" @bind-Value="_note" Label="Note (optional)" Lines="3" MaxLength="@SenderDecision.MaxNoteLength" Counter="@SenderDecision.MaxNoteLength" Class="mt-2" />
     </DialogContent>
     <DialogActions>

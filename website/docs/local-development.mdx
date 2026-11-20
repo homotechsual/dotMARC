@@ -5,8 +5,7 @@ description: Build, test, and run dotMARC locally, with or without Docker Compos
 
 # Local Development
 
-The repo is designed to work in two common local modes: run the full stack with Docker Compose, or
-run the app locally while connecting to a PostgreSQL instance on `localhost:5432`.
+The repo is designed to work in two common local modes: run the full stack with Docker Compose, or run the app locally while connecting to a PostgreSQL instance on `localhost:5432`.
 
 ## Build and test
 
@@ -16,14 +15,11 @@ dotnet build dotMARC.sln
 dotnet test dotMARC.sln
 ```
 
-`dotnet test` uses Testcontainers.PostgreSql, so Docker must be running; the first run pulls the
-`postgres:18` image automatically.
+`dotnet test` uses Testcontainers.PostgreSql, so Docker must be running; the first run pulls the `postgres:18` image automatically.
 
 ## Local database-first flow
 
-Use this mode when you want to run the app itself from your IDE/`dotnet run` (for debugging,
-breakpoints, hot reload) but still need a real Postgres instance behind it, rather than building
-and running the whole thing in containers.
+Use this mode when you want to run the app itself from your IDE/`dotnet run` (for debugging, breakpoints, hot reload) but still need a real Postgres instance behind it, rather than building and running the whole thing in containers.
 
 To start just the database for local debugging:
 
@@ -31,10 +27,7 @@ To start just the database for local debugging:
 docker compose up postgres
 ```
 
-This publishes PostgreSQL on `localhost:5432` using the default development connection values from
-`src/DotMarc/appsettings.json`: database `dotmarc`, username `dotmarc`, and password `dotmarc`. It
-keeps running in your terminal - leave it there, and use a second terminal for the next step (or
-add `-d` to run it in the background: `docker compose up -d postgres`).
+This publishes PostgreSQL on `localhost:5432` using the default development connection values from `src/DotMarc/appsettings.json`: database `dotmarc`, username `dotmarc`, and password `dotmarc`. It keeps running in your terminal - leave it there, and use a second terminal for the next step (or add `-d` to run it in the background: `docker compose up -d postgres`).
 
 Then, in a second terminal, run the app directly on the host instead of in a container:
 
@@ -42,60 +35,39 @@ Then, in a second terminal, run the app directly on the host instead of in a con
 dotnet run --project src/DotMarc/DotMarc.csproj
 ```
 
-The app expects the same PostgreSQL connection settings as the Docker Compose setup (it reads them
-from `src/DotMarc/appsettings.json` by default), so no extra configuration is needed for this mode.
-You'll still need the Graph/EntraId environment variables described in
-[Getting Started](./getting-started.mdx#configure) set for sign-in and mailbox polling to work -
-`dotnet run` reads environment variables the same way Docker Compose does.
+The app expects the same PostgreSQL connection settings as the Docker Compose setup (it reads them from `src/DotMarc/appsettings.json` by default), so no extra configuration is needed for this mode. You'll still need the Graph/EntraId environment variables described in [Getting Started](./getting-started.mdx#configure) set for sign-in and mailbox polling to work - `dotnet run` reads environment variables the same way Docker Compose does.
 
 ## Full stack with Docker Compose
 
-Use this mode to build and run everything - dotMARC and PostgreSQL both - exactly as it would run
-in production, entirely inside containers:
+Use this mode to build and run everything - dotMARC and PostgreSQL both - exactly as it would run in production, entirely inside containers:
 
 ```powershell
 docker compose up --build
 ```
 
-`--build` rebuilds the dotMARC image from your current source before starting (drop it on later
-runs if you haven't changed any code - `docker compose up` alone reuses the last build and starts
-faster). This uses the repo's `docker-compose.yml` configuration and the environment variables
-described in [Getting Started](./getting-started.mdx#configure) - set them in your shell or in a
-`.env` file next to `docker-compose.yml`, the same as described there.
+`--build` rebuilds the dotMARC image from your current source before starting (drop it on later runs if you haven't changed any code - `docker compose up` alone reuses the last build and starts faster). This uses the repo's `docker-compose.yml` configuration and the environment variables described in [Getting Started](./getting-started.mdx#configure) - set them in your shell or in a `.env` file next to `docker-compose.yml`, the same as described there.
 
-Once it's running, the dashboard is reachable at `http://localhost:8080`. Sign-in works over plain
-HTTP for local testing as long as your Entra dashboard app registration's redirect URI matches
-(`http://localhost:8080/signin-oidc`) - you don't need the reverse-proxy/HTTPS setup from Getting
-Started unless you're exposing this to anyone outside your own machine.
+Once it's running, the dashboard is reachable at `http://localhost:8080`. Sign-in works over plain HTTP for local testing as long as your Entra dashboard app registration's redirect URI matches (`http://localhost:8080/signin-oidc`) - you don't need the reverse-proxy/HTTPS setup from Getting Started unless you're exposing this to anyone outside your own machine.
 
-To stop everything: `Ctrl+C` in the terminal it's running in, or `docker compose down` from
-another terminal (add `-v` to also delete the Postgres data volume and start completely fresh next
-time: `docker compose down -v`).
+To stop everything: `Ctrl+C` in the terminal it's running in, or `docker compose down` from another terminal (add `-v` to also delete the Postgres data volume and start completely fresh next time: `docker compose down -v`).
 
 ## Refreshing the website screenshots
 
-The images on the website (in `website/static/img/screenshots`, a light and a dark version of each) are
-captured from a demo-mode dotMARC by a script, so they can be refreshed after a UI change or a change to the
-demo data (`src/DotMarc/Demo`) without taking them by hand.
+The images on the website (in `website/static/img/screenshots`, a light and a dark version of each) are captured from a demo-mode dotMARC by a script, so they can be refreshed after a UI change or a change to the demo data (`src/DotMarc/Demo`) without taking them by hand.
 
-The demo data is seeded from the UTC date, so a given day always produces the same numbers but the numbers
-change from day to day. Expect every image to differ a little on each run, and only commit the ones that show
-something worth publishing.
+The demo data is seeded from the UTC date, so a given day always produces the same numbers but the numbers change from day to day. Expect every image to differ a little on each run, and only commit the ones that show something worth publishing.
 
 <details>
 <summary>In GitHub</summary>
 
-Run the **Update Screenshots** workflow from the Actions tab. It starts PostgreSQL and the demo, captures
-every image, and opens a pull request with the result. It needs the repository setting that lets Actions
-create pull requests (Settings, Actions, General).
+Run the **Update Screenshots** workflow from the Actions tab. It starts PostgreSQL and the demo, captures every image, and opens a pull request with the result. It needs the repository setting that lets Actions create pull requests (Settings, Actions, General).
 
 </details>
 
 <details>
 <summary>On your machine</summary>
 
-Start PostgreSQL as in [Local database-first flow](#local-database-first-flow), then run the app in demo
-mode:
+Start PostgreSQL as in [Local database-first flow](#local-database-first-flow), then run the app in demo mode:
 
 ```powershell
 $env:Demo__Enabled = 'true'
@@ -112,9 +84,6 @@ yarn playwright install chromium
 yarn screenshots
 ```
 
-If Microsoft Edge is installed you can skip the browser download with `yarn screenshots --channel msedge`.
-`yarn screenshots --only dashboard-admin,sources-tab` captures just those pictures, and the top of
-`website/scripts/capture-screenshots.mjs` lists the other options (the address of the demo, the output folder,
-which domain the domain pages show, and the tallest an image can be).
+If Microsoft Edge is installed you can skip the browser download with `yarn screenshots --channel msedge`. `yarn screenshots --only dashboard-admin,sources-tab` captures just those pictures, and the top of `website/scripts/capture-screenshots.mjs` lists the other options (the address of the demo, the output folder, which domain the domain pages show, and the tallest an image can be).
 
 </details>

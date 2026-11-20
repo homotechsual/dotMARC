@@ -34,6 +34,12 @@ public sealed class DemoPsaProvider(PsaKind kind, TimeProvider timeProvider) : I
 
     public Task<PsaTicketState> GetTicketStateAsync(DotMarcDbContext context, string ticketId, CancellationToken cancellationToken = default)
     {
+        // The tickets the demo data starts with were not raised by this provider, so it would call them gone. They stay open.
+        if (DemoTickets.IsSeededOpen(Kind, ticketId))
+        {
+            return Task.FromResult(PsaTicketState.Open);
+        }
+
         if (!_createdUtc.TryGetValue(ticketId, out var createdUtc))
         {
             return Task.FromResult(PsaTicketState.Missing);

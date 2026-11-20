@@ -3,13 +3,16 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @using DotMarc.Demo
+@using DotMarc.Notifications
 @using DotMarc.Components.Shared
 @using DotMarc.Reporting
 @using Microsoft.Extensions.Options
 @using System.Reflection
 @implements IDisposable
 @inject IJSRuntime Js
+@using DotMarc.DevBuild
 @inject IOptions<DemoOptions> DemoOptions
+@inject IOptions<DevBuildOptions> DevBuild
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuditRecorder AuditRecorder
@@ -19,6 +22,7 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
+<DevBuildBanner />
 <MudLayout>
     <MudAppBar Elevation="1">
         <div class="d-flex align-center">
@@ -43,6 +47,12 @@
             </AuthorizeView>
             <AuthorizeView Policy="DnsPushManage">
                 <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="AlertsView">
+                @if (AlertRuleAccess.MayView(context.User))
+                {
+                    <MudMenuItem Href="/alerts/rules" Icon="@Icons.Material.Filled.Rule">Alert rules</MudMenuItem>
+                }
             </AuthorizeView>
             <AuthorizeView Policy="AlertsManage">
                 <MudMenuItem Href="/alerts/settings" Icon="@Icons.Material.Filled.NotificationsActive">Alert settings</MudMenuItem>
@@ -100,7 +110,14 @@
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     © @_currentYear dotMARC. Free software licensed under the
                     <MudLink Href="https://dotmarc.app/license" Target="_blank" Color="Color.Primary">GNU Affero General Public License v3.0</MudLink>.
-                    <MudLink Href="@_releaseNotesUrl" Target="_blank" Color="Color.Primary">v@_version</MudLink>.
+                    @if (_versionLabel.ReleaseNotesUrl is { } releaseNotesUrl)
+                    {
+                        <MudLink Href="@releaseNotesUrl" Target="_blank" Color="Color.Primary">@_versionLabel.Text</MudLink>
+                    }
+                    else
+                    {
+                        <span>@_versionLabel.Text</span>
+                    }.
                     <MudLink Href="https://github.com/homotechsual/dotMARC" Target="_blank" Color="Color.Primary">Source code</MudLink>.
                     <SponsorLink />
                 </MudText>
@@ -115,7 +132,7 @@
     private bool _isDarkMode;
     private readonly int _currentYear = DateTime.UtcNow.Year;
     private static readonly string _version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
-    private static readonly string _releaseNotesUrl = $"https://dotmarc.app/releases-updates/v{_version.Replace('.', '-')}";
+    private VersionLabel _versionLabel = null!;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -135,7 +152,11 @@
 
     private string? _lastRecordedPath;
 
-    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+    protected override void OnInitialized()
+    {
+        _versionLabel = DevBuildOptions.VersionLabel(_version, DevBuild.Value.Enabled);
+        Navigation.LocationChanged += OnLocationChanged;
+    }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args) => await RecordPageViewAsync(args.Location);
 

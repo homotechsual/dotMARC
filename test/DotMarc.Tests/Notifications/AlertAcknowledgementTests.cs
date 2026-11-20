@@ -240,8 +240,8 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         {
             var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
             settings.TeamsWebhookUrl = "https://example.test/webhook";
-            settings.AcknowledgeableAutoCloseDays = 3;
             await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
+            await AlertRuleTestSupport.EditDefaultRuleAsync(_connectionString, AlertTypes.DmarcPolicyWeakened, rule => rule.AutoCloseDays = 3);
             (await context.AlertEvents.SingleAsync(alert => alert.Id == alertId)).CreatedUtc = DateTimeOffset.UtcNow.AddDays(-4);
             await context.SaveChangesAsync();
         }
@@ -264,8 +264,8 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         {
             var settings = await context.NotificationSettings.AsNoTracking().SingleAsync();
             settings.TeamsWebhookUrl = "https://example.test/webhook";
-            settings.AcknowledgeableAutoCloseDays = 3;
             await NotificationSettingsService.SaveAsync(context, TestActors.Admin, settings);
+            await AlertRuleTestSupport.EditDefaultRuleAsync(_connectionString, AlertTypes.DmarcPolicyWeakened, rule => rule.AutoCloseDays = 3);
         }
 
         var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), PsaTestSupport.ForHalo(new NoOpHaloPsaClient()), NullLogger<AlertingService>.Instance);

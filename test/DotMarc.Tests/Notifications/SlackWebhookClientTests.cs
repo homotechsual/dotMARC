@@ -19,7 +19,7 @@ public sealed class SlackWebhookClientTests
     {
         var (client, handler) = CreateClient();
 
-        await client.SendAlertAsync("https://hooks.slack.com/services/T000/B000/secret", "contoso.io", "MissedReport", "Missing DMARC report",
+        await client.SendAlertAsync("https://hooks.slack.com/services/T000/B000/secret", "contoso.io", "MissedReport", "Warning", "Missing DMARC report",
             "contoso.io has not sent a report.", CancellationToken.None);
 
         Assert.Equal("https://hooks.slack.com/services/T000/B000/secret", handler.Requests.Single().RequestUri!.ToString());
@@ -43,7 +43,7 @@ public sealed class SlackWebhookClientTests
         var (client, handler) = CreateClient();
         handler.StatusCode = HttpStatusCode.NotFound;
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.SendAlertAsync("https://hooks.slack.com/services/gone", "contoso.io", "MissedReport",
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.SendAlertAsync("https://hooks.slack.com/services/gone", "contoso.io", "MissedReport", "Warning",
             "Missing DMARC report", "contoso.io has not sent a report.", CancellationToken.None));
     }
 }

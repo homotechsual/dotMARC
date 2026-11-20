@@ -72,6 +72,46 @@ public sealed class StaticPagesTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData(false, "[Demo]")]
+    [InlineData(true, "[Next]")]
+    public async Task SignedOutPage_TitleStartsWithTheBuildLabel(bool next, string prefix)
+    {
+        await using var factory = _factory!.WithWebHostBuilder(builder =>
+            builder.UseSetting("DevBuild:Enabled", next ? "true" : "false"));
+        using var client = factory.CreateClient();
+
+        var html = await client.GetStringAsync("/demo");
+
+        Assert.Contains($"<title>{prefix} dotMARC - Demo Sign In</title>", html);
+        Assert.DoesNotContain(InteractiveServerMarker, html);
+    }
+
+    [Theory]
+    [InlineData(false, "admin", "/dashboard", "[Demo] dotMARC - Dashboard")]
+    [InlineData(true, "admin", "/dashboard", "[Next] dotMARC - Dashboard")]
+    [InlineData(false, "client", "/portal", "[Demo] Your domains - Example MSP")]
+    [InlineData(true, "client", "/portal", "[Next] Your domains - Example MSP")]
+    public async Task SignedInPage_TitleKeepsItsContentAndPortalBrand(bool next, string persona, string path, string expected)
+    {
+        await using var factory = _factory!.WithWebHostBuilder(builder =>
+            builder.UseSetting("DevBuild:Enabled", next ? "true" : "false"));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await client.PostAsync("/demo/sign-in/admin", content: null);
+
+        var dbFactory = factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var settings = await BrandingSettingsService.GetAsync(context);
+        settings.ProductName = "Example MSP";
+        await BrandingSettingsService.SaveAsync(context, TestActors.Admin, settings);
+        await client.PostAsync($"/demo/sign-in/{persona}", content: null);
+
+        var html = await client.GetStringAsync(path);
+
+        Assert.Contains($"<title>{expected}</title>", html);
+        Assert.Contains(InteractiveServerMarker, html);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Alerts_LinkToExistingDomains_ButNotSystemOrRemovedSubjects(bool resolved)

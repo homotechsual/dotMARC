@@ -43,10 +43,16 @@ public sealed class AlertingServiceTests : IAsyncLifetime
             Enabled = enabled,
             TeamsEnabled = true,
             TeamsWebhookUrl = "https://example.test/webhook",
-            MissingReportThresholdDays = missingReportThresholdDays,
-            CooldownMinutes = cooldownMinutes,
-            SuspiciousRejectMinVolume = suspiciousRejectMinVolume,
-            SuspiciousRejectNonBenignPercent = suspiciousRejectNonBenignPercent
+            CooldownMinutes = cooldownMinutes
+        });
+
+        // The thresholds are settings of the default rules, not of the notification settings.
+        await AlertRuleTestSupport.EditDefaultRuleAsync(_connectionString, AlertTypes.MissedReport,
+            rule => AlertRuleTestSupport.SetParameter(rule, AlertRuleParameterKeys.MissingDays, missingReportThresholdDays.ToString()));
+        await AlertRuleTestSupport.EditDefaultRuleAsync(_connectionString, AlertTypes.SuspiciousRejectActivity, rule =>
+        {
+            AlertRuleTestSupport.SetParameter(rule, AlertRuleParameterKeys.MinimumMessages, suspiciousRejectMinVolume.ToString());
+            AlertRuleTestSupport.SetParameter(rule, AlertRuleParameterKeys.NonBenignPercent, suspiciousRejectNonBenignPercent.ToString());
         });
     }
 

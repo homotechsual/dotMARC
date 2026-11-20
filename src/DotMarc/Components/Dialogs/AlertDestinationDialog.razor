@@ -1,0 +1,157 @@
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuditActorAccessor AuditActorAccessor
+@inject IAlertWebhookClient AlertWebhookClient
+@inject ISnackbar Snackbar
+@inject ILogger<AlertDestinationDialog> Logger
+
+@* Adds or edits one alert destination. The service validates every save and never puts the URL in an error message; this only shows
+   what it says. The URL is a secret, so it is shown as a password field. *@
+<MudDialog>
+    <TitleContent>@(DestinationId is null ? "Add a destination" : "Edit destination")</TitleContent>
+    <DialogContent>
+        @if (!_loaded)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            @if (_problem is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_problem</MudAlert>
+            }
+
+            <MudGrid>
+                <MudItem xs="12" sm="8">
+                    <MudTextField T="string" Label="Name" @bind-Value="_name" Immediate="true" MaxLength="100" Variant="Variant.Outlined" Required="true"
+                                  HelperText="Shown on the rules that send here, for example Aurora Teams." />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="AlertChannel" Label="Kind" @bind-Value="_kind" Variant="Variant.Outlined">
+                        <MudSelectItem T="AlertChannel" Value="AlertChannel.Teams">Teams</MudSelectItem>
+                        <MudSelectItem T="AlertChannel" Value="AlertChannel.Slack">Slack</MudSelectItem>
+                        <MudSelectItem T="AlertChannel" Value="AlertChannel.GenericWebhook">Generic webhook</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField T="string" Label="Webhook URL" @bind-Value="_url" Immediate="true" InputType="InputType.Password" Variant="Variant.Outlined" Required="true"
+                                  HelperText="@UrlHelp" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch T="bool" @bind-Value="_enabled" Color="Color.Primary" Label="Enabled" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">A destination that is off receives nothing, whichever rules send to it.</MudText>
+                </MudItem>
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.Send" Disabled="@(!_loaded || _testing || string.IsNullOrWhiteSpace(_url))" OnClick="TestAsync">@(_testing ? "Sending..." : "Send test")</MudButton>
+        <MudSpacer />
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(!_loaded || _saving)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The destination being edited, or null to add one.</summary>
+    [Parameter] public int? DestinationId { get; set; }
+
+    private bool _loaded;
+    private bool _saving;
+    private bool _testing;
+    private string _name = "";
+    private AlertChannel _kind = AlertChannel.Teams;
+    private string _url = "";
+    private bool _enabled = true;
+    private string? _problem;
+
+    private string UrlHelp => _kind switch
+    {
+        AlertChannel.Slack => "The incoming webhook URL from your Slack app (Incoming Webhooks), starting https://hooks.slack.com/services/.",
+        AlertChannel.GenericWebhook => "dotMARC POSTs each alert here as JSON, with domainName, alertType, title, message, severity and createdUtc.",
+        _ => "The webhook URL of the Teams channel alerts should post to."
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DestinationId is { } id)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (await db.AlertDestinations.AsNoTracking().SingleOrDefaultAsync(destination => destination.Id == id) is not { } destination)
+            {
+                // Someone else may have deleted it since the list was drawn.
+                Snackbar.Add("That destination no longer exists. The list has been refreshed.", Severity.Warning);
+                MudDialog.Close(DialogResult.Ok(true));
+                return;
+            }
+
+            (_name, _kind, _url, _enabled) = (destination.Name, destination.Kind, destination.Url, destination.Enabled);
+        }
+
+        _loaded = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _problem = null;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actor = await AuditActorAccessor.GetAsync();
+            var input = new AlertDestinationInput(_name, _kind, _url, _enabled);
+            if (DestinationId is { } id)
+            {
+                await AlertDestinationService.UpdateAsync(db, actor, id, input);
+            }
+            else
+            {
+                await AlertDestinationService.CreateAsync(db, actor, input);
+            }
+
+            Snackbar.Add("Destination saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (AlertDestinationException exception)
+        {
+            _problem = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not save alert destination {DestinationId}.", DestinationId);
+            _problem = "Could not save the destination. Try again, and check the server logs if it keeps happening.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Sends a marked test alert to the URL as typed, saved or not, so a destination can be checked before saving.</summary>
+    private async Task TestAsync()
+    {
+        _testing = true;
+        try
+        {
+            var problem = await AlertWebhookClient.SendTestAsync(_kind, _url);
+            if (problem is null)
+            {
+                Snackbar.Add("Test alert sent. Check that it arrived.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"The test didn't go through: {problem}", Severity.Error);
+            }
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

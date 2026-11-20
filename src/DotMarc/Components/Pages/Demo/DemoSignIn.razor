@@ -3,13 +3,15 @@
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
 @using DotMarc.Demo
+@using DotMarc.Components.Shared
 @using Microsoft.Extensions.Options
 @inject IOptions<DemoOptions> DemoOptions
 @inject NavigationManager Navigation
 
 @if (DemoOptions.Value.Enabled)
 {
-    <PageTitle>dotMARC - Demo Sign In</PageTitle>
+    <AppPageTitle>dotMARC - Demo Sign In</AppPageTitle>
+    <DevBuildBanner />
     <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
         <MudText Typo="Typo.h4" Class="mb-4">dotMARC demo</MudText>
         <MudText Class="mb-6">
@@ -44,7 +46,7 @@
 }
 else 
 {
-    <PageTitle>dotMARC - Demo Disabled</PageTitle>
+    <AppPageTitle>dotMARC - Demo Disabled</AppPageTitle>
     <MudText Typo="Typo.h5">Demo mode is disabled</MudText>
     <MudText>Contact an administrator if you believe this is a mistake.</MudText>
 }

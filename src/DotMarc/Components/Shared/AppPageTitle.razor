@@ -1,0 +1,7 @@
+@inject AppTitle Title
+
+<PageTitle>@(Title.Prefix)@ChildContent</PageTitle>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = null!;
+}

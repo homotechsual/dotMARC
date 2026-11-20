@@ -43,15 +43,28 @@ public sealed class SenderAlertingTests : IAsyncLifetime
     private DotMarcDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
+    /// <summary>Sets the sender alert thresholds and switches. Alerting reads the default rules, so they are set there.</summary>
     private async Task SaveSettingsAsync(
         bool newSenderEnabled = true, int newSenderMinVolume = 20, int newSenderDays = 7, bool deliveredEnabled = true, int deliveredMinVolume = 10)
     {
-        await using var context = CreateContext();
-        await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
+        await using (var context = CreateContext())
         {
-            Enabled = true, TeamsEnabled = true, TeamsWebhookUrl = "https://example.test/webhook",
-            NewSenderAlertEnabled = newSenderEnabled, NewSenderMinVolume = newSenderMinVolume, NewSenderDays = newSenderDays,
-            UnauthorisedDeliveredAlertEnabled = deliveredEnabled, UnauthorisedDeliveredMinVolume = deliveredMinVolume,
+            await NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
+            {
+                Enabled = true, TeamsEnabled = true, TeamsWebhookUrl = "https://example.test/webhook",
+            });
+        }
+
+        await AlertRuleTestSupport.EditDefaultRuleAsync(_connectionString, AlertTypes.NewUnreviewedSender, rule =>
+        {
+            rule.Enabled = newSenderEnabled;
+            AlertRuleTestSupport.SetParameter(rule, AlertRuleParameterKeys.MinimumMessages, newSenderMinVolume.ToString());
+            AlertRuleTestSupport.SetParameter(rule, AlertRuleParameterKeys.NewDays, newSenderDays.ToString());
+        });
+        await AlertRuleTestSupport.EditDefaultRuleAsync(_connectionString, AlertTypes.UnauthorisedSenderDelivered, rule =>
+        {
+            rule.Enabled = deliveredEnabled;
+            AlertRuleTestSupport.SetParameter(rule, AlertRuleParameterKeys.MinimumMessages, deliveredMinVolume.ToString());
         });
     }
 
@@ -262,7 +275,7 @@ public sealed class SenderAlertingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheNewDaysAndTheMinimumVolume_AreReadFromSettings()
+    public async Task TheNewDaysAndTheMinimumVolume_AreReadFromTheRule()
     {
         var domainId = await SeedDomainAsync();
         await AddReportAsync(domainId, 3, Mail(MailchimpIp, 30, "bounce.mcsv.net"));
@@ -319,35 +332,4 @@ public sealed class SenderAlertingTests : IAsyncLifetime
         Assert.Null(owners["192.0.2.1"]);
     }
 
-    // ---- Saving the settings ----
-
-    [Fact]
-    public async Task SavingTheSenderAlertSettings_KeepsThem_AndAuditsTheChange()
-    {
-        await SaveSettingsAsync(newSenderEnabled: false, newSenderMinVolume: 50, newSenderDays: 14, deliveredEnabled: false, deliveredMinVolume: 25);
-
-        await using var verify = CreateContext();
-        var settings = await verify.NotificationSettings.SingleAsync();
-        Assert.Equal((false, 50, 14, false, 25),
-            (settings.NewSenderAlertEnabled, settings.NewSenderMinVolume, settings.NewSenderDays, settings.UnauthorisedDeliveredAlertEnabled, settings.UnauthorisedDeliveredMinVolume));
-        var entry = await verify.AuditEntries.Where(candidate => candidate.Action == AuditActions.NotificationSettingsSaved).OrderByDescending(candidate => candidate.Id).FirstAsync();
-        Assert.Contains(entry.Changes, change => change is { Field: "New sender alerts", Old: "Yes", New: "No" });
-        Assert.Contains(entry.Changes, change => change.Field == "New sender days" && change.New == "14");
-    }
-
-    [Theory]
-    [InlineData(0, 1, 1)]
-    [InlineData(31, 1, 1)]
-    [InlineData(7, 0, 1)]
-    [InlineData(7, 1, 0)]
-    public async Task OutOfRangeSenderAlertSettings_AreRefused(int days, int newMinimum, int deliveredMinimum)
-    {
-        await using var context = CreateContext();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => NotificationSettingsService.SaveAsync(context, TestActors.Admin, new NotificationSettings
-        {
-            Enabled = true, TeamsEnabled = true, TeamsWebhookUrl = "https://example.test/webhook",
-            NewSenderDays = days, NewSenderMinVolume = newMinimum, UnauthorisedDeliveredMinVolume = deliveredMinimum,
-        }));
-    }
 }

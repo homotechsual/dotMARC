@@ -14,7 +14,7 @@ public static class AlertEndpoints
 {
     private const int DefaultPageSize = 50;
 
-    public static IReadOnlyList<string> Severities { get; } = ["Info", "Warning"];
+    public static IReadOnlyList<string> Severities { get; } = AlertSeverities.All;
 
     private static readonly IReadOnlyList<string> Statuses = ["open", "resolved", "all"];
 
@@ -196,6 +196,10 @@ public static class AlertEndpoints
         var domainIds = await scope.Domains(context.Domains.AsNoTracking())
             .Where(domain => subjects.Contains(domain.Name))
             .ToDictionaryAsync(domain => domain.Name, domain => domain.Id, cancellationToken);
+        var ruleIds = alerts.Where(alert => alert.AlertRuleId is not null).Select(alert => alert.AlertRuleId!.Value).Distinct().ToList();
+        var ruleNames = scope.IsScoped || ruleIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await context.AlertRules.AsNoTracking().Where(rule => ruleIds.Contains(rule.Id)).ToDictionaryAsync(rule => rule.Id, rule => rule.Name, cancellationToken);
         var items = alerts.Select(alert => new ApiAlert(
                 alert.Id,
                 alert.AlertType,
@@ -209,7 +213,8 @@ public static class AlertEndpoints
                 alert.IsResolved,
                 alert.ResolvedUtc,
                 !alert.IsResolved && AlertAcknowledgement.IsAcknowledgeable(alert.AlertType),
-                tickets[alert.Id].Select(ticket => new ApiAlertTicket(ticket.Psa.ToString(), ticket.TicketId, ticket.IsOpen, ticket.CreatedUtc, ticket.LastCheckedUtc)).ToList()))
+                tickets[alert.Id].Select(ticket => new ApiAlertTicket(ticket.Psa.ToString(), ticket.TicketId, ticket.IsOpen, ticket.CreatedUtc, ticket.LastCheckedUtc)).ToList(),
+                alert.AlertRuleId is { } ruleId && ruleNames.TryGetValue(ruleId, out var ruleName) ? new ApiNamedRef(ruleId, ruleName) : null))
             .ToList();
         return TypedResults.Ok(new ApiPage<ApiAlert>(items, pageNumber, size, totalCount));
     }

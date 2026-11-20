@@ -13,9 +13,10 @@
 @inject IPsaTicketService PsaTicketService
 @inject IEnumerable<IPsaProvider> PsaProviders
 @inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ISnackbar Snackbar
 
-<PageTitle>dotMARC - Alerts</PageTitle>
+<AppPageTitle>dotMARC - Alerts</AppPageTitle>
 <div class="d-flex align-center mb-4">
     <MudText Typo="Typo.h4">Alerts</MudText>
     <DocsLink Href="https://dotmarc.app/docs/alerts" Text="Alert types and delivery channels" Class="ml-2" />
@@ -41,6 +42,10 @@ else
             <tr>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.DomainName)">Domain</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.AlertType)">Type</MudTableSortLabel></MudTh>
+                @if (_showRule)
+                {
+                    <MudTh>Rule</MudTh>
+                }
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.Severity)">Severity</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
@@ -60,6 +65,10 @@ else
                         }
                     </MudSelect>
                 </MudTh>
+                @if (_showRule)
+                {
+                    <MudTh></MudTh>
+                }
                 <MudTh>
                     <MudSelect T="string" Value="_severityFilter" ValueChanged="@(v => _severityFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
                         @foreach (var severity in _alerts.Select(e => e.Severity).Distinct().OrderBy(s => s))
@@ -93,10 +102,20 @@ else
                 }
             </MudTd>
             <MudTd>@context.AlertType</MudTd>
+            @if (_showRule)
+            {
+                <MudTd>@RuleNameOf(context)</MudTd>
+            }
             <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
             <MudTd>@FormatCreated(context)</MudTd>
             <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
-            <MudTd>@context.Message</MudTd>
+            <MudTd>
+                @context.Message
+                @if (AlertRulePresentation.DescribeNotification(context, RuleOf(context), _zone) is { } notification)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@notification</MudText>
+                }
+            </MudTd>
             <MudTd DataLabel="Tickets">
                 @foreach (var ticket in _tickets[context.Id].OrderBy(ticket => ticket.Psa))
                 {
@@ -171,6 +190,17 @@ else
         return true;
     }
 
+    // Rule names can name clients, so the column is only for staff with no group limit, as the rules page is.
+    private bool _showRule;
+    private Dictionary<int, string> _ruleNames = [];
+
+    private Dictionary<int, AlertRule> _rulesById = [];
+    private TimeZoneInfo _zone = TimeZoneInfo.Utc;
+
+    private AlertRule? RuleOf(AlertEvent alert) => alert.AlertRuleId is { } ruleId && _rulesById.TryGetValue(ruleId, out var rule) ? rule : null;
+
+    private string RuleNameOf(AlertEvent alert) => alert.AlertRuleId is { } ruleId && _ruleNames.TryGetValue(ruleId, out var name) ? name : string.Empty;
+
     protected override Task OnInitializedAsync() => LoadAsync();
 
     private async Task LoadAsync()
@@ -184,6 +214,11 @@ else
 
         // An alert raised again while an earlier copy's ticket is open shows that ticket too, rather than none.
         _tickets = await AlertTicketLinks.LoadAsync(db, _alerts);
+
+        _showRule = AlertRuleAccess.MayView((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        _rulesById = _showRule ? await db.AlertRules.AsNoTracking().ToDictionaryAsync(rule => rule.Id) : [];
+        _ruleNames = _rulesById.ToDictionary(pair => pair.Key, pair => pair.Value.Name);
+        _zone = QuietHours.ZoneFor((await NotificationSettingsService.GetAsync(db)).TimeZoneId);
 
         var alertDomainNames = _alerts.Select(alert => alert.DomainName).Distinct().ToArray();
         _domainNames = (await db.Domains.AsNoTracking()
@@ -243,7 +278,7 @@ else
 
     private static Color GetSeverityColor(string severity) => severity switch
     {
-        "Error" => Color.Error,
+        "Critical" or "Error" => Color.Error,
         "Warning" => Color.Warning,
         _ => Color.Info
     };
