@@ -44,7 +44,7 @@ const sidebars: SidebarsConfig = {
           type: 'category',
           label: 'PSA integration',
           link: {type: 'doc', id: 'psa-integration'},
-          items: ['psa/halopsa', 'psa/connectwise', 'psa/autotask'],
+          items: ['psa/halopsa', 'psa/connectwise', 'psa/autotask', 'psa/superops', 'psa/ninjaone'],
         },
       ],
     },
