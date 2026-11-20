@@ -8,7 +8,7 @@
 @inject PortalData PortalData
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<PageTitle>@PortalTitle.With(DomainName, Brand)</PageTitle>
+<AppPageTitle>@PortalTitle.With(DomainName, Brand)</AppPageTitle>
 
 <PortalDomainView Detail="_detail" Loaded="_loaded" BackHref="@(_scope?.HomeHref ?? "/portal")" />
 

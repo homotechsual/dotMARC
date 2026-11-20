@@ -13,6 +13,10 @@ env:
   DEPLOY_PATH: /opt/dotmarc-next
   DOCKERHUB_IMAGE: homotechsual/dotmarc
 
+concurrency:
+  group: dotmarc-next-deployment
+  cancel-in-progress: false
+
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
@@ -24,11 +28,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image: ${{ steps.image.outputs.name }}
-
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+      image: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
 
     steps:
       - uses: actions/checkout@v7
@@ -72,6 +72,7 @@ jobs:
       # One multi-arch build, pushed to GHCR (the server pulls from here) and, when credentials exist, Docker Hub. DEV_BUILD
       # bakes DevBuild__Enabled=true into the image, so anyone running :next gets the dev banner without setting anything.
       - name: Build and push next image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -90,11 +91,25 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: next
+      url: ${{ steps.deployment-url.outputs.url }}
+    outputs:
+      hostname: ${{ steps.deployment-url.outputs.hostname }}
+      url: ${{ steps.deployment-url.outputs.url }}
     env:
-      DOTMARC_IMAGE: ${{ needs.build-and-push.outputs.image }}:next
+      DOTMARC_IMAGE: ${{ needs.build-and-push.outputs.image }}
+      DOTMARC_NEXT_DOMAIN: ${{ vars.DOTMARC_NEXT_DOMAIN }}
       POSTGRES_PASSWORD: ${{ secrets.DOTMARC_DEMO_POSTGRES_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Resolve deployment URL
+        id: deployment-url
+        run: bash scripts/deployment-url.sh "$DOTMARC_NEXT_DOMAIN"
 
       - name: Set up SSH
         run: |
@@ -128,8 +143,29 @@ jobs:
             ${{ secrets.DOTMARC_DEMO_DEPLOY_USER }}@${{ secrets.DOTMARC_DEMO_DEPLOY_HOST }} \
             "cd ${{ env.DEPLOY_PATH }} && \
              docker compose -f docker-compose.next.yml --env-file .env pull && \
-             docker compose -f docker-compose.next.yml --env-file .env up -d && \
+             docker compose -f docker-compose.next.yml --env-file .env up -d --wait --wait-timeout 180 && \
              docker image prune -f"
+
+      - name: Verify public deployment
+        timeout-minutes: 7
+        env:
+          DEPLOYMENT_URL: ${{ steps.deployment-url.outputs.url }}
+        run: bash scripts/verify-deployment.sh "$DEPLOYMENT_URL" "[Next] dotMARC - Demo Sign In"
+
+      - name: Write deployment summary
+        env:
+          DEPLOYMENT_URL: ${{ steps.deployment-url.outputs.url }}
+          DEPLOYMENT_HOSTNAME: ${{ steps.deployment-url.outputs.hostname }}
+        run: |
+          {
+            echo "## Next deployment"
+            echo
+            echo "| Name | Value |"
+            echo "| --- | --- |"
+            echo "| Hostname | $DEPLOYMENT_HOSTNAME |"
+            echo "| URL | [$DEPLOYMENT_URL]($DEPLOYMENT_URL) |"
+            echo "| Image | \`$DOTMARC_IMAGE\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clean up SSH key
         if: always()

@@ -1,4 +1,8 @@
 using DotMarc.DnsPush;
+using DotMarc.Components.Shared;
+using DotMarc.Demo;
+using DotMarc.DevBuild;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace DotMarc.Tests.DnsPush;
@@ -9,6 +13,7 @@ namespace DotMarc.Tests.DnsPush;
 public sealed class DnsPushPopupResultTests
 {
     private const string PushId = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    private static readonly AppTitle Title = new(Options.Create(new DemoOptions()), Options.Create(new DevBuildOptions()));
 
     [Theory]
     [InlineData("pushed", "Records pushed")]
@@ -20,7 +25,7 @@ public sealed class DnsPushPopupResultTests
     [InlineData("nothing-to-push", "already matches")]
     public void EachOutcome_IsSaidInWords(string outcome, string words)
     {
-        var html = System.Net.WebUtility.HtmlDecode(DnsPushPopupResult.Html(outcome, PushId));
+        var html = System.Net.WebUtility.HtmlDecode(DnsPushPopupResult.Html(outcome, PushId, Title));
 
         Assert.Contains(words, html);
         Assert.Contains("You can close this window", html);
@@ -29,13 +34,13 @@ public sealed class DnsPushPopupResultTests
     [Fact]
     public void AnUnknownOutcome_StillSaysSomething()
     {
-        Assert.Contains("The DNS push finished", DnsPushPopupResult.Html("something-new", PushId));
+        Assert.Contains("The DNS push finished", DnsPushPopupResult.Html("something-new", PushId, Title));
     }
 
     [Fact]
     public void TheResult_IsBroadcast_AndPostedToTheOpener_WithThePushId()
     {
-        var html = DnsPushPopupResult.Html("pushed", PushId);
+        var html = DnsPushPopupResult.Html("pushed", PushId, Title);
 
         Assert.Contains("BroadcastChannel(\"dotmarc-dns-push\")", html);
         Assert.Contains("window.opener", html);
@@ -46,7 +51,7 @@ public sealed class DnsPushPopupResultTests
     [Fact]
     public void WithoutAPushId_ItStillSaysWhatHappened()
     {
-        var html = DnsPushPopupResult.Html("invalid", null);
+        var html = DnsPushPopupResult.Html("invalid", null, Title);
 
         Assert.Contains("\"pushId\":null", html);
         Assert.Contains("You can close this window", html);
@@ -55,9 +60,22 @@ public sealed class DnsPushPopupResultTests
     [Fact]
     public void AValueCantBreakOutOfThePage()
     {
-        var html = DnsPushPopupResult.Html("</script><script>alert(1)</script>", "\"};alert(1);//");
+        var html = DnsPushPopupResult.Html("</script><script>alert(1)</script>", "\"};alert(1);//", Title);
 
         Assert.DoesNotContain("<script>alert(1)", html);
         Assert.DoesNotContain("\"};alert(1);//\"", html);
+    }
+
+    [Theory]
+    [InlineData(false, false, "dotMARC - DNS push")]
+    [InlineData(true, false, "[Demo] dotMARC - DNS push")]
+    [InlineData(false, true, "[Next] dotMARC - DNS push")]
+    [InlineData(true, true, "[Next] dotMARC - DNS push")]
+    public void PopupTitle_UsesTheSameBuildLabel(bool demo, bool next, string expected)
+    {
+        var title = new AppTitle(Options.Create(new DemoOptions { Enabled = demo }),
+            Options.Create(new DevBuildOptions { Enabled = next }));
+
+        Assert.Contains($"<title>{expected}</title>", DnsPushPopupResult.Html("pushed", PushId, title));
     }
 }

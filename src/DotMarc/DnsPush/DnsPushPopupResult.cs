@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using DotMarc.Components.Shared;
 
 namespace DotMarc.DnsPush;
 
@@ -10,9 +11,9 @@ namespace DotMarc.DnsPush;
 /// over a BroadcastChannel as well as postMessage, and only then tries to close.</summary>
 public static class DnsPushPopupResult
 {
-    public static IResult Close(string outcome, string? pushId = null) => Results.Content(Html(outcome, pushId), "text/html");
+    public static IResult Close(string outcome, AppTitle title, string? pushId = null) => Results.Content(Html(outcome, pushId, title), "text/html");
 
-    public static string Html(string outcome, string? pushId)
+    public static string Html(string outcome, string? pushId, AppTitle title)
     {
         // The serializer's default encoder escapes <, >, & and quotes, so nothing in the values can end the script.
         var message = JsonSerializer.Serialize(new { dnsPush = outcome, pushId });
@@ -22,7 +23,7 @@ public static class DnsPushPopupResult
             <html lang="en">
             <head>
             <meta charset="utf-8">
-            <title>dotMARC - DNS push</title>
+            <title>{{WebUtility.HtmlEncode(title.With("dotMARC - DNS push"))}}</title>
             <style>body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #1f2937; } h1 { font-size: 1.25rem; }</style>
             </head>
             <body>

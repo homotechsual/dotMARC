@@ -38,7 +38,7 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
-<PageTitle>dotMARC - @DomainName</PageTitle>
+<AppPageTitle>dotMARC - @DomainName</AppPageTitle>
 <MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
 @if (_domain is not null && _domain.DnsProvider.ToProviderKey() is not null)

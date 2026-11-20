@@ -26,6 +26,20 @@ redeploys [next.dotmarc.app](https://next.dotmarc.app). `Directory.Build.props` 
 worked towards, and the image is built with `DEV_BUILD=true`, which turns on the dev banner and the `(dev)` footer.
 Pushes to `main` keep publishing `:edge` and redeploying the demo.
 
+### Demo and next deployment addresses
+
+Set the repository variables `DOTMARC_DEMO_DOMAIN` (`demo.dotmarc.app`) and `DOTMARC_NEXT_DOMAIN`
+(`next.dotmarc.app`) to the public hostnames configured in the shared reverse proxy, without a scheme or path.
+The deployment workflows validate these values and expose `hostname` and `url` as outputs of their `deploy` jobs.
+They also publish the HTTPS URL in the workflow summary and in GitHub environments named `demo` and `next`.
+
+Bots can subscribe to GitHub's `deployment_status` webhook and read `deployment_status.environment_url` when
+`deployment_status.state` is `success`, filtering on the `demo` or `next` environment. The same URL is available
+through the deployment statuses REST API; workflow job outputs alone are not an external API.
+
+Each workflow serializes its builds and deployments and deploys the image by digest. It checks that the public
+`/demo` page serves the expected `[Demo]` or `[Next]` title before the deployment job succeeds.
+
 ## What is automated
 
 | Step | Done by | Trigger |
