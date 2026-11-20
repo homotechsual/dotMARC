@@ -7,93 +7,66 @@ authors: [mikey]
 tags: [release]
 ---
 
-Three things arrive together: alerts you can shape per client, a place to record which senders are authorised, and a
-Sources tab that names the services behind your reports. Upgrading changes nothing until you use them.
+Three things arrive together: alerts you can shape per client, a place to record which senders are authorised, and a Sources tab that names the services behind your reports. Upgrading changes nothing until you use them.
 
 {/* truncate */}
 
 ## Alert rules
 
-Every alert now comes from a rule, and the new **Alert rules** page is where you manage them. Each kind of alert has a
-default rule that behaves as the old alert settings did, with the values you already had copied into it. On top of that
-you can add rules of your own.
+Every alert now comes from a rule, and the new **Alert rules** page is where you manage them. Each kind of alert has a default rule that behaves as the old alert settings did, with the values you already had copied into it. On top of that you can add rules of your own.
 
-* **Scope.** A rule can apply to chosen groups, tags and domains, and leave some out. The editor shows how many domains it
-  reaches as you change it, and warns when another rule hides it.
-* **Order and Stop processing.** Rules for a kind run in order. A rule that stops processing replaces the rules after it
-  for the domains it covers, so a stricter threshold for one client sits above the default without touching it. Several
-  rules that don't stop each raise their own alert.
+* **Scope.** A rule can apply to chosen groups, tags and domains, and leave some out. The editor shows how many domains it reaches as you change it, and warns when another rule hides it.
+* **Order and Stop processing.** Rules for a kind run in order. A rule that stops processing replaces the rules after it for the domains it covers, so a stricter threshold for one client sits above the default without touching it. Several rules that don't stop each raise their own alert.
 * **Severity, cooldown and close-after** are set per rule, and there is a new **Critical** severity that webhooks carry.
 * The Alerts page shows which rule raised each alert.
 
 Each rule also chooses where its alerts go and what happens next:
 
-* **Destinations.** Teams, Slack and generic webhooks are now named destinations, as many as you like, each with its own
-  on/off switch. A rule sends to all of them or only the ones you choose. The channels you had set up are copied across.
+* **Destinations.** Teams, Slack and generic webhooks are now named destinations, as many as you like, each with its own on/off switch. A rule sends to all of them or only the ones you choose. The channels you had set up are copied across.
 * **Tickets.** A rule can follow the ticket rules, never open a ticket, or always open one.
-* **Quiet hours.** A daily window, read in a time zone you set on Alert settings, in which a rule's notifications are held
-  until it ends or muted. Critical alerts can ignore the window. The alert is still raised and recorded either way.
-* **Escalation.** If an alert is still open after a time you choose, it is also sent to extra destinations. Acknowledging
-  or resolving the alert stops it.
+* **Quiet hours.** A daily window, read in a time zone you set on Alert settings, in which a rule's notifications are held until it ends or muted. Critical alerts can ignore the window. The alert is still raised and recorded either way.
+* **Escalation.** If an alert is still open after a time you choose, it is also sent to extra destinations. Acknowledging or resolving the alert stops it.
 
 ### Three alerts for the numbers in your reports
 
-For the things only you know are worth hearing about, there are three new kinds. They are **off until you switch their
-rule on**, so nothing new starts firing on upgrade:
+For the things only you know are worth hearing about, there are three new kinds. They are **off until you switch their rule on**, so nothing new starts firing on upgrade:
 
 * **DMARC pass rate low**: a domain's pass rate over the last few days is below a percentage.
 * **Message volume changed**: volume has dropped, risen, or either, by a percentage compared with the period before.
 * **Rejected or quarantined messages high**: a domain had at least a number of rejected or quarantined messages.
 
-Each has a minimum message count so a quiet domain never alerts on a handful of messages, and each closes by itself when
-the number recovers. A scoped copy of the rule lets one client have a different threshold.
+Each has a minimum message count so a quiet domain never alerts on a handful of messages, and each closes by itself when the number recovers. A scoped copy of the rule lets one client have a different threshold.
 
 ### Also for alerts
 
 * A **Manage alert rules** permission, which the Admin role has. Seeing the rules needs Alerts view and no group limit.
 * Read-only API endpoints for alert rules and destinations. A destination's webhook URL is never returned.
-* A rule for **new senders** can choose what Under review means: counts as decided, counts as unreviewed, or counts as
-  decided for a while and then alerts again.
-* An alert raised again while its ticket is still open now shows that ticket on the Alerts page and in the API, instead
-  of showing none.
+* A rule for **new senders** can choose what Under review means: counts as decided, counts as unreviewed, or counts as decided for a while and then alerts again.
+* An alert raised again while its ticket is still open now shows that ticket on the Alerts page and in the API, instead of showing none.
 
 ## Decide which senders are authorised
 
-The Sources tab has a **Decision** column. For each sender, your team records Authorised, Unauthorised or Under review,
-with a note. Decisions can be made for one domain, for a group, or as a baseline that applies to every domain, and an IP
-can override its service.
+The Sources tab has a **Decision** column. For each sender, your team records Authorised, Unauthorised or Under review, with a note. Decisions can be made for one domain, for a group, or as a baseline that applies to every domain, and an IP can override its service.
 
 A decision never changes DNS and never blocks mail. It changes what dotMARC tells you:
 
-* A sender nobody has decided on raises a **new sender** alert when it first appears, and counts towards "senders need a
-  decision" on the domain's Overview.
+* A sender nobody has decided on raises a **new sender** alert when it first appears, and counts towards "senders need a decision" on the domain's Overview.
 * An Unauthorised sender whose mail is still being delivered raises an alert.
-* The **Fix** column stops asking you to fix an unauthorised sender, and flags one whose mail passes DMARC first, because
-  it authenticates as your domain.
-* Client reports say how much mail from unauthorised senders was blocked or delivered, and the sources API returns each
-  decision.
+* The **Fix** column stops asking you to fix an unauthorised sender, and flags one whose mail passes DMARC first, because it authenticates as your domain.
+* Client reports say how much mail from unauthorised senders was blocked or delivered, and the sources API returns each decision.
 
-Changing decisions needs the new **Review senders** permission, which the Admin role has. Every change is in the audit
-log.
+Changing decisions needs the new **Review senders** permission, which the Admin role has. Every change is in the audit log.
 
 ## See which services are sending
 
-Above the per-IP table, a **Senders** table groups a domain's sources by sending service, such as Microsoft 365, Google
-Workspace or Mailchimp, with its share of mail, pass rate and a **Fix** that names the service. Each row shows an
-evidence score and the signals behind it: a matching SPF or DKIM domain, the DKIM selector, the owner of the sending IP,
-and whether the IP falls in a range your own SPF record authorises for that service. The service is named in failure
-recommendations, client reports, the client portal and the sources API.
+Above the per-IP table, a **Senders** table groups a domain's sources by sending service, such as Microsoft 365, Google Workspace or Mailchimp, with its share of mail, pass rate and a **Fix** that names the service. Each row shows an evidence score and the signals behind it: a matching SPF or DKIM domain, the DKIM selector, the owner of the sending IP, and whether the IP falls in a range your own SPF record authorises for that service. The service is named in failure recommendations, client reports, the client portal and the sources API.
 
 ## For people running dotMARC
 
-* A `:next` image is published on every push to `develop`, built as a dev build with a banner and a `(dev)` version, and
-  deployed to next.dotmarc.app. Browser tabs on the demo and next instances start with `[Demo]` or `[Next]`.
-* The Teams, Slack and webhook settings and the global alert thresholds are no longer read. The values were copied into
-  destinations and rules on upgrade, and the old columns stay in the database for one more release.
-* Alerts raised before the upgrade belong to their kind's default rule, so cooldown, resolve and acknowledge keep
-  working. Quiet hours and escalation are off on every existing rule, and the quiet hours time zone starts as UTC.
+* A `:next` image is published on every push to `develop`, built as a dev build with a banner and a `(dev)` version, and deployed to next.dotmarc.app. Browser tabs on the demo and next instances start with `[Demo]` or `[Next]`.
+* The Teams, Slack and webhook settings and the global alert thresholds are no longer read. The values were copied into destinations and rules on upgrade, and the old columns stay in the database for one more release.
+* Alerts raised before the upgrade belong to their kind's default rule, so cooldown, resolve and acknowledge keep working. Quiet hours and escalation are off on every existing rule, and the quiet hours time zone starts as UTC.
 
 ## Updates
 
-Every direct package is on its latest version. Those that stay on 10.x do so because 11.x needs a newer .NET than dotMARC
-targets.
+Every direct package is on its latest version. Those that stay on 10.x do so because 11.x needs a newer .NET than dotMARC targets.

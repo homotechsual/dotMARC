@@ -7,36 +7,25 @@ authors: [mikey]
 tags: [release]
 ---
 
-dotMARC now works with NinjaOne ticketing, alongside HaloPSA, ConnectWise and Autotask. An alert raises a NinjaOne ticket,
-the ticket is resolved when the alert clears, and a ticket a tech resolves in NinjaOne resolves its alert.
+dotMARC now works with NinjaOne ticketing, alongside HaloPSA, ConnectWise and Autotask. An alert raises a NinjaOne ticket, the ticket is resolved when the alert clears, and a ticket a tech resolves in NinjaOne resolves its alert.
 
 {/* truncate */}
 
 ## NinjaOne tickets
 
-NinjaOne only lets a signed-in person raise tickets, so dotMARC connects as a NinjaOne user. On **Manage > PSA
-settings**, the new **NinjaOne** tab takes your instance and a client app's ID and secret, then **Connect to NinjaOne**
-signs you in at NinjaOne and brings you back. The tab shows who connected and when the sign-in was last refreshed.
+NinjaOne only lets a signed-in person raise tickets, so dotMARC connects as a NinjaOne user. On **Manage > PSA settings**, the new **NinjaOne** tab takes your instance and a client app's ID and secret, then **Connect to NinjaOne** signs you in at NinjaOne and brings you back. The tab shows who connected and when the sign-in was last refreshed.
 
-Choose the ticket form, the status new tickets start in, and their type, priority and severity, then link Groups to
-NinjaOne organisations as you would companies in the other PSAs. Domain imports take a `ninjaone organisation` column.
+Choose the ticket form, the status new tickets start in, and their type, priority and severity, then link Groups to NinjaOne organisations as you would companies in the other PSAs. Domain imports take a `ninjaone organisation` column.
 
-When an alert clears, dotMARC adds a private comment and sets the ticket to **Resolved**. NinjaOne doesn't let other apps
-close tickets directly, so its own rules close it in time. A ticket a tech resolves or closes, or moves to a custom
-status under either, resolves its alert.
+When an alert clears, dotMARC adds a private comment and sets the ticket to **Resolved**. NinjaOne doesn't let other apps close tickets directly, so its own rules close it in time. A ticket a tech resolves or closes, or moves to a custom status under either, resolves its alert.
 
 See [NinjaOne](/docs/psa/ninjaone) for setting up the client app.
 
 ## Keeping the connection alive
 
-NinjaOne's refresh tokens last an hour unless they're used, so dotMARC uses its sign-in every 20 minutes, even when no
-alerts are firing. If dotMARC is stopped for more than an hour, NinjaOne forgets the sign-in: dotMARC raises a new **PSA
-connection lost** alert and stops raising NinjaOne tickets until someone reconnects. To survive longer gaps, ask NinjaOne
-support for sliding refresh tokens, as the docs explain.
+NinjaOne's refresh tokens last an hour unless they're used, so dotMARC uses its sign-in every 20 minutes, even when no alerts are firing. If dotMARC is stopped for more than an hour, NinjaOne forgets the sign-in: dotMARC raises a new **PSA connection lost** alert and stops raising NinjaOne tickets until someone reconnects. To survive longer gaps, ask NinjaOne support for sliding refresh tokens, as the docs explain.
 
 ## Smaller changes
 
-* PSAs are now listed HaloPSA, NinjaOne, ConnectWise, Autotask everywhere: the settings tabs, the Groups and Domains
-  pages, and domain import.
-* The [API reference](/api/dotmarc-api) sets each parameter's name apart from its details, so long parameter lists are
-  easier to scan.
+* PSAs are now listed HaloPSA, NinjaOne, ConnectWise, Autotask everywhere: the settings tabs, the Groups and Domains pages, and domain import.
+* The [API reference](/api/dotmarc-api) sets each parameter's name apart from its details, so long parameter lists are easier to scan.

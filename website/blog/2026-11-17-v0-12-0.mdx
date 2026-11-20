@@ -7,40 +7,32 @@ authors: [mikey]
 tags: [release]
 ---
 
-Pushing a DNS record from dotMARC is now something you can check first, and when dotMARC can't push for you, the
-records are laid out so they are quick to copy into your DNS provider.
+Pushing a DNS record from dotMARC is now something you can check first, and when dotMARC can't push for you, the records are laid out so they are quick to copy into your DNS provider.
 
 {/* truncate */}
 
 ## A review screen before every DNS push
 
-Until now a push went straight from the button to your DNS provider's sign-in. Now every push, whichever provider you use
-and whichever record it is (DMARC, the DMARC authorization record, TLS reporting, MTA-STS or DKIM), opens a review first:
+Until now a push went straight from the button to your DNS provider's sign-in. Now every push, whichever provider you use and whichever record it is (DMARC, the DMARC authorization record, TLS reporting, MTA-STS or DKIM), opens a review first:
 
 * the records dotMARC will **add**, in a table,
 * any existing records it will **remove or replace** to make room, with a warning,
-* a clear error when the existing record is a **CNAME delegated to someone else**, because DNS does not allow a CNAME
-  beside other records and continuing ends that delegation.
+* a clear error when the existing record is a **CNAME delegated to someone else**, because DNS does not allow a CNAME beside other records and continuing ends that delegation.
 
-If DNS already holds exactly what dotMARC would write, the review says so and there is nothing to push. The review is
-worked out the same way the push itself is, so what you see is what gets written.
+If DNS already holds exactly what dotMARC would write, the review says so and there is nothing to push. The review is worked out the same way the push itself is, so what you see is what gets written.
 
 ## Records you add by hand come with copy buttons
 
-When no DNS push option is set up for a domain's provider, dotMARC used to say "add the record manually" and leave you
-to work out what to add. It now opens a dialog with the records in a table:
+When no DNS push option is set up for a domain's provider, dotMARC used to say "add the record manually" and leave you to work out what to add. It now opens a dialog with the records in a table:
 
 * a copy button on every name and value,
-* a **host only** form of each name, such as `_dmarc` instead of `_dmarc.example.com`, since most DNS providers want the
-  name relative to the zone,
+* a **host only** form of each name, such as `_dmarc` instead of `_dmarc.example.com`, since most DNS providers want the name relative to the zone,
 * **Copy all**, which copies every record as tab-separated lines for pasting into a ticket,
 * the existing records to remove first, if any would clash.
 
-The DMARC record shown is the merged one, with your report address settings applied. The same table, with copy buttons,
-is used on the review screen for pushes.
+The DMARC record shown is the merged one, with your report address settings applied. The same table, with copy buttons, is used on the review screen for pushes.
 
-Copying needs HTTPS or localhost, as with the other copy buttons in dotMARC. Over plain HTTP you get a message asking you
-to select and copy the text yourself.
+Copying needs HTTPS or localhost, as with the other copy buttons in dotMARC. Over plain HTTP you get a message asking you to select and copy the text yourself.
 
 ## Updates
 

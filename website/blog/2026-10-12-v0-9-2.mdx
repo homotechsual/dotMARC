@@ -7,8 +7,7 @@ authors: [mikey]
 tags: [release]
 ---
 
-The API now reaches almost everything the app shows, with filters fine enough that a script fetches only what it
-needs. Branding gets separate light and dark colours with contrast ratings, and reports from more senders import.
+The API now reaches almost everything the app shows, with filters fine enough that a script fetches only what it needs. Branding gets separate light and dark colours with contrast ratings, and reports from more senders import.
 
 {/* truncate */}
 
@@ -16,55 +15,39 @@ needs. Branding gets separate light and dark colours with contrast ratings, and 
 
 ### Filters on every list
 
-Every list endpoint takes filters, with the same rules everywhere: give several values with commas or by repeating the
-filter, in any letter case, and dates as a day or a time with its zone. A value dotMARC doesn't recognise is a 400 that
-names the filter and lists what it accepts. See [Filtering](/docs/api#filtering).
+Every list endpoint takes filters, with the same rules everywhere: give several values with commas or by repeating the filter, in any letter case, and dates as a day or a time with its zone. A value dotMARC doesn't recognise is a 400 that names the filter and lists what it accepts. See [Filtering](/docs/api#filtering).
 
-* **Alerts:** type, severity, domain, group, tag, whether the API can acknowledge it, whether it has an open PSA
-  ticket, and when it was raised or resolved.
-* **Domains:** name, groups and tags, the result of every DNS check, the same plain-language status the client portal
-  shows, DMARC policy, DNS provider, when reports last arrived, and pass rate.
+* **Alerts:** type, severity, domain, group, tag, whether the API can acknowledge it, whether it has an open PSA ticket, and when it was raised or resolved.
+* **Domains:** name, groups and tags, the result of every DNS check, the same plain-language status the client portal shows, DMARC policy, DNS provider, when reports last arrived, and pass rate.
 * **Groups and tags:** search by name.
 
 ### New endpoints
 
-* **The audit log:** who did what, filtered by action, actor, target, domain, date or text. A key limited to certain
-  groups sees only the entries about its own domains and groups.
-* **Sending sources:** every IP that sent as a domain over any range of up to a year, with its pass rate and, once
-  dotMARC has looked it up, who owns the network.
+* **The audit log:** who did what, filtered by action, actor, target, domain, date or text. A key limited to certain groups sees only the entries about its own domains and groups.
+* **Sending sources:** every IP that sent as a domain over any range of up to a year, with its pass rate and, once dotMARC has looked it up, who owns the network.
 * **DMARC and TLS reports:** each report with its records, and the original file exactly as the receiver sent it.
 * **The dashboard's headline figures**, over the domains a key can see.
-* **Client reports:** each group's schedule and delivery history, a report as a PDF for any period, and sending a
-  report now, recorded and audited as from the Reports dialog.
+* **Client reports:** each group's schedule and delivery history, a report as a PDF for any period, and sending a report now, recorded and audited as from the Reports dialog.
 * **Parse failures:** report emails dotMARC couldn't read, and why.
 * **PSA tickets** on every alert.
 
-The report summary takes any range of up to a year with `from` and `to`, and how many sending IPs to return with `top`,
-and is now worked out in the database. Every endpoint, filter and error is in the [API reference](/api/dotmarc-api),
-whose code examples now start with PowerShell, C# and curl.
+The report summary takes any range of up to a year with `from` and `to`, and how many sending IPs to return with `top`, and is now worked out in the database. Every endpoint, filter and error is in the [API reference](/api/dotmarc-api), whose code examples now start with PowerShell, C# and curl.
 
 ## Light and dark brand colours
 
-**Manage > Branding** now sets a primary and secondary colour for light mode and for dark mode. Dark colours start
-automatic, worked out from the light ones, until you pick your own. **Advanced: backgrounds** sets the page and card
-colours for each mode. A Group can set its own light and dark colours too.
+**Manage > Branding** now sets a primary and secondary colour for light mode and for dark mode. Dark colours start automatic, worked out from the light ones, until you pick your own. **Advanced: backgrounds** sets the page and card colours for each mode. A Group can set its own light and dark colours too.
 
-Every colour shows a swatch and its WCAG contrast rating (AAA, AA, AA for large text only, or below AA) against the
-background it sits on. You can still use a colour that falls short, since a brand's official colours sometimes do.
+Every colour shows a swatch and its WCAG contrast rating (AAA, AA, AA for large text only, or below AA) against the background it sits on. You can still use a colour that falls short, since a brand's official colours sometimes do.
 
-The secondary colour now does more: headings, the pass rate line, footer links and neutral statuses in the portal, and
-section headings and table headers in client reports. See [Branding](/docs/client-portal#branding).
+The secondary colour now does more: headings, the pass rate line, footer links and neutral statuses in the portal, and section headings and table headers in client reports. See [Branding](/docs/client-portal#branding).
 
 ## Reports that wouldn't import
 
-* **DMARCbis reports.** Reports that name the software that generated them, or include the new `psd` tag, failed with
-  "failed schema validation". They now import, as do reports with DMARCbis's `pass` disposition.
-* **Reports in an unusual order.** Some senders, such as Trellix, put a report's sections in a different order from the
-  standard. A report that has everything dotMARC uses now imports, and the log says where it strayed.
+* **DMARCbis reports.** Reports that name the software that generated them, or include the new `psd` tag, failed with "failed schema validation". They now import, as do reports with DMARCbis's `pass` disposition.
+* **Reports in an unusual order.** Some senders, such as Trellix, put a report's sections in a different order from the standard. A report that has everything dotMARC uses now imports, and the log says where it strayed.
 * If a report still can't be read, the log and its parse failure now say exactly why.
 
 ## Smaller changes
 
-* **DNS push setup scripts.** A script creates the Azure DNS app registration for you, and another prepares a Google
-  Cloud project, with each step shown in the [DNS push docs](/docs/dns-provider-push).
+* **DNS push setup scripts.** A script creates the Azure DNS app registration for you, and another prepares a Google Cloud project, with each step shown in the [DNS push docs](/docs/dns-provider-push).
 * An unexpected error in the API now comes back in the API's own error format, not as a web page.

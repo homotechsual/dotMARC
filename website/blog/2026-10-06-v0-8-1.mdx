@@ -15,23 +15,15 @@ A small release after [`v0.8.0`](/releases-updates/v0-8-0), from setting up DKIM
 
 **Configure selectors** on a domain's DKIM check now does more of the typing:
 
-* **Records already in DNS are filled in.** For any mail platform, a selector that's already published starts with
-  its current CNAME target or TXT value, and says so. Nothing you've typed or saved is replaced.
-* **Paste from Microsoft 365.** Microsoft 365 domains get a box for the output of `Get-DkimSigningConfig`, or the
-  Defender portal's **Publish CNAMEs** text. dotMARC reads both selectors' targets from it and fills them in.
-* **The known part of a Microsoft 365 target.** With nothing published yet, each selector starts with the part that
-  follows from the domain, such as `selector1-contoso-com._domainkey.`, and a note on what to add. The rest (your
-  tenant's name and a letter Microsoft assigns) can only come from Microsoft 365, and dotMARC won't save a target that
-  stops at `._domainkey`.
+* **Records already in DNS are filled in.** For any mail platform, a selector that's already published starts with its current CNAME target or TXT value, and says so. Nothing you've typed or saved is replaced.
+* **Paste from Microsoft 365.** Microsoft 365 domains get a box for the output of `Get-DkimSigningConfig`, or the Defender portal's **Publish CNAMEs** text. dotMARC reads both selectors' targets from it and fills them in.
+* **The known part of a Microsoft 365 target.** With nothing published yet, each selector starts with the part that follows from the domain, such as `selector1-contoso-com._domainkey.`, and a note on what to add. The rest (your tenant's name and a letter Microsoft assigns) can only come from Microsoft 365, and dotMARC won't save a target that stops at `._domainkey`.
 
-The dialog's rows line up properly too: each selector's type and value sit side by side, with the selector named in
-the value's label. See [DKIM records](/docs/dns-provider-push#dkim-records).
+The dialog's rows line up properly too: each selector's type and value sit side by side, with the selector named in the value's label. See [DKIM records](/docs/dns-provider-push#dkim-records).
 
 ## A tidier API description
 
-The OpenAPI document at `/api/v1/openapi.json` now groups operations into **Domains**, **Imports**, **Groups and tags**
-and **Alerts**, and describes whole numbers and decimals as numbers rather than as text matching a pattern. API tools
-show cleaner types as a result. The [API reference](/api/dotmarc-api) on this site is built from the same document.
+The OpenAPI document at `/api/v1/openapi.json` now groups operations into **Domains**, **Imports**, **Groups and tags** and **Alerts**, and describes whole numbers and decimals as numbers rather than as text matching a pattern. API tools show cleaner types as a result. The [API reference](/api/dotmarc-api) on this site is built from the same document.
 
 ## Upgrading
 
@@ -39,5 +31,4 @@ There are no database migrations and no new settings. Redeploy and you're done.
 
 ## Everything else
 
-As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.8.1) for everything that
-shipped between these two tags.
+As always, see the [full changelog](https://github.com/homotechsual/dotMARC/commits/v0.8.1) for everything that shipped between these two tags.
