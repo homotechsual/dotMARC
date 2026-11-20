@@ -1,0 +1,80 @@
+---
+sidebar_position: 10
+description: Control when each kind of alert is raised, for which clients, how serious it is, where it goes and when, with alert rules, ordering, tickets, quiet hours and escalation.
+---
+
+# Alert rules
+
+Each kind of alert is controlled by **alert rules**, under **Manage > Alert rules** (`/alerts/rules`). A rule decides when that kind of alert is raised, for which domains, how serious it is and how it behaves. dotMARC ships one **default rule** for every kind of alert, applying to every domain, so alerting works the same as always until someone changes a rule.
+
+Anyone with `AlertsView` and no group limit can read the rules. Creating, changing, ordering, deleting and resetting them needs the `AlertRulesManage` permission, which the Admin role has. A custom role has to be given it on the Access page. Rules name groups, tags and domains across your whole estate, so someone limited to some groups doesn't see the page, and the Rule column on the Alerts page and the `rule` field in the API are empty for them. Every change is recorded in the [audit log](./audit-log.mdx).
+
+## What a rule sets
+
+| Setting | What it does |
+| --- | --- |
+| Name | Shown in the rule list, on the alerts the rule raises and in the audit log. Unique among the rules of a kind. |
+| Severity | `Info`, `Warning` or `Critical`. A `Critical` alert is marked as such in Teams and Slack and in the webhook payload. |
+| Enabled | A rule that is off raises nothing, and the alerts it has open are closed on the next check. |
+| Applies to | The groups, tags and domains the rule covers, and any to leave out. Empty means every domain. A domain matches if it is in any group or tag chosen, or is one of the domains chosen, and isn't excluded. |
+| Settings | The kind's own thresholds, such as days without a report. Each has a range, and a value outside it is refused with a message naming it. |
+| Cooldown | Overrides the cooldown on Alert settings for this rule. Empty uses the global one. |
+| Close after (days) | For DMARC policy weakened and nameservers changed only: closes the alert by itself, as if acknowledged. Empty keeps it open until someone acknowledges it. |
+| Stop processing more rules | See below. |
+| Where it goes | All destinations, or only the destinations you choose. See [Destinations](./alerts.mdx#destinations). |
+| Ticket mode | Follow the ticket rules, never open a ticket, or always open one. See [Tickets](#tickets). |
+| Quiet hours | A daily window in which this rule's notifications are held or muted. See [Quiet hours](#quiet-hours). |
+| Escalation | Extra destinations told when the alert is still open after a time. See [Escalation](#escalation). |
+
+Alerts about the system itself (an expiring API key, a failed client report, a lost PSA connection) aren't about a domain, so their rules have no scope.
+
+## Order and stopping
+
+For one domain, the rules of a kind are tried from top to bottom. A rule that applies raises its own alert, and if it has **Stop processing more rules** on (the default) the rules after it are skipped for that domain. So a rule for one client, placed above the default, replaces the default for that client and leaves everyone else alone. A new rule is added at the top for exactly this reason. Turn **Stop processing more rules** off to raise an alert from this rule as well as from the ones after it. Two rules that both apply raise two alerts, each with its own cooldown and, if tickets are on for that kind, its own ticket.
+
+The page shows how many domains each rule reaches, and warns when a rule is hidden behind an earlier one that stops processing. Use the arrows to move a rule. A rule that no longer applies to a domain, because it was switched off, narrowed or put behind a stopping rule, closes the alerts it had open for that domain on the next check.
+
+## Default rules
+
+A default rule can be switched off, edited and moved, but not deleted. **Reset to default values** in its dialog restores its name, severity, settings and scope. If a rule's scope names a group, tag or domain that has since been deleted, the page says so and offers **Clean up**, which removes those entries. A scope limited to something that is gone applies to nothing.
+
+## Tickets
+
+Each rule has a **Ticket mode** (for the kinds of alert that are about a domain):
+
+* **Follow the ticket rules** (the default): the group's ticket rule, then the global rule, then the alert type's default decide, as described in [PSA integration](./psa-integration.mdx).
+* **Never open a ticket**: this rule's alerts open no ticket, whatever the ticket rules say.
+* **Always open a ticket**: this rule's alerts open a ticket whatever the ticket rules say, provided a PSA is connected and the domain has a company there. With no company to put it under, no ticket is opened.
+
+Because tickets are opened per alert, two stacked rules that both apply can open two tickets unless one of them is set to **Never**.
+
+## Quiet hours
+
+A rule can keep its notifications back during a daily window, for example 22:00 to 07:00. Choose what happens in the window under **During quiet hours** in the rule's dialog:
+
+* **Send as usual** (the default): no quiet hours.
+* **Hold, then send when it ends**: the alert is recorded and shown on the Alerts page straight away, but its notification waits. When the window ends it is sent, if the alert is still open. An alert that was resolved or acknowledged in the meantime is never sent.
+* **Mute (never send)**: the alert is recorded and shown, and its notification is never sent.
+
+The window runs from the start time up to, but not including, the end time, in the **Time zone** set on Alert settings (`UTC` until you change it). A window that ends earlier than it starts runs overnight, so 22:00 to 07:00 covers the night. Clocks changing for daylight saving are followed, because the window is read in local time.
+
+**Critical alerts ignore quiet hours** is on by default, so a Critical alert is sent straight away even inside a window. Turn it off on a rule to hold or mute its Critical alerts like the rest.
+
+Quiet hours affect notifications only. Alerts are still raised and recorded, and tickets still open. A held alert shows "Notification held until the quiet window ends" on the Alerts page, and a muted one shows "Muted by quiet hours". Held notifications go out on the next check after the window ends, so the timing is as precise as the monitor interval (5 minutes by default).
+
+## Escalation
+
+A rule can tell more people when an alert is not being dealt with. Under **Escalation**, set **Escalate after (minutes)** (from 5 to 10080) and tick the destinations to tell. If the alert is still open that long after its notification went out, it is also sent to those destinations, with "Escalated:" at the start of its title. It happens once per alert.
+
+* Acknowledging an alert, or it clearing by itself, closes it, so an alert that was dealt with is never escalated.
+* Escalation ignores quiet hours, which is the point of it. It never happens to an alert that is still being held, because that alert hasn't been sent yet. A muted alert can still escalate.
+* A rule with an escalation time and no destinations ticked escalates to nobody.
+* Like held notifications, escalation is checked on each monitor cycle.
+
+## Under review on the new sender rule
+
+The **New sender to review** rule has an **Under review counts as** setting for senders someone has marked Under review:
+
+* **Counts as decided** (the default): Under review stops the alert, as Authorised and Unauthorised do.
+* **Counts as unreviewed**: Under review changes nothing, so a new sender alerts whether or not someone has started reviewing it.
+* **Counts as decided for a while, then alert again**: the alert stays quiet for the number of days you set, counted from when the decision that applies was made (a group or baseline decision counts from its own date). After that the sender alerts again, whether or not it is still new, so a review left hanging gets a reminder. Deciding on it ends the reminders.
