@@ -139,6 +139,8 @@ public sealed class AlertingService : IAlertingService
             await CheckSuspiciousRejectActivityAsync(db, settings, rules, domain, facts, openAlerts, applicable, cancellationToken).ConfigureAwait(false);
 
             await CheckSenderAlertsAsync(db, settings, rules, domain, facts, senderAlerts, openAlerts, applicable, cancellationToken).ConfigureAwait(false);
+
+            await CheckMetricAlertsAsync(db, settings, rules, domain, facts, openAlerts, applicable, cancellationToken).ConfigureAwait(false);
         }
 
         // A rule that was disabled, moved out of scope or put behind a rule that stops processing no longer applies to a
@@ -164,10 +166,12 @@ public sealed class AlertingService : IAlertingService
 
     /// <summary>The kinds whose rule changes the cycle reconciles: the ones it raises itself, plus the ones raised by events, so an
     /// alert closes when its rule stops applying whichever way it was raised.</summary>
+    private static readonly string[] MetricKinds = [AlertTypes.PassRateLow, AlertTypes.VolumeChanged, AlertTypes.RejectedMessagesHigh];
+
     private static readonly string[] CycleKinds =
     [
         AlertTypes.MissedReport, AlertTypes.SuspiciousRejectActivity, AlertTypes.NewUnreviewedSender, AlertTypes.UnauthorisedSenderDelivered,
-        AlertTypes.TlsrptFailure, AlertTypes.UnexpectedActivityOnNullRoutedDomain, .. SystemKinds
+        AlertTypes.TlsrptFailure, AlertTypes.UnexpectedActivityOnNullRoutedDomain, .. MetricKinds, .. SystemKinds
     ];
 
     private static DomainFacts FactsFor(Domain domain) =>
@@ -463,6 +467,71 @@ public sealed class AlertingService : IAlertingService
             }
         }
     }
+
+    /// <summary>Runs the three metric kinds for one domain. Each applicable rule is judged on its own settings: it raises its alert when
+    /// the numbers say so and closes it again when they stop saying so. A kind with no applicable rule closes whatever it left open.</summary>
+    private async Task CheckMetricAlertsAsync(
+        DotMarcDbContext context, NotificationSettings settings, AlertRuleSet rules, Domain domain, DomainFacts facts, OpenAlertIndex openAlerts, ApplicableRules applicable, CancellationToken cancellationToken)
+    {
+        var nowUtc = _timeProvider.GetUtcNow();
+        foreach (var kind in MetricKinds)
+        {
+            var kindRules = applicable.Record(domain.Name, kind, rules.For(kind, facts));
+            if (kindRules.Count == 0)
+            {
+                if (openAlerts.HasAny(domain.Name, kind))
+                {
+                    await ResolveAlertAsync(domain.Name, kind, cancellationToken).ConfigureAwait(false);
+                }
+
+                continue;
+            }
+
+            foreach (var rule in kindRules)
+            {
+                if (EvaluateMetricRule(kind, rule, domain, nowUtc) is var (title, message))
+                {
+                    await EnsureAlertAsync(context, settings, rule, domain.Name, title, message, cancellationToken).ConfigureAwait(false);
+                }
+                else if (openAlerts.Has(domain.Name, kind, rule.RuleId))
+                {
+                    await ResolveAlertAsync(domain.Name, kind, rule.RuleId, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    /// <summary>The alert a metric rule raises for a domain, or null when its numbers are fine.</summary>
+    private static (string Title, string Message)? EvaluateMetricRule(string kind, ResolvedAlertRule rule, Domain domain, DateTimeOffset nowUtc)
+    {
+        var windowDays = rule.Int(AlertRuleParameterKeys.WindowDays);
+        var lastDays = windowDays == 1 ? "the last day" : $"the last {windowDays} days";
+        switch (kind)
+        {
+            case AlertTypes.PassRateLow:
+                var belowPercent = rule.Int(AlertRuleParameterKeys.BelowPercent);
+                var passRate = MetricAlertEvaluator.PassRate(domain.Reports, windowDays, belowPercent, rule.Int(AlertRuleParameterKeys.MinimumMessages), nowUtc);
+                return passRate.Raise
+                    ? ("DMARC pass rate is low", $"{domain.Name}: DMARC pass rate was {passRate.PassPercent:F0}% over {lastDays} (threshold {belowPercent}%, {MessageCount(passRate.Messages)}).")
+                    : null;
+            case AlertTypes.VolumeChanged:
+                var volume = MetricAlertEvaluator.Volume(domain.Reports, windowDays, rule.Text(AlertRuleParameterKeys.Direction), rule.Int(AlertRuleParameterKeys.ChangePercent), rule.Int(AlertRuleParameterKeys.MinimumMessages), nowUtc);
+                var before = windowDays == 1 ? "the day before" : $"the {windowDays} days before";
+                return volume.Raise
+                    ? ("Message volume changed", $"{domain.Name}: message volume {(volume.ChangePercent < 0 ? "fell" : "rose")} {Math.Abs(volume.ChangePercent):F0}% over {lastDays} ({MessageCount(volume.Current)}, {volume.Previous} in {before}).")
+                    : null;
+            case AlertTypes.RejectedMessagesHigh:
+                var threshold = rule.Int(AlertRuleParameterKeys.MessagesAtLeast);
+                var rejected = MetricAlertEvaluator.Rejected(domain.Reports, windowDays, threshold, nowUtc);
+                return rejected.Raise
+                    ? ("Rejected or quarantined messages are high", $"{domain.Name}: {MessageCount(rejected.Messages)} {(rejected.Messages == 1 ? "was" : "were")} rejected or quarantined over {lastDays} (threshold {threshold}).")
+                    : null;
+            default:
+                return null;
+        }
+    }
+
+    private static string MessageCount(int messages) => messages == 1 ? "1 message" : $"{messages} messages";
 
     /// <summary>Appends a short "of that, X had inferred SPF/DKIM issues" clause when any of the
     /// three inferred buckets are non-zero, so the alert itself points at which mechanism to
