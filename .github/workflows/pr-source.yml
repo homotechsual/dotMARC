@@ -1,0 +1,50 @@
+# .github/workflows/pr-source.yml
+name: PR source
+
+# Pull requests into main may only come from develop, with two exceptions. A fix/* branch is a fix to the released product,
+# branched from main, so it can go out without waiting for unreleased code on develop. A docs/* branch is the same for the
+# docs, provided every file it changes is under website/. GitHub's branch protection can't restrict a PR's source branch, so
+# this check does it and main requires it before merging. The check keeps the name "from-develop" because main's protection
+# refers to it by that name.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  from-develop:
+    name: from-develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop, a fix/* branch, or a docs-only docs/* branch, as the source
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_FILES_URL: repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files
+        run: |
+          if [ "$HEAD_REF" = "develop" ]; then
+            exit 0
+          fi
+
+          case "$HEAD_REF" in
+            fix/*)
+              echo "A fix branch: allowed into main without going through develop."
+              exit 0
+              ;;
+            docs/*)
+              outside="$(gh api --paginate "$PR_FILES_URL" --jq '.[] | .filename, (.previous_filename // empty)' | grep -v '^website/' || true)"
+              if [ -z "$outside" ]; then
+                echo "A docs-only branch: every changed file is under website/."
+                exit 0
+              fi
+              echo "::error::A docs/* branch may only change files under website/. These are outside it:"
+              echo "$outside"
+              exit 1
+              ;;
+          esac
+
+          echo "::error::Pull requests into main must come from develop, from a fix/* branch, or from a docs/* branch that only changes website/ (this one is from '$HEAD_REF')."
+          exit 1
