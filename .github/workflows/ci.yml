@@ -1,9 +1,28 @@
 name: CI
 
 on:
+  # A push to main runs CI, and CI finishing is what builds the :edge image and redeploys the demo, so only what changes the image,
+  # the demo's deployment or these workflows should start it. The website has its own workflows, and the docs, the release scripts
+  # and the other workflows don't change what runs. This filter applies to pushes only: the pull_request trigger below has none,
+  # because main requires the test check on every pull request.
   push:
     branches: [main]
-    paths-ignore: [website/**]
+    paths:
+      - "src/**"
+      - "test/**"
+      - "Directory.Build.props"
+      - "Directory.Build.targets"
+      - "Directory.Packages.props"
+      - "global.json"
+      - "nuget.config"
+      - "dotMARC.sln"
+      - ".dockerignore"
+      - "docker-compose.demo.yml"
+      - "scripts/deployment-url.sh"
+      - "scripts/verify-deployment.sh"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/publish.yml"
+      - ".github/workflows/demo-deploy.yml"
   # No paths filter on pull requests: main requires the "test" check, and a workflow skipped by a path filter never
   # reports it, which would block a docs-only PR for good. Instead the job always runs and skips its steps when the PR
   # changes nothing outside website/.
