@@ -110,7 +110,7 @@ else
                                 @if (_canManage)
                                 {
                                     <MudSwitch T="bool" Value="rule.Enabled" ValueChanged="@(enabled => SetEnabledAsync(rule, enabled))" Color="Color.Primary" Size="Size.Small"
-                                               aria-label="@($"{rule.Name} is on")" />
+                                               aria-label="@($"{rule.Name}: {(rule.Enabled ? "on" : "off")}")" />
                                 }
                                 else
                                 {

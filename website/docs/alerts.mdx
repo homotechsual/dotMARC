@@ -18,6 +18,9 @@ resolves itself automatically once the underlying condition clears, no manual di
 | `PsaConnectionLost` | dotMARC can no longer sign in to a PSA, such as when NinjaOne's sign-in lapses. It doesn't raise tickets by default. See [NinjaOne](./psa/ninjaone.mdx#keeping-the-connection-alive). | Someone reconnects the PSA, or turns it off. |
 | `NewUnreviewedSender` | A sender that nobody has decided on first appeared on a domain within the last few days. See [Sender alerts](#sender-alerts). It doesn't raise tickets by default. | A decision is made on the sender at any level, including Under review. |
 | `UnauthorisedSenderDelivered` | Mail from a sender marked Unauthorised is being delivered. See [Sender alerts](#sender-alerts). | The delivered volume falls below the minimum. |
+| `PassRateLow` | A domain's DMARC pass rate over the last few days is below a percentage. See [Metric alerts](#metric-alerts). It is off until you switch its rule on, and doesn't raise tickets by default. | The pass rate is back at or above the percentage, or the rule is switched off. |
+| `VolumeChanged` | A domain's message volume has dropped or risen by a percentage compared with the period before. See [Metric alerts](#metric-alerts). It is off until you switch its rule on, and doesn't raise tickets by default. | The change is smaller again, or the rule is switched off. |
+| `RejectedMessagesHigh` | A domain had at least a number of rejected or quarantined messages over the last few days. See [Metric alerts](#metric-alerts). It is off until you switch its rule on, and doesn't raise tickets by default. | The count falls below the number, or the rule is switched off. |
 
 Each of these is a kind of alert with its own [rules](#alert-rules). By default they are raised at `Warning` severity, and
 the DNS health alerts below have their own default severities. A rule can change the severity to `Info`, `Warning` or `Critical`.
@@ -225,6 +228,34 @@ sender whose decision is Unauthorised is reaching inboxes:
 
 Neither alert is raised for a null-routed domain, which has its own unexpected-activity alert. Switch a rule
 off, or change its thresholds, under [Alert rules](#alert-rules). Switching a rule off closes the alerts it has open. The new sender alert doesn't create tickets by default, and the delivered alert does.
+
+## Metric alerts
+
+Three alerts watch a number in the DMARC reports a monitored domain has received. They suit the things only you know are
+worth hearing about, such as one client's pass rate or a sudden quiet spell. All three are **off until you switch their rule
+on** under [Alert rules](#alert-rules), so upgrading never starts raising alerts you didn't ask for. Each has a default rule
+for every domain, and you can add scoped copies, for example a stricter pass rate for one client.
+
+| Alert | Raised when | Settings |
+| --- | --- | --- |
+| DMARC pass rate low (`PassRateLow`) | The share of messages passing DMARC over the last few days is below a percentage. | **Alert below (percent)** 1 to 99, default 90. **Days to look back** 1 to 30, default 7. **Minimum messages** 1 to 1,000,000, default 100. |
+| Message volume changed (`VolumeChanged`) | The volume over the last few days has dropped, risen, or either, by at least a percentage compared with the same number of days before. | **Alert when volume** drops, rises or either, default drops. **Change (percent)** 10 to 500, default 50. **Days to look back** 1 to 15, default 7. **Minimum messages in the earlier period** 1 to 1,000,000, default 100. |
+| Rejected or quarantined messages high (`RejectedMessagesHigh`) | The domain had at least a number of messages with a reject or quarantine disposition over the last few days. | **Messages at least** 1 to 1,000,000, default 50. **Days to look back** 1 to 30, default 7. |
+
+> contoso.io: DMARC pass rate was 71% over the last 7 days (threshold 90%, 420 messages).
+
+* Counts are of messages, not of reports, so one report covering a thousand messages counts a thousand times. A message
+  passes if SPF or DKIM passes, as everywhere else in dotMARC.
+* **Minimum messages** stops a quiet domain alerting on a handful of messages. A pass rate or volume rule never fires below
+  it, and the volume rule counts it against the earlier period, so a domain that was already quiet never alerts.
+* dotMARC keeps 30 days of reports for these checks, so a volume rule can look back at most 15 days: it compares two periods
+  of that length. A report belongs to a period by when dotMARC received it.
+* The alert closes by itself on the next check once the number recovers, or when you switch the rule off or the domain stops
+  being covered by it.
+* A domain with no reports raises none of the three. A missing report has its own [alert](#alert-types).
+* Like every alert they follow the rule's severity, cooldown, destinations, quiet hours and escalation, appear in the ticket
+  rules, and can be filtered by type in the [API](./api.mdx#alert-rules).
+* Resetting one of these default rules to its default values leaves it switched off.
 
 ## DNS health alerts
 
