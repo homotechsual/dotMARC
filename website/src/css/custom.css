@@ -94,6 +94,37 @@ body {
   border-bottom: 1px solid var(--dotmarc-rule);
 }
 
+.navbar__items { gap: 0.25rem; }
+.navbar__link { white-space: nowrap; }
+.navbar__brand { flex-shrink: 0; }
+.navbar {
+  --docsense-accent: var(--ifm-color-primary);
+  --docsense-trigger-border: var(--dotmarc-rule);
+  --docsense-trigger-bg: var(--ifm-background-surface-color);
+  --docsense-trigger-color: var(--dotmarc-ink-soft);
+  --docsense-trigger-radius: 6px;
+  --docsense-trigger-padding: 0.45rem 0.65rem;
+}
+.docsense-trigger { white-space: nowrap; flex-shrink: 0; }
+.docsense-trigger__kbd {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--dotmarc-ink-soft);
+  border-radius: 4px;
+  font-family: var(--ifm-font-family-monospace);
+  line-height: 1.4;
+}
+.docsense-overlay {
+  --docsense-accent: var(--ifm-color-primary);
+  --docsense-modal-bg: var(--dotmarc-page);
+  --docsense-modal-fg: var(--dotmarc-ink);
+  --docsense-modal-muted: var(--dotmarc-ink-soft);
+  --docsense-modal-border: var(--dotmarc-rule);
+  --docsense-modal-radius: 8px;
+}
+@media (min-width: 997px) and (max-width: 1199px) {
+  .docsense-trigger__kbd { display: none; }
+}
+
 .navbar__title {
   display: none !important;
 }

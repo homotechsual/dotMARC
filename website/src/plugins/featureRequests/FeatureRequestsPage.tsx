@@ -42,10 +42,12 @@ function loadTurnstile(): Promise<void> {
   return turnstileLoading;
 }
 
-function IssueCard({issue}: {issue: RoadmapIssue}): ReactNode {
+function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): ReactNode {
   return <article className={styles.issue}>
     <a href={issue.url}>{issue.title}</a>
     <small>#{issue.number}{issue.awaitingRelease ? ' · Completed, awaiting release' : ''}</small>
+    <span className={styles.badge}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
+    {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}
   </article>;
 }
@@ -151,6 +153,8 @@ export default function FeatureRequests(): ReactNode {
   const [attempt, setAttempt] = useState(0);
   const [view, setView] = useState<'board' | 'releases'>(location.pathname.includes('/roadmap') ? 'releases' : 'board');
   const [search, setSearch] = useState('');
+  const [showShipped, setShowShipped] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -168,59 +172,79 @@ export default function FeatureRequests(): ReactNode {
   }, [api, attempt]);
 
   const filtered = data?.issues.filter(issue => issue.title.toLowerCase().includes(search.toLowerCase())) ?? [];
-  return <Layout title="Feedback and Roadmap" description="Request features and see planned dotMARC releases, maintained on GitHub.">
+  const upcoming = data?.milestones.filter(plan => !plan.released) ?? [];
+  const shipped = data?.milestones.filter(plan => plan.released) ?? [];
+  const matches = (plan: {number: number}) => !search || filtered.some(issue => issue.milestone === plan.number);
+  function ReleaseCard({plan}: {plan: NonNullable<typeof data>['milestones'][number]}): ReactNode {
+    const items = filtered.filter(issue => issue.milestone === plan.number);
+    const all = data?.issues.filter(issue => issue.milestone === plan.number) ?? [];
+    const complete = all.filter(issue => issue.completed).length;
+    return <section className={styles.release}>
+      <div className={styles.releaseHeading}><h2><a href={plan.url}>{plan.title}</a></h2>
+        <span className={styles.badge}>{plan.released ? 'Released' : 'Planned'}</span></div>
+      {plan.released && plan.releaseUrl && <p><a href={plan.releaseUrl}>View published release</a></p>}
+      {!plan.released && <p className={styles.updated}>{plan.dueOn ? `Target date: ${new Date(plan.dueOn).toLocaleDateString()}` : 'No release date committed.'}</p>}
+      {plan.description && <p className={styles.description}>{plan.description}</p>}
+      <p className={styles.updated}>{complete} of {all.length} public features completed. This is not an estimate of remaining effort.</p>
+      <progress value={complete} max={Math.max(1, all.length)} aria-label={`${plan.title}: ${complete} of ${all.length} public features completed`} />
+      {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public features listed yet.</p>}
+    </section>;
+  }
+  return <Layout title="Features and Roadmap" description="Request features and see planned dotMARC releases, maintained on GitHub.">
     <main className={`container margin-vert--lg ${styles.main}`}>
       <header className={styles.header}>
-        <div><h1>Feedback and roadmap</h1><p>Ideas, work in progress and planned releases. Managed openly on GitHub.</p></div>
-        <a href={REQUEST_URL}>Submit directly on GitHub</a>
+        <div><p className={styles.eyebrow}>Help shape dotMARC</p><h1>Features &amp; roadmap</h1><p>See what is coming next, explore ideas and tell us what would help you.</p></div>
+        <a className={styles.primaryAction} href="#request-feature" onClick={() => setRequestOpen(true)}>Request a feature</a>
       </header>
-      <p>Planned scope can change. An unscheduled idea is not a release commitment; dates appear only when a milestone has one.</p>
+      <p className={styles.updated}>Planned scope can change. Unscheduled ideas are not release commitments.</p>
       {loading && <p role="status">Loading roadmap…</p>}
       {error && <div role="alert" className={styles.error}>{error} <button onClick={() => setAttempt(value => value + 1)}>Retry</button></div>}
       {data && <>
-        <p className={styles.updated}>Last successful update: {new Date(data.updatedAt).toLocaleString()}
+        <p className={styles.updated}>Synced from GitHub: {new Date(data.updatedAt).toLocaleString()}
           {(data.stale || error) && <strong className={styles.warning}> · Showing cached data; GitHub refresh is unavailable.</strong>}
         </p>
         <nav className={styles.toolbar} aria-label="Roadmap views">
-          <button aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</button>
-          <button aria-pressed={view === 'releases'} onClick={() => setView('releases')}>Planned releases</button>
-          <label htmlFor="roadmap-search">Find a feature</label>
-          <input id="roadmap-search" type="search" value={search} onChange={event => setSearch(event.target.value)} />
+          <div className={styles.viewSwitch}>
+            <button aria-pressed={view === 'releases'} onClick={() => setView('releases')}>Planned releases</button>
+            <button aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</button>
+          </div>
+          <div className={styles.featureSearch}><label htmlFor="roadmap-search">Find a feature</label>
+            <input id="roadmap-search" type="search" placeholder="Filter features by title..." value={search} onChange={event => setSearch(event.target.value)} /></div>
         </nav>
-        {view === 'board' ? <div className={styles.board}>
-          {Object.entries(STATUS_LABELS).map(([status, label]) => {
+        {view === 'board' ? <>
+          <label className={styles.consent}><input type="checkbox" checked={showShipped} onChange={event => setShowShipped(event.target.checked)} />Include shipped features</label>
+          <div className={styles.board}>
+          {Object.entries(STATUS_LABELS).filter(([status]) => showShipped || status !== 'shipped').map(([status, label]) => {
             const items = filtered.filter(issue => issue.status === status);
             return <section key={status} className={styles.column}>
               <h2>{label} <small>({items.length})</small></h2>
-              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching features.</p>}
+              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} release={data.milestones.find(plan => plan.number === issue.milestone)?.title} />) : <p className={styles.updated}>No matching features.</p>}
             </section>;
           })}
-        </div> : <div className={styles.releases}>
-          {data.milestones.map(plan => {
-            const items = filtered.filter(issue => issue.milestone === plan.number);
-            const complete = items.filter(issue => issue.completed).length;
-            return <section key={plan.number} className={styles.release}>
-              <h2><a href={plan.url}>{plan.title}</a></h2>
-              <span className={styles.badge}>{plan.released ? 'Released' : 'Planned'}</span>
-              {plan.released && plan.releaseUrl && <p><a href={plan.releaseUrl}>View published release</a></p>}
-              {!plan.released && <p>{plan.dueOn ? `Target date: ${new Date(plan.dueOn).toLocaleDateString()}` : 'No release date committed.'}</p>}
-              <p className={styles.description}>{plan.description}</p>
-              <p>{complete} of {items.length} {search ? 'matching ' : ''}public features completed. This is not an estimate of remaining effort.</p>
-              <progress value={complete} max={Math.max(1, items.length)} aria-label={`${plan.title}: ${complete} of ${items.length} public features completed`} />
-              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public features listed yet.</p>}
-            </section>;
-          })}
+        </div></> : <>
+          <div className={styles.releases}>
+          {upcoming.filter(matches).map(plan => <ReleaseCard key={plan.number} plan={plan} />)}
+          {!upcoming.filter(matches).length && <p>No matching planned releases.</p>}
           <section className={styles.release}><h2>Unscheduled ideas</h2>
             {filtered.filter(issue => !data.milestones.some(plan => plan.number === issue.milestone)).map(issue => <IssueCard key={issue.number} issue={issue} />)}
             {!filtered.some(issue => !data.milestones.some(plan => plan.number === issue.milestone)) && <p>No matching unscheduled ideas.</p>}
           </section>
-        </div>}
+          </div>
+          {shipped.length > 0 && <details className={styles.history}>
+            <summary>Previously shipped releases ({shipped.length})</summary>
+            <div className={styles.releases}>{shipped.filter(matches).map(plan => <ReleaseCard key={plan.number} plan={plan} />)}</div>
+          </details>}
+        </>}
       </>}
-      <section className={styles.request}><h2>Request a feature</h2>
+      <section id="request-feature" className={styles.request}><h2>Have an idea?</h2>
         <p>Search the public roadmap first, or <a href={`${REPO}/issues`}>browse all requests on GitHub</a>. New requests need maintainer triage before appearing here.</p>
+        <p><a href={REQUEST_URL}>Submit directly on GitHub</a>, or use the form below.</p>
+        <details open={requestOpen} onToggle={event => setRequestOpen(event.currentTarget.open)}>
+          <summary>Request a feature on this site</summary>
         {siteKey && data?.submissionsEnabled
           ? <RequestForm api={api} siteKey={siteKey} issues={data.issues} />
           : <p>Website submissions are currently unavailable. <a href={REQUEST_URL}>Submit your request on GitHub</a>.</p>}
+        </details>
       </section>
     </main>
   </Layout>;

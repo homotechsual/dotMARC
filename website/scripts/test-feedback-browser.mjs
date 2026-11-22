@@ -26,8 +26,12 @@ const roadmap = {
     {number: 1, title: 'Bulk DNS push', url: `${repository}/issues/1`, status: 'planned', milestone: 1, completed: false, awaitingRelease: false, statusWarning: false},
     {number: 2, title: 'Action-centre Dashboard', url: `${repository}/issues/2`, status: 'in-progress', milestone: 1, completed: true, awaitingRelease: true, statusWarning: false},
     {number: 3, title: 'An unscheduled idea', url: `${repository}/issues/3`, status: 'considering', milestone: null, completed: false, awaitingRelease: false, statusWarning: false},
+    {number: 4, title: 'An older shipped feature', url: `${repository}/issues/4`, status: 'shipped', milestone: 2, completed: true, awaitingRelease: false, statusWarning: false},
   ],
-  milestones: [{number: 1, title: 'v0.14.0', description: 'Bulk push and action centre', url: `${repository}/milestone/1`, dueOn: null, released: false, releaseUrl: null}],
+  milestones: [
+    {number: 1, title: 'v0.14.0', description: 'Bulk push and action centre', url: `${repository}/milestone/1`, dueOn: null, released: false, releaseUrl: null},
+    {number: 2, title: 'v0.13.0', description: 'Previously shipped', url: `${repository}/milestone/2`, dueOn: null, released: true, releaseUrl: `${repository}/releases/tag/v0.13.0`},
+  ],
 };
 try {
   browser = await chromium.launch({headless: true});
@@ -53,11 +57,24 @@ try {
   }));
   await page.goto(`${base}/roadmap/`);
   await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
+  assert.equal(await page.getByRole('link', {name: 'An older shipped feature', exact: true}).isVisible(), false);
+  await page.getByText('Previously shipped releases (1)', {exact: true}).click();
+  assert.equal(await page.getByRole('link', {name: 'An older shipped feature', exact: true}).isVisible(), true);
+  for (const width of [1024, 1100, 1280]) {
+    await page.setViewportSize({width, height: 900});
+    const links = page.locator('.navbar__items--left > .navbar__link');
+    for (const link of await links.all()) {
+      assert.ok(await link.evaluate(element => element.getBoundingClientRect().height < 45), `Navbar link wraps at ${width}px`);
+    }
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  }
+  await page.getByRole('button', {name: 'Resources', exact: true}).hover();
+  await page.getByRole('link', {name: 'API reference', exact: true}).waitFor();
   assert.equal(await page.getByRole('link', {name: 'Submit directly on GitHub'}).getAttribute('href'), `${repository}/issues/new?template=feature-request.yml`);
   await page.getByRole('button', {name: 'Search', exact: true}).click();
-  const searchDialog = page.getByRole('dialog', {name: 'Search docs'});
+  const searchDialog = page.getByRole('dialog', {name: 'Search the site'});
   await searchDialog.waitFor();
-  await searchDialog.getByPlaceholder('Search...', {exact: true}).fill('getting started');
+  await searchDialog.getByPlaceholder('Search documentation, API and updates...', {exact: true}).fill('getting started');
   await searchDialog.locator('button.docsense-hit').filter({hasText: /Getting Started/i}).first().click();
   await page.waitForURL('**/docs/getting-started/**');
   await page.goto(`${base}/roadmap/`);
@@ -65,13 +82,26 @@ try {
   assert.equal(await page.getByText('No release date committed.').count(), 1);
   assert.equal(await page.getByText('1 of 2 public features completed.', {exact: false}).count(), 1);
   await page.getByRole('button', {name: 'Board', exact: true}).click();
+  assert.equal(await page.getByRole('heading', {name: 'Shipped (1)', exact: true}).count(), 0);
+  await page.getByLabel('Include shipped features').check();
+  await page.getByRole('heading', {name: 'Shipped (1)', exact: true}).waitFor();
+  await page.getByLabel('Include shipped features').uncheck();
   await page.getByRole('heading', {name: 'Planned (1)', exact: true}).waitFor();
   await page.getByRole('searchbox', {name: 'Find a feature'}).fill('Bulk DNS');
   assert.equal(await page.getByRole('link', {name: 'Bulk DNS push', exact: true}).count(), 1);
   assert.equal(await page.getByRole('link', {name: 'An unscheduled idea', exact: true}).count(), 0);
   await page.getByRole('searchbox', {name: 'Find a feature'}).fill('');
+  await page.getByRole('button', {name: 'Planned releases', exact: true}).click();
+  await page.getByRole('searchbox', {name: 'Find a feature'}).fill('Bulk DNS');
+  assert.equal(await page.getByText('1 of 2 public features completed.', {exact: false}).count(), 1);
+  await page.getByRole('searchbox', {name: 'Find a feature'}).fill('');
   await page.setViewportSize({width: 390, height: 844});
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  await page.getByRole('button', {name: 'Search', exact: true}).click();
+  await page.getByRole('dialog', {name: 'Search the site'}).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', {name: 'Search the site'}).waitFor({state: 'hidden'});
+  await page.getByRole('link', {name: 'Request a feature', exact: true}).click();
   await page.getByLabel('Short title').fill('A helpful browser-tested feature');
   await page.getByLabel('What would you like to change?').fill('Please add a useful new capability for our team.');
   await page.getByLabel('What would this help you do?').fill('This would simplify onboarding our client domains.');
