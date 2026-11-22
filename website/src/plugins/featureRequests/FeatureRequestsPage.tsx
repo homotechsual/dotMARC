@@ -6,6 +6,7 @@ import {readRoadmap, type Roadmap, type RoadmapIssue} from './roadmap';
 import styles from './styles.module.css';
 
 const REPO = 'https://github.com/homotechsual/dotMARC';
+const REQUEST_URL = `${REPO}/issues/new?template=feature-request.yml`;
 const STATUS_LABELS = {
   triage: 'Needs triage', considering: 'Considering', planned: 'Planned',
   'in-progress': 'In progress', shipped: 'Shipped',
@@ -171,7 +172,7 @@ export default function FeatureRequests(): ReactNode {
     <main className={`container margin-vert--lg ${styles.main}`}>
       <header className={styles.header}>
         <div><h1>Feedback and roadmap</h1><p>Ideas, work in progress and planned releases. Managed openly on GitHub.</p></div>
-        <a href={`${REPO}/issues/new`}>Submit directly on GitHub</a>
+        <a href={REQUEST_URL}>Submit directly on GitHub</a>
       </header>
       <p>Planned scope can change. An unscheduled idea is not a release commitment; dates appear only when a milestone has one.</p>
       {loading && <p role="status">Loading roadmap…</p>}
@@ -219,7 +220,7 @@ export default function FeatureRequests(): ReactNode {
         <p>Search the public roadmap first, or <a href={`${REPO}/issues`}>browse all requests on GitHub</a>. New requests need maintainer triage before appearing here.</p>
         {siteKey && data?.submissionsEnabled
           ? <RequestForm api={api} siteKey={siteKey} issues={data.issues} />
-          : <p>Website submissions are currently unavailable. <a href={`${REPO}/issues/new`}>Submit your request on GitHub</a>.</p>}
+          : <p>Website submissions are currently unavailable. <a href={REQUEST_URL}>Submit your request on GitHub</a>.</p>}
       </section>
     </main>
   </Layout>;

@@ -53,6 +53,7 @@ try {
   }));
   await page.goto(`${base}/roadmap/`);
   await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
+  assert.equal(await page.getByRole('link', {name: 'Submit directly on GitHub'}).getAttribute('href'), `${repository}/issues/new?template=feature-request.yml`);
   await page.getByRole('button', {name: 'Search', exact: true}).click();
   const searchDialog = page.getByRole('dialog', {name: 'Search docs'});
   await searchDialog.waitFor();

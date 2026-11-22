@@ -73,6 +73,8 @@ For a local deployment use `npm ci` in `website/feedback-worker`, authenticate w
 - Durable Object state contains at most three current receipts per active identity; old data is pruned on access and an alarm removes receipts after an hour without a new reservation. This is not anonymous identity verification or protection against distributed spam. Consider Cloudflare edge limits if needed.
 - Rate-limited requests show an explicit error. Website issues do not gain `roadmap:public` until a maintainer approves them.
 
+Direct GitHub submissions use the repository's Feature request issue form with the same feature description, use case, public-content warning and triage labels. GitHub attributes these to the submitter's account. Its form requires both text fields and public consent; the website's character limits are guidance in GitHub because issue forms do not enforce those length constraints.
+
 ## Public data and refresh
 
 Only `roadmap:public` issues appear in the website board, excluding pull requests, declined closures and duplicate/invalid/wontfix labels. Milestone titles begin with a semantic release version; descriptions and optional due dates are public. Do not put private planning details in those milestones.
