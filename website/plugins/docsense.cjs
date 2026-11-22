@@ -18,7 +18,7 @@ module.exports = function routedDocsense(context) {
       triggerLabel: 'Chwilio',
       modalAriaLabel: 'Chwilio',
       emptyResultsLabel: 'Dim canlyniadau',
-    } : {placeholder: 'Search...', triggerLabel: 'Search'},
+    } : {placeholder: 'Search documentation, API and updates...', triggerLabel: 'Search', modalAriaLabel: 'Search the site'},
   });
   let runtime;
   let index;
