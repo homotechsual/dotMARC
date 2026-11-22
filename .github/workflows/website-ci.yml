@@ -50,8 +50,19 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
+      - name: Test roadmap response contract
+        run: node --test feedback-worker/test/roadmap-client.test.mjs
+
       - name: Install pinned Bicep compiler
         run: az bicep install --version v0.46.1
 
       - name: Build
+        env:
+          TURNSTILE_SITE_KEY: 1x00000000000000000000AA
         run: yarn build
+
+      - name: Install browser for feedback checks
+        run: yarn exec playwright install --with-deps chromium
+
+      - name: Test feedback and roadmap in browser
+        run: node scripts/test-feedback-browser.mjs

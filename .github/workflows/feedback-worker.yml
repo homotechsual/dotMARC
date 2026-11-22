@@ -1,0 +1,77 @@
+name: Feedback Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/feedback-worker/**'
+      - '.github/workflows/feedback-worker.yml'
+  pull_request:
+    paths:
+      - 'website/feedback-worker/**'
+      - '.github/workflows/feedback-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feedback-worker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website/feedback-worker
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: website/feedback-worker/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: feedback-production
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require feedback credentials
+        env:
+          FEEDBACK_GITHUB_APP_ID: ${{ secrets.FEEDBACK_GITHUB_APP_ID }}
+          FEEDBACK_GITHUB_INSTALLATION_ID: ${{ secrets.FEEDBACK_GITHUB_INSTALLATION_ID }}
+          FEEDBACK_GITHUB_PRIVATE_KEY: ${{ secrets.FEEDBACK_GITHUB_PRIVATE_KEY }}
+          FEEDBACK_GITHUB_WEBHOOK_SECRET: ${{ secrets.FEEDBACK_GITHUB_WEBHOOK_SECRET }}
+          FEEDBACK_TURNSTILE_SECRET: ${{ secrets.FEEDBACK_TURNSTILE_SECRET }}
+        run: |
+          for name in FEEDBACK_GITHUB_APP_ID FEEDBACK_GITHUB_INSTALLATION_ID FEEDBACK_GITHUB_PRIVATE_KEY FEEDBACK_GITHUB_WEBHOOK_SECRET FEEDBACK_TURNSTILE_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required secret: $name"
+              exit 1
+            fi
+          done
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          wranglerVersion: 4.166.0
+          workingDirectory: website/feedback-worker
+          command: deploy
+          secrets: |
+            GITHUB_APP_ID
+            GITHUB_INSTALLATION_ID
+            GITHUB_PRIVATE_KEY
+            GITHUB_WEBHOOK_SECRET
+            TURNSTILE_SECRET
+        env:
+          GITHUB_APP_ID: ${{ secrets.FEEDBACK_GITHUB_APP_ID }}
+          GITHUB_INSTALLATION_ID: ${{ secrets.FEEDBACK_GITHUB_INSTALLATION_ID }}
+          GITHUB_PRIVATE_KEY: ${{ secrets.FEEDBACK_GITHUB_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.FEEDBACK_GITHUB_WEBHOOK_SECRET }}
+          TURNSTILE_SECRET: ${{ secrets.FEEDBACK_TURNSTILE_SECRET }}

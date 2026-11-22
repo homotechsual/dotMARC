@@ -46,6 +46,19 @@ const config: Config = {
   url: siteUrl,
   baseUrl: '/',
   trailingSlash: true,
+  customFields: {
+    feedbackApiUrl: process.env.FEEDBACK_API_URL || 'https://feedback-api.dotmarc.app',
+    turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
+  },
+  headTags: [{
+    tagName: 'script',
+    attributes: {},
+    innerHTML: `(() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme = param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();`,
+  }],
 
   organizationName: 'homotechsual',
   projectName: 'dotMARC',
@@ -91,6 +104,7 @@ const config: Config = {
   ],
 
   plugins: [
+    './plugins/docsense.cjs',
     [
       '@docusaurus/plugin-content-docs',
       {
@@ -195,6 +209,7 @@ const config: Config = {
         {to: '/releases-updates', label: 'Releases and Updates', position: 'left'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
         {to: '/feedback', label: 'Feedback', position: 'left'},
+        {to: '/roadmap', label: 'Roadmap', position: 'left'},
         {
           href: 'https://github.com/sponsors/homotechsual',
           html: '<span class="navbar__action-label">Sponsor</span>',
