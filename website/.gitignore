@@ -20,3 +20,6 @@
 .env.production.local
 
 npm-debug.log*
+
+# Generated DocSense search indexes
+/static/docsense/

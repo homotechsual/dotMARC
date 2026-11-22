@@ -1,0 +1,105 @@
+---
+sidebar_position: 4.6
+description: Configure the GitHub-backed feedback form, public roadmap and Cloudflare Worker.
+---
+
+# Feedback and roadmap operations
+
+The Docusaurus site stays on Cloudflare Pages. A separate Worker at `feedback-api.dotmarc.app` accepts feature requests and caches public GitHub issues and release milestones. GitHub is the source of truth; Durable Objects hold only a read cache and short-lived submission receipts/rate limits.
+
+## GitHub setup
+
+Create a GitHub App installed **only** on `homotechsual/dotMARC`:
+
+- Repository permissions: Issues read/write, Contents read, Metadata read (automatic).
+- Webhook URL: `https://feedback-api.dotmarc.app/webhook`.
+- Subscribe to Issues, Milestone and Release events.
+- Set a randomly generated webhook secret.
+
+Obtain the App ID, installation ID and private key. The Worker uses PKCS#8 PEM (`BEGIN PRIVATE KEY`). Never commit the key or paste it into a public issue.
+
+If GitHub supplies PKCS#1 (`BEGIN RSA PRIVATE KEY`), convert it locally. Windows does not include OpenSSL. In **PowerShell 7**, set the input path to the downloaded key and run:
+
+```powershell
+$inputPath = 'C:\Users\YourName\Downloads\github-app.pem'
+$outputPath = Join-Path (Split-Path $inputPath) 'github-app-pkcs8.pem'
+$rsa = [System.Security.Cryptography.RSA]::Create()
+try {
+    $rsa.ImportFromPem([System.IO.File]::ReadAllText($inputPath))
+    [System.IO.File]::WriteAllText(
+        $outputPath,
+        $rsa.ExportPkcs8PrivateKeyPem(),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
+finally {
+    $rsa.Dispose()
+}
+```
+
+This requires PowerShell 7, not Windows PowerShell 5.1. On systems with OpenSSL installed, `openssl pkcs8 -topk8 -nocrypt -in github-app.pem -out github-app-pkcs8.pem` is an alternative.
+
+Create the roadmap labels with the migration script's preview/apply workflow, or manually: `type:feature`, `roadmap:public`, and one `status:*` label per state described in [Releasing](./releasing.mdx).
+
+## Cloudflare and Turnstile setup
+
+The existing Cloudflare deployment token needs Workers script, Durable Object and custom-domain deployment access for the account/zone. Keep the existing Pages hosting unchanged.
+
+Create a Turnstile widget allowing `dotmarc.app`. The Worker requires hostname `dotmarc.app` and action `feature-request`; a successful challenge for another site/action is rejected.
+
+Set these repository/environment secrets for the **Feedback Worker** workflow:
+
+| Secret | Purpose |
+| --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Deployment |
+| `FEEDBACK_GITHUB_APP_ID` | App ID |
+| `FEEDBACK_GITHUB_INSTALLATION_ID` | Repository installation ID |
+| `FEEDBACK_GITHUB_PRIVATE_KEY` | PKCS#8 PEM key |
+| `FEEDBACK_GITHUB_WEBHOOK_SECRET` | Signed webhook verification |
+| `FEEDBACK_TURNSTILE_SECRET` | Server-side Turnstile verification |
+
+Set repository variable `FEEDBACK_TURNSTILE_SITE_KEY` for the website build. It is public, unlike the Turnstile secret. The site defaults to `https://feedback-api.dotmarc.app`; local builds can override `FEEDBACK_API_URL`.
+
+Protect the `feedback-production` GitHub environment as appropriate. The Worker workflow tests and bundles pull requests, and deploys only `main`. Publish the Worker before enabling the website form. A missing configuration is explicitly reported; the site offers direct GitHub submission rather than claiming success.
+
+For a local deployment use `npm ci` in `website/feedback-worker`, authenticate with Wrangler, set the equivalent Worker secrets (`GITHUB_APP_ID`, `GITHUB_INSTALLATION_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `TURNSTILE_SECRET`) with `wrangler secret put`, then `npm run deploy`. Do not store credentials in Wrangler configuration.
+
+## Submission and abuse controls
+
+- Anonymous submissions require consent to public publication. They are authored by the App, not attributed to a fabricated GitHub identity. No contact address is collected.
+- The Worker restricts browser writes to the exact site origin, verifies Turnstile server-side, limits streamed request size and validates title/description/use-case lengths.
+- A Durable Object permits three reservations per source IP per hour, using a SHA-256-derived object identity rather than storing the raw IP. Cloudflare receives the IP as part of normal request processing; Turnstile verification receives it.
+- A stable request identifier prevents immediate retry duplication. Reservations and receipts expire logically after one hour. If a write has an uncertain result, the API reports that uncertainty instead of automatically trying another issue creation.
+- Durable Object state contains at most three current receipts per active identity; old data is pruned on access and an alarm removes receipts after an hour without a new reservation. This is not anonymous identity verification or protection against distributed spam. Consider Cloudflare edge limits if needed.
+- Rate-limited requests show an explicit error. Website issues do not gain `roadmap:public` until a maintainer approves them.
+
+Direct GitHub submissions use the repository's Feature request issue form with the same feature description, use case, public-content warning and triage labels. GitHub attributes these to the submitter's account. Its form requires both text fields and public consent; the website's character limits are guidance in GitHub because issue forms do not enforce those length constraints.
+
+## Public data and refresh
+
+Only `roadmap:public` issues appear in the website board, excluding pull requests, declined closures and duplicate/invalid/wontfix labels. Milestone titles begin with a semantic release version; descriptions and optional due dates are public. Do not put private planning details in those milestones.
+
+Completed issues count as shipped only when their milestone matches a published stable GitHub Release. Public feature counts deliberately exclude internal issues and pull requests.
+
+The Worker consumes all API pages, refreshes from signed webhooks and reconciles every ten minutes. Reads use the persistent snapshot instead of fetching GitHub for every visitor. Refresh failures preserve the last successful snapshot with a visible stale flag; the initial failure returns an error, not a fabricated empty roadmap. A removed public label can remain in the old cached snapshot during an outage: never treat labels on a public repository as a privacy boundary.
+
+## Migration away from Canny
+
+`website/data/legacy-canny-roadmap.json` preserves the previous curated planning snapshot. It is **not a full Canny export**. Run `node website/scripts/migrate-feedback.mjs` for a read-only preview; use `--apply` only after checking the output. The **Migrate feedback to GitHub** workflow offers the same choice.
+
+The script creates missing labels/milestones and imports the snapshot with stable source markers, original descriptions, original status and any original URL present in the data. Repeated runs skip imported markers. A title collision without a marker stops for reconciliation rather than overwriting an existing issue.
+
+Votes, comments and subscribers are not migrated. Export any additional Canny requests and original URLs before closing the account; reconcile them separately. Do not claim the curated snapshot includes every user request.
+
+The old Canny sync/backfill workflows, browser embed and release publishing scripts are removed. After the replacement is deployed and the export is secured, remove the unused `CANNY_API_KEY` repository secret and revoke the old Canny key.
+
+## Validation and rollout
+
+1. Run Worker tests and `npm run check`; run the website typecheck/build.
+2. Provision the GitHub App, Turnstile widget and Worker secrets.
+3. Preview/apply the migration, confirm labels and planned milestone scope.
+4. Deploy the Worker; verify `/roadmap`, an allowed site submission, a rejected challenge and a signed webhook.
+5. Publish the website with the public site key; verify both `/feedback` and `/roadmap`, mobile layouts and a request confirmation.
+6. Confirm a label/milestone update appears after a webhook or the next reconciliation.
+
+Keep the roadmap descriptive: milestone dates are targets, not guarantees. Voting, site comments, subscriber emails and GitHub Projects custom-field integration are outside this first version.

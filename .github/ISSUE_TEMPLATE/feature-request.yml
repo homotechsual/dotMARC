@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest a change to dotMARC and explain what it would help you do.
+labels:
+  - type:feature
+  - status:triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search the [public roadmap](https://dotmarc.app/roadmap/) and [existing issues](https://github.com/homotechsual/dotMARC/issues) before submitting.
+
+        Use a short, descriptive issue title (8-160 characters). This request will be public and attributed to your GitHub account. Do not include credentials, client details or other sensitive information.
+
+        New requests need maintainer triage before appearing on the curated roadmap. Submission is not a release commitment.
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature request
+      description: What would you like to change? Aim for 20-4,000 characters, matching the website form.
+      placeholder: Describe the capability or improvement you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What would this help you do? Aim for 10-2,000 characters, matching the website form.
+      placeholder: Explain the task or problem this would help you solve.
+    validations:
+      required: true
+  - type: checkboxes
+    id: public-consent
+    attributes:
+      label: Public submission
+      options:
+        - label: I understand this request will be public and have not included sensitive information.
+          required: true
