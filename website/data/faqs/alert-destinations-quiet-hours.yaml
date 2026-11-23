@@ -1,0 +1,18 @@
+question: Why is an alert visible in dotMARC but missing from Teams or Slack?
+answer: |
+  Alert recording and notification delivery are separate. Check **Where alerts go** on **Alert
+  settings**: the destination must exist and be enabled. Then check the alert rule sends to it.
+  A rule set to chosen destinations with none selected records alerts without posting them anywhere.
+
+  Quiet hours can also explain it. **Hold** sends on a later check after the window ends, only if
+  the alert is still open. **Mute** never sends that original notification. The Alerts page shows
+  held or muted status. Windows use the time zone on Alert settings, and Critical alerts bypass
+  them by default unless the rule says otherwise.
+
+  Quiet hours don't prevent PSA tickets. Escalation is separate: an enabled escalation can notify
+  its selected destinations later, even for a muted alert. Use **Send test** in the destination
+  dialog and check application logs if delivery fails.
+
+  See [Destinations](/docs/alerts#destinations) and [Quiet hours](/docs/alert-rules#quiet-hours).
+category: Alerts & PSA integration
+order: 8

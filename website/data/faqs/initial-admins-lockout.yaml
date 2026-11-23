@@ -1,12 +1,15 @@
 question: I deployed dotMARC and now no one can sign in - how do I get Admin access back?
 answer: |
   Authorization in dotMARC is deny-by-default: with no existing access grants, every user is
-  locked out, including whoever deployed it. The only way to seed the first Admin is the
-  `InitialAdmins__Emails` environment variable, and it only takes effect the very first time the
-  app starts with an empty `UserAccess` table.
+  locked out, including whoever deployed it. On each startup, dotMARC checks whether the `UserAccess`
+  table is empty. If it is, the comma-separated emails in `InitialAdmins__Emails` receive the Admin role.
 
-  If you deployed without setting it, there's no in-app recovery path - you'll need direct
-  database access to insert a `UserAccess` row granting the locked `Admin` role to your own email.
+  If you deployed without setting it and there are still no access grants, set `InitialAdmins__Emails`
+  to your sign-in email and restart the app. You don't need to insert a database row in that case.
+
+  If any access grants already exist, the setting does not add or replace them. Ask an existing
+  administrator to restore your access. If no administrator can sign in, recovery needs direct
+  database access; changing this environment variable alone won't fix it.
 
   Set `InitialAdmins__Emails` **before** your first deploy (or before deploying the permissions
   feature to an existing environment) to avoid this entirely. See
