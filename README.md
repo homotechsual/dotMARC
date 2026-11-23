@@ -190,8 +190,9 @@ demo.dotmarc.app {
 }
 ```
 
-Deployment to the demo VM is automated by `.github/workflows/demo-deploy.yml` on every push to
-`main` - see that workflow for the required repository secrets/variables.
+Deployment to the demo VM is automated by `.github/workflows/demo-deploy.yml` after successful
+CI for application/build/deployment changes on `main`. Documentation-
+and website-only pushes do not start this chain. See that workflow for the required repository secrets/variables.
 
 ## Development
 
@@ -210,6 +211,15 @@ dotnet test dotMARC.sln
 
 `dotnet test` uses Testcontainers.PostgreSql, so Docker must be running; the first run pulls the
 `postgres:18` image automatically.
+
+Every pull request reports the required `CI / test` check. Its lightweight scope and release-script tests always
+run, but .NET restore/build/tests run only when application, test, build or demo-deployment inputs
+change. Website and feedback Worker changes use their own workflows. Manual and reusable CI
+invocations still run the full suite. Scope detection fails the check if the Git diff cannot be read.
+
+The application input list lives in [scripts/ci-scope.mjs](scripts/ci-scope.mjs) and must match
+the push filter in [.github/workflows/ci.yml](.github/workflows/ci.yml). Validate scope changes with
+`node --test scripts/ci-scope.test.mjs`; it checks the lists agree and covers deletions and renames.
 
 ### Local database-first flow
 
