@@ -24,7 +24,7 @@ const roadmap = {
   updatedAt: '2026-11-22T18:00:00Z', stale: false, submissionsEnabled: true,
   issues: [
     {number: 1, title: 'Bulk DNS push', url: `${repository}/issues/1`, status: 'planned', milestone: 1, completed: false, awaitingRelease: false, statusWarning: false, changeType: 'enhancement', areas: ['dns', 'domains'], classificationWarning: false},
-    {number: 2, title: 'Action-centre Dashboard', url: `${repository}/issues/2`, status: 'in-progress', milestone: 1, completed: true, awaitingRelease: true, statusWarning: false, changeType: 'feature', areas: ['domains'], classificationWarning: false},
+    {number: 2, title: 'Action-centre Dashboard', url: `${repository}/issues/2`, status: 'in-progress', milestone: 1, completed: true, awaitingRelease: true, statusWarning: false, changeType: 'feature', areas: ['domains', 'dmarc', 'alerts'], classificationWarning: false},
     {number: 3, title: 'An unscheduled idea', url: `${repository}/issues/3`, status: 'considering', milestone: null, completed: false, awaitingRelease: false, statusWarning: false},
     {number: 4, title: 'An older shipped feature', url: `${repository}/issues/4`, status: 'shipped', milestone: 2, completed: true, awaitingRelease: false, statusWarning: false},
   ],
@@ -111,6 +111,22 @@ try {
   await page.getByRole('searchbox', {name: 'Find an item'}).fill('Bulk DNS');
   assert.equal(await page.getByText('1 of 2 public items completed.', {exact: false}).count(), 1);
   await page.getByRole('searchbox', {name: 'Find an item'}).fill('');
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({width, height: 900});
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${theme} overflow at ${width}px`);
+      const card = page.getByRole('article').filter({has: page.getByRole('link', {name: 'Bulk DNS push', exact: true})});
+      const size = await card.boundingBox();
+      assert.ok(size && size.height < 210, `Two-area card should stay compact at ${width}px in ${theme}`);
+      const meta = card.getByText('Enhancement', {exact: true});
+      assert.ok(Number.parseFloat(await meta.evaluate(element => getComputedStyle(element).fontSize)) <= 12, 'Metadata must remain secondary to the title');
+      assert.equal(await card.getByRole('list', {name: 'Product areas'}).getByRole('listitem').count(), 2);
+      if (process.env.ROADMAP_SCREENSHOT_DIR && width !== 768) {
+        await page.screenshot({path: resolve(process.env.ROADMAP_SCREENSHOT_DIR, `roadmap-${theme}-${width}.png`), fullPage: true});
+      }
+    }
+  }
   await page.setViewportSize({width: 390, height: 844});
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.getByRole('button', {name: 'Search', exact: true}).click();

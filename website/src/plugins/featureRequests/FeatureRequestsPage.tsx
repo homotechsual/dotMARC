@@ -44,13 +44,16 @@ function loadTurnstile(): Promise<void> {
 
 function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): ReactNode {
   return <article className={styles.issue}>
-    <a href={issue.url}>{issue.title}</a>
-    <small>#{issue.number}{issue.awaitingRelease ? ' · Completed, awaiting release' : ''}</small>
-    <span className={styles.badge}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
-    <div className={styles.badges} aria-label="Classification">
-      <span className={styles.badge}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
-      {issue.areas.map(id => <span className={styles.badge} key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</span>)}
+    <div className={styles.issueMeta}>
+      <span className={styles.issueNumber}>#{issue.number}</span>
+      <span className={styles.changeType}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
+      <span className={styles.issueStatus} data-status={issue.status}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
     </div>
+    <a className={styles.issueTitle} href={issue.url}>{issue.title}</a>
+    {issue.areas.length > 0 && <ul className={styles.areas} aria-label="Product areas">
+      {issue.areas.map(id => <li key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</li>)}
+    </ul>}
+    {issue.awaitingRelease && <small>Completed, awaiting release</small>}
     {issue.classificationWarning && <small className={styles.warning}>Classification needs maintainer review</small>}
     {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}
@@ -202,14 +205,19 @@ export default function FeatureRequests(): ReactNode {
     const all = data?.issues.filter(issue => issue.milestone === plan.number) ?? [];
     const complete = all.filter(issue => issue.completed).length;
     return <section className={styles.release}>
-      <div className={styles.releaseHeading}><h2><a href={plan.url}>{plan.title}</a></h2>
+      <div className={styles.releaseHeading}><div><p className={styles.eyebrow}>{plan.released ? 'Release archive' : 'Coming next'}</p><h2><a href={plan.url}>{plan.title}</a></h2></div>
         <span className={styles.badge}>{plan.released ? 'Released' : 'Planned'}</span></div>
       {plan.released && plan.releaseUrl && <p><a href={plan.releaseUrl}>View published release</a></p>}
       {!plan.released && <p className={styles.updated}>{plan.dueOn ? `Target date: ${new Date(plan.dueOn).toLocaleDateString()}` : 'No release date committed.'}</p>}
       {plan.description && <p className={styles.description}>{plan.description}</p>}
-      <p className={styles.updated}>{complete} of {all.length} public items completed. This is not an estimate of remaining effort.</p>
-      <progress value={complete} max={Math.max(1, all.length)} aria-label={`${plan.title}: ${complete} of ${all.length} public items completed`} />
-      {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public items listed yet.</p>}
+      <div className={styles.releaseProgress}>
+        <div><p>{complete} of {all.length} public items completed.</p><span>{all.length ? Math.round(100 * complete / all.length) : 0}%</span></div>
+        <progress value={complete} max={Math.max(1, all.length)} aria-label={`${plan.title}: ${complete} of ${all.length} public items completed`} />
+        <small>Item count, not an estimate of remaining effort.</small>
+      </div>
+      <div className={styles.issueList}>
+        {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public items listed yet.</p>}
+      </div>
     </section>;
   }
   return <Layout title="Features and Roadmap" description="Suggest features and enhancements, report bugs and see planned dotMARC releases, maintained on GitHub.">
@@ -233,17 +241,17 @@ export default function FeatureRequests(): ReactNode {
           <div className={styles.featureSearch}><label htmlFor="roadmap-search">Find an item</label>
             <input id="roadmap-search" type="search" placeholder="Filter roadmap by title..." value={search} onChange={event => setSearch(event.target.value)} /></div>
         </nav>
-        <div className={styles.filters} aria-label="Roadmap filters">
-          <label htmlFor="roadmap-area">Product area</label>
+        <div className={styles.filters} role="group" aria-label="Roadmap filters">
+          <div className={styles.filterField}><label htmlFor="roadmap-area">Product area</label>
           <select id="roadmap-area" value={areaFilter} onChange={event => setAreaFilter(event.target.value)}>
             <option value="">All areas</option>{PRODUCT_AREAS.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
             <option value="unclassified">Not classified</option>
-          </select>
-          <label htmlFor="roadmap-type">Change type</label>
+          </select></div>
+          <div className={styles.filterField}><label htmlFor="roadmap-type">Change type</label>
           <select id="roadmap-type" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
             <option value="">All types</option>{CHANGE_TYPES.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
             <option value="unclassified">Not classified</option>
-          </select>
+          </select></div>
           {(search || areaFilter || typeFilter) && <button onClick={() => {setSearch(''); setAreaFilter(''); setTypeFilter('');}}>Clear filters</button>}
         </div>
         {view === 'board' ? <>
@@ -260,11 +268,13 @@ export default function FeatureRequests(): ReactNode {
           <div className={styles.releases}>
           {upcoming.filter(matches).map(plan => <ReleaseCard key={plan.number} plan={plan} />)}
           {!upcoming.filter(matches).length && <p>No matching planned releases.</p>}
-          <section className={styles.release}><h2>Unscheduled ideas</h2>
+          </div>
+          <section className={styles.unscheduled}><div className={styles.releaseHeading}><h2>Unscheduled ideas</h2><span className={styles.updated}>Not yet assigned to a release</span></div>
+            <div className={styles.ideaGrid}>
             {filtered.filter(issue => !data.milestones.some(plan => plan.number === issue.milestone)).map(issue => <IssueCard key={issue.number} issue={issue} />)}
             {!filtered.some(issue => !data.milestones.some(plan => plan.number === issue.milestone)) && <p>No matching unscheduled ideas.</p>}
+            </div>
           </section>
-          </div>
           {shipped.length > 0 && <details className={styles.history}>
             <summary>Previously shipped releases ({shipped.length})</summary>
             <div className={styles.releases}>{shipped.filter(matches).map(plan => <ReleaseCard key={plan.number} plan={plan} />)}</div>
