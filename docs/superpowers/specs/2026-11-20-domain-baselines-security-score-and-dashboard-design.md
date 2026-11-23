@@ -1,6 +1,24 @@
 # Domain baselines, secure score and dashboard workflow
 
-Status: requirements draft with a phased delivery plan. No implementation is authorised by this document. Release allocation is not decided.
+Status: requirements draft with a phased delivery plan. The 0.14 subset is locked below and in the roadmap; baseline contracts remain draft. This document records scope, not an instruction to implement the entire feature set.
+
+## Locked 0.14 subset (22 November)
+
+The user accepted bulk DNS push plus the action-centre Dashboard, separate Domain Inventory and correctness/UX fixes:
+
+- Existing-fact summary counts, a domain problem queue and seven-day quarantine/reject chart with a matching investigation queue.
+- Full inventory on its own page with viewer access, grouped views, sorting, preferences, return navigation and authorised bulk selection preserved.
+- Unified Filters on Dashboard and Inventory, dashboard sender-review visibility, collapsed polling details with visible operational failures, and Add domain controls on Dashboard and Import.
+- Existing roadmap improvements: tag management page, report-based DKIM suggestions, overview group assignment, review/per-IP action fixes, percentage layout, API scope protection and list-position restoration.
+- Null-domain DMARC/DKIM corrections using existing observed evidence, independently of new baseline profiles. Do not suppress genuine policy weakening or treat incomplete lookups as proof of absent keys.
+
+Problem-queue membership is confirmed DNS failures, overdue expected reports and outstanding sender decisions; unknown required checks are separately labelled "needs checking". Operational failures appear first, then domain issues by severity. Entries link directly to an action. Quarantine/reject traffic remains a separate investigation reason, not automatically a configuration failure.
+
+Use seven days for quarantine/reject counts and matching drill-downs, labelled 30-day pass rates, and Domain Overview's existing sender-review window. Keep polling details collapsed on Dashboard and surface existing PSA/polling problems for authorised viewers; per-rule ticker configuration is not in this release.
+
+Assigned to 0.15 in the subsequent release-issue planning discussion: baseline profiles/preset purpose tags, drift views, secure score and health-distribution chart, managed overrides that generate baselines, provider-wide selector enumeration, domain-age conditions, Forwarder decisions and per-rule dashboard visibility. The later sections retain their open design decisions; release assignment does not make them 0.14 dependencies or settle their behavioural contracts.
+
+See the [locked roadmap](../plans/2026-11-20-v0-14-0-roadmap.md) for sequencing and release gates. Routes, component choices and preference-migration mechanics remain detailed-plan decisions within this scope.
 
 ## Intent
 
@@ -17,6 +35,7 @@ Also simplify domain onboarding, dashboard status, tag management and filtering.
 - Make baseline drift discoverable through counts, expected-versus-observed values and domain drill-downs.
 - Allow per-domain and per-group overrides and DNS pushes for both DMARC record values and DKIM selectors/records.
 - On explicit confirmation of a managed change, automatically create and assign the intended baseline; do not wait for push success or DNS verification.
+- Move the full domain inventory to its own page; Dashboard is the action centre, not the complete domain list.
 - Record requirements and plan only at this stage; do not change application behaviour.
 
 ## Related work
@@ -192,6 +211,72 @@ Exact DMARC requirements for sending profiles, DKIM evidence completeness, fresh
 
 ## 7. Dashboard and management workflow
 
+### Action-centre direction (22 November mock-up)
+
+The Dashboard should answer "what needs my attention, and what do I do next?" rather than primarily listing every domain. The user's mock-up proposes summary cards, a seven-day quarantine/reject chart, a domain-health distribution, a Domains with Problems list and a Domains with Quarantines/Rejects list. Moving the full domain inventory to its own page is confirmed.
+
+Treat the mock-up as a workflow reference, not a pixel-exact layout or a replacement for the agreed baseline and filtering contracts.
+
+#### Summary and operational context
+
+- Keep compact summary cards for monitored domains, overall pass rate, domains with warnings, missing expected reports, unparseable messages and report sources. Label their time windows and scope explicitly.
+- Make actionable counts open the corresponding filtered list or investigation view.
+- Show operational alerts, including PSA connection and mailbox polling failures, without making the full polling diagnostic block dominate the page.
+- Keep Add domain and a clear route to the full domain inventory available.
+- Use one Filters entry point for groups, tags and other filters, rather than reproducing the mock-up's separate Groups and Tags buttons.
+
+#### Domains with Problems
+
+- List domains with actionable configuration failures, baseline drift, missing expected reports or outstanding sender decisions. Healthy domains belong in the inventory, not this queue.
+- Show the reason for inclusion and the next action: configure/check DNS, review a sender, investigate missing reports or inspect a failed push.
+- Include domain name, purpose/baseline, report status, last report, pass rate with its window, and the relevant DNS/security status. Do not require every column from the mock-up at narrow viewport sizes.
+- Make the default order prioritise actionable problems; define severity and tie-breaking before implementation rather than sorting solely by domain name.
+- Keep indeterminate/unchecked required checks visible as "needs checking", distinct from confirmed failures.
+- Evaluate report expectations and applicable checks against effective intent. A healthy Parked domain must not enter the queue because it has no reports, usable DKIM key or MTA-STS.
+- An intentional reporting destination different from dotMARC is a problem only when it violates the effective reporting requirement, not solely because it differs.
+- Provide explicit all-clear and no-data states; an empty queue must not imply health if required checks have not run.
+
+#### Domains with Quarantines/Rejects
+
+- Show quarantine and reject message totals over the last seven days, with a domain-level investigation list using that same window.
+- Include affected domains with non-zero volume even when their DNS configuration meets the baseline. Configuration compliance and traffic requiring investigation are separate views.
+- Show message counts, relevant pass/alignment rates and available sender/reason evidence; drill through to the corresponding domain, time window and records.
+- Do not label all quarantine/reject traffic as a configuration failure or automatically recommend weakening policy. Enforcement may be working correctly against spoofing, and authorised forwarding can produce failures requiring a different investigation.
+- Count messages rather than reports/records and avoid duplicate domain rows unless an explicit secondary grouping is selected.
+- Permit a domain in both queues when it has both configuration problems and traffic to investigate; do not deduplicate away either reason for attention.
+
+#### Domain-health distribution
+
+- The mock-up's Healthy / 1 issue / 2 or more issues chart complements the secure-score percentage; it does not replace its baseline-aware definition.
+- Define an issue as a distinct unmet required baseline check, not the number of alerts, rules or delivery attempts. Multiple alerts about one failed check must not inflate the issue count.
+- Keep unknown/unchecked required evidence separately identified. A domain with unknown required checks cannot fall into Healthy just because no failure is confirmed.
+- Do not mix sender-review counts, quarantine/reject volume or global polling failures into a domain configuration score.
+- Display counts alongside percentages and allow each category to open its corresponding domain list.
+
+#### Separate domain inventory
+
+- Move the full domain list off Dashboard to a dedicated Domain Inventory page. Provide clear navigation between the action centre and inventory; choose its route and whether to extend an existing domain-management surface during implementation planning.
+- Preserve read access for viewers who cannot manage domains; moving inventory must not make it write-permission-only.
+- Preserve group views, sorting, filters, saved defaults, list-position restoration, domain navigation and authorised bulk DNS selection/review.
+- Specify how existing dashboard preferences and links migrate when the full table moves. Do not silently discard saved views or orphan return-to-list navigation.
+
+#### Release boundary
+
+Confirmed for 0.14: an action centre and investigation queues using existing facts, with the inventory move coordinated with bulk-push UI and list-position work.
+
+The full baseline-aware score, drift comparisons and managed-baseline changes are deferred. Omit the secure score and domain-health distribution chart in 0.14 rather than substituting an approximation. A release scope change requires agreement; the mock-up does not bring the entire spec into 0.14.
+
+#### Acceptance criteria
+
+- A user can identify an affected domain, understand why it needs attention and reach the relevant action directly from the Dashboard.
+- Healthy domains are excluded from the problem queue; required unknown checks remain visible without being labelled confirmed failures.
+- A baseline-compliant domain with rejected spoofing traffic appears in the investigation list without being falsely marked misconfigured.
+- Seven-day chart totals match the investigation list's message counts under identical filters and access scope.
+- Health-chart categories and secure-score counts agree on configuration results, while unknowns remain explicit.
+- Moving inventory preserves viewer access, domain navigation, saved views and bulk workflows.
+- Every card, queue and chart declares its reporting window and scope; global operational counts are not disguised as group-filtered metrics.
+- The layout remains usable with keyboard navigation, narrow viewports, long domain names and no-data/all-clear states.
+
 ### Dashboard alerts
 
 - Let alert rules opt into a dashboard ticker/status strip.
@@ -203,7 +288,7 @@ Exact DMARC requirements for sending profiles, DKIM evidence completeness, fresh
 
 ### Polling status
 
-Reduce the dashboard polling block to a simple status icon with details collapsed by default, or move detailed polling status to email/report settings. The placement is not yet selected. Preserve access to errors, last-poll information and authorised diagnostic actions.
+For 0.14, reduce the dashboard polling block to a simple status icon with details collapsed by default on Dashboard. Preserve access to errors, last-poll information and authorised diagnostic actions. Relocation to email/report settings is not part of this slice.
 
 ### Domain onboarding
 
@@ -290,7 +375,7 @@ This is sequencing, not an execution-ready task list. Resolve each slice's open 
 5. **Expose drift and managed changes.** Add expected-versus-observed counts and drill-downs using shared comparisons. Extend reviewed domain/group DMARC and DKIM pushes to persist intended baselines on confirmation; test cancellation, persistence failures, partial writes, retries and verification.
 6. **Add domain-age rule conditions.** Implement and test the agreed semantics across evaluators and editing boundaries. This can proceed independently once its date/condition contract is settled.
 7. **Add the secure score.** Consume the shared baseline/health model after check semantics and discovery evidence are defined.
-8. **Reshape dashboard and management workflows.** Add ticker configuration/defaults, simplify polling, add domain entry, separate tag management, unify filters and fix percentage wrapping. Coordinate with other Dashboard work.
+8. **Reshape dashboard and management workflows.** Build the action-centre summary, problem and investigation queues, baseline-aware health distribution and separate domain inventory. Add ticker configuration/defaults, simplify polling, add domain entry, separate tag management, unify filters and fix percentage wrapping. Coordinate with bulk-push UI and list-position work; agree the 0.14 subset before implementation.
 9. **Improve sender review and forwarding decisions.** Fix Review button consistency, alert alignment and per-IP discoverability; add the dashboard review indicator. Define and implement Forwarder decision semantics through persistence, resolution, presentation and affected alerts without changing reported authentication outcomes.
 10. **Verify and document.** Run focused tests for each slice, migration/upgrade tests where applicable, permission/API tests and browser checks. Document purpose-specific expectations and discovery limitations.
 
@@ -311,11 +396,12 @@ The percentage layout fix and dedicated tag page may ship independently. Do not 
 - Discovery suggestions or automatic maintenance first; what provider access and selector-retirement rules apply?
 - Domain-age date, comparisons, units and alert-resolution semantics?
 - Ticker visibility/lifecycle/permissions, especially for global operational alerts?
-- Collapse polling details on Dashboard or relocate them?
-- Scope of the filter overhaul beyond Dashboard and compatibility with saved preferences?
+- Detailed filter/preference migration mechanics for the locked Dashboard and Inventory scope?
+- What route/existing surface hosts the confirmed separate Domain Inventory page?
+- Severity tie-breaking and migration of dashboard preferences/navigation to inventory; distinct health-chart issue categories for the later baseline tranche?
 - Dashboard sender-review indicator placement and an optional outstanding-decision filter?
 - Forwarder as an authorised subtype/role or a distinct status; supported scopes, inheritance, sender-alert treatment and recommended fixes?
-- Release allocation and detailed implementation slices?
+- Detailed implementation slices for locked 0.14 work; release allocation for the deferred tranche?
 
 ## Out of scope unless separately approved
 
