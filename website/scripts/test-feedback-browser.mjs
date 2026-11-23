@@ -62,6 +62,15 @@ try {
     await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
     assert.equal(await page.getByRole('button', {name: 'Planned releases', exact: true}).getAttribute('aria-pressed'), 'true');
     assert.equal(await page.getByRole('button', {name: 'Board', exact: true}).getAttribute('aria-pressed'), 'false');
+    const switchStyle = await page.getByRole('button', {name: 'Board', exact: true}).evaluate(element => {
+      const style = getComputedStyle(element);
+      return {fontSize: style.fontSize, fontWeight: style.fontWeight, borderColor: style.borderTopColor,
+        surfaceColor: getComputedStyle(element.parentElement).backgroundColor,
+        rootFontSize: getComputedStyle(document.documentElement).fontSize};
+    });
+    assert.equal(Number.parseFloat(switchStyle.fontSize), Number.parseFloat(switchStyle.rootFontSize) * 0.875);
+    assert.equal(switchStyle.fontWeight, '600');
+    assert.equal(switchStyle.borderColor, switchStyle.surfaceColor);
   }
   await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
   assert.equal(await page.getByRole('link', {name: 'An older shipped feature', exact: true}).isVisible(), false);
