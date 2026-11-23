@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'website/feedback-worker/**'
+      - 'website/src/plugins/featureRequests/taxonomy.ts'
       - '.github/workflows/feedback-worker.yml'
   pull_request:
     paths:
       - 'website/feedback-worker/**'
+      - 'website/src/plugins/featureRequests/taxonomy.ts'
       - '.github/workflows/feedback-worker.yml'
   workflow_dispatch:
 

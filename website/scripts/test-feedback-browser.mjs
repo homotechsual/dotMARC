@@ -23,8 +23,8 @@ const repository = 'https://github.com/homotechsual/dotMARC';
 const roadmap = {
   updatedAt: '2026-11-22T18:00:00Z', stale: false, submissionsEnabled: true,
   issues: [
-    {number: 1, title: 'Bulk DNS push', url: `${repository}/issues/1`, status: 'planned', milestone: 1, completed: false, awaitingRelease: false, statusWarning: false},
-    {number: 2, title: 'Action-centre Dashboard', url: `${repository}/issues/2`, status: 'in-progress', milestone: 1, completed: true, awaitingRelease: true, statusWarning: false},
+    {number: 1, title: 'Bulk DNS push', url: `${repository}/issues/1`, status: 'planned', milestone: 1, completed: false, awaitingRelease: false, statusWarning: false, changeType: 'enhancement', areas: ['dns', 'domains'], classificationWarning: false},
+    {number: 2, title: 'Action-centre Dashboard', url: `${repository}/issues/2`, status: 'in-progress', milestone: 1, completed: true, awaitingRelease: true, statusWarning: false, changeType: 'feature', areas: ['domains'], classificationWarning: false},
     {number: 3, title: 'An unscheduled idea', url: `${repository}/issues/3`, status: 'considering', milestone: null, completed: false, awaitingRelease: false, statusWarning: false},
     {number: 4, title: 'An older shipped feature', url: `${repository}/issues/4`, status: 'shipped', milestone: 2, completed: true, awaitingRelease: false, statusWarning: false},
   ],
@@ -45,6 +45,8 @@ try {
       const body = route.request().postDataJSON();
       assert.equal(body.publicConsent, true);
       assert.equal(body.turnstileToken, 'browser-test-token');
+      assert.equal(body.changeType, 'bug');
+      assert.deepEqual(body.areas, ['dns', 'spf-dkim']);
       assert.match(body.requestId, /^[0-9a-f-]{36}$/);
       await route.fulfill({status: 201, json: {issue: {number: 42, url: `${repository}/issues/42`}}, headers: {'Access-Control-Allow-Origin': base}});
     } else {
@@ -85,33 +87,45 @@ try {
   await page.goto(`${base}/roadmap/`);
   await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
   assert.equal(await page.getByText('No release date committed.').count(), 1);
-  assert.equal(await page.getByText('1 of 2 public features completed.', {exact: false}).count(), 1);
+  assert.equal(await page.getByText('1 of 2 public items completed.', {exact: false}).count(), 1);
+  await page.getByLabel('Product area', {exact: true}).selectOption('dns');
+  await page.getByLabel('Roadmap filters').getByLabel('Change type', {exact: true}).selectOption('enhancement');
+  assert.equal(await page.getByRole('link', {name: 'Bulk DNS push', exact: true}).count(), 1);
+  assert.equal(await page.getByRole('link', {name: 'Action-centre Dashboard', exact: true}).count(), 0);
+  assert.equal(await page.getByText('1 of 2 public items completed.', {exact: false}).count(), 1);
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.getByRole('heading', {name: 'Planned (1)', exact: true}).waitFor();
+  assert.equal(await page.getByRole('link', {name: 'Action-centre Dashboard', exact: true}).count(), 0);
+  await page.getByRole('button', {name: 'Clear filters', exact: true}).click();
   await page.getByRole('button', {name: 'Board', exact: true}).click();
   assert.equal(await page.getByRole('heading', {name: 'Shipped (1)', exact: true}).count(), 0);
-  await page.getByLabel('Include shipped features').check();
+  await page.getByLabel('Include shipped items').check();
   await page.getByRole('heading', {name: 'Shipped (1)', exact: true}).waitFor();
-  await page.getByLabel('Include shipped features').uncheck();
+  await page.getByLabel('Include shipped items').uncheck();
   await page.getByRole('heading', {name: 'Planned (1)', exact: true}).waitFor();
-  await page.getByRole('searchbox', {name: 'Find a feature'}).fill('Bulk DNS');
+  await page.getByRole('searchbox', {name: 'Find an item'}).fill('Bulk DNS');
   assert.equal(await page.getByRole('link', {name: 'Bulk DNS push', exact: true}).count(), 1);
   assert.equal(await page.getByRole('link', {name: 'An unscheduled idea', exact: true}).count(), 0);
-  await page.getByRole('searchbox', {name: 'Find a feature'}).fill('');
+  await page.getByRole('searchbox', {name: 'Find an item'}).fill('');
   await page.getByRole('button', {name: 'Planned releases', exact: true}).click();
-  await page.getByRole('searchbox', {name: 'Find a feature'}).fill('Bulk DNS');
-  assert.equal(await page.getByText('1 of 2 public features completed.', {exact: false}).count(), 1);
-  await page.getByRole('searchbox', {name: 'Find a feature'}).fill('');
+  await page.getByRole('searchbox', {name: 'Find an item'}).fill('Bulk DNS');
+  assert.equal(await page.getByText('1 of 2 public items completed.', {exact: false}).count(), 1);
+  await page.getByRole('searchbox', {name: 'Find an item'}).fill('');
   await page.setViewportSize({width: 390, height: 844});
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.getByRole('button', {name: 'Search', exact: true}).click();
   await page.getByRole('dialog', {name: 'Search the site'}).waitFor();
   await page.keyboard.press('Escape');
   await page.getByRole('dialog', {name: 'Search the site'}).waitFor({state: 'hidden'});
-  await page.getByRole('link', {name: 'Request a feature', exact: true}).click();
+  await page.getByRole('link', {name: 'Submit feedback', exact: true}).click();
   await page.getByLabel('Short title').fill('A helpful browser-tested feature');
+  await page.getByLabel('Change type', {exact: true}).last().selectOption('bug');
+  await page.getByLabel('DNS & provider push', {exact: true}).check();
+  await page.getByLabel('SPF & DKIM', {exact: true}).check();
   await page.getByLabel('What would you like to change?').fill('Please add a useful new capability for our team.');
   await page.getByLabel('What would this help you do?').fill('This would simplify onboarding our client domains.');
   await page.getByLabel('I understand this request will be public.').check();
-  await page.getByRole('button', {name: 'Submit feature request', exact: true}).click();
+  await page.getByRole('button', {name: 'Submit request', exact: true}).click();
   await page.getByRole('link', {name: '#42 on GitHub'}).waitFor();
   assert.equal(await page.getByRole('link', {name: '#42 on GitHub'}).getAttribute('href'), `${repository}/issues/42`);
   roadmap.stale = true;

@@ -91,8 +91,8 @@
 .main button:hover { background: var(--cp-accent-soft); }
 .main button[aria-pressed="true"], .main button[type="submit"] { background: var(--cp-accent); color: var(--cp-accent-fg); }
 .main button:disabled { opacity: 0.6; cursor: not-allowed; }
-.main :is(button, input, textarea, a):focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; }
-.main input:not([type="checkbox"]), .main textarea {
+.main :is(button, input, textarea, select, a):focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; }
+.main input:not([type="checkbox"]), .main textarea, .main select {
   padding: 8px 12px;
   border: 1px solid var(--cp-border-strong);
   border-radius: 0.625rem;
@@ -123,6 +123,13 @@
 .form fieldset { border: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
 .form label { font-weight: 600; }
 .form textarea { resize: vertical; }
+.badges, .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.filters { gap: 12px; align-items: center; }
+.filters label { display: grid; gap: 4px; min-width: 0; }
+.filters select { max-width: 100%; min-width: 0; }
+.form .areaChoices { border: 1px solid var(--cp-border); padding: 12px; border-radius: 0.625rem; }
+.areaChoices legend { font-size: 1rem; font-weight: 600; width: auto; }
+.areaChoices label { font-weight: 400; }
 .consent { display: flex; align-items: center; gap: 12px; }
 .form button { justify-self: start; }
 .error { color: var(--cp-danger); border-left: 4px solid var(--cp-danger); padding: 12px; }

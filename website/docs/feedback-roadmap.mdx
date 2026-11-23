@@ -7,7 +7,7 @@ description: Configure the GitHub-backed feedback form, public roadmap and Cloud
 
 The Docusaurus site stays on Cloudflare Pages. A separate Worker at `feedback-api.dotmarc.app` accepts feature requests and caches public GitHub issues and release milestones. GitHub is the source of truth; Durable Objects hold only a read cache and short-lived submission receipts/rate limits.
 
-The site's Features navigation opens planned releases. Both `/roadmap` and `/feedback` default to Planned Releases; Board is an explicit view choice. The Board view focuses on active ideas and work, with shipped features opt-in. Previous releases are grouped under a collapsed history section. Feature filtering does not change a milestone's completion totals. The Request a feature action opens the on-site form; direct GitHub submission remains available.
+The site's Features navigation opens planned releases. Both `/roadmap` and `/feedback` default to Planned Releases; Board is an explicit view choice. The Board view focuses on active ideas and work, with shipped items opt-in. Previous releases are grouped under a collapsed history section. Filtering does not change a milestone's completion totals. The Submit feedback action opens the on-site form; direct GitHub submission remains available.
 
 The navbar groups documentation, API reference and FAQs under Resources; Updates retains the release-note archive. Site search covers documentation, API and updates, separately from the features page's title filter.
 
@@ -43,7 +43,17 @@ finally {
 
 This requires PowerShell 7, not Windows PowerShell 5.1. On systems with OpenSSL installed, `openssl pkcs8 -topk8 -nocrypt -in github-app.pem -out github-app-pkcs8.pem` is an alternative.
 
-Create the roadmap labels with the migration script's preview/apply workflow, or manually: `type:feature`, `roadmap:public`, and one `status:*` label per state described in [Releasing](./releasing.mdx).
+Create the roadmap labels with the migration script's preview/apply workflow, or manually: `roadmap:public`, and one `status:*` label per state described in [Releasing](./releasing.mdx). Classification labels are set up with `node scripts/classify-feedback.mjs --apply` from the repository root (preview without `--apply`). This also applies the reviewed classification manifest to existing public items; it does not change milestones, status or public visibility.
+
+## Product areas and change types
+
+The shared taxonomy in `website/src/plugins/featureRequests/taxonomy.ts` defines **New feature** (`type:feature`), **Enhancement** (`type:enhancement`) and **Bug fix** (`type:bug`), plus the product areas (`area:*`). Each request has exactly one type and one or more areas, including **Other / not sure**. Both the website and GitHub issue form offer the same choices. Cards show them as badges, and both Board and Planned Releases can filter by area and type together with title. Filtering never changes full milestone completion totals.
+
+Website submissions are validated against the allowlist and receive labels at creation. GitHub's issue form cannot assign different labels from dropdown selections itself, so the **Feedback classification** workflow synchronises its structured selections on issue creation or when those selections change. It uses only recognised taxonomy labels, preserves unrelated labels, and does not undo maintainer label corrections when someone merely edits the description. Unstructured issues remain unchanged; malformed classification fields fail the workflow rather than guessing.
+
+Maintainers can correct the labels after triage. Exactly one explicit `type:*` label is expected. Legacy `bug` and `enhancement` labels are recognised only if no explicit type is set. Missing or conflicting types and missing areas are shown as needing maintainer review, with unclassified filter choices rather than pretending every item is a new feature. Old cached Worker responses remain readable and visibly unclassified during rollout. Classification does not add `roadmap:public` or make a release commitment.
+
+When changing the taxonomy, update the GitHub form options too; `node --test scripts/feedback-labels.test.mjs` verifies parity. Deploy the Worker and label-sync workflow with the website. Provision labels before accepting the new forms. Requests from an old open browser tab that lack classifications are rejected with a selection error and can be retried after reloading.
 
 ## Cloudflare and Turnstile setup
 

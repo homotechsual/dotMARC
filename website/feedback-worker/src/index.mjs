@@ -1,5 +1,6 @@
 import {githubClient, submissionsConfigured} from './github.mjs';
 import {buildRoadmap} from './roadmap.mjs';
+import {CHANGE_TYPES, PRODUCT_AREAS, isChangeType, isProductArea} from '../../src/plugins/featureRequests/taxonomy.ts';
 
 const MINUTE = 60000;
 const encoder = new TextEncoder();
@@ -32,7 +33,12 @@ export async function readBody(request, limit) {
 
 export function validateSubmission(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InputError('Invalid submission.');
-  const {title, description, useCase, turnstileToken, requestId, publicConsent} = value;
+  const {title, description, useCase, turnstileToken, requestId, publicConsent, changeType, areas} = value;
+  if (!isChangeType(changeType)) throw new InputError('Choose New feature, Enhancement or Bug fix.');
+  if (!Array.isArray(areas) || areas.length < 1 || areas.length > PRODUCT_AREAS.length
+    || !areas.every(isProductArea) || new Set(areas).size !== areas.length) {
+    throw new InputError('Choose one or more valid product areas.');
+  }
   if (typeof title !== 'string' || title.trim().length < 8 || title.trim().length > 160 || /[\r\n]/.test(title)) {
     throw new InputError('Use a title between 8 and 160 characters on one line.');
   }
@@ -45,7 +51,7 @@ export function validateSubmission(value) {
   if (publicConsent !== true) throw new InputError('Confirm that the request will be public.');
   if (typeof turnstileToken !== 'string' || !turnstileToken || turnstileToken.length > 2048) throw new InputError('Complete the anti-spam check.');
   if (typeof requestId !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)) throw new InputError('Invalid request identifier.');
-  return {title: title.trim(), description: description.trim(), useCase: useCase.trim(), turnstileToken, requestId};
+  return {title: title.trim(), description: description.trim(), useCase: useCase.trim(), turnstileToken, requestId, changeType, areas};
 }
 
 export async function verifySignature(body, signature, secret) {
@@ -146,8 +152,8 @@ async function submit(request, env) {
   if (reservation.issue) return json({issue: reservation.issue});
   const issue = await githubClient(env).createIssue({
     title: value.title,
-    body: `## Feature request\n\n${value.description}\n\n## Use case\n\n${value.useCase}\n\n---\nSubmitted anonymously through dotmarc.app. No contact information was collected.\n<!-- dotmarc-submission:${value.requestId} -->`,
-    labels: ['type:feature', 'status:triage'],
+    body: `### Change type\n\n${CHANGE_TYPES.find(type => type.id === value.changeType).name}\n\n### Product areas\n\n${PRODUCT_AREAS.filter(area => value.areas.includes(area.id)).map(area => area.name).join(', ')}\n\n### Request description\n\n${value.description}\n\n### Use case\n\n${value.useCase}\n\n---\nSubmitted anonymously through dotmarc.app. No contact information was collected.\n<!-- dotmarc-submission:${value.requestId} -->`,
+    labels: [`type:${value.changeType}`, ...value.areas.map(area => `area:${area}`), 'status:triage'],
   });
   const result = {number: issue.number, url: issue.html_url};
   const saved = await gate.fetch('https://internal/complete', {method: 'POST', body: JSON.stringify({id: value.requestId, issue: result})});

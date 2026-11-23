@@ -13,6 +13,7 @@ const milestone = (number, title, extra = {}) => ({
   number, title, state: 'open', description: 'Planned scope', html_url: 'https://github.com/homotechsual/dotMARC/milestone/1', due_on: null, ...extra,
 });
 const submission = {
+  changeType: 'enhancement', areas: ['dns', 'spf-dkim'],
   title: 'A useful feature', description: 'Please add this helpful capability.', useCase: 'It makes our work easier.',
   publicConsent: true, turnstileToken: 'test-token', requestId: '89c2ee34-6c12-42ba-9e3a-4aa5b163a102',
 };
@@ -70,10 +71,27 @@ test('submission validates boundaries and consent', () => {
   assert.equal(validateSubmission(submission).title, submission.title);
   for (const patch of [{title: 'short'}, {title: 'a\nlong title'}, {description: 'short'},
     {useCase: ''}, {publicConsent: false}, {requestId: 'invalid'}, {turnstileToken: ''},
-    {title: 'a'.repeat(161)}, {description: 'a'.repeat(4001)}, {useCase: 'a'.repeat(2001)}]) {
+    {title: 'a'.repeat(161)}, {description: 'a'.repeat(4001)}, {useCase: 'a'.repeat(2001)},
+    {changeType: 'unknown'}, {changeType: undefined}, {areas: []}, {areas: ['dns', 'dns']},
+    {areas: ['arbitrary-label']}, {areas: 'dns'}]) {
     assert.throws(() => validateSubmission({...submission, ...patch}));
   }
   assert.doesNotThrow(() => validateSubmission({...submission, title: 'a'.repeat(160), description: 'a'.repeat(4000), useCase: 'a'.repeat(2000)}));
+});
+
+test('roadmap exposes multiple areas and distinct change types, with explicit ambiguity', () => {
+  const result = buildRoadmap([
+    issue(1, {labels: ['roadmap:public', 'type:feature', 'area:dns', 'area:spf-dkim'].map(name => ({name}))}),
+    issue(2, {labels: ['roadmap:public', 'type:bug', 'area:domains'].map(name => ({name}))}),
+    issue(3, {labels: ['roadmap:public', 'enhancement', 'area:other'].map(name => ({name}))}),
+    issue(4, {labels: ['roadmap:public', 'type:feature', 'type:bug'].map(name => ({name}))}),
+  ], [], []).issues;
+  assert.equal(result.find(issue => issue.number === 1).changeType, 'feature');
+  assert.deepEqual(result.find(issue => issue.number === 1).areas, ['dns', 'spf-dkim']);
+  assert.equal(result.find(issue => issue.number === 2).changeType, 'bug');
+  assert.equal(result.find(issue => issue.number === 3).changeType, 'enhancement');
+  assert.equal(result.find(issue => issue.number === 4).changeType, null);
+  assert.equal(result.find(issue => issue.number === 4).classificationWarning, true);
 });
 
 test('body limit counts streamed bytes, not only Content-Length', async () => {
@@ -206,7 +224,9 @@ test('full submission verifies Turnstile and creates correctly labelled issue on
     if (url.endsWith('/issues')) {
       writes++;
       const body = JSON.parse(options.body);
-      assert.deepEqual(body.labels, ['type:feature', 'status:triage']);
+      assert.deepEqual(body.labels, ['type:enhancement', 'area:dns', 'area:spf-dkim', 'status:triage']);
+      assert.match(body.body, /### Change type\n\nEnhancement/);
+      assert.match(body.body, /### Product areas\n\nDNS & provider push, SPF & DKIM/);
       assert.ok(body.body.includes(`dotmarc-submission:${submission.requestId}`));
       return Response.json({number: 42, html_url: `https://github.com/${repository}/issues/42`});
     }
