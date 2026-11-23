@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A person can select domains on the Dashboard or Manage domains, choose a target, review what will change for each domain, sign in once, watch the batch run and see a result per domain, all working on the demo instance with a fake provider.
+**Goal:** A person can select domains on the dedicated Domain Inventory page, choose a target, review what will change for each domain, sign in once, watch the batch run and see a result per domain, all working on the demo instance with a fake provider. Dashboard is the action centre, not a bulk-selection entry point.
+
+**Prerequisite:** Coordinate Tasks 7 and 8 with the Inventory move and preference/navigation migration in roadmap items 13 to 18. Inventory's route, component name and row mapping are not settled yet; resolve them in that plan before wiring selection. Do not add a temporary Dashboard selection flow that would immediately be removed.
 
 **Architecture:** Slice A already stores, reviews, claims and runs a batch (`DnsPushBatchService`, `DnsPushBatchGate`, `DnsPushBatchCallback`, `DnsPushBatchRunner`, `DnsPushBatchWorker`) and exposes `/dns-push/{provider}/start-batch`. Slice B adds the pages and dialogs on top, stores each domain's review text on its batch row so the review page never re-plans, and registers a demo DNS push provider with demo lookups so the whole flow runs without a real DNS account. The page follows the batch by reading its stored state on a timer, which works on any replica.
 
@@ -17,7 +19,7 @@
 * `TreatWarningsAsErrors` is on. The OpenAPI copy must be regenerated (`node scripts/update-openapi.mjs`) if the API surface changes, and nothing in slice B should change it.
 * The first version pushes `dmarc`, `tlsrpt` and `mta-sts` only (`DnsPushBatchService.BulkTargets`). A batch has at most 50 domains (`DnsPushBatchLimits.MaxDomains`) and one provider. A review can be signed in to for 30 minutes.
 * The target's policy decides who may start a batch: `IDnsChangeBuilder.RequiredPolicy` (`DomainsEdit` for `dmarc` and `tlsrpt`, `MtaStsManage` for `mta-sts`). Checking it only in the UI is not enough: the review page and every action on it check it too.
-* A domain that would lose a CNAME delegation is unticked by default and needs an explicit tick (decided in the roadmap).
+* A domain that would lose a CNAME delegation is unticked by default and needs an explicit tick on that domain's checkbox (decided in the roadmap). Select-all must not grant that consent, including when its warning is collapsed.
 * The provider session never leaves memory and is never shown, logged or stored. No page, dialog or message in this slice may print a code, token, verifier or state value.
 * Browser checks use Edge through playwright-edge only (never install Chrome), against the demo with the demo admin sign-in, and the app and its `dotmarc-verify` container are stopped afterwards.
 * Each task is one commit. Tests are written first and watched failing.
@@ -116,20 +118,21 @@ Today the demo registers only the three real providers and the real detector and
 
 **Files:**
 - Create: `src/DotMarc/Demo/DemoDnsPushProvider.cs`, `src/DotMarc/Demo/DemoDnsLookups.cs`
-- Modify: `src/DotMarc/Program.cs` (demo registrations beside the real ones, in the same `if (demoOptions.Enabled)` style as `DemoPsaProvider`)
-- Test: `test/DotMarc.Tests/Demo/DemoDnsPushProviderTests.cs`
+- Modify: `src/DotMarc/Program.cs` (demo registrations beside the real ones, in the same `if (demoOptions.Enabled)` style as `DemoPsaProvider`), `src/DotMarc/Demo/DemoDataGenerator.cs` and its seeding path as needed
+- Test: `test/DotMarc.Tests/Demo/DemoDnsPushProviderTests.cs`, additions to the demo generator/seeding tests
 
 **Interfaces:**
 - Consumes: `IDnsPushProvider`, `IDnsPushSession`, `DnsPushSessionResult`, `DnsPushResult`, `IDnsProviderDetector`, `IDmarcTxtLookup`, `ITlsrptTxtLookup` (read their definitions before writing the demo versions), `DetectedDnsProvider.ToProviderKey()`.
 - Produces:
   - `DemoDnsPushProvider(string providerKey)`: `IsConfiguredAsync` is true, `BuildAuthorizationUrlAsync(state, challenge, redirectUri)` returns the callback URL itself with `code=demo-code` and the state, so the "sign-in" is a redirect straight back and shows no real provider page, `ExchangeAsync` returns a session, `PushAsync` waits about 400 ms (so progress is visible) and returns `Pushed` for each domain except any whose zone name contains `broken` (returns `ProviderError` with "The demo provider rejected this record."), which gives the demo a failure to show.
-  - `DemoDnsProviderDetector` (reads the stored `Domain.DnsProvider` for the domain name and returns that provider with the zone equal to the domain name; a name that is not in the database is `Unknown`), `DemoDmarcTxtLookup` and `DemoTlsrptTxtLookup` (no existing record for most domains, a plain `v=DMARC1; p=none` direct value for domains whose name starts with `already-`, so the review shows both a create and a nothing-to-change row).
+  - `DemoDnsProviderDetector` (reads the stored `Domain.DnsProvider` for the domain name and returns that provider with the zone equal to the domain name; a name that is not in the database is `Unknown`), `DemoDmarcTxtLookup` and `DemoTlsrptTxtLookup` (no existing record for ordinary demo domains). For `already-` domains, DMARC returns `v=DMARC1; p=none; {DmarcRuaMerge.RuaTag(mailbox, additionalAddress)}`, using the configured Graph mailbox and DNS settings just as `DmarcChangeBuilder` does; TLSRPT returns `v=TLSRPTv1; rua=mailto:{tlsrptMailbox}`, using `GraphOptions.TlsrptMailboxAddress`. These are distinct protocol records, not one shared hard-coded value. Seed nonempty demo mailbox settings so both targets can plan.
+  - Deterministic demo fixtures: `push-create.example`, `already-correct.example` and `broken-push.example`, all assigned `DetectedDnsProvider.Cloudflare`, plus `manual-push.example` assigned an unsupported provider such as GoDaddy. Include them in a demo-admin-accessible group. The first plans changes and succeeds, the second is already correct for DMARC and TLSRPT, the third plans changes then fails on each attempt with the documented demo rejection, and the fourth is listed for manual setup. Add them through the normal generator/seeder so a fresh or reset demo has them; update exact-count expectations affected by those additions.
   - In demo mode the three real push providers and the real detector and lookups are not registered, and one `DemoDnsPushProvider` per key `cloudflare`, `azure-dns` and `google-cloud-dns` is.
 
-- [ ] **Step 1: Write the failing tests.** `Exchange_GivesASession_AndPushReturnsPushed`, `PushToAZoneNamedBroken_ReturnsAProviderError_WithNoSessionOrTokenInTheMessage`, `TheAuthorizationUrl_ReturnsToTheCallbackWithTheStateUntouched` (parse the URL, check the path is `/dns-push/{key}/callback` and `state` equals the input), `TheDetector_ReturnsTheStoredProviderAndTheDomainAsItsZone` (Postgres fixture, a domain stored as Cloudflare), `TheDetector_ReturnsUnknownForAnUnstoredName`, `TheDmarcLookup_FindsARecordOnlyForAlreadyPrefixedNames`.
+- [ ] **Step 1: Write the failing tests.** `Exchange_GivesASession_AndPushReturnsPushed`, `PushToAZoneNamedBroken_ReturnsAProviderError_WithNoSessionOrTokenInTheMessage`, `TheAuthorizationUrl_ReturnsToTheCallbackWithTheStateUntouched` (parse the URL, check the path is `/dns-push/{key}/callback` and `state` equals the input), `TheDetector_ReturnsTheStoredProviderAndTheDomainAsItsZone` (Postgres fixture, a domain stored as Cloudflare), `TheDetector_ReturnsUnknownForAnUnstoredName`. Build real DMARC and TLSRPT plans against the demo lookups and assert `DnsPushReview.From(plan).NothingToChange` for `already-correct.example`, including a configured additional DMARC rua address; assert changes for `push-create.example`. Generator/seeding tests assert the four named fixtures, provider assignments, accessible group membership and required mailbox settings exist after seed/reset.
 - [ ] **Step 2: Run.** `dotnet test test/DotMarc.Tests --filter "FullyQualifiedName~DemoDns"`. Expected: FAIL.
 - [ ] **Step 3: Implement** the classes and the demo-only registrations. If `MtaStsChangeBuilder` needs lookups beyond these (check its constructor), leave `mta-sts` out of the demo and record that as a ledger ruling rather than adding more fakes.
-- [ ] **Step 4: Run** `dotnet test test/DotMarc.Tests --filter "FullyQualifiedName~Demo"`. Expected: all pass, and the existing demo seeding tests are unchanged.
+- [ ] **Step 4: Run** `dotnet test test/DotMarc.Tests --filter "FullyQualifiedName~Demo"`. Expected: all pass, with existing seeding tests updated only where the new deterministic fixtures legitimately change expectations.
 - [ ] **Step 5: Commit** `Add a demo DNS push provider so a push can be shown`.
 
 ### Task 5: The review page
@@ -144,12 +147,13 @@ Today the demo registers only the three real providers and the real detector and
 - Produces:
   - Route `@page "/dns-push/batch/{BatchId:guid}"`, `@attribute [Authorize]`, and a check on load that the person holds the batch target's `RequiredPolicy` (otherwise the page shows the same not-found text as a missing batch).
   - The page shows a summary line ("38 will change, 9 already correct, 3 need attention"), one collapsed row per domain (name, status chip, a short "adds 1, replaces 1" line), expanding to the `DnsPushBatchReviewJson.Read` review using `DnsRecordsTable` for additions and removals and a red alert for lost delegations. A checkbox per `Planned` domain, a "Select all with changes" toggle, and a **Sign in and push** button that saves the ticked set through `SetIncludedAsync` and then opens `/dns-push/{provider}/start-batch?batchId={id}` in the popup.
-  - The button is disabled, with the reason shown, when nothing is ticked, when the batch is not `Planned`, or when it has expired.
+  - Select-all includes only `Planned` rows with a readable review and no lost delegations; it preserves a delegated row's current explicit selection but never turns an unticked delegated row on. Only that row's checkbox can opt it in; unticking it withdraws consent. Bulk clearing can clear all selections. A missing/unreadable stored review blocks signing in and explains that a fresh review is needed rather than treating unknown delegation state as safe.
+  - The button is disabled, with the reason shown, when nothing is ticked, when the batch is not `Planned`, when it has expired, or when a required stored review is unreadable.
   - `start-batch` takes `string? pushId` like `/start` and stores it in the state's `pushId` (the page's id, not the batch id), because the opener only accepts a result whose `pushId` equals the one it generated. Today the endpoint stores the batch id there, so the popup's result would be ignored.
   - `OnDnsPushResult("batch-started")` switches the page to the progress view (Task 6). `cancelled` and `invalid` show a warning and leave the review usable. `error` says the sign-in was rejected and that a new review is needed, since the batch is no longer `Planned`.
 
 - [ ] **Step 1: Write the failing tests.**
-  - A pure view model, `DnsPushBatchReviewModel` (in `src/DotMarc/Components/Shared/`), built from a batch: `CanSignIn` is false with each of the three reasons above (`NothingTicked`, `NotPlanned`, `Expired`), true otherwise, and `TickedDomainIds` matches `Included`. Test each case and `SelectAllWithChanges` ticks only `Planned` rows.
+  - A pure view model, `DnsPushBatchReviewModel` (in `src/DotMarc/Components/Shared/`), built from a batch: `CanSignIn` is false with each reason above (`NothingTicked`, `NotPlanned`, `Expired`, unreadable review), true otherwise, and `TickedDomainIds` matches `Included`. Test each case. `SelectAllWithChanges` selects ordinary `Planned` rows, leaves delegated rows unticked with warnings collapsed or expanded, preserves an explicitly ticked delegated row, does not reselect it after explicit unticking, and excludes non-planned or unreadable-review rows.
   - `TheStartedBatchEndpoint_PutsThePagesPushIdInTheState` through the extracted state-building helper: the protected state's `PushId` equals the supplied GUID and `BatchId` equals the batch id, and a non-GUID `pushId` is dropped.
   - If bUnit is already a test dependency: the page renders the not-found text for another person's batch and shows no Sign in button.
 - [ ] **Step 2: Run.** Expected: FAIL.
@@ -178,43 +182,43 @@ Today the demo registers only the three real providers and the real detector and
 - [ ] **Step 4: Run** the DnsPush and Components filter. Expected: all pass.
 - [ ] **Step 5: Commit** `Show a batch of DNS pushes running and what happened to each domain`.
 
-### Task 7: Start a batch from the Dashboard
+### Task 7: Start a batch from Domain Inventory
 
 **Files:**
 - Create: `src/DotMarc/Components/Dialogs/StartDnsPushBatchDialog.razor`, `src/DotMarc/Components/Shared/DnsPushSelectionBar.razor`
-- Modify: `src/DotMarc/Components/Pages/Dashboard.razor`, `src/DotMarc/Components/Pages/DashboardDomainRow` (add `DnsProvider`; find where it is built in `DashboardSummary.Build`)
-- Test: `test/DotMarc.Tests/DnsPush/DnsPushStartModelTests.cs`, additions to the dashboard row tests
+- Modify: the Domain Inventory page/component and its row mapping selected by the coordinated Inventory plan (add `DnsProvider` to that row contract; reuse the existing reporting projection where applicable)
+- Test: `test/DotMarc.Tests/DnsPush/DnsPushStartModelTests.cs`, additions to the Inventory row and permission tests
 
 **Interfaces:**
 - Consumes: `DnsPushSelection.Group`, `IEnumerable<IDnsPushProvider>.FindConfiguredAsync`, `IEnumerable<IDnsChangeBuilder>`, `IAuthorizationService`, `DnsPushBatchService.CreateAsync`, `DnsPushBatchService.BulkTargets`.
 - Produces:
-  - `DashboardDomainRow.DnsProvider` (`DetectedDnsProvider`).
-  - The Dashboard keeps one page-level `HashSet<int> _selectedDomainIds` and renders a checkbox in each row's first cell and a header "select all shown" checkbox for the rows the current filters show. It does not use `MudTable.MultiSelection`, because the By group view builds several tables and each would own a separate selection. A selection survives sorting, filtering and switching between All domains and By group. Clicking the checkbox must not trigger the row's navigation to the domain.
-  - `DnsPushSelectionBar` (shown only when something is selected and the person holds `DomainsEdit`): "N selected", **Push DNS records**, **Clear**.
+  - The Inventory row's `DnsProvider` (`DetectedDnsProvider`).
+  - Inventory keeps one page-level `HashSet<int> _selectedDomainIds` and renders a checkbox in each row's first cell and a header "select all shown" checkbox for the rows the current filters show. It does not use `MudTable.MultiSelection`, because the By group view builds several tables and each would own a separate selection. A selection survives sorting, filtering and switching between All domains and By group. Clicking the checkbox must not trigger the row's navigation to the domain. Dashboard links to Inventory rather than duplicating selection controls.
+  - `DnsPushSelectionBar` (shown only when something is selected and `AvailableTargets` contains at least one authorised bulk target): "N selected", **Push DNS records**, **Clear**. Evaluate each builder's `RequiredPolicy`; do not require `DomainsEdit` as an extra umbrella permission. An `MtaStsManage`-only user can open the chooser for `mta-sts`.
   - `StartDnsPushBatchDialog` takes the selected `SelectedDomain` list. It lets the person choose a target from `BulkTargets`, offering only the targets whose `RequiredPolicy` they hold. It shows the grouping from `DnsPushSelection.Group` (a card per provider with its count and a **Review** button, and a "Set up manually" list with each reason) and says plainly when a group is over 50. **Review** calls `CreateAsync` for that group, shows a spinner while the live lookups run, then navigates to `/dns-push/batch/{id}`. A `DnsPushBatchException` message is shown as the dialog's error.
   - A pure `DnsPushStartModel` with `AvailableTargets(IReadOnlySet<string> heldPolicies, IEnumerable<IDnsChangeBuilder>)`, which the dialog uses.
 
-- [ ] **Step 1: Write the failing tests.** `AvailableTargets_OffersDmarcAndTlsrpt_ForAnEditorAndNothingForAViewer`, `AvailableTargets_OffersMtaSts_OnlyWithMtaStsManage`, `AvailableTargets_NeverOffersSpfDkimOrDmarcAuth`, `TheDashboardRow_CarriesTheDomainsDnsProvider`.
+- [ ] **Step 1: Write the failing tests.** `AvailableTargets_OffersDmarcAndTlsrpt_ForAnEditorAndNothingForAViewer`, `AvailableTargets_OffersMtaSts_OnlyWithMtaStsManage`, `AvailableTargets_NeverOffersSpfDkimOrDmarcAuth`, `TheInventoryRow_CarriesTheDomainsDnsProvider`. Verify selection-bar/chooser access for `MtaStsManage` without `DomainsEdit` (bar visible, only `mta-sts` available), `DomainsEdit` without `MtaStsManage` (only DMARC/TLSRPT), both, and neither. Assert the same target policies on review and start actions, not merely UI visibility.
 - [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement** the model, the row field, the bar, the dialog and the Dashboard wiring.
+- [ ] **Step 3: Implement** the model, the row field, the bar, the dialog and the Inventory wiring after the prerequisite Inventory contract is settled.
 - [ ] **Step 4: Run** `dotnet test test/DotMarc.Tests --filter "FullyQualifiedName~DnsPush|FullyQualifiedName~Dashboard"`. Expected: all pass.
-- [ ] **Step 5: Commit** `Start a batch of DNS pushes from the Dashboard`.
+- [ ] **Step 5: Commit** `Start a batch of DNS pushes from Domain Inventory`.
 
-### Task 8: Start a batch from Manage domains
+### Task 8: Preserve management controls in the Inventory workflow
 
 **Files:**
-- Modify: `src/DotMarc/Components/Pages/ManageDomains.razor` (its `DomainRow` needs `DnsProvider`)
-- Test: additions to the Manage domains tests, if the page has any
+- Modify: the Inventory and existing `src/DotMarc/Components/Pages/ManageDomains.razor` integration according to the coordinated Inventory plan
+- Test: additions to the Inventory/Manage domains navigation and access tests
 
 **Interfaces:**
 - Consumes: `DnsPushSelectionBar`, `StartDnsPushBatchDialog`, `SelectedDomain` (Tasks 2 and 7).
-- Produces: the same selection column, header toggle and bar on Manage domains, with the same dialog. The page already has per-row controls (groups, tags, delete), so the checkbox goes in a new first column and its click does not affect them.
+- Produces: one authoritative inventory selection flow, accessible to read-only inventory viewers without granting edit actions. Preserve group/tag/delete controls under their existing permissions. If Manage domains is retained separately, provide navigation to Inventory for bulk selection instead of duplicating its full table or selection state.
 
-- [ ] **Step 1: Write the failing test** that `ManageDomains`' `DomainRow` carries `DnsProvider` from the loaded domain (extract the mapping if it is inline).
+- [ ] **Step 1: Write the failing tests** for management-to-Inventory navigation, preservation of read-only access and edit-only actions, and clicking a selection checkbox without invoking row navigation or another control.
 - [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.** Reuse the Task 7 components unchanged. If anything in the bar or dialog had to be page specific, move it into the component rather than copying.
+- [ ] **Step 3: Implement.** Reuse the Task 7 flow unchanged and preserve the coordinated Inventory architecture rather than creating another selection surface.
 - [ ] **Step 4: Run** the DnsPush and Domains filters. Expected: all pass.
-- [ ] **Step 5: Commit** `Start a batch of DNS pushes from Manage domains`.
+- [ ] **Step 5: Commit** `Preserve domain management access around Inventory bulk selection`.
 
 ### Task 9: Check it in the browser, then the docs and notes
 
@@ -226,8 +230,8 @@ Today the demo registers only the three real providers and the real detector and
 - Consumes: everything above, with the demo running through the project's verification recipe (docker `dotmarc-verify` Postgres, the demo admin sign-in).
 - Produces: the browser check recorded in the commit message, and docs for the person using it.
 
-- [ ] **Step 1: Run the demo and check, in Edge.** Sign in as the demo admin. On the Dashboard select several Cloudflare demo domains and one on an unsupported provider, open Push DNS records, pick `dmarc`, and confirm: the unsupported domain is under "Set up manually", the review shows additions, an `already-` domain shows already correct, a `broken` zone is reviewed normally. Untick one, sign in (the popup should return at once), and watch the progress turn into per-domain results with the broken one Failed. Use Retry and confirm a new review opens for only that domain. Sign in as a demo Viewer and confirm there is no selection bar and that the review URL shows the not-found page. Take a screenshot of the review and of the results and look at them.
-- [ ] **Step 2: Repeat** the start from Manage domains once, and check that a reload on the results page still shows them.
+- [ ] **Step 1: Run the freshly seeded/reset demo and check, in Edge.** Sign in as the demo admin. Navigate from Dashboard to Inventory and select `push-create.example`, `already-correct.example`, `broken-push.example` and `manual-push.example`. Open Push DNS records, pick `dmarc`, and confirm: the manual domain is listed under "Set up manually", the create domain shows additions, the already-correct domain shows no changes, and the broken domain is reviewed normally. Sign in (the popup should return at once), and watch the create domain become Pushed and the broken domain become Failed. Retry creates a fresh review for only the broken domain and requires a new sign-in; its deterministic rejection remains visible on retry rather than falsely becoming successful. Repeat the already-correct check with `tlsrpt`. Sign in as a demo Viewer and confirm Inventory remains readable but has no push bar and the review URL shows the not-found page. Also exercise an `MtaStsManage`-only user at the chooser and real target authorisation boundary. Take a screenshot of the review and of the results and look at them.
+- [ ] **Step 2: Check** grouped Inventory selection, explicit unticking and the delegation/select-all safeguard with a deterministic delegated test fixture; verify management navigation reaches the same Inventory flow and a reload on the results page still shows results.
 - [ ] **Step 3: Write the docs.** A "Push to several domains at once" section in the DNS push docs: who can, which targets, the 50 domain limit, that a selection is split by provider and unsupported domains are listed to set up manually, what the review shows, that a plan that changed after the review is skipped and reported, what each result means, and what a retry does. Write it for someone running the app, in plain sentences, with no em dashes and one paragraph per line. Add the release-note line to the 0.14 notes if the notes file exists.
 - [ ] **Step 4: Stop the app and remove the `dotmarc-verify` container.** Run the full suite to a file and read the tail. Expected: all pass, 0 failed.
 - [ ] **Step 5: Commit** `Document pushing DNS records to several domains`.
