@@ -7,7 +7,7 @@ description: Configure the GitHub-backed feedback form, public roadmap and Cloud
 
 The Docusaurus site stays on Cloudflare Pages. A separate Worker at `feedback-api.dotmarc.app` accepts feature requests and caches public GitHub issues and release milestones. GitHub is the source of truth; Durable Objects hold only a read cache and short-lived submission receipts/rate limits.
 
-The site's Features navigation opens planned releases. The Board view focuses on active ideas and work, with shipped features opt-in. Previous releases are grouped under a collapsed history section. Feature filtering does not change a milestone's completion totals. The Request a feature action opens the on-site form; direct GitHub submission remains available.
+The site's Features navigation opens planned releases. Both `/roadmap` and `/feedback` default to Planned Releases; Board is an explicit view choice. The Board view focuses on active ideas and work, with shipped features opt-in. Previous releases are grouped under a collapsed history section. Feature filtering does not change a milestone's completion totals. The Request a feature action opens the on-site form; direct GitHub submission remains available.
 
 The navbar groups documentation, API reference and FAQs under Resources; Updates retains the release-note archive. Site search covers documentation, API and updates, separately from the features page's title filter.
 

@@ -1,7 +1,6 @@
 import React, {useEffect, useRef, useState, type ReactNode} from 'react';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import {useLocation} from '@docusaurus/router';
 import {readRoadmap, type Roadmap, type RoadmapIssue} from './roadmap';
 import styles from './styles.module.css';
 
@@ -142,7 +141,6 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
 
 export default function FeatureRequests(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
-  const location = useLocation();
   const apiValue = siteConfig.customFields?.feedbackApiUrl;
   const keyValue = siteConfig.customFields?.turnstileSiteKey;
   const api = typeof apiValue === 'string' ? apiValue.replace(/\/$/, '') : '';
@@ -151,7 +149,7 @@ export default function FeatureRequests(): ReactNode {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
-  const [view, setView] = useState<'board' | 'releases'>(location.pathname.includes('/roadmap') ? 'releases' : 'board');
+  const [view, setView] = useState<'board' | 'releases'>('releases');
   const [search, setSearch] = useState('');
   const [showShipped, setShowShipped] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);

@@ -55,7 +55,12 @@ try {
     contentType: 'application/javascript',
     body: 'window.turnstile = { render: (el, options) => { setTimeout(() => options.callback("browser-test-token"), 0); return "test"; }, reset: () => {}, remove: () => {} };',
   }));
-  await page.goto(`${base}/roadmap/`);
+  for (const route of ['/feedback/', '/roadmap/']) {
+    await page.goto(`${base}${route}`);
+    await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
+    assert.equal(await page.getByRole('button', {name: 'Planned releases', exact: true}).getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByRole('button', {name: 'Board', exact: true}).getAttribute('aria-pressed'), 'false');
+  }
   await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
   assert.equal(await page.getByRole('link', {name: 'An older shipped feature', exact: true}).isVisible(), false);
   await page.getByText('Previously shipped releases (1)', {exact: true}).click();
