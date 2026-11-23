@@ -1,0 +1,22 @@
+question: Does marking a sender Authorised or Unauthorised change DNS or block its mail?
+answer: |
+  No. Decisions on a domain's **Sources** tab record your team's intent and change dotMARC's
+  recommendations and alerts. They don't publish DNS or directly block mail; receivers apply
+  your SPF, DKIM and DMARC configuration.
+
+  Use **Authorised** for an expected sender, **Unauthorised** for one that shouldn't send as the
+  domain, or **Under review** while investigating. Authorised mail can still fail authentication
+  and need fixing; Unauthorised mail can still authenticate and be delivered.
+
+  A domain decision overrides inherited group defaults and the **Sender baseline**. That is a
+  baseline of sender decisions, not a DNS-policy baseline. Use **Reset to inherited** to remove
+  the domain override.
+
+  Under review stops the new-sender alert by default, but its alert rule can count it as unreviewed
+  or remind you after a number of days. Marking a sender Unauthorised can lead to an
+  **Unauthorised sender mail delivered** alert if its delivered volume meets the rule's threshold.
+
+  See [Decide which senders are authorised](/docs/getting-started#decide-which-senders-are-authorised)
+  and [Sender alerts](/docs/alerts#sender-alerts).
+category: DMARC & MTA-STS
+order: 3

@@ -1,15 +1,22 @@
-question: A HaloPSA ticket I closed early reopened almost immediately - is that a sync bug?
+question: Another PSA ticket appeared after I closed one early - is that a sync bug?
 answer: |
-  No, this is expected. Closing a ticket in Halo resolves the dotMARC alert (that's the intended
-  sync direction), but if the underlying condition is still active, the very next monitor cycle
-  sees no unresolved alert for that domain and creates a fresh one right away - the alert cooldown
-  only suppresses re-firing of an *already open* alert, so it doesn't apply here.
+  Usually this is a **new ticket**, not dotMARC reopening the one you closed. Once dotMARC learns
+  that a ticket was closed, it resolves the linked alert and closes that alert's other PSA tickets.
+  HaloPSA can report closure through its webhook; dotMARC also checks ticket status by polling.
+
+  If an ongoing condition such as missing reports still meets an enabled rule's threshold, the next
+  monitor check can raise a fresh alert. Cooldown suppresses repeats of an alert that is still open;
+  it doesn't give a resolved alert a grace period.
 
   A new ticket is opened for that fresh alert too, unless another ticket for the same domain and
   alert type is already open, in which case ticket creation is skipped for that occurrence (though
   dotMARC's own alert history still gets a new row either way).
 
-  In short: closing the ticket early doesn't fix the underlying issue, so it comes right back. See
+  **DMARC policy weakened and nameservers changed are different.** Closing their ticket accepts the
+  currently observed change, just like acknowledging the alert. The same accepted change shouldn't
+  immediately raise another alert, although a later change can.
+
+  See
   [PSA integration: What syncs, and what doesn't](/docs/psa-integration#what-syncs-and-what-doesnt)
   for the full sync behavior.
 category: Alerts & PSA integration
