@@ -24,6 +24,14 @@ test('description-only edits preserve maintainer label corrections', () => {
     ['type:enhancement', 'area:dns', 'area:spf-dkim']);
 });
 
+test('classification workflow retains queued edits instead of replacing them', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/feedback-labels.yml', import.meta.url), 'utf8');
+  const concurrency = workflow.split('concurrency:')[1].split('jobs:')[0];
+  assert.match(concurrency, /group: feedback-labels-\$\{\{ github.event.issue.number \|\| github.ref \}\}/);
+  assert.match(concurrency, /cancel-in-progress: false/);
+  assert.match(concurrency, /queue: max/);
+});
+
 test('GitHub form dropdowns stay aligned with the shared taxonomy', () => {
   const form = readFileSync(new URL('../.github/ISSUE_TEMPLATE/feature-request.yml', import.meta.url), 'utf8');
   const typeOptions = form.split('      label: Change type')[1].split('    validations:')[0];
