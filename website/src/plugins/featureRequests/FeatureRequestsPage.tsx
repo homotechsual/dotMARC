@@ -3,6 +3,7 @@ import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import {readRoadmap, type Roadmap, type RoadmapIssue} from './roadmap';
 import styles from './styles.module.css';
+import {CHANGE_TYPES, PRODUCT_AREAS, isChangeType, type ChangeType, type ProductArea} from './taxonomy';
 
 const REPO = 'https://github.com/homotechsual/dotMARC';
 const REQUEST_URL = `${REPO}/issues/new?template=feature-request.yml`;
@@ -46,6 +47,11 @@ function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): R
     <a href={issue.url}>{issue.title}</a>
     <small>#{issue.number}{issue.awaitingRelease ? ' · Completed, awaiting release' : ''}</small>
     <span className={styles.badge}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
+    <div className={styles.badges} aria-label="Classification">
+      <span className={styles.badge}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
+      {issue.areas.map(id => <span className={styles.badge} key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</span>)}
+    </div>
+    {issue.classificationWarning && <small className={styles.warning}>Classification needs maintainer review</small>}
     {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}
   </article>;
@@ -55,6 +61,8 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [useCase, setUseCase] = useState('');
+  const [changeType, setChangeType] = useState<ChangeType>('feature');
+  const [areas, setAreas] = useState<ProductArea[]>([]);
   const [consent, setConsent] = useState(false);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -92,7 +100,7 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
     try {
       const response = await fetch(`${api}/requests`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({title, description, useCase, publicConsent: consent, turnstileToken: token, requestId: requestId.current}),
+        body: JSON.stringify({title, description, useCase, changeType, areas, publicConsent: consent, turnstileToken: token, requestId: requestId.current}),
         signal: AbortSignal.timeout(30000),
       });
       const data: unknown = await response.json();
@@ -118,6 +126,17 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
   return <form onSubmit={submit} className={styles.form}>
     <p>Submissions become public GitHub issues, posted by the dotMARC app. Do not include credentials, client details or other sensitive information. No email address is collected.</p>
     <fieldset disabled={busy}>
+      <label htmlFor="request-type">Change type</label>
+      <select id="request-type" value={changeType} onChange={event => { if (isChangeType(event.target.value)) setChangeType(event.target.value); }}>
+        {CHANGE_TYPES.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+      </select>
+      <fieldset className={styles.areaChoices}>
+        <legend>Product areas (choose at least one)</legend>
+        {PRODUCT_AREAS.map(area => <label key={area.id} className={styles.consent}>
+          <input type="checkbox" checked={areas.includes(area.id)} onChange={event => setAreas(previous => event.target.checked
+            ? [...previous, area.id] : previous.filter(id => id !== area.id))} />{area.name}
+        </label>)}
+      </fieldset>
       <label htmlFor="request-title">Short title</label>
       <input id="request-title" required minLength={8} maxLength={160} value={title} onChange={event => setTitle(event.target.value)} />
       {suggestions.length > 0 && <aside aria-label="Possibly related requests">
@@ -125,7 +144,8 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
         <ul>{suggestions.map(issue => <li key={issue.number}><a href={issue.url}>{issue.title}</a></li>)}</ul>
       </aside>}
       <label htmlFor="request-description">What would you like to change?</label>
-      <textarea id="request-description" required minLength={20} maxLength={4000} rows={5} value={description} onChange={event => setDescription(event.target.value)} />
+      <textarea id="request-description" required minLength={20} maxLength={4000} rows={5} value={description} onChange={event => setDescription(event.target.value)}
+        placeholder={changeType === 'bug' ? 'Include steps to reproduce, expected and actual behaviour, and your dotMARC version. Do not include secrets.' : 'Describe the capability or improvement you would like.'} />
       <label htmlFor="request-use-case">What would this help you do?</label>
       <textarea id="request-use-case" required minLength={10} maxLength={2000} rows={3} value={useCase} onChange={event => setUseCase(event.target.value)} />
       <label className={styles.consent}>
@@ -133,7 +153,7 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
         I understand this request will be public.
       </label>
       <div ref={container} />
-      <button type="submit" disabled={busy || !token || !consent}>{busy ? 'Submitting…' : 'Submit feature request'}</button>
+      <button type="submit" disabled={busy || !token || !consent || !areas.length}>{busy ? 'Submitting…' : 'Submit request'}</button>
     </fieldset>
     {error && <p role="alert" className={styles.error}>{error}</p>}
   </form>;
@@ -151,6 +171,8 @@ export default function FeatureRequests(): ReactNode {
   const [attempt, setAttempt] = useState(0);
   const [view, setView] = useState<'board' | 'releases'>('releases');
   const [search, setSearch] = useState('');
+  const [areaFilter, setAreaFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [showShipped, setShowShipped] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
 
@@ -169,10 +191,12 @@ export default function FeatureRequests(): ReactNode {
     return () => controller.abort();
   }, [api, attempt]);
 
-  const filtered = data?.issues.filter(issue => issue.title.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const filtered = data?.issues.filter(issue => issue.title.toLowerCase().includes(search.toLowerCase())
+    && (!typeFilter || (typeFilter === 'unclassified' ? issue.changeType === null : issue.changeType === typeFilter))
+    && (!areaFilter || (areaFilter === 'unclassified' ? !issue.areas.length : issue.areas.some(area => area === areaFilter)))) ?? [];
   const upcoming = data?.milestones.filter(plan => !plan.released) ?? [];
   const shipped = data?.milestones.filter(plan => plan.released) ?? [];
-  const matches = (plan: {number: number}) => !search || filtered.some(issue => issue.milestone === plan.number);
+  const matches = (plan: {number: number}) => (!search && !areaFilter && !typeFilter) || filtered.some(issue => issue.milestone === plan.number);
   function ReleaseCard({plan}: {plan: NonNullable<typeof data>['milestones'][number]}): ReactNode {
     const items = filtered.filter(issue => issue.milestone === plan.number);
     const all = data?.issues.filter(issue => issue.milestone === plan.number) ?? [];
@@ -183,16 +207,16 @@ export default function FeatureRequests(): ReactNode {
       {plan.released && plan.releaseUrl && <p><a href={plan.releaseUrl}>View published release</a></p>}
       {!plan.released && <p className={styles.updated}>{plan.dueOn ? `Target date: ${new Date(plan.dueOn).toLocaleDateString()}` : 'No release date committed.'}</p>}
       {plan.description && <p className={styles.description}>{plan.description}</p>}
-      <p className={styles.updated}>{complete} of {all.length} public features completed. This is not an estimate of remaining effort.</p>
-      <progress value={complete} max={Math.max(1, all.length)} aria-label={`${plan.title}: ${complete} of ${all.length} public features completed`} />
-      {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public features listed yet.</p>}
+      <p className={styles.updated}>{complete} of {all.length} public items completed. This is not an estimate of remaining effort.</p>
+      <progress value={complete} max={Math.max(1, all.length)} aria-label={`${plan.title}: ${complete} of ${all.length} public items completed`} />
+      {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public items listed yet.</p>}
     </section>;
   }
-  return <Layout title="Features and Roadmap" description="Request features and see planned dotMARC releases, maintained on GitHub.">
+  return <Layout title="Features and Roadmap" description="Suggest features and enhancements, report bugs and see planned dotMARC releases, maintained on GitHub.">
     <main className={`container margin-vert--lg ${styles.main}`}>
       <header className={styles.header}>
         <div><p className={styles.eyebrow}>Help shape dotMARC</p><h1>Features &amp; roadmap</h1><p>See what is coming next, explore ideas and tell us what would help you.</p></div>
-        <a className={styles.primaryAction} href="#request-feature" onClick={() => setRequestOpen(true)}>Request a feature</a>
+        <a className={styles.primaryAction} href="#request-feature" onClick={() => setRequestOpen(true)}>Submit feedback</a>
       </header>
       <p className={styles.updated}>Planned scope can change. Unscheduled ideas are not release commitments.</p>
       {loading && <p role="status">Loading roadmap…</p>}
@@ -206,17 +230,30 @@ export default function FeatureRequests(): ReactNode {
             <button aria-pressed={view === 'releases'} onClick={() => setView('releases')}>Planned releases</button>
             <button aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</button>
           </div>
-          <div className={styles.featureSearch}><label htmlFor="roadmap-search">Find a feature</label>
-            <input id="roadmap-search" type="search" placeholder="Filter features by title..." value={search} onChange={event => setSearch(event.target.value)} /></div>
+          <div className={styles.featureSearch}><label htmlFor="roadmap-search">Find an item</label>
+            <input id="roadmap-search" type="search" placeholder="Filter roadmap by title..." value={search} onChange={event => setSearch(event.target.value)} /></div>
         </nav>
+        <div className={styles.filters} aria-label="Roadmap filters">
+          <label htmlFor="roadmap-area">Product area</label>
+          <select id="roadmap-area" value={areaFilter} onChange={event => setAreaFilter(event.target.value)}>
+            <option value="">All areas</option>{PRODUCT_AREAS.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+            <option value="unclassified">Not classified</option>
+          </select>
+          <label htmlFor="roadmap-type">Change type</label>
+          <select id="roadmap-type" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
+            <option value="">All types</option>{CHANGE_TYPES.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+            <option value="unclassified">Not classified</option>
+          </select>
+          {(search || areaFilter || typeFilter) && <button onClick={() => {setSearch(''); setAreaFilter(''); setTypeFilter('');}}>Clear filters</button>}
+        </div>
         {view === 'board' ? <>
-          <label className={styles.consent}><input type="checkbox" checked={showShipped} onChange={event => setShowShipped(event.target.checked)} />Include shipped features</label>
+          <label className={styles.consent}><input type="checkbox" checked={showShipped} onChange={event => setShowShipped(event.target.checked)} />Include shipped items</label>
           <div className={styles.board}>
           {Object.entries(STATUS_LABELS).filter(([status]) => showShipped || status !== 'shipped').map(([status, label]) => {
             const items = filtered.filter(issue => issue.status === status);
             return <section key={status} className={styles.column}>
               <h2>{label} <small>({items.length})</small></h2>
-              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} release={data.milestones.find(plan => plan.number === issue.milestone)?.title} />) : <p className={styles.updated}>No matching features.</p>}
+              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} release={data.milestones.find(plan => plan.number === issue.milestone)?.title} />) : <p className={styles.updated}>No matching items.</p>}
             </section>;
           })}
         </div></> : <>
@@ -234,11 +271,11 @@ export default function FeatureRequests(): ReactNode {
           </details>}
         </>}
       </>}
-      <section id="request-feature" className={styles.request}><h2>Have an idea?</h2>
+      <section id="request-feature" className={styles.request}><h2>Have an idea or found a bug?</h2>
         <p>Search the public roadmap first, or <a href={`${REPO}/issues`}>browse all requests on GitHub</a>. New requests need maintainer triage before appearing here.</p>
         <p><a href={REQUEST_URL}>Submit directly on GitHub</a>, or use the form below.</p>
         <details open={requestOpen} onToggle={event => setRequestOpen(event.currentTarget.open)}>
-          <summary>Request a feature on this site</summary>
+          <summary>Submit a feature, enhancement or bug on this site</summary>
         {siteKey && data?.submissionsEnabled
           ? <RequestForm api={api} siteKey={siteKey} issues={data.issues} />
           : <p>Website submissions are currently unavailable. <a href={REQUEST_URL}>Submit your request on GitHub</a>.</p>}

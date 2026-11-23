@@ -1,6 +1,7 @@
 export interface RoadmapIssue {
   number: number; title: string; url: string; status: string;
   milestone: number | null; completed: boolean; awaitingRelease: boolean; statusWarning: boolean;
+  changeType: ChangeType | null; areas: ProductArea[]; classificationWarning: boolean;
 }
 export interface RoadmapMilestone {
   number: number; title: string; description: string; url: string;
@@ -46,10 +47,17 @@ export function readRoadmap(value: unknown): Roadmap {
       const issue = record(value);
       const status = text(issue.status);
       if (!['triage', 'considering', 'planned', 'in-progress', 'shipped'].includes(status)) throw new Error('Invalid roadmap status.');
+      // Older cached Worker snapshots have no taxonomy; show them as unclassified, not new features.
+      const changeType = issue.changeType === undefined ? null : issue.changeType;
+      const areas = issue.areas === undefined ? [] : issue.areas;
+      if (changeType !== null && !isChangeType(changeType)) throw new Error('Invalid roadmap change type.');
+      if (!Array.isArray(areas) || !areas.every(isProductArea) || new Set(areas).size !== areas.length) throw new Error('Invalid roadmap areas.');
       return {
         number: number(issue.number), title: text(issue.title), url: link(issue.url), status,
         milestone: issue.milestone === null ? null : number(issue.milestone),
         completed: boolean(issue.completed), awaitingRelease: boolean(issue.awaitingRelease), statusWarning: boolean(issue.statusWarning),
+        changeType, areas, classificationWarning: issue.classificationWarning === undefined
+          ? true : boolean(issue.classificationWarning),
       };
     }),
     milestones: data.milestones.map((value: unknown) => {
@@ -62,3 +70,4 @@ export function readRoadmap(value: unknown): Roadmap {
     }),
   };
 }
+import {isChangeType, isProductArea, type ChangeType, type ProductArea} from './taxonomy.ts';

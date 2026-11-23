@@ -23,6 +23,7 @@ export function buildRoadmap(issues, milestones, releases, now = new Date().toIS
         status, milestone: issue.milestone?.number ?? null,
         completed, awaitingRelease: completed && !release,
         statusWarning: !completed && statuses.length !== 1,
+        ...readClassification(labels),
       };
     }).sort((a, b) => b.number - a.number);
   const plans = milestones.filter(milestone => version(milestone.title))
@@ -45,3 +46,4 @@ export function buildRoadmap(issues, milestones, releases, now = new Date().toIS
     });
   return {updatedAt: now, issues: items, milestones: plans};
 }
+import {readClassification} from '../../src/plugins/featureRequests/taxonomy.ts';

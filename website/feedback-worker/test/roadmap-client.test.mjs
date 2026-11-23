@@ -14,11 +14,23 @@ test('website accepts Worker response shape', () => {
   assert.equal(readRoadmap(payload()).issues[0].title, 'A useful feature');
 });
 test('website rejects unexpected links, invalid states and dates', () => {
-  for (const patch of [{url: 'https://evil.example/'}, {status: 'unknown'}, {number: -1}, {completed: 'yes'}]) {
+  for (const patch of [{url: 'https://evil.example/'}, {status: 'unknown'}, {number: -1}, {completed: 'yes'},
+    {changeType: 'unknown'}, {areas: ['invalid']}, {areas: ['dns', 'dns']}]) {
     const value = payload();
     value.issues[0] = {...value.issues[0], ...patch};
     assert.throws(() => readRoadmap(value));
   }
   assert.throws(() => readRoadmap({...payload(), updatedAt: 'invalid'}));
   assert.throws(() => readRoadmap({...payload(), issues: null}));
+});
+
+test('old cached roadmap items remain visibly unclassified', () => {
+  const value = payload();
+  delete value.issues[0].changeType;
+  delete value.issues[0].areas;
+  delete value.issues[0].classificationWarning;
+  const issue = readRoadmap(value).issues[0];
+  assert.equal(issue.changeType, null);
+  assert.deepEqual(issue.areas, []);
+  assert.equal(issue.classificationWarning, true);
 });

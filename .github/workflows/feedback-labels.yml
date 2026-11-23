@@ -1,0 +1,38 @@
+name: Feedback classification
+
+on:
+  issues:
+    types: [opened, edited]
+  pull_request:
+    paths:
+      - '.github/ISSUE_TEMPLATE/feature-request.yml'
+      - '.github/workflows/feedback-labels.yml'
+      - 'scripts/feedback-labels*'
+      - 'scripts/feedback-classifications.json'
+      - 'scripts/classify-feedback.mjs'
+      - 'website/src/plugins/featureRequests/taxonomy.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feedback-labels-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - run: node --test scripts/feedback-labels.test.mjs
+      - if: github.event_name == 'issues'
+        run: node scripts/feedback-labels.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
