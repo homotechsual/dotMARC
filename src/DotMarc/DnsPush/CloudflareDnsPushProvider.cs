@@ -353,14 +353,12 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>The outcome for a leftover old value: DMARC names start with _dmarc., everything else is SPF.</summary>
-    private static DnsPushOutcome DuplicateRecordOutcome(string name) => IsDmarcName(name)
+    private static DnsPushOutcome DuplicateRecordOutcome(string name) => DmarcRecordName.IsDmarcName(name)
         ? DnsPushOutcome.LeftDuplicateDmarcRecord
         : DnsPushOutcome.LeftDuplicateRecord;
 
-    private static bool IsDmarcName(string name) => name.StartsWith("_dmarc.", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>What a leftover old value means at this name, in the words for its record type (DMARC names start with _dmarc.).</summary>
-    private static string DuplicateRecordEffect(string name) => IsDmarcName(name)
+    private static string DuplicateRecordEffect(string name) => DmarcRecordName.IsDmarcName(name)
         ? "the name now has more than one DMARC record, which receivers treat as none; delete the old one by hand."
         : "the name now has more than one SPF record. Remove the old one by hand.";
 

@@ -34,7 +34,7 @@ public static class DnsPushAudit
         // The provider's error text isn't included: it adds nothing to "what changed" and is already in the server log.
         return AuditLog.Create(actor, AuditEntryKind.Change, action, AuditTarget.For(domain), summary!,
             changes.Select(change => new AuditFieldChange(
-                change.Kind == DnsRecordChangeKind.ReplaceTxtValues && !change.Name.StartsWith("_dmarc.", StringComparison.OrdinalIgnoreCase) ? $"SPF {change.Name}" : $"{change.RecordType} {change.Name}",
+                change.Kind == DnsRecordChangeKind.ReplaceTxtValues && !DmarcRecordName.IsDmarcName(change.Name) ? $"SPF {change.Name}" : $"{change.RecordType} {change.Name}",
                 change.ExistingValue, change.DesiredValue)).ToList());
     }
 }
