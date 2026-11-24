@@ -266,14 +266,28 @@ namespace DotMarc.Migrations
                     b.Property<DateTimeOffset?>("DmarcCheckedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DmarcNonExistentSubdomainPolicy")
+                        .HasColumnType("text");
+
                     b.Property<int?>("DmarcPercent")
                         .HasColumnType("integer");
 
                     b.Property<string>("DmarcPolicy")
                         .HasColumnType("text");
 
+                    b.Property<string[]>("DmarcProblems")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string[]>("DmarcRecords")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
                     b.Property<string>("DmarcSubdomainPolicy")
                         .HasColumnType("text");
+
+                    b.Property<bool>("DmarcTesting")
+                        .HasColumnType("boolean");
 
                     b.Property<string[]>("DnsNameservers")
                         .IsRequired()

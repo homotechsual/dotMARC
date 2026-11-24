@@ -21,6 +21,19 @@ public sealed class Domain
     public DmarcPolicyLevel? DmarcSubdomainPolicy { get; set; }
     public int? DmarcPercent { get; set; }
 
+    /// <summary>The np tag the DMARC record actually publishes (strictest valid value); null when it has none.</summary>
+    public DmarcPolicyLevel? DmarcNonExistentSubdomainPolicy { get; set; }
+
+    /// <summary>True when the DMARC record has t=y (testing mode, RFC 9989).</summary>
+    public bool DmarcTesting { get; set; }
+
+    /// <summary>Every DMARC-like TXT value at _dmarc.&lt;domain&gt; at the last check: the records, then any
+    /// look-alike values ignored beside them. Empty when there is no DMARC record.</summary>
+    public List<string> DmarcRecords { get; set; } = [];
+
+    /// <summary>The problems found in the DMARC record, each as its kind or kind:tag, for example RepeatedTag:p.</summary>
+    public List<string> DmarcProblems { get; set; } = [];
+
     /// <summary>The DMARC policy this domain should reach. Null when none is set.</summary>
     public DmarcPolicyLevel? TargetDmarcPolicy { get; set; }
 

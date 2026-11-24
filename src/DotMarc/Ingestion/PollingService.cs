@@ -474,6 +474,10 @@ public sealed class PollingService : BackgroundService
         domain.DmarcPolicy = result.Policy?.Policy;
         domain.DmarcSubdomainPolicy = result.Policy?.SubdomainPolicy;
         domain.DmarcPercent = result.Policy?.Percent;
+        domain.DmarcNonExistentSubdomainPolicy = result.Analysis?.NonExistentPolicy;
+        domain.DmarcTesting = result.Analysis?.Testing ?? false;
+        domain.DmarcRecords = result.Analysis is { } analysis ? [.. analysis.Records, .. analysis.IgnoredCandidates] : [];
+        domain.DmarcProblems = result.Analysis?.Problems.Select(problem => problem.Tag is null || problem.Kind == DmarcRecordProblemKind.TestingMode ? problem.Kind.ToString() : $"{problem.Kind}:{problem.Tag}").ToList() ?? [];
     }
 
     /// <summary>TLSRPT counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>

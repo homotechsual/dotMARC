@@ -85,6 +85,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.DnsProvider).HasConversion<string>();
             entity.Property(d => d.DmarcPolicy).HasConversion<string>();
             entity.Property(d => d.DmarcSubdomainPolicy).HasConversion<string>();
+            entity.Property(d => d.DmarcNonExistentSubdomainPolicy).HasConversion<string>();
             entity.Property(d => d.TargetDmarcPolicy).HasConversion<string>();
             entity.Property(d => d.TargetDmarcSubdomainPolicy).HasConversion<string>();
 
@@ -95,6 +96,24 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.MtaStsMxHosts)
                 .HasConversion(
                     hosts => hosts.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
+
+            entity.Property(d => d.DmarcRecords)
+                .HasConversion(
+                    records => records.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
+
+            entity.Property(d => d.DmarcProblems)
+                .HasConversion(
+                    problems => problems.ToArray(),
                     stored => stored.ToList())
                 .Metadata.SetValueComparer(new ValueComparer<List<string>>(
                     (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
