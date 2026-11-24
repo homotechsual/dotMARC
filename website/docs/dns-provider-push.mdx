@@ -47,6 +47,14 @@ The ending for new records is set under **Manage → DNS push settings → DNS r
 
 </details>
 
+## DMARC policy and your target
+
+If a [DMARC target](./baselines.mdx#domain) applies to a domain, the DMARC push uses it. A new record is written with the domain's effective target (`p`, and `sp` when it differs). An existing record that falls short is raised to the target: a weaker `p` or `sp` is raised, and a `pct` below 100 is removed. Other tags, their order and the record's spacing are kept, and the plan shows the change like any other before anything is written.
+
+The push never lowers a policy. A record that is already stricter than the target is left as it is, and a record that already meets the target is unchanged. This holds for a single push and for a bulk push.
+
+With no target set at any level, the push behaves as it always has: a new record starts at `p=none`, and an existing record keeps its policy.
+
 ## DKIM records
 
 **Configure selectors** on a domain's DKIM check takes, for each selector, the record your mail platform gives you: a CNAME target or a TXT value with the key. Where to find them:

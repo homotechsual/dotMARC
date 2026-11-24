@@ -465,7 +465,7 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
         Assert.Equal(sources, summary.TopSources);
     }
 
-    private async Task SetSystemTargetAsync(DmarcPolicyLevel policy)
+    private async Task SetSystemTargetAsync(DmarcPolicyLevel? policy)
     {
         await using var context = _host.CreateContext();
         var settings = await context.DnsRecordSettings.SingleAsync();
@@ -499,6 +499,8 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
     [Fact]
     public async Task ListDomains_HasNoDmarcTarget_WhenNoTargetIsSet()
     {
+        // The host runs in demo mode, which seeds a system target, so clear it first.
+        await SetSystemTargetAsync(null);
         var tagId = await _host.SeedTagAsync("api-target-none");
         await _host.SeedDomainAsync("api-target-none.example", tagIds: [tagId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
         var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);

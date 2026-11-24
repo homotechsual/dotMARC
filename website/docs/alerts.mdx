@@ -120,6 +120,7 @@ dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM 
 | `DkimRecordBroken` | A DKIM selector set for the domain is missing or broken. | The check passes again, or the selectors are removed. | Warning |
 | `MtaStsFailing` | dotMARC stopped being able to serve the domain's MTA-STS policy. | MTA-STS is active again, or turned off. | Warning |
 | `DmarcPolicyWeakened` | `p`, `sp` or `pct` went down, for example from `p=reject` to `p=quarantine`. | The policy goes back up, or the alert is closed (see below). | Warning |
+| `DmarcPolicyBelowTarget` | The domain's DMARC policy is below the [target](./baselines.mdx#domain) set for it. It never fires without a target, stays quiet while `DmarcRecordBroken` holds, and doesn't raise tickets by default. | The domain meets its target, or the target is removed. | Warning |
 | `NameserversChanged` | The domain's nameservers changed, often the start of a DNS migration. | They change back, or the alert is closed (see below). | Info |
 
 A check that hasn't run yet, or doesn't apply (no DKIM selectors, MTA-STS turned off or still being set up), never alerts.

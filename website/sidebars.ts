@@ -40,6 +40,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'alerts',
         'alert-rules',
+        'baselines',
         {
           type: 'category',
           label: 'PSA integration',

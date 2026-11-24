@@ -12,9 +12,11 @@ public sealed record DemoDataset(
     List<DemoParseFailureSeed> ParseFailures,
     List<DemoAlertEventSeed> AlertEvents,
     List<DemoAlertStateSeed> AlertStates,
-    IReadOnlyList<DemoSenderDecisionSeed>? SenderDecisions = null);
+    IReadOnlyList<DemoSenderDecisionSeed>? SenderDecisions = null,
+    DmarcPolicyLevel? SystemTargetPolicy = null);
 
-public sealed record DemoGroupSeed(string Name);
+/// <summary>A demo group. <see cref="TargetPolicy"/> is the group's DMARC target policy, or null for none.</summary>
+public sealed record DemoGroupSeed(string Name, DmarcPolicyLevel? TargetPolicy = null);
 
 /// <summary>A decision about a sender, so the demo's Sources tabs show every state. <see cref="GroupName"/> is set for group scope
 /// and <see cref="DomainName"/> for domain scope. Written as made by a fictional person, never a real sign-in.</summary>

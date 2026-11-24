@@ -61,7 +61,7 @@ public static class DemoDataSeeder
         var viewerRole = new Role { Name = "Viewer", IsLocked = false, IsScopable = true, Permissions = AccessBootstrapper.ViewerPermissions };
         context.Roles.AddRange(adminRole, viewerRole);
 
-        var groupsByName = dataset.Groups.ToDictionary(g => g.Name, g => new Group { Name = g.Name });
+        var groupsByName = dataset.Groups.ToDictionary(g => g.Name, g => new Group { Name = g.Name, TargetDmarcPolicy = g.TargetPolicy });
         context.Groups.AddRange(groupsByName.Values);
 
         foreach (var domainSeed in dataset.Domains)
@@ -334,6 +334,11 @@ public static class DemoDataSeeder
         {
             GroupId = groupsByName[ViewerScopedGroupName].Id, DisplayName = "Aurora Retail Ltd", PrimaryColour = "#7A1FA2", DarkPrimaryColour = "#CE93D8",
         });
+
+        // The DNS record settings are a singleton row too: put the system DMARC target back to the demo's, so a visitor's change doesn't stay.
+        var dnsRecordSettings = await context.DnsRecordSettings.SingleAsync(cancellationToken).ConfigureAwait(false);
+        dnsRecordSettings.TargetDmarcPolicy = dataset.SystemTargetPolicy;
+        dnsRecordSettings.TargetDmarcSubdomainPolicy = null;
 
         // Report and email settings are singleton rows the truncate leaves alone too; put them back so one visitor's
         // changes don't stay for everyone. The demo never sends email whatever these say.

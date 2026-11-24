@@ -71,6 +71,10 @@ A rule can tell more people when an alert is not being dealt with. Under **Escal
 * A rule with an escalation time and no destinations ticked escalates to nobody.
 * Like held notifications, escalation is checked on each monitor cycle.
 
+## DMARC policy below target
+
+The **DMARC policy below target** rule is raised for a domain whose DMARC record is weaker than the [target](./baselines.mdx#domain) set for it. It is enabled by default and, like every default rule, can be switched off, edited and scoped. It never fires for a domain with no target, so it does nothing until a target is set. It doesn't open a ticket by default, so its alerts only open one if you set the rule's **Ticket mode** to always, or a ticket rule says so. It stays quiet for a domain whose DMARC record is missing or broken, which the **DMARC record broken** rule already covers, and for a domain that hasn't been checked yet.
+
 ## Under review on the new sender rule
 
 The **New sender to review** rule has an **Under review counts as** setting for senders someone has marked Under review:

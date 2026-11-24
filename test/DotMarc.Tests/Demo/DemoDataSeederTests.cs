@@ -297,4 +297,26 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
         Assert.Equal(DmarcPolicyLevel.Quarantine, aurora.DmarcPolicy);
         Assert.Single(await verify.DomainAlertStates.Where(state => state.DomainId == aurora.Id).ToListAsync());
     }
+
+    [Fact]
+    public async Task ResetAsync_SeedsADmarcTargetAtSystemAndGroupLevel_ResettingAVisitorsChange()
+    {
+        using (var firstContext = CreateContext())
+        {
+            await DemoDataSeeder.ResetAsync(firstContext, SampleDataset(), CancellationToken.None);
+            (await firstContext.DnsRecordSettings.SingleAsync()).TargetDmarcPolicy = DmarcPolicyLevel.None;
+            await firstContext.SaveChangesAsync();
+        }
+
+        using (var secondContext = CreateContext())
+        {
+            await DemoDataSeeder.ResetAsync(secondContext, SampleDataset(), CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        Assert.Equal(DmarcPolicyLevel.Quarantine, (await verify.DnsRecordSettings.SingleAsync()).TargetDmarcPolicy);
+        var groupTargets = await verify.Groups.Where(group => group.TargetDmarcPolicy != null).ToListAsync();
+        var cobalt = Assert.Single(groupTargets);
+        Assert.Equal(("Cobalt Freight", DmarcPolicyLevel.Reject), (cobalt.Name, cobalt.TargetDmarcPolicy));
+    }
 }
