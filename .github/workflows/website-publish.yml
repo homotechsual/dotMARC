@@ -14,24 +14,43 @@ on:
       - 'website/**'
       - 'infra/**'
       - '.github/workflows/website-publish.yml'
+      - '.github/workflows/website-ci.yml'
+      - 'scripts/website-workflows.test.mjs'
   pull_request:
     types:
       - opened
       - synchronize
+      - reopened
     paths:
       - 'website/**'
       - 'infra/**'
       - '.github/workflows/website-publish.yml'
+      - '.github/workflows/website-ci.yml'
+      - 'scripts/website-workflows.test.mjs'
   workflow_dispatch:
+
+concurrency:
+  group: website-publish-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  deployments: write
-  pull-requests: write
 
 jobs:
+  validate:
+    name: Website CI
+    uses: ./.github/workflows/website-ci.yml
+    with:
+      source-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      publish-build: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+
   deploy:
     name: Deploy
+    needs: validate
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -39,10 +58,6 @@ jobs:
         working-directory: website
     env:
       CF_PAGES_PROJECT: ${{ vars.CF_PAGES_PROJECT_DOTMARC || 'dotmarc-website' }}
-
-    concurrency:
-      group: website-publish-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
-      cancel-in-progress: true
 
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
@@ -52,33 +67,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Remove built-in Yarn
-        run: npm uninstall -g yarn
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Download tested website
+        uses: actions/download-artifact@v4
         with:
-          node-version: lts/*
-          cache: yarn
-          cache-dependency-path: website/yarn.lock
-
-      - name: Install dependencies
-        run: yarn install --check-cache --inline-builds
-
-      - name: Install pinned Bicep compiler
-        run: az bicep install --version v0.46.1
-
-      - name: Build
-        env:
-          # Lets the build look up the latest GitHub release (the homepage badge and <LatestVersion /> in the docs)
-          # without hitting the anonymous rate limit. See website/lib/latest-version.cjs.
-          GITHUB_TOKEN: ${{ github.token }}
-          FEEDBACK_API_URL: https://feedback-api.dotmarc.app
-          TURNSTILE_SITE_KEY: ${{ vars.FEEDBACK_TURNSTILE_SITE_KEY }}
-        run: yarn build
+          name: website-build
+          path: website/build
 
       - name: Publish to Cloudflare Pages
         id: cloudflare-pages-deploy
