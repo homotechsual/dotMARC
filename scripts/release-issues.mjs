@@ -12,6 +12,13 @@ function versionParts(title) {
   return match ? match.slice(1).map(Number) : null;
 }
 
+/** A milestone title's version. Titles may carry a theme after the version ("v0.14.0 — Action centre"), as the roadmap
+ * allows, so only the leading version counts. */
+function milestoneVersion(title) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:\s|$)/.exec(title?.trim() ?? '');
+  return match ? match.slice(1).map(Number) : null;
+}
+
 function compareVersions(left, right) {
   for (let index = 0; index < 3; index++) {
     if (left[index] !== right[index]) return left[index] - right[index];
@@ -26,7 +33,7 @@ export function planCloseOut(version, milestones, issues) {
   const releaseParts = versionParts(version);
   if (!releaseParts) throw new Error(`Not a release version: ${version}.`);
   const title = `v${releaseParts.join('.')}`;
-  const milestone = milestones.find(candidate => versionParts(candidate.title) && compareVersions(versionParts(candidate.title), releaseParts) === 0);
+  const milestone = milestones.find(candidate => milestoneVersion(candidate.title) && compareVersions(milestoneVersion(candidate.title), releaseParts) === 0);
   if (!milestone) throw new Error(`No milestone named ${title}.`);
 
   const open = issues.filter(issue => !issue.pull_request && issue.state === 'open' && issue.milestone?.number === milestone.number);
@@ -34,8 +41,8 @@ export function planCloseOut(version, milestones, issues) {
   const move = open.filter(issue => !ship.includes(issue));
 
   const later = milestones
-    .filter(candidate => candidate.state === 'open' && versionParts(candidate.title) && compareVersions(versionParts(candidate.title), releaseParts) > 0)
-    .sort((left, right) => compareVersions(versionParts(left.title), versionParts(right.title)));
+    .filter(candidate => candidate.state === 'open' && milestoneVersion(candidate.title) && compareVersions(milestoneVersion(candidate.title), releaseParts) > 0)
+    .sort((left, right) => compareVersions(milestoneVersion(left.title), milestoneVersion(right.title)));
   const next = later[0] ?? null;
   const createTitle = next || move.length === 0 ? null : `v${releaseParts[0]}.${releaseParts[1] + 1}.0`;
 
@@ -78,8 +85,8 @@ async function main() {
   };
 
   const milestones = await all('milestones?state=all');
-  const releaseTitle = `v${version.replace(/^v/, '')}`;
-  const target = milestones.find(candidate => candidate.title === releaseTitle);
+  const releaseParts = versionParts(version);
+  const target = milestones.find(candidate => milestoneVersion(candidate.title)?.join('.') === releaseParts?.join('.'));
   const issues = target ? await all(`issues?milestone=${target.number}&state=open`) : [];
   const plan = planCloseOut(version, milestones, issues);
   const nextTitle = plan.next?.title ?? plan.createTitle;

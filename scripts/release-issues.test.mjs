@@ -25,6 +25,14 @@ describe('planCloseOut', () => {
     assert.equal(plan.createTitle, null);
   });
 
+  test('matches milestones whose title carries a theme after the version', () => {
+    const themed = [milestone(9, 'v0.14.0 — Action centre'), milestone(10, 'v0.15.0 — Ticketing'), milestone(14, 'v0.140.0')];
+    const plan = planCloseOut('0.14.0', themed, [issue(1, 9, ['release:ready']), issue(2, 9, [])]);
+    assert.equal(plan.milestone.number, 9);
+    assert.equal(plan.next.title, 'v0.15.0 — Ticketing');
+    assert.deepEqual(plan.ship.map(item => item.number), [1]);
+  });
+
   test('accepts the version with or without its v', () => {
     assert.equal(planCloseOut('v0.14.0', milestones, []).milestone.number, 9);
   });
