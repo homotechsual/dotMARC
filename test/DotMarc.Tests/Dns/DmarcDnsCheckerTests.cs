@@ -29,6 +29,18 @@ public class DmarcDnsCheckerTests
     }
 
     [Fact]
+    public async Task CheckAsync_SaysNoDmarcRecord_WhenOtherTxtValuesSitAtTheName()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers("google-site-verification=abc");
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.MissingOwnRecord, result.Status);
+        Assert.Equal("No DMARC record found at _dmarc.contoso.io", result.Detail);
+    }
+
+    [Fact]
     public async Task CheckAsync_ReturnsMisconfigured_WhenTheVersionIsNotDMARC1()
     {
         var (checker, handler) = CreateChecker();

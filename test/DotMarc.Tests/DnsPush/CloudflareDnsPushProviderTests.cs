@@ -229,6 +229,31 @@ public sealed class CloudflareDnsPushProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ReplaceTxtValues_NamesDmarcNotSpf_WhenTheOldDmarcRecordCantBeDeleted()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"zone1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"result":[{"id":"r2","content":"\"v=DMARC1; p=none\""}]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        handler.ResponseBodies.Enqueue("{}");
+        foreach (var status in new[] { System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.InternalServerError })
+        {
+            handler.StatusCodes.Enqueue(status);
+        }
+
+        var provider = await CreateProviderAsync(handler);
+        var change = new DnsRecordChange(DnsRecordChangeKind.ReplaceTxtValues, "TXT", "_dmarc.contoso.com", "v=DMARC1; p=reject",
+            "v=DMARC1; p=none", "contoso.com", ValuesToRemove: ["v=DMARC1; p=none"]);
+
+        var result = await provider.ExchangeAndPushAsync("code", "verifier", "https://dotmarc.example/callback", [change], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.LeftDuplicateRecord, result.Outcome);
+        Assert.Contains("more than one DMARC record, which receivers treat as none; delete the old one by hand", result.DetailMessage);
+        Assert.DoesNotContain("SPF", result.DetailMessage);
+    }
+
+    [Fact]
     public async Task ReplaceTxtValues_RefusesToAddASecondSpfRecord()
     {
         var handler = new FakeHttpMessageHandler();

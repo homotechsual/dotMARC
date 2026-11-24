@@ -338,13 +338,13 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
                 if (!deleteResponse.IsSuccessStatusCode)
                 {
                     return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
-                        $"The new record was added at {change.Name}, but removing the old \"{oldValue}\" failed ({(int)deleteResponse.StatusCode}), so the name now has more than one SPF record. Remove the old one by hand.");
+                        $"The new record was added at {change.Name}, but removing the old \"{oldValue}\" failed ({(int)deleteResponse.StatusCode}), so {DuplicateRecordEffect(change.Name)}");
                 }
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
                 return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
-                    $"The new record was added at {change.Name}, but Cloudflare couldn't be reached to remove the old \"{oldValue}\" ({exception.Message}), so the name now has more than one SPF record. Remove the old one by hand.");
+                    $"The new record was added at {change.Name}, but Cloudflare couldn't be reached to remove the old \"{oldValue}\" ({exception.Message}), so {DuplicateRecordEffect(change.Name)}");
             }
         }
 
@@ -358,6 +358,11 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     /// text, the MTA-STS asuid verification token) is plain text with no embedded quotes, so the
     /// escape only guards against a value that happens to contain one. CNAME (and any other
     /// non-TXT type) content is never zone-file text and must NOT be quoted.</summary>
+    /// <summary>What a leftover old value means at this name, in the words for its record type (DMARC names start with _dmarc.).</summary>
+    private static string DuplicateRecordEffect(string name) => name.StartsWith("_dmarc.", StringComparison.OrdinalIgnoreCase)
+        ? "the name now has more than one DMARC record, which receivers treat as none; delete the old one by hand."
+        : "the name now has more than one SPF record. Remove the old one by hand.";
+
     private static string BuildContent(DnsRecordChange change) =>
         string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase)
             ? TxtValues.ToQuotedText(change.DesiredValue)

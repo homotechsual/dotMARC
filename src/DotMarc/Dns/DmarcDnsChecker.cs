@@ -23,7 +23,9 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
         var analysis = DmarcRecordAnalysis.Analyse(txtValues);
         if (analysis.Records.Count == 0)
         {
-            return new DmarcCheckResult(DmarcCheckStatus.MissingOwnRecord, $"No TXT record found at _dmarc.{domainName}");
+            return new DmarcCheckResult(DmarcCheckStatus.MissingOwnRecord, txtValues.Count > 0
+                ? $"No DMARC record found at _dmarc.{domainName}"
+                : $"No TXT record found at _dmarc.{domainName}");
         }
 
         // A policy is filled in for anything that looks like a DMARC record, a missing or invalid p reading as none.
