@@ -78,11 +78,11 @@ export class RoadmapCache {
     if (this.refreshing) return this.refreshing;
     this.refreshing = (async () => {
       const github = githubClient(this.env);
-      const [issues, milestones, releases] = await Promise.all([
+      const [issues, milestones, releases, labels] = await Promise.all([
         github.list('issues?state=all&labels=roadmap%3Apublic'),
-        github.list('milestones?state=all'), github.list('releases'),
+        github.list('milestones?state=all'), github.list('releases'), github.list('labels'),
       ]);
-      const data = buildRoadmap(issues, milestones, releases);
+      const data = buildRoadmap(issues, milestones, releases, undefined, labels);
       await this.state.storage.put('snapshot', data);
       await this.state.storage.delete('failure');
       return data;

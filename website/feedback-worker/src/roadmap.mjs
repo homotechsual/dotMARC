@@ -4,7 +4,15 @@ function version(title) {
   return /^v?(\d+\.\d+\.\d+)(?:\s|$)/.exec(title)?.[1] ?? null;
 }
 
-export function buildRoadmap(issues, milestones, releases, now = new Date().toISOString()) {
+/** The public meaning of each roadmap status, and of release:ready, taken from the GitHub label descriptions so they are
+ * maintained in one place. Keyed by status, plus `ready`; a label with no description is left out. */
+export function statusDescriptions(labels) {
+  const describe = name => labels.find(label => label.name === name)?.description?.trim() || null;
+  const entries = [...STATUSES.map(status => [status, describe(`status:${status}`)]), ['ready', describe('release:ready')]];
+  return Object.fromEntries(entries.filter(([, description]) => description));
+}
+
+export function buildRoadmap(issues, milestones, releases, now = new Date().toISOString(), labels = []) {
   const published = new Map(releases.filter(release => !release.draft && !release.prerelease)
     .map(release => [version(release.tag_name), release]).filter(([key]) => key));
   const items = issues.filter(issue => !issue.pull_request && issue.labels.some(label => label.name === 'roadmap:public'))
@@ -15,13 +23,15 @@ export function buildRoadmap(issues, milestones, releases, now = new Date().toIS
       const statuses = STATUSES.filter(status => labels.includes(`status:${status}`));
       const release = issue.milestone ? published.get(version(issue.milestone.title)) : null;
       const completed = issue.state === 'closed' && issue.state_reason === 'completed';
+      // Finished on develop but not yet released: the issue stays open until the release workflow closes it.
+      const ready = issue.state === 'open' && labels.includes('release:ready');
       let status = statuses.length === 1 ? statuses[0] : 'triage';
       if (completed) status = release ? 'shipped' : 'in-progress';
-      else if (status === 'shipped') status = 'in-progress';
+      else if (status === 'shipped' || ready) status = 'in-progress';
       return {
         number: issue.number, title: issue.title, url: issue.html_url,
         status, milestone: issue.milestone?.number ?? null,
-        completed, awaitingRelease: completed && !release,
+        completed: completed || ready, awaitingRelease: (completed && !release) || ready,
         statusWarning: !completed && statuses.length !== 1,
         ...readClassification(labels),
       };
@@ -44,6 +54,6 @@ export function buildRoadmap(issues, milestones, releases, now = new Date().toIS
       for (let i = 0; i < 3; i++) if (av[i] !== bv[i]) return a.released ? bv[i] - av[i] : av[i] - bv[i];
       return a.number - b.number;
     });
-  return {updatedAt: now, issues: items, milestones: plans};
+  return {updatedAt: now, issues: items, milestones: plans, statusDescriptions: statusDescriptions(labels)};
 }
 import {readClassification} from '../../src/plugins/featureRequests/taxonomy.ts';

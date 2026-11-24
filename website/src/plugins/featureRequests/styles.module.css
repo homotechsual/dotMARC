@@ -115,3 +115,4 @@
 .warning, .issue .warning { color: var(--cp-text); font-weight: 600; }
 @media (max-width: 996px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 576px) { .board { grid-template-columns: 1fr; } .main { padding: 16px; } .featureSearch { flex-direction: column; align-items: stretch; width: 100%; } .viewSwitch { flex-wrap: wrap; } }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
