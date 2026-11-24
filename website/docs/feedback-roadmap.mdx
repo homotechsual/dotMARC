@@ -88,7 +88,7 @@ For a local deployment use `npm ci` in `website/feedback-worker`, authenticate w
 
 ## Submission and abuse controls
 
-- Anonymous submissions require consent to public publication. They are authored by the App, not attributed to a fabricated GitHub identity. No contact address is collected.
+- Website submissions require consent to public publication. They are authored by the App, not attributed to a fabricated GitHub identity. No email address is collected. An optional GitHub username requires separate consent to a public mention, is validated for username syntax and is explicitly unverified; it confers no ownership or access. The confirmation links to the created issue and asks visitors to sign in and select Subscribe. There is no automatic subscription or notification guarantee.
 - The Worker restricts browser writes to the exact site origin, verifies Turnstile server-side, limits streamed request size and validates title/description/use-case lengths.
 - A Durable Object permits three reservations per source IP per hour, using a SHA-256-derived object identity rather than storing the raw IP. Cloudflare receives the IP as part of normal request processing; Turnstile verification receives it.
 - A stable request identifier prevents immediate retry duplication. Reservations and receipts expire logically after one hour. If a write has an uncertain result, the API reports that uncertainty instead of automatically trying another issue creation.

@@ -79,6 +79,15 @@ test('submission validates boundaries and consent', () => {
   assert.doesNotThrow(() => validateSubmission({...submission, title: 'a'.repeat(160), description: 'a'.repeat(4000), useCase: 'a'.repeat(2000)}));
 });
 
+test('optional GitHub username requires explicit mention consent and excludes mention injection', () => {
+  assert.equal(validateSubmission(submission).githubUsername, '');
+  assert.equal(validateSubmission({...submission, githubUsername: ' @example-user ', mentionConsent: true}).githubUsername, 'example-user');
+  for (const githubUsername of ['a--b', '-user', 'user-', 'user/team', 'user@example.com', 'user\n@other', 'a'.repeat(40)]) {
+    assert.throws(() => validateSubmission({...submission, githubUsername, mentionConsent: true}));
+  }
+  assert.throws(() => validateSubmission({...submission, githubUsername: 'example-user'}), /consent/);
+});
+
 test('roadmap exposes multiple areas and distinct change types, with explicit ambiguity', () => {
   const result = buildRoadmap([
     issue(1, {labels: ['roadmap:public', 'type:feature', 'area:dns', 'area:spf-dkim'].map(name => ({name}))}),
@@ -227,6 +236,7 @@ test('full submission verifies Turnstile and creates correctly labelled issue on
       assert.deepEqual(body.labels, ['type:enhancement', 'area:dns', 'area:spf-dkim', 'status:triage']);
       assert.match(body.body, /### Change type\n\nEnhancement/);
       assert.match(body.body, /### Product areas\n\nDNS & provider push, SPF & DKIM/);
+      assert.match(body.body, /username not verified\): @example-user/);
       assert.ok(body.body.includes(`dotmarc-submission:${submission.requestId}`));
       return Response.json({number: 42, html_url: `https://github.com/${repository}/issues/42`});
     }
@@ -235,7 +245,7 @@ test('full submission verifies Turnstile and creates correctly labelled issue on
   try {
     const request = () => new Request('https://api/requests', {
       method: 'POST', headers: {Origin: env.SITE_ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1'},
-      body: JSON.stringify(submission),
+      body: JSON.stringify({...submission, githubUsername: 'example-user', mentionConsent: true}),
     });
     assert.equal((await worker.fetch(request(), env)).status, 201);
     assert.equal((await (await worker.fetch(request(), env)).json()).issue.number, 42);
