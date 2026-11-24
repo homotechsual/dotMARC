@@ -34,8 +34,8 @@ else
 {
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6">
-            <SearchableSelect TValue="int?" Label="Group" Options="@(_allGroups.Select(group => new SelectOption<int?>(group.Id, group.Name)).ToList())"
-                              Value="_selectedGroupId" ValueChanged="@(v => OnGroupFilterChangedAsync(v))"
+            <SearchableSelect TValue="int?" Label="Group" Options="GroupOptions()"
+                              Value="DashboardGroupChoice.DropdownValue(_allScopedGroups, _selectedGroupId, _scopedGroupIds)" ValueChanged="@(v => OnGroupFilterChangedAsync(v))"
                               Clearable="@(_scopedGroupIds is null)" Disabled="@(_scopedGroupIds is not null && _scopedGroupIds.Count == 1)" />
         </MudItem>
         <MudItem xs="12" sm="6">
@@ -583,6 +583,11 @@ else
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var scopedGroupClaims = authState.User.FindAll(DotMarc.Security.UserAccessClaimsTransformation.ScopedGroupClaimType).ToList();
         _scopedGroupIds = scopedGroupClaims.Count == 0 ? null : scopedGroupClaims.Select(c => int.Parse(c.Value)).ToList();
+        if (_scopedGroupIds?.Count == 1)
+        {
+            // One group is always the chosen one: there is no "all" to show.
+            _allScopedGroups = false;
+        }
         // A person limited to some groups sees one of them at a time, unless a Baselines link asked for all of them.
         if (_scopedGroupIds is not null && !_allScopedGroups && (_selectedGroupId is null || !_scopedGroupIds.Contains(_selectedGroupId.Value)))
         {
@@ -676,10 +681,20 @@ else
         await LoadAsync();
     }
 
-    private async Task OnGroupFilterChangedAsync(int? groupId)
+    private IReadOnlyList<SelectOption<int?>> GroupOptions()
     {
-        _allScopedGroups = false;
-        _selectedGroupId = groupId;
+        var options = _allGroups.Select(group => new SelectOption<int?>(group.Id, group.Name)).ToList();
+        if (DashboardGroupChoice.IsOffered(_scopedGroupIds))
+        {
+            options.Insert(0, new SelectOption<int?>(DashboardGroupChoice.AllMyGroupsId, DashboardGroupChoice.AllMyGroupsText));
+        }
+
+        return options;
+    }
+
+    private async Task OnGroupFilterChangedAsync(int? value)
+    {
+        (_allScopedGroups, _selectedGroupId) = DashboardGroupChoice.FromDropdownValue(value);
         await LoadAsync();
     }
 
