@@ -40,7 +40,7 @@ dotMARC judges the record against [RFC 9989](https://www.rfc-editor.org/rfc/rfc9
 | Problem | What receivers do |
 | --- | --- |
 | `v=DMARC1` missing, not first, or not exactly `DMARC1` | Ignore the whole record. |
-| More than one DMARC record at `_dmarc.<domain>` | Discard all of them. TXT values at that name that do not start with `v=DMARC1` are not DMARC records and are not counted. |
+| More than one DMARC record at `_dmarc.<domain>` | Discard all of them. A TXT value at that name is counted as a DMARC record when it starts with `v=DMARC1`. A value that only looks like one, because its `v` value starts with `DMARC` in any case (for example `v=dmarc1`) or it holds a `v=DMARC1` tag that is not first, is read as a DMARC record with a version problem and is not counted beside a proper record. Any other value, such as an SPF record or a verification token, is not DMARC and is ignored. |
 | A tag that appears more than once | RFC 9989 does not say what to do with a repeated tag. dotMARC follows the DKIM tag-list rule that DMARC's syntax inherits (RFC 6376 section 3.2), under which the record is malformed, so receivers may ignore it. |
 | No `p` tag, or a `p` that is not `none`, `quarantine` or `reject` | Treat the record as `p=none` when it has a valid `rua`, otherwise apply no DMARC processing (RFC 9989 section 4.10.1). |
 | An invalid `sp` or `np` | The same: `p=none`, or no DMARC processing without a valid `rua`. |
@@ -54,10 +54,10 @@ RFC 9989 also adds `np`, the policy for subdomains that do not exist. When a rec
 
 ### Suggested record and repair
 
-When a record has a problem, or sits below its target, the domain page shows a **Suggested record** with a Copy button and a line for each change. dotMARC's [DNS push](./dns-provider-push.mdx#repairing-a-dmarc-record) writes the same record. The repair:
+When a record has a problem, or sits below its target, the domain page shows a **Suggested record** with a Copy button and a line for each change. dotMARC's [DNS push](./dns-provider-push.mdx#repairing-a-dmarc-record) writes this record too, with dotMARC's report address added to `rua` if it is missing. The repair:
 
 * puts `v=DMARC1` first and writes each tag once, keeping the other tags in their original order;
-* keeps the strictest valid value of a repeated `p`, `sp` or `np`, so nothing a receiver might have applied is weakened, and the first value of any other repeated tag;
+* keeps the strictest valid value of a repeated `p`, `sp` or `np`, so nothing a receiver might have applied is weakened, keeps `t=n` when `t` is repeated, joins repeated `rua` and `ruf` tags into one with each address once, and keeps the first value of any other repeated tag;
 * writes a missing or invalid `p` as `p=none`, or as the strictest valid `p` found, and drops an invalid `sp` or `np` so it inherits;
 * combines several DMARC records into one by the same rules, and leaves unrelated TXT values at the name alone;
 * drops `rf` and `ri`, which have no effect on enforcement;

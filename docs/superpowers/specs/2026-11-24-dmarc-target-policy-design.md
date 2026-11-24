@@ -86,7 +86,7 @@ RFC 9989 (May 2026) obsoletes RFC 7489 and is the current DMARC standard. dotMAR
 #### What the standard says, as dotMARC applies it
 
 * `v=DMARC1` must be the first tag. If it is absent, not first or not exactly `DMARC1`, receivers ignore the whole record.
-* More than one DMARC record at `_dmarc.<domain>`: receivers discard all of them. TXT values that do not start with `v=DMARC1` are not DMARC records and are ignored when counting.
+* More than one DMARC record at `_dmarc.<domain>`: receivers discard all of them. A value counts as a DMARC look-alike when its `v` value starts with `DMARC` (any case) or it holds a `v=DMARC1` tag anywhere; a look-alike is analysed only when no proper record exists, and is removed by the push when one does. Any other value (for example `v=spf1 ...`) is not DMARC and is ignored.
 * A repeated tag name makes the tag-list invalid (RFC 6376 section 3.2, adopted by reference; RFC 9989 has no explicit text). dotMARC treats the record as malformed: receivers may discard it.
 * A missing or invalid `p`, or an invalid `sp` or `np`: receivers treat the record as `p=none` when it has a valid `rua`, otherwise they apply no DMARC processing (RFC 9989 section 4.10.1).
 * `np` (new) is the policy for non-existent subdomains; when absent, `sp` applies, else `p`.
@@ -119,13 +119,13 @@ The DMARC check names each problem. Two kinds:
 For any record with a problem, the domain page shows a suggested clean record with a copy action, and the `dmarc` push writes it:
 
 * `v=DMARC1` first, each tag once, other tags kept in their original order.
-* A repeated `p`, `sp` or `np` keeps its strictest valid value, so nothing a receiver might have applied is weakened. Any other repeated tag keeps its first value.
+* A repeated `p`, `sp` or `np` keeps its strictest valid value, so nothing a receiver might have applied is weakened. A repeated `t` keeps `t=n`. Repeated `rua` and `ruf` tags are joined into one tag (URIs comma-joined in order, duplicates removed ignoring case), so the vendor addresses survive the keep-other-addresses merge. Any other repeated tag keeps its first value. Tag text that cannot be read, including text after the version (`v=DMARC1 p=reject`), is reported as discarded.
 * A missing or invalid `p` is written as the strictest valid `p` found, else `none`. An invalid `sp` or `np` is dropped (it then inherits).
 * `rf` and `ri` are dropped (no effect on enforcement).
 * Without a target, `pct` and `t` are kept as they are (dropping them would change enforcement without anyone asking); they stay flagged as informational.
 * With a target, the record is also raised to it: `p`, `sp` and `np` raised (never lowered), `pct` removed, `t=y` removed.
 * More than one DMARC record at the name: the push removes every existing DMARC value and writes the one clean record, built from the values combined by the same rules. Non-DMARC TXT values at the name are left alone.
-* The review screen labels a repair as "Repairs a malformed DMARC record" and lists each change in plain words (for example "Removed the repeated p=none", "Removed the obsolete pct=50").
+* The push also merges dotMARC's `rua` into the repaired record, and a CNAME-delegated `_dmarc` is replaced by a fresh record rather than the suggestion. The review screen labels a repair as "Repairs a malformed DMARC record" (for breaking problems only) and lists each change in plain words (for example "Removed the repeated p=none", "Removed the obsolete pct=50").
 
 This supersedes the earlier "rewrite every copy of a repeated tag" behaviour and replaces the separate raise step. A valid record with no problems and no target still produces exactly today's push plan.
 
