@@ -7,7 +7,7 @@ namespace DotMarc.Notifications;
 public sealed record AlertDestinationInput(string Name, AlertChannel Kind, string Url, bool Enabled);
 
 /// <summary>What the rules page and dialog show about a destination. It has no URL on purpose: the URL is a secret, and the only
-/// screen that handles it is the destination dialog on Alert settings.</summary>
+/// screen that handles it is the destination dialog on the Settings tab of Alerts &amp; PSA.</summary>
 public sealed record AlertDestinationSummary(int Id, string Name, AlertChannel Kind, bool Enabled);
 
 /// <summary>A destination change was refused. The message is a sentence a person can act on and never contains the URL.</summary>

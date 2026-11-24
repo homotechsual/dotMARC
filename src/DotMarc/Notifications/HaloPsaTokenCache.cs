@@ -9,7 +9,7 @@ namespace DotMarc.Notifications;
 /// singleton instance - safe even across multiple Container Apps replicas, since each replica
 /// just acquires its own token independently; no shared/distributed cache is needed at this call
 /// volume (alert-triggered, not a per-request hot path). Keyed on (AuthServerUrl, ClientId) so
-/// that changing the configured Halo credentials from Alert settings naturally misses the old
+/// that changing the configured Halo credentials from the Settings tab of Alerts &amp; PSA naturally misses the old
 /// cache entry rather than reusing a token minted from stale credentials for up to an hour.</summary>
 public sealed class HaloPsaTokenCache
 {

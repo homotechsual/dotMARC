@@ -55,7 +55,7 @@ public sealed class AlertRule
 
     public AlertQuietMode QuietMode { get; set; } = AlertQuietMode.Off;
 
-    /// <summary>The quiet window, as minutes after local midnight (0 to 1439) in the time zone set on Alert settings. A start after the
+    /// <summary>The quiet window, as minutes after local midnight (0 to 1439) in the time zone set on the Settings tab of Alerts &amp; PSA. A start after the
     /// end crosses midnight.</summary>
     public int? QuietStartMinutes { get; set; }
 

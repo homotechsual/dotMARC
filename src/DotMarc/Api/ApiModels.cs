@@ -123,7 +123,7 @@ public sealed record ApiAlert(
     DateTimeOffset RaisedUtc, bool Resolved, DateTimeOffset? ResolvedUtc, bool Acknowledgeable, IReadOnlyList<ApiAlertTicket> Tickets,
     ApiNamedRef? Rule = null);
 
-/// <summary>An alert rule as the API shows it. Times of day are "HH:mm" in the time zone set on Alert settings. DestinationMode is All or
+/// <summary>An alert rule as the API shows it. Times of day are "HH:mm" in the time zone set on the Settings tab of Alerts &amp; PSA. DestinationMode is All or
 /// Selected (Destinations is only meaningful for Selected). TicketMode is FollowRules, Never or Always. A destination's URL is never included.</summary>
 public sealed record ApiAlertRule(
     int Id, string Kind, string Name, bool Enabled, string Severity, int Position, bool StopProcessing, int? CooldownMinutes, int? AutoCloseDays,
