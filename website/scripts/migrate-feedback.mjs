@@ -21,9 +21,14 @@ function list(path) {
 }
 const labels = [
   ['type:feature', 'Feature request'], ['roadmap:public', 'Approved public roadmap item'],
-  ['status:triage', 'Needs maintainer triage'], ['status:considering', 'Under consideration'],
-  ['status:planned', 'Planned work'], ['status:in-progress', 'Work in progress or awaiting release'],
-  ['status:shipped', 'Completed work in a published release'],
+  // Status descriptions are shown to visitors on the roadmap as hover text, so they are written for them. The roadmap reads
+  // them from GitHub; these values only seed labels that do not exist yet.
+  ['status:triage', 'New, and not reviewed by a maintainer yet.'],
+  ['status:considering', 'Being weighed up. Not planned for a release yet.'],
+  ['status:planned', 'Planned for a release. Work has not started yet.'],
+  ['status:in-progress', 'Being worked on now, or finished and waiting for its release.'],
+  ['status:shipped', 'Released and available in dotMARC.'],
+  ['release:ready', 'Finished, and ships when its planned release is published.'],
 ];
 const existingLabels = new Set(list('labels').map(label => label.name));
 for (const [name, description] of labels) {
