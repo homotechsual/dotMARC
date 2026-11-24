@@ -91,7 +91,7 @@ up to the limit of two addresses in total. Two settings in the **DNS records** s
 
 ## The DMARC authorization record
 
-This is the one that doesn't turn up much when you search for it, because it's not really called one thing: RFC 7489 §7.1 calls the mechanism **external destination verification**; other vendors call it a third-party authorization record. dotMARC's health checklist just calls it the "DMARC authorization record" since that's what it does - authorizes a report destination.
+This is the one that doesn't turn up much when you search for it, because it's not really called one thing: RFC 9990 §4 ("Verifying External Destinations", which replaced RFC 7489 §7.1 in May 2026) describes the mechanism, often called **external destination verification**; other vendors call it a third-party authorization record. dotMARC's health checklist just calls it the "DMARC authorization record" since that's what it does - authorizes a report destination. RFC 9990 also lets the receiving domain authorise every domain at once with a wildcard record at `*._report._dmarc.<its domain>` containing `v=DMARC1;`.
 
 <details>
 <summary>Why this record exists, and why it matters for dotMARC</summary>

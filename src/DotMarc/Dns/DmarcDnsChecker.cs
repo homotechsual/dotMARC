@@ -97,7 +97,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
     /// may cap the count (RFC 7489 section 6.2) and some only send to the first two. dotMARC's own address counts.</summary>
     public const int MaxReportAddresses = 2;
 
-    /// <summary>RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being
+    /// <summary>RFC 9990 §4: when the rua= mailbox's domain differs from the domain being
     /// monitored (the normal MSP shape), that mailbox's domain must publish this record proving it
     /// accepts reports for the monitored domain. Independent of CheckAsync above - this always
     /// runs and always returns its own result, regardless of whether CheckAsync's own-record check

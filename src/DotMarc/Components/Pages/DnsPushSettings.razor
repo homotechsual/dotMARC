@@ -98,7 +98,7 @@
             <MudSwitch T="bool" @bind-Value="_dnsRecordSettings.KeepOtherRuaAddresses" Color="Color.Primary" Label="Keep other rua addresses when pushing" />
         </FieldWithHelp>
         <div style="max-width:360px" class="mt-2">
-        <FieldWithHelp Topic="Additional rua address" Help="A second report destination added to every DMARC record dotMARC pushes, after dotMARC's own address. Use it to send reports to another tool as well. It takes one of the two places a record can reliably list. Leave blank for none. If its domain differs from the domain being monitored, that domain must publish an authorization record (RFC 7489 section 7.1) or receivers will not send reports to it.">
+        <FieldWithHelp Topic="Additional rua address" Help="A second report destination added to every DMARC record dotMARC pushes, after dotMARC's own address. Use it to send reports to another tool as well. It takes one of the two places a record can reliably list. Leave blank for none. If its domain differs from the domain being monitored, that domain must publish an authorization record (RFC 9990 section 4) or receivers will not send reports to it.">
         <MudTextField T="string" Label="Additional rua address" @bind-Value="_additionalRuaAddress" Variant="Variant.Outlined" Placeholder="reports@example.com" MaxLength="DnsRecordSettings.MaxAdditionalRuaAddressLength" />
         </FieldWithHelp>
         </div>

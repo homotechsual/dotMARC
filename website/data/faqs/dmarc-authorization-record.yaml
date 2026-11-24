@@ -1,6 +1,6 @@
 question: What is a "DMARC authorization record"?
 answer: |
-  It's the record RFC 7489 §7.1 calls **external destination verification** - dotMARC's health
+  It's the record RFC 9990 §4 ("Verifying External Destinations") describes, often called **external destination verification** - dotMARC's health
   checklist just calls it a "DMARC authorization record" because that's what it does. It's easy to
   come up empty searching for that exact phrase, since different tools call the same mechanism
   different things (some say "third-party authorization record").
