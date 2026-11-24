@@ -12,6 +12,8 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -841,41 +843,67 @@
 
     private void OpenSenderDefaults(GroupRow row) => Navigation.NavigateTo($"/groups/{row.Id}/senders");
 
+    private async Task<bool> MayChangeBaselineAsync(int groupId)
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        return (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded && BaselineAccess.MayChangeGroup(user, groupId);
+    }
+
     private async Task OpenDomainBaselineAsync(GroupRow row)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var group = await db.Groups.AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == row.Id);
-        if (group is null)
-        {
-            Snackbar.Add("This group no longer exists.", Severity.Error);
-            await LoadAsync();
-            return;
-        }
-
-        var heading = $"DMARC target for {row.Name}";
-        var parameters = new DialogParameters<DmarcTargetDialog>
-        {
-            { dialog => dialog.Heading, heading },
-            { dialog => dialog.Current, group.DmarcTarget },
-        };
-        var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        var result = await dialogRef.Result;
-        if (result is null || result.Canceled)
+        if (!await MayChangeBaselineAsync(row.Id))
         {
             return;
         }
 
-        var choice = (DmarcTargetDialog.DmarcTargetDialogResult)result.Data!;
-        await using var saveDb = await DbFactory.CreateDbContextAsync();
-        if (await DmarcTargetService.SetGroupAsync(saveDb, await AuditActorAccessor.GetAsync(), row.Id, choice.Target))
+        try
         {
-            Snackbar.Add($"Saved the DMARC target for {row.Name}", Severity.Success);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var group = await db.Groups.AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == row.Id);
+            if (group is null)
+            {
+                Snackbar.Add("This group no longer exists.", Severity.Error);
+                await LoadAsync();
+                return;
+            }
+
+            var heading = $"DMARC target for {row.Name}";
+            var parameters = new DialogParameters<DmarcTargetDialog>
+            {
+                { dialog => dialog.Heading, heading },
+                { dialog => dialog.Current, group.DmarcTarget },
+            };
+            var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+            var result = await dialogRef.Result;
+            if (result is null || result.Canceled)
+            {
+                return;
+            }
+
+            // The dialog can stay open while permissions change, so check again before saving.
+            if (!await MayChangeBaselineAsync(row.Id))
+            {
+                return;
+            }
+
+            var choice = (DmarcTargetDialog.DmarcTargetDialogResult)result.Data!;
+            await using var saveDb = await DbFactory.CreateDbContextAsync();
+            if (await DmarcTargetService.SetGroupAsync(saveDb, await AuditActorAccessor.GetAsync(), row.Id, choice.Target))
+            {
+                Snackbar.Add($"Saved the DMARC target for {row.Name}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("This group no longer exists.", Severity.Error);
+            }
         }
-        else
+        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
         {
-            Snackbar.Add("This group no longer exists.", Severity.Error);
-            await LoadAsync();
+            Logger.LogWarning(ex, "Saving the DMARC target for group {GroupName} failed.", row.Name);
+            Snackbar.Add($"The target wasn't saved: {ex.Message}", Severity.Error);
         }
+
+        await LoadAsync();
     }
 
     private async Task OpenReportsAsync(GroupRow row)
