@@ -1,0 +1,187 @@
+@page "/baselines/domain"
+@attribute [Authorize(Policy = "BaselinesManage")]
+@using DotMarc.Baselines
+@using DotMarc.Components.Dialogs
+@using DotMarc.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<BaselinesDomain> Logger
+
+<AppPageTitle>dotMARC - Baselines</AppPageTitle>
+
+@if (_summary is not null)
+{
+    <TabbedPage Title="Baselines" Tabs="_tabs">
+        <MudText Typo="Typo.body1" Class="mb-4">
+            The DMARC policy your domains should reach. Set it for every domain, for a group, or for one domain, and dotMARC shows which domains fall short.
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            A domain in more than one group uses the strictest of those groups' targets. A group's target replaces the system-wide target for its domains, even when it is weaker. A domain's own target replaces both.
+        </MudAlert>
+
+        <MudText Typo="Typo.h6" Class="mb-1">System-wide target</MudText>
+        <div class="d-flex align-center mb-4" style="gap:12px;">
+            <MudText Typo="Typo.body1">@DmarcTargetText.Stored(_summary.System)</MudText>
+            @if (_mayChangeSystem)
+            {
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeSystemAsync">Change</MudButton>
+            }
+        </div>
+
+        <MudText Typo="Typo.h6" Class="mb-1">Domains against their targets</MudText>
+        <div class="mb-4">
+            <MudLink Href="/dashboard?target=below">@_summary.BelowCount @(_summary.BelowCount == 1 ? "domain" : "domains") below target</MudLink>
+            <span class="mx-2">|</span>
+            <MudLink Href="/dashboard?target=checking">@_summary.NeedsCheckingCount @(_summary.NeedsCheckingCount == 1 ? "needs" : "need") checking</MudLink>
+        </div>
+
+        <MudText Typo="Typo.h6" Class="mb-1">Group targets</MudText>
+        @if (_summary.Groups.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">There are no groups.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Class="mb-4" Style="overflow-x:auto;">
+                <thead>
+                    <tr>
+                        <th>Group</th>
+                        <th>Domains</th>
+                        <th>Target</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var group in _summary.Groups)
+                    {
+                        <tr>
+                            <td>@group.Name</td>
+                            <td>@group.DomainCount</td>
+                            <td>@DmarcTargetText.Stored(group.Target)</td>
+                            <td>
+                                @if (BaselineAccess.MayChangeGroup(_user, group.Id))
+                                {
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeGroupAsync(group))">Change</MudButton>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        <MudText Typo="Typo.h6" Class="mb-1">Domain targets</MudText>
+        @if (_summary.Overrides.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No domain has its own target.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
+                <thead>
+                    <tr>
+                        <th>Domain</th>
+                        <th>Target</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var domainOverride in _summary.Overrides)
+                    {
+                        <tr>
+                            <td><MudLink Href="@($"/domains/{domainOverride.Name}")">@domainOverride.Name</MudLink></td>
+                            <td>@DmarcTargetText.Stored(domainOverride.Target)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </TabbedPage>
+}
+
+@code {
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
+    private DmarcTargetSummary? _summary;
+    private System.Security.Claims.ClaimsPrincipal _user = new();
+    private bool _mayChangeSystem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _mayChangeSystem = BaselineAccess.MayChangeSystem(_user);
+        _tabs = await BaselineTabs.ForAsync(_user, AuthorizationService);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _summary = await DmarcTargetSummary.LoadAsync(db, _user);
+    }
+
+    private async Task<DmarcTargetDialog.DmarcTargetDialogResult?> AskAsync(string heading, DmarcTarget? current)
+    {
+        var parameters = new DialogParameters<DmarcTargetDialog>
+        {
+            { x => x.Heading, heading },
+            { x => x.Current, current },
+        };
+        var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        return result is null || result.Canceled ? null : (DmarcTargetDialog.DmarcTargetDialogResult)result.Data!;
+    }
+
+    private async Task ChangeSystemAsync()
+    {
+        if (!_mayChangeSystem || await AskAsync("System-wide DMARC target", _summary!.System) is not { } choice)
+        {
+            return;
+        }
+
+        await SaveAsync("the system-wide target", async (db, actor) =>
+        {
+            await DmarcTargetService.SetSystemAsync(db, actor, choice.Target);
+            return true;
+        });
+    }
+
+    private async Task ChangeGroupAsync(GroupTargetRow group)
+    {
+        if (!BaselineAccess.MayChangeGroup(_user, group.Id) || await AskAsync($"DMARC target for {group.Name}", group.Target) is not { } choice)
+        {
+            return;
+        }
+
+        await SaveAsync(group.Name, (db, actor) => DmarcTargetService.SetGroupAsync(db, actor, group.Id, choice.Target));
+    }
+
+    private async Task SaveAsync(string what, Func<DotMarcDbContext, DotMarc.Audit.AuditActor, Task<bool>> save)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (await save(db, await AuditActorAccessor.GetAsync()))
+            {
+                Snackbar.Add($"Saved the DMARC target for {what}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("That group no longer exists.", Severity.Error);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+        {
+            Logger.LogWarning(ex, "Saving the DMARC target for {Target} failed.", what);
+            Snackbar.Add($"The target wasn't saved: {ex.Message}", Severity.Error);
+        }
+
+        await ReloadAsync();
+    }
+}

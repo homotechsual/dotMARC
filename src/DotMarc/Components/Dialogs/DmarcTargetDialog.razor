@@ -1,0 +1,56 @@
+@* src/DotMarc/Components/Dialogs/DmarcTargetDialog.razor *@
+@using DotMarc.Baselines
+@using DotMarc.Data
+<MudDialog>
+    <TitleContent>@Heading</TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            The DMARC policy this should reach. dotMARC reports where a domain falls short and can raise its record to the target. It never lowers a record.
+        </MudText>
+        <MudSelect T="DmarcPolicyLevel?" @bind-Value="_policy" Label="Policy (p)" Variant="Variant.Outlined" Class="mb-2">
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)null)">Not set</MudSelectItem>
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.None)">None</MudSelectItem>
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Quarantine)">Quarantine</MudSelectItem>
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Reject)">Reject</MudSelectItem>
+        </MudSelect>
+        <MudSelect T="DmarcPolicyLevel?" @bind-Value="_subdomainPolicy" Label="Subdomain policy (sp)" Variant="Variant.Outlined" Disabled="@(_policy is null)">
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)null)">Follows p</MudSelectItem>
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.None)">None</MudSelectItem>
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Quarantine)">Quarantine</MudSelectItem>
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Reject)">Reject</MudSelectItem>
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Heading { get; set; } = "";
+
+    /// <summary>The target set at this level, or null when none is set.</summary>
+    [Parameter] public DmarcTarget? Current { get; set; }
+
+    private DmarcPolicyLevel? _policy;
+    private DmarcPolicyLevel? _subdomainPolicy;
+
+    protected override void OnInitialized()
+    {
+        _policy = Current?.Policy;
+        _subdomainPolicy = Current?.SubdomainPolicy;
+    }
+
+    /// <summary>Closes with a <see cref="DmarcTargetDialogResult"/>; its Target is null when Not set was chosen, so that differs from Cancel.</summary>
+    private void Save()
+    {
+        DmarcTarget? target = _policy is { } policy ? new DmarcTarget(policy, _subdomainPolicy) : null;
+        MudDialog.Close(DialogResult.Ok(new DmarcTargetDialogResult(target)));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public sealed record DmarcTargetDialogResult(DmarcTarget? Target);
+}

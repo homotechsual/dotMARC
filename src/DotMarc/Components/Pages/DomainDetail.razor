@@ -1,6 +1,7 @@
 @page "/domains/{DomainName}"
 @page "/domains/{DomainName}/{Tab}"
 @attribute [Authorize(Policy = "DomainsView")]
+@using DotMarc.Baselines
 @using DotMarc.Data
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
@@ -93,6 +94,28 @@ else
                     </MudGrid>
                 </MudPaper>
             }
+            <MudPaper Class="pa-4 mt-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">DMARC target</MudText>
+                @if (_effectiveTarget is { } effectiveTarget)
+                {
+                    <MudText Typo="Typo.body1">DMARC target: @DmarcTargetText.Policy(effectiveTarget), @DmarcTargetText.Source(effectiveTarget)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@TargetOutcomeLabel</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1">No DMARC target applies.</MudText>
+                }
+                @if (_canChangeTarget)
+                {
+                    <div class="mt-2 d-flex" style="gap:8px;">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeTargetAsync">@(_domain.DmarcTarget is null ? "Set target" : "Change target")</MudButton>
+                        @if (_domain.DmarcTarget is not null)
+                        {
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearTargetAsync">Clear target</MudButton>
+                        }
+                    </div>
+                }
+            </MudPaper>
             <MudPaper Class="pa-4 mt-4" Elevation="1">
                 <div class="d-flex align-center mb-2">
                     <MudText Typo="Typo.subtitle1">Domain health</MudText>
@@ -547,12 +570,83 @@ else
     private List<SenderDecision> _decisions = [];
     private Dictionary<int, string> _groupNames = [];
     private bool _canReviewSenders;
+    private EffectiveDmarcTarget? _effectiveTarget;
+    private DmarcTargetOutcome _targetOutcome;
+    private bool _canChangeTarget;
 
     /// <summary>Senders with no decision at any level. Read each render, so it follows a saved decision and finished lookups.</summary>
     private int? UnreviewedSenderCount => _senderResult is { } result && _domain is not null
         ? SenderDecisionSummaries.CountUnreviewed(result, (service, ip) =>
             SenderDecisionResolver.Resolve(_decisions, _domain.Id, _groupNames.Keys.ToList(), service, ip, _groupNames))
         : null;
+
+    private string TargetOutcomeLabel => _targetOutcome switch
+    {
+        DmarcTargetOutcome.Meets => "Meets target",
+        DmarcTargetOutcome.Below => "Below target",
+        DmarcTargetOutcome.NeedsChecking => "Needs checking",
+        _ => "No target"
+    };
+
+    private async Task ResolveTargetAsync(DotMarcDbContext db)
+    {
+        var settings = await db.DnsRecordSettings.AsNoTracking().FirstOrDefaultAsync() ?? new DnsRecordSettings();
+        _effectiveTarget = DmarcTargetResolver.Resolve(_domain!, settings);
+        _targetOutcome = DmarcTargetCheck.Outcome(_domain!, _effectiveTarget);
+    }
+
+    private async Task ChangeTargetAsync()
+    {
+        if (_domain is null || !_canChangeTarget)
+        {
+            return;
+        }
+
+        var heading = $"DMARC target for {_domain.Name}";
+        var parameters = new DialogParameters<DmarcTargetDialog>
+        {
+            { x => x.Heading, heading },
+            { x => x.Current, _domain.DmarcTarget },
+        };
+        var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled)
+        {
+            return;
+        }
+
+        await SaveTargetAsync(((DmarcTargetDialog.DmarcTargetDialogResult)result.Data!).Target);
+    }
+
+    private async Task ClearTargetAsync() => await SaveTargetAsync(null);
+
+    private async Task SaveTargetAsync(DmarcTarget? target)
+    {
+        if (_domain is null || !_canChangeTarget)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await DmarcTargetService.SetDomainAsync(db, await AuditActorAccessor.GetAsync(), _domain.Id, target))
+            {
+                Snackbar.Add("This domain no longer exists.", Severity.Error);
+                return;
+            }
+
+            _domain.TargetDmarcPolicy = target?.Policy;
+            _domain.TargetDmarcSubdomainPolicy = target is null || target.SubdomainPolicy == target.Policy ? null : target.SubdomainPolicy;
+            await ResolveTargetAsync(db);
+            Snackbar.Add(target is null ? "Cleared the DMARC target" : "Saved the DMARC target", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+        {
+            Logger.LogWarning(ex, "Saving the DMARC target for {DomainName} failed.", DomainName);
+            Snackbar.Add($"The target wasn't saved: {ex.Message}", Severity.Error);
+        }
+    }
 
     private ResolvedSenderDecision DecisionFor(SenderServiceRow row) =>
         SenderDecisionResolver.Resolve(_decisions, _domain!.Id, _groupNames.Keys.ToList(), row.IsUnrecognised ? null : row.Name, string.Empty, _groupNames);
@@ -813,6 +907,9 @@ else
         _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, "SenderReview")).Succeeded;
         _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
         _decisions = await SenderDecisionService.LoadForDomainAsync(db, _domain.Id);
+        _canChangeTarget = (await AuthorizationService.AuthorizeAsync(authState.User, "BaselinesManage")).Succeeded
+            && BaselineAccess.MayChangeDomain(authState.User, _groupNames.Keys.ToList());
+        await ResolveTargetAsync(db);
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
         _tlsrptReports = _domain.TlsrptReports.OrderByDescending(report => report.ReceivedUtc).ToList();

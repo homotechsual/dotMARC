@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Security.Claims;
 using DotMarc.Baselines;
+using DotMarc.Components.Dialogs;
 using DotMarc.Components.Pages;
 using DotMarc.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -40,6 +41,18 @@ public sealed class BaselinesPagesTests
     [Fact]
     public void LegacyRedirects_CoversTheOldSenderBaselineAddress() =>
         Assert.Contains("/senders/baseline", Routes(typeof(LegacyRedirects)));
+
+    [Fact]
+    public void BaselinesDomain_IsAtTheDomainTab_AndRequiresBaselinesManage()
+    {
+        Assert.Equal(["/baselines/domain"], Routes(typeof(BaselinesDomain)));
+        var authorize = Assert.Single(typeof(BaselinesDomain).GetCustomAttributes<AuthorizeAttribute>());
+        Assert.Equal("BaselinesManage", authorize.Policy);
+    }
+
+    [Fact]
+    public void DmarcTargetDialog_IsNotRoutable() =>
+        Assert.Empty(Routes(typeof(DmarcTargetDialog)));
 
     [Fact]
     public void BaselinesIndex_IsAtBaselines() =>

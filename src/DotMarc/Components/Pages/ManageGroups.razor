@@ -1,5 +1,6 @@
 @page "/groups"
 @attribute [Authorize(Policy = "GroupsOrTagsWrite")]
+@using DotMarc.Baselines
 @using DotMarc.Psa
 @using DotMarc.Data
 @using DotMarc.Components.Dialogs
@@ -142,6 +143,9 @@
                     <AuthorizeView Policy="SenderReview" Context="senderReviewState">
                         <MudTh>Sender defaults</MudTh>
                     </AuthorizeView>
+                    <AuthorizeView Policy="BaselinesManage" Context="baselinesHeaderState">
+                        <MudTh>Domain baseline</MudTh>
+                    </AuthorizeView>
                     <MudTh></MudTh>
                 </tr>
                 @if (_showGroupFilters)
@@ -262,6 +266,16 @@
                         {
                             <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Rule" OnClick="@(() => OpenSenderDefaults(context))">
                                 Sender defaults
+                            </MudButton>
+                        }
+                    </MudTd>
+                </AuthorizeView>
+                <AuthorizeView Policy="BaselinesManage" Context="baselinesState">
+                    <MudTd>
+                        @if (BaselineAccess.MayChangeGroup(baselinesState.User, context.Id))
+                        {
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Flag" OnClick="@(() => OpenDomainBaselineAsync(context))">
+                                Domain baseline
                             </MudButton>
                         }
                     </MudTd>
@@ -826,6 +840,43 @@
     }
 
     private void OpenSenderDefaults(GroupRow row) => Navigation.NavigateTo($"/groups/{row.Id}/senders");
+
+    private async Task OpenDomainBaselineAsync(GroupRow row)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var group = await db.Groups.AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == row.Id);
+        if (group is null)
+        {
+            Snackbar.Add("This group no longer exists.", Severity.Error);
+            await LoadAsync();
+            return;
+        }
+
+        var heading = $"DMARC target for {row.Name}";
+        var parameters = new DialogParameters<DmarcTargetDialog>
+        {
+            { dialog => dialog.Heading, heading },
+            { dialog => dialog.Current, group.DmarcTarget },
+        };
+        var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled)
+        {
+            return;
+        }
+
+        var choice = (DmarcTargetDialog.DmarcTargetDialogResult)result.Data!;
+        await using var saveDb = await DbFactory.CreateDbContextAsync();
+        if (await DmarcTargetService.SetGroupAsync(saveDb, await AuditActorAccessor.GetAsync(), row.Id, choice.Target))
+        {
+            Snackbar.Add($"Saved the DMARC target for {row.Name}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("This group no longer exists.", Severity.Error);
+            await LoadAsync();
+        }
+    }
 
     private async Task OpenReportsAsync(GroupRow row)
     {
