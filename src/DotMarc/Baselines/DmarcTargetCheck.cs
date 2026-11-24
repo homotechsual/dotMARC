@@ -51,7 +51,7 @@ public static class DmarcTargetCheck
             .Select(DmarcRecordProblem.Parse)
             .OfType<DmarcRecordProblem>()
             .Where(problem => problem.Kind.IsBreaking())
-            .Select(problem => $"The record is malformed: {problem.Description}")
+            .Select(problem => $"The record is malformed: {problem.Description.TrimEnd('.')}")
             .ToList();
 
         if (domain.DmarcPolicy is not { } policy)
@@ -64,21 +64,28 @@ public static class DmarcTargetCheck
             return reasons;
         }
 
-        var subdomainPolicy = domain.DmarcSubdomainPolicy ?? policy;
-        var nonExistentPolicy = domain.DmarcNonExistentSubdomainPolicy ?? subdomainPolicy;
         if (policy < target.Policy)
         {
             reasons.Add($"p is {Name(policy)}, target is {Name(target.Policy)}");
         }
 
-        if (subdomainPolicy < target.SubdomainPolicy)
+        if (domain.DmarcSubdomainPolicy is { } publishedSubdomainPolicy)
         {
-            reasons.Add($"sp is {Name(subdomainPolicy)}, target is {Name(target.SubdomainPolicy)}");
+            if (publishedSubdomainPolicy < target.SubdomainPolicy)
+            {
+                reasons.Add($"sp is {Name(publishedSubdomainPolicy)}, target is {Name(target.SubdomainPolicy)}");
+            }
+        }
+        else if (policy >= target.Policy && policy < target.SubdomainPolicy)
+        {
+            // With no sp tag subdomains follow p; a p that falls short is already reported above.
+            reasons.Add($"sp follows p ({Name(policy)}), target for subdomains is {Name(target.SubdomainPolicy)}");
         }
 
-        if (nonExistentPolicy < target.SubdomainPolicy)
+        // An unpublished np follows sp, which the checks above already cover.
+        if (domain.DmarcNonExistentSubdomainPolicy is { } publishedNonExistentPolicy && publishedNonExistentPolicy < target.SubdomainPolicy)
         {
-            reasons.Add($"np is {Name(nonExistentPolicy)}, target for subdomains is {Name(target.SubdomainPolicy)}");
+            reasons.Add($"np is {Name(publishedNonExistentPolicy)}, target for subdomains is {Name(target.SubdomainPolicy)}");
         }
 
         // t has no effect on none, so it only counts against a target that asks for enforcement.

@@ -421,7 +421,7 @@ public sealed class DnsHealthAlertEvaluatorTests
 
         var raised = Assert.Single(actions, action => action.Kind == DnsHealthActionKind.Raise);
         Assert.Equal(AlertTypes.DmarcPolicyBelowTarget, raised.AlertType);
-        Assert.Equal("The DMARC policy for contoso.com is p=none; pct=50; its target is p=reject (from group Contoso). Reasons: p is none, target is reject; sp is none, target is reject; np is none, target for subdomains is reject; pct is 50.", raised.Message);
+        Assert.Equal("The DMARC policy for contoso.com is p=none; pct=50; its target is p=reject (from group Contoso). Reasons: p is none, target is reject; sp is none, target is reject; pct is 50.", raised.Message);
     }
 
     [Fact]
