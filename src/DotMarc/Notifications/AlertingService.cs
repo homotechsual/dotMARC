@@ -936,7 +936,7 @@ public sealed class AlertingService : IAlertingService
         foreach (var rule in rules.For(AlertTypes.PsaConnectionLost, facts: null))
         {
             await EnsureAlertAsync(db, settings, rule, PsaConnectionAlertSubject(psa), "PSA connection lost",
-                $"dotMARC can no longer refresh its {name} sign-in ({reason}). New alerts won't raise {name} tickets until someone reconnects under Manage > PSA settings > {name}.",
+                $"dotMARC can no longer refresh its {name} sign-in ({reason}). New alerts won't raise {name} tickets until someone reconnects under Manage > Alerts & PSA > PSA > {name}.",
                 cancellationToken).ConfigureAwait(false);
         }
     }

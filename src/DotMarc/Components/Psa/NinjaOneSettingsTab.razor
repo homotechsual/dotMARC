@@ -23,7 +23,7 @@ else
     <MudPaper Class="pa-4">
         <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
             <MudText Typo="Typo.h5">NinjaOne</MudText>
-            <FieldWithHelp Topic="NinjaOne tickets" Inline="true" Help="Opens a NinjaOne ticket for each alert (as set under 'Which alerts create tickets' on Alert settings) and resolves it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket resolved or closed in NinjaOne resolves its alert.">
+            <FieldWithHelp Topic="NinjaOne tickets" Inline="true" Help="Opens a NinjaOne ticket for each alert (as set under 'Which alerts create tickets' on the Settings tab) and resolves it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket resolved or closed in NinjaOne resolves its alert.">
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable NinjaOne tickets" />
 </FieldWithHelp>
         </div>

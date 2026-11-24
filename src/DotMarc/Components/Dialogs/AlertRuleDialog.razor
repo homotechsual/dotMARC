@@ -126,7 +126,7 @@
             <MudText Typo="Typo.subtitle1" Class="mt-4">What happens next</MudText>
             <MudGrid>
                 <MudItem xs="12" sm="6">
-                    <FieldWithHelp Topic="Cooldown" Help="The least time between repeat alerts for the same thing while it stays open. Leave it empty to use the cooldown on Alert settings.">
+                    <FieldWithHelp Topic="Cooldown" Help="The least time between repeat alerts for the same thing while it stays open. Leave it empty to use the cooldown on the Settings tab.">
                         <MudNumericField T="int?" Label="Cooldown (minutes)" @bind-Value="_cooldown" Min="0" Max="@AlertRuleValidator.MaxCooldownMinutes" Clearable="true" Variant="Variant.Outlined" />
                     </FieldWithHelp>
                 </MudItem>
