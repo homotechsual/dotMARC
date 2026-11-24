@@ -4,6 +4,7 @@ using System.Security.Claims;
 using DotMarc.Baselines;
 using DotMarc.Components.Pages;
 using DotMarc.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Xunit;
 
@@ -75,5 +76,35 @@ public sealed class BaselinesPagesTests
         var tabs = BaselineTabs.For(User(portal: true), canManageBaselines: false, canReviewSenders: false);
 
         Assert.DoesNotContain(tabs, tab => tab.Visible);
+    }
+
+    /// <summary>Grants only the named policies, so a test can see which policy each tab depends on.</summary>
+    private sealed class PolicyNamedAuthorizationService(params string[] grantedPolicies) : IAuthorizationService
+    {
+        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, IEnumerable<IAuthorizationRequirement> requirements) =>
+            throw new NotSupportedException();
+
+        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, string policyName) =>
+            Task.FromResult(grantedPolicies.Contains(policyName) ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+    }
+
+    [Theory]
+    [InlineData(new[] { "BaselinesManage", "SenderReview" }, new[] { "Sender", "Domain" })]
+    [InlineData(new[] { "BaselinesManage" }, new[] { "Domain" })]
+    [InlineData(new[] { "SenderReview" }, new[] { "Sender" })]
+    [InlineData(new string[0], new string[0])]
+    public async Task ForAsync_ChecksTheBaselinesManageAndSenderReviewPolicies(string[] grantedPolicies, string[] expectedVisibleTitles)
+    {
+        var tabs = await BaselineTabs.ForAsync(User(portal: false), new PolicyNamedAuthorizationService(grantedPolicies));
+
+        Assert.Equal(expectedVisibleTitles, tabs.Where(tab => tab.Visible).Select(tab => tab.Title));
+    }
+
+    [Fact]
+    public async Task ForAsync_StillHidesSender_FromAGroupLimitedPerson()
+    {
+        var tabs = await BaselineTabs.ForAsync(User(portal: false, 3), new PolicyNamedAuthorizationService("BaselinesManage", "SenderReview"));
+
+        Assert.Equal(["Domain"], tabs.Where(tab => tab.Visible).Select(tab => tab.Title));
     }
 }

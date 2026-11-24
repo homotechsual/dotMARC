@@ -173,10 +173,7 @@
 
         if (GroupId is null)
         {
-            _tabs = BaselineTabs.For(
-                user,
-                (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded,
-                (await AuthorizationService.AuthorizeAsync(user, "SenderReview")).Succeeded);
+            _tabs = await BaselineTabs.ForAsync(user, AuthorizationService);
         }
 
         if (GroupId is { } groupId)

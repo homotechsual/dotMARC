@@ -21,9 +21,7 @@
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        var canManageBaselines = (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded;
-        var canReviewSenders = (await AuthorizationService.AuthorizeAsync(user, "SenderReview")).Succeeded;
-        var first = BaselineTabs.For(user, canManageBaselines, canReviewSenders).FirstOrDefault(tab => tab.Visible);
+        var first = (await BaselineTabs.ForAsync(user, AuthorizationService)).FirstOrDefault(tab => tab.Visible);
         if (first is null)
         {
             _noAccess = true;

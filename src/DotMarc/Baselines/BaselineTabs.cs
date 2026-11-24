@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using DotMarc.Components.Shared;
+using DotMarc.Data;
 using DotMarc.Reporting;
+using Microsoft.AspNetCore.Authorization;
 
 namespace DotMarc.Baselines;
 
@@ -16,4 +18,12 @@ public static class BaselineTabs
         new TabbedPageTab("Sender", SenderHref, canReviewSenders && SenderDecisionAccess.MayChangeBaseline(user)),
         new TabbedPageTab("Domain", DomainHref, canManageBaselines),
     ];
+
+    /// <summary>The same list, after making the policy checks. Every page that shows the tabs, and the menu, calls this so the checks live in one place.</summary>
+    public static async Task<IReadOnlyList<TabbedPageTab>> ForAsync(ClaimsPrincipal user, IAuthorizationService authorizationService)
+    {
+        var canManageBaselines = (await authorizationService.AuthorizeAsync(user, nameof(Permission.BaselinesManage))).Succeeded;
+        var canReviewSenders = (await authorizationService.AuthorizeAsync(user, nameof(Permission.SenderReview))).Succeeded;
+        return For(user, canManageBaselines, canReviewSenders);
+    }
 }

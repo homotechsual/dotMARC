@@ -163,15 +163,31 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        if (user.Identity?.IsAuthenticated != true)
-        {
-            return;
-        }
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        await RefreshBaselinesAsync();
+    }
 
-        var canManageBaselines = (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded;
-        var canReviewSenders = (await AuthorizationService.AuthorizeAsync(user, "SenderReview")).Succeeded;
-        _showBaselines = BaselineTabs.For(user, canManageBaselines, canReviewSenders).Any(tab => tab.Visible);
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> authenticationState)
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshBaselinesAsync();
+                StateHasChanged();
+            });
+        }
+        catch (Exception)
+        {
+            // Nothing to do: a stale menu entry must not end the circuit.
+        }
+    }
+
+    private async Task RefreshBaselinesAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _showBaselines = user.Identity?.IsAuthenticated == true
+            && (await BaselineTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible);
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args) => await RecordPageViewAsync(args.Location);
@@ -205,7 +221,11 @@
         }
     }
 
-    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
 
     private async Task ToggleDarkModeAsync()
     {
