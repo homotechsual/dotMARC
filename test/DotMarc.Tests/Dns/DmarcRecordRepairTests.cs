@@ -58,9 +58,9 @@ public sealed class DmarcRecordRepairTests
     [Fact]
     public void RepeatedOtherTag_KeepsTheFirstValue()
     {
-        AssertRepair(Build(null, "v=DMARC1; p=reject; rua=mailto:a@x; rua=mailto:b@x"),
-            "v=DMARC1; p=reject; rua=mailto:a@x",
-            "Removed the repeated rua=mailto:b@x.");
+        AssertRepair(Build(null, "v=DMARC1; p=reject; adkim=r; adkim=s"),
+            "v=DMARC1; p=reject; adkim=r",
+            "Removed the repeated adkim=s.");
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public sealed class DmarcRecordRepairTests
         AssertRepair(Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine), "v=DMARC1; p=none; rua=mailto:a@x"),
             "v=DMARC1; p=reject; sp=quarantine; rua=mailto:a@x",
             "Raised p from none to reject.",
-            "Set sp to quarantine so subdomains keep their policy.");
+            "Set sp to quarantine.");
         AssertRepair(Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.None), "v=DMARC1; p=none"),
             "v=DMARC1; p=reject; sp=none",
             "Raised p from none to reject.",
@@ -240,4 +240,64 @@ public sealed class DmarcRecordRepairTests
             "Raised p from none to reject.",
             "Removed t=y (testing mode).");
     }
+
+    [Fact]
+    public void RepeatedRuaTagsInOneRecord_AreJoinedIntoOne() =>
+        AssertRepair(
+            Build(null, "v=DMARC1; p=none; rua=mailto:vendor@x.example; rua=mailto:dotmarc@y.example"),
+            "v=DMARC1; p=none; rua=mailto:vendor@x.example,mailto:dotmarc@y.example",
+            "Joined the repeated rua tags into one.");
+
+    [Fact]
+    public void RuaTagsAcrossCombinedRecords_AreJoinedAndDuplicatesDropped() =>
+        AssertRepair(
+            Build(null, "v=DMARC1; p=none; rua=mailto:vendor@x.example,mailto:shared@x.example", "v=DMARC1; p=none; rua=mailto:SHARED@x.example,mailto:dotmarc@y.example"),
+            "v=DMARC1; p=none; rua=mailto:vendor@x.example,mailto:shared@x.example,mailto:dotmarc@y.example",
+            "Combined 2 DMARC records into one.",
+            "Removed the repeated p=none.",
+            "Joined the repeated rua tags into one.");
+
+    [Fact]
+    public void RepeatedRufTags_AreJoinedIntoOne() =>
+        AssertRepair(
+            Build(null, "v=DMARC1; p=none; ruf=mailto:a@x.example; ruf=mailto:b@x.example"),
+            "v=DMARC1; p=none; ruf=mailto:a@x.example,mailto:b@x.example",
+            "Joined the repeated ruf tags into one.");
+
+    [Fact]
+    public void VersionTagWithTextAfterIt_ReportsTheDiscardedText() =>
+        AssertRepair(
+            Build(null, "v=DMARC1 p=reject"),
+            "v=DMARC1; p=none",
+            "Set the version to v=DMARC1.",
+            "Discarded text that was not a valid tag: p=reject.",
+            "Added p=none because the record had no p.");
+
+    [Fact]
+    public void UnreadableTextBesideOtherChanges_IsReportedAsDiscarded() =>
+        AssertRepair(
+            Build(null, "v=DMARC1; p=none; p=reject; junk"),
+            "v=DMARC1; p=reject",
+            "Discarded text that was not a valid tag: junk.",
+            "Removed the repeated p=none.");
+
+    [Fact]
+    public void UnreadableTextOnACleanRecord_IsNotARepairOnItsOwn() =>
+        Assert.Null(Build(null, "v=DMARC1; p=reject; junk"));
+
+    [Fact]
+    public void RaisingSpAboveTheOriginal_DoesNotClaimSubdomainsKeepTheirPolicy() =>
+        AssertRepair(
+            Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine), "v=DMARC1; p=none"),
+            "v=DMARC1; p=reject; sp=quarantine",
+            "Raised p from none to reject.",
+            "Set sp to quarantine.");
+
+    [Fact]
+    public void RaisingPWhileSpKeepsTheOriginal_SaysSubdomainsKeepTheirPolicy() =>
+        AssertRepair(
+            Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.None), "v=DMARC1; p=quarantine"),
+            "v=DMARC1; p=reject; sp=quarantine",
+            "Raised p from quarantine to reject.",
+            "Set sp to quarantine so subdomains keep their policy.");
 }

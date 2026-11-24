@@ -106,10 +106,24 @@ internal static class DmarcTagList
     public static bool IsProperRecord(List<DmarcTag> tags) =>
         tags.Count > 0 && tags[0].IsNamed("v") && tags[0].Value == "DMARC1";
 
-    /// <summary>True for a value that looks like a DMARC record gone wrong: its first tag is v with another value, or it
-    /// holds a v=DMARC1 tag that is not first.</summary>
+    /// <summary>True for a value that looks like a DMARC record gone wrong: its first tag is v with a value starting with
+    /// DMARC (any case), or it holds a v=DMARC1 tag that is not first. Other v values, such as v=spf1, are not DMARC.</summary>
     public static bool IsCandidate(List<DmarcTag> tags) =>
-        tags.Count > 0 && (tags[0].IsNamed("v") || tags.Any(tag => tag.IsNamed("v") && tag.Value == "DMARC1"));
+        tags.Count > 0
+        && ((tags[0].IsNamed("v") && tags[0].Value.StartsWith("DMARC", StringComparison.OrdinalIgnoreCase))
+            || tags.Any(tag => tag.IsNamed("v") && tag.Value == "DMARC1"));
+
+    /// <summary>The parts of a TXT value that <see cref="Parse"/> cannot read as a tag, trimmed.</summary>
+    public static List<string> UnreadableParts(string value) =>
+        value.Split(';')
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0 && !(part.IndexOf('=') is var separator and > 0 && part[..separator].Trim().Length > 0))
+            .ToList();
+
+    /// <summary>The text after a leading DMARC1 in a version tag's value (for example the p=reject of "v=DMARC1 p=reject"),
+    /// or null when there is none.</summary>
+    public static string? TextAfterVersion(string versionValue) =>
+        versionValue.StartsWith("DMARC1", StringComparison.OrdinalIgnoreCase) && versionValue[6..].Trim() is { Length: > 0 } rest ? rest : null;
 
     /// <summary>The strictest valid level among the tags named <paramref name="name"/>, or null when none is valid.</summary>
     public static DmarcPolicyLevel? Strictest(IEnumerable<DmarcTag> tags, string name)
@@ -137,7 +151,6 @@ public sealed record DmarcRecordAnalysis(
     DmarcPolicyLevel? NonExistentPolicy,
     int? Percent,
     bool Testing,
-    bool HasValidRua,
     IReadOnlyList<string> IgnoredCandidates)
 {
     private static readonly string[] ObsoleteTagNames = ["pct", "rf", "ri"];
@@ -171,7 +184,7 @@ public sealed record DmarcRecordAnalysis(
         var problems = new List<DmarcRecordProblem>();
         if (records.Count == 0)
         {
-            return new DmarcRecordAnalysis(records, problems, null, null, null, null, false, false, []);
+            return new DmarcRecordAnalysis(records, problems, null, null, null, null, false, []);
         }
 
         if (proper.Count == 0)
@@ -236,9 +249,7 @@ public sealed record DmarcRecordAnalysis(
             .Select(tag => int.TryParse(tag.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed is >= 0 and <= 100 ? parsed : (int?)null)
             .FirstOrDefault(parsed => parsed is not null);
 
-        var hasValidRua = records.Any(record => DmarcRua.Parse(record).Any(entry => entry.HasMailtoScheme));
-
-        return new DmarcRecordAnalysis(records, problems, policy, subdomainPolicy, nonExistentPolicy, percent, testing, hasValidRua,
+        return new DmarcRecordAnalysis(records, problems, policy, subdomainPolicy, nonExistentPolicy, percent, testing,
             proper.Count > 0 ? candidates : []);
     }
 }

@@ -25,6 +25,7 @@ public static class DmarcRecordRepair
         var obsoleteChanges = new List<string>();
         var raiseChanges = new List<string>();
         var testingChanges = new List<string>();
+        var discardChanges = new List<string>();
 
         if (analysis.Records.Count > 1)
         {
@@ -36,6 +37,22 @@ public static class DmarcRecordRepair
         {
             var hasVersionTag = parsedRecords.SelectMany(tags => tags).Any(tag => tag.IsNamed("v") && tag.Value == "DMARC1");
             versionChanges.Add(hasVersionTag ? "Moved v=DMARC1 to the front." : "Set the version to v=DMARC1.");
+        }
+
+        foreach (var recordText in analysis.Records)
+        {
+            foreach (var tag in DmarcTagList.Parse(recordText).Where(tag => tag.IsNamed("v")))
+            {
+                if (DmarcTagList.TextAfterVersion(tag.Value) is { } afterVersion)
+                {
+                    discardChanges.Add($"Discarded text that was not a valid tag: {afterVersion}.");
+                }
+            }
+
+            foreach (var unreadable in DmarcTagList.UnreadableParts(recordText))
+            {
+                discardChanges.Add($"Discarded text that was not a valid tag: {unreadable}.");
+            }
         }
 
         var allTags = parsedRecords.SelectMany(tags => tags).Where(tag => !tag.IsNamed("v")).ToList();
@@ -81,13 +98,25 @@ public static class DmarcRecordRepair
             }
             else
             {
-                // A repeated t keeps t=n if there is one, as the value that enforces more; other tags keep the first.
+                // A repeated t keeps t=n if there is one, as the value that enforces more; repeated rua and ruf are joined
+                // into one tag; other tags keep the first.
                 var keeper = name == "t"
                     ? occurrences.FirstOrDefault(tag => string.Equals(tag.Value, "n", StringComparison.OrdinalIgnoreCase)) ?? first
                     : first;
-                foreach (var dropped in occurrences.Where(tag => !ReferenceEquals(tag, keeper)))
+                if (name is "rua" or "ruf")
                 {
-                    repeatChanges.Add($"Removed the repeated {dropped.Raw}.");
+                    if (occurrences.Count > 1)
+                    {
+                        repeatChanges.Add($"Joined the repeated {name} tags into one.");
+                        keeper = new DmarcTag(first.Name, JoinUris(occurrences));
+                    }
+                }
+                else
+                {
+                    foreach (var dropped in occurrences.Where(tag => !ReferenceEquals(tag, keeper)))
+                    {
+                        repeatChanges.Add($"Removed the repeated {dropped.Raw}.");
+                    }
                 }
 
                 kept = keeper;
@@ -127,8 +156,21 @@ public static class DmarcRecordRepair
             return null;
         }
 
+        // Text that could not be read is only worth a line when the record is being rewritten anyway.
+        changes.InsertRange(versionChanges.Count, discardChanges);
+
         var record = string.Join("; ", output.Select(tag => tag.Raw).Prepend("v=DMARC1"));
         return new DmarcRecordRepairResult(record, changes);
+    }
+
+    /// <summary>The URIs of every tag in order, comma-joined, each once (compared ignoring case).</summary>
+    private static string JoinUris(IEnumerable<DmarcTag> tags)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var uris = tags
+            .SelectMany(tag => tag.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            .Where(uri => seen.Add(uri));
+        return string.Join(",", uris);
     }
 
     private static void Raise(List<DmarcTag> output, EffectiveDmarcTarget target, List<string> raiseChanges)
@@ -163,7 +205,9 @@ public static class DmarcRecordRepair
             if (subdomainPolicy != policy)
             {
                 var level = DmarcTagList.Name(subdomainPolicy);
-                raiseChanges.Add(policyRaised ? $"Set sp to {level} so subdomains keep their policy." : $"Added sp={level}.");
+                raiseChanges.Add(policyRaised
+                    ? subdomainPolicy == originalPolicy ? $"Set sp to {level} so subdomains keep their policy." : $"Set sp to {level}."
+                    : $"Added sp={level}.");
                 output.Insert(policyIndex + 1, new DmarcTag("sp", level));
             }
         }

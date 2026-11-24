@@ -16,7 +16,6 @@ public sealed class DmarcRecordAnalysisTests
         Assert.True(analysis.IsValid);
         Assert.Empty(analysis.Problems);
         Assert.Equal(DmarcPolicyLevel.Reject, analysis.Policy);
-        Assert.True(analysis.HasValidRua);
     }
 
     [Fact]
@@ -202,16 +201,6 @@ public sealed class DmarcRecordAnalysisTests
     }
 
     [Theory]
-    [InlineData("v=DMARC1; p=reject; rua=https://example.com/dmarc", false)]
-    [InlineData("v=DMARC1; p=reject; rua=a@example.com", false)]
-    [InlineData("v=DMARC1; p=reject", false)]
-    [InlineData("v=DMARC1; p=reject; rua=mailto:a@example.com", true)]
-    public void HasValidRua_NeedsAMailtoUri(string record, bool expected)
-    {
-        Assert.Equal(expected, Analyse(record).HasValidRua);
-    }
-
-    [Theory]
     [InlineData(DmarcRecordProblemKind.VersionMissingOrNotFirst, true)]
     [InlineData(DmarcRecordProblemKind.InvalidNonExistentPolicy, true)]
     [InlineData(DmarcRecordProblemKind.ObsoleteTag, false)]
@@ -219,5 +208,28 @@ public sealed class DmarcRecordAnalysisTests
     public void IsBreaking_SplitsBreakingFromInformational(DmarcRecordProblemKind kind, bool expected)
     {
         Assert.Equal(expected, kind.IsBreaking());
+    }
+
+    [Fact]
+    public void AnSpfRecordAtTheName_IsNotADmarcLookAlike()
+    {
+        var analysis = Analyse("v=spf1 -all");
+
+        Assert.Empty(analysis.Records);
+        Assert.Empty(analysis.Problems);
+        Assert.Empty(analysis.IgnoredCandidates);
+    }
+
+    [Theory]
+    [InlineData("v=dmarc1; p=reject")]
+    [InlineData("v=DMARC2; p=reject")]
+    [InlineData("v=DMARC1 p=reject")]
+    [InlineData("p=reject; v=DMARC1")]
+    public void ValuesThatLookLikeDmarc_AreAnalysedAsVersionProblems(string value)
+    {
+        var analysis = Analyse(value);
+
+        Assert.Equal([value], analysis.Records);
+        Assert.Contains(analysis.Problems, problem => problem.Kind == DmarcRecordProblemKind.VersionMissingOrNotFirst);
     }
 }

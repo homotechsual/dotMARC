@@ -162,6 +162,27 @@ public sealed class DnsChangeBuilderTests
     }
 
     [Fact]
+    public async Task Dmarc_RepeatedRuaTags_KeepTheVendorAddressWhenKeepingOthersIsOn()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none; rua=mailto:vendor@x.example; rua=mailto:rua@dotmarc.example"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example,mailto:vendor@x.example", change.DesiredValue);
+        Assert.Contains("Joined the repeated rua tags into one.", plan.Notes);
+    }
+
+    [Fact]
+    public async Task Dmarc_AnSpfRecordAtTheName_IsLeftAloneAndTheDmarcRecordAddedBesideIt()
+    {
+        var plan = await DmarcPlan(["v=spf1 -all"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Empty(change.ValuesToRemove!);
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example", change.DesiredValue);
+    }
+
+    [Fact]
     public async Task Dmarc_SeveralRecords_AreReplacedByOneAndNonDmarcValuesAreLeftAlone()
     {
         string[] values = ["v=DMARC1; p=none; rua=mailto:a@example.com", "google-site-verification=abc", "v=DMARC1; p=reject"];
