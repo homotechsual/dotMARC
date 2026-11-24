@@ -73,7 +73,7 @@ A rule can tell more people when an alert is not being dealt with. Under **Escal
 
 ## DMARC policy below target
 
-The **DMARC policy below target** rule is raised for a domain whose DMARC record is weaker than the [target](./baselines.mdx#domain) set for it. It is enabled by default and, like every default rule, can be switched off, edited and scoped. It never fires for a domain with no target, so it does nothing until a target is set. It doesn't open a ticket by default, so its alerts only open one if you set the rule's **Ticket mode** to always, or a ticket rule says so. It stays quiet for a domain whose DMARC record is missing or broken, which the **DMARC record broken** rule already covers, and for a domain that hasn't been checked yet.
+The **DMARC policy below target** rule is raised for a domain whose DMARC record is weaker than the [target](./baselines.mdx#domain) set for it. It is enabled by default and, like every default rule, can be switched off, edited and scoped. It never fires for a domain with no target, so it does nothing until a target is set. It doesn't open a ticket by default, so its alerts only open one if you set the rule's **Ticket mode** to always, or a ticket rule says so. It stays quiet for a domain whose DMARC record is missing or unreadable, which the **DMARC record broken** rule already covers, and for a domain that hasn't been checked yet.
 
 ## Under review on the new sender rule
 

@@ -153,7 +153,8 @@ else
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAsync" title="Recheck now" />
                                 }
                                 @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured
-                                    or DmarcCheckStatus.OtherReportAddresses or DmarcCheckStatus.TooManyReportAddresses)
+                                    or DmarcCheckStatus.OtherReportAddresses or DmarcCheckStatus.TooManyReportAddresses
+                                    || _targetOutcome == DmarcTargetOutcome.Below)
                                 {
                                     @if (_isPushingDmarcRecord)
                                     {
@@ -590,7 +591,7 @@ else
 
     private async Task ResolveTargetAsync(DotMarcDbContext db)
     {
-        var settings = await db.DnsRecordSettings.AsNoTracking().FirstOrDefaultAsync() ?? new DnsRecordSettings();
+        var settings = await DnsRecordSettingsService.GetAsync(db);
         _effectiveTarget = DmarcTargetResolver.Resolve(_domain!, settings);
         _targetOutcome = DmarcTargetCheck.Outcome(_domain!, _effectiveTarget);
     }
@@ -1245,6 +1246,10 @@ else
             _domain!.DmarcCheckStatus = domain.DmarcCheckStatus;
             _domain.DmarcCheckedUtc = domain.DmarcCheckedUtc;
             _domain.DmarcCheckDetail = domain.DmarcCheckDetail;
+            _domain.DmarcPolicy = domain.DmarcPolicy;
+            _domain.DmarcSubdomainPolicy = domain.DmarcSubdomainPolicy;
+            _domain.DmarcPercent = domain.DmarcPercent;
+            await ResolveTargetAsync(db);
         }
         finally
         {

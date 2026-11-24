@@ -27,14 +27,14 @@ A target can be set at three levels, and each is optional.
 | --- | --- | --- |
 | System | Every domain with no group or domain target. | The Domain tab. |
 | Group | Every domain in the group. | The Domain tab, or **Domain baseline** on the Groups page. |
-| Domain | One domain. | The Domain tab, or the target card on the domain's page. |
+| Domain | One domain. | The target card on the domain's page. The Domain tab lists these overrides and links to them. |
 
 For each domain dotMARC uses the first of these that applies: the domain's own target, then the strictest target among its groups, then the system target. If none is set, the domain has no target and is never reported as below it.
 
 :::warning Strictest group wins
 A domain can be in more than one group. When it is, and it has no target of its own, it uses the **strictest** of its groups' targets, compared separately for `p` and `sp`.
 
-For example, a domain in **Contoso** (`p=reject`) and **Parked-Estate** (`p=quarantine`) with no override of its own uses `p=reject`. Everywhere dotMARC shows that target it says where it came from, for example "Reject, strictest of Contoso and Parked-Estate".
+For example, a domain in **Contoso** (`p=reject`) and **Parked-Estate** (`p=quarantine`) with no override of its own uses `p=reject`. Everywhere dotMARC shows that target it says where it came from, for example "p=reject" with "strictest of Contoso and Parked-Estate".
 
 A group's target also **replaces** the system target for its domains, even when it is weaker. The system target is a default, not a floor: if the system target is `reject` and a group's is `quarantine`, that group's domains are held to `quarantine`. A domain's own target replaces both.
 :::
@@ -58,7 +58,7 @@ The Domain tab shows how many domains are below target and how many need checkin
 
 ### The alert
 
-**DMARC policy below target** is raised for a domain that is below its target, and closes when the domain meets it again or the target is removed. It is a kind of alert with its own [rule](./alert-rules.mdx#dmarc-policy-below-target), enabled by default, and it does not open a PSA ticket by default, because it reports a standing posture rather than a breakage, and setting a target for many domains at once should not flood your PSA. It never fires without a target. While the DMARC record is missing or broken the **DMARC record broken** alert covers the domain, so this one stays quiet, though the domain still counts as below target on the Domain tab and in the filter. See [DNS health alerts](./alerts.mdx#dns-health-alerts).
+**DMARC policy below target** is raised for a domain that is below its target, and closes when the domain meets it again or the target is removed. It is a kind of alert with its own [rule](./alert-rules.mdx#dmarc-policy-below-target), enabled by default, and it does not open a PSA ticket by default, because it reports a standing posture rather than a breakage, and setting a target for many domains at once should not flood your PSA. It never fires without a target. While the DMARC record is missing or unreadable the **DMARC record broken** alert covers the domain, so this one stays quiet (a record that is broken but still readable raises both alerts), though the domain still counts as below target on the Domain tab and in the filter. See [DNS health alerts](./alerts.mdx#dns-health-alerts).
 
 ### Raising records with the push
 

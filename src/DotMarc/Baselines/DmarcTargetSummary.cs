@@ -25,7 +25,7 @@ public sealed record DmarcTargetSummary(
         var scopedGroupIds = PortalData.ScopedGroupIds(user).ToList();
         var isLimited = scopedGroupIds.Count > 0;
 
-        var settings = await context.DnsRecordSettings.AsNoTracking().FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) ?? new DnsRecordSettings();
+        var settings = await DnsRecordSettingsService.GetAsync(context, cancellationToken).ConfigureAwait(false);
 
         var groupRows = await context.Groups
             .AsNoTracking()

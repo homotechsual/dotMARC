@@ -160,7 +160,7 @@ Scope option B (the whole of #58 and #59 in 0.14) was rejected as too large and 
 
 ## Left to the builder (my calls, can be corrected)
 
-* **No double alert for a missing record.** A missing or broken DMARC record already raises "DMARC record broken", so the below-target alert does not open while that alert's condition holds. The domain still counts as below target on the Baselines page and in the filter.
+* **No double alert for a missing record.** A missing or unreadable DMARC record already raises "DMARC record broken", so the below-target alert stays quiet while there is no readable policy. A record that is broken but still readable raises both alerts. The domain still counts as below target on the Baselines page and in the filter.
 * **Ticket default.** `CreatesTicketByDefault: false` for the new alert type: it reports a standing posture, not a breakage, and a team that sets a target for many domains at once should not get a ticket flood.
 * **API.** The domain read model gains the effective target and outcome (read-only) and the domain list a `belowTarget` filter, from the same resolver. Writing targets through the API is out of scope.
 * **Storage names**, migration name, resolver type name, component structure and tab component choice.
