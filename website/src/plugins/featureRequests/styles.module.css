@@ -105,10 +105,11 @@
 .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin-top: 16px; }
 .column { background: var(--cp-surface-soft); padding: 12px; border-radius: 0.625rem; min-width: 0; }
 .column h2 { font-size: 1rem; }
-.issue { padding: 16px; margin: 12px 0; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); overflow-wrap: anywhere; }
-.issue:hover { border-color: var(--cp-border-strong); }
+.issue { margin: 12px 0; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); overflow-wrap: anywhere; }
+.issue:hover, .issue:focus-within { border-color: var(--cp-border-strong); }
+.main .issueLink { display: block; padding: 16px; border-radius: inherit; color: var(--cp-text); text-decoration: none; }
 .main .issueTitle { display: block; color: var(--cp-text); font-size: 1rem; line-height: 1.5; font-weight: 600; text-decoration: none; }
-.main .issueTitle:hover { color: var(--cp-accent); text-decoration: underline; text-underline-offset: 3px; }
+.main .issueLink:hover .issueTitle, .main .issueLink:focus-visible .issueTitle { color: var(--cp-accent); text-decoration: underline; text-underline-offset: 3px; }
 .issue small { display: block; margin-top: 8px; color: var(--cp-text-muted); font-size: 0.75rem; }
 .issueMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; font-size: 0.75rem; line-height: 1.5; }
 .issueNumber { color: var(--cp-text-muted); font-family: Consolas, "Courier New", Courier, monospace; }
@@ -146,6 +147,8 @@
 .history[open] summary { margin-bottom: 12px; }
 .main details:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; }
 .form { max-width: 760px; }
+.receipt { padding: 16px; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface-soft); }
+.receipt .primaryAction { display: inline-block; }
 .form fieldset { border: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
 .form label { font-weight: 600; }
 .form textarea { resize: vertical; }

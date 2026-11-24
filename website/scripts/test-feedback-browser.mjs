@@ -47,6 +47,8 @@ try {
       assert.equal(body.turnstileToken, 'browser-test-token');
       assert.equal(body.changeType, 'bug');
       assert.deepEqual(body.areas, ['dns', 'spf-dkim']);
+      assert.equal(body.githubUsername, 'example-user');
+      assert.equal(body.mentionConsent, true);
       assert.match(body.requestId, /^[0-9a-f-]{36}$/);
       await route.fulfill({status: 201, json: {issue: {number: 42, url: `${repository}/issues/42`}}, headers: {'Access-Control-Allow-Origin': base}});
     } else {
@@ -116,6 +118,16 @@ try {
   assert.equal(await page.getByRole('link', {name: 'Bulk DNS push', exact: true}).count(), 1);
   assert.equal(await page.getByRole('link', {name: 'An unscheduled idea', exact: true}).count(), 0);
   await page.getByRole('searchbox', {name: 'Find an item'}).fill('');
+  const issueLink = page.getByRole('link', {name: 'Bulk DNS push', exact: true});
+  await issueLink.focus();
+  assert.equal(await issueLink.evaluate(element => element === document.activeElement), true);
+  const linkBounds = await issueLink.boundingBox();
+  assert.ok(linkBounds);
+  await page.route(`${repository}/issues/1`, route => route.fulfill({contentType: 'text/html', body: '<h1>Issue opened</h1>'}));
+  await issueLink.click({position: {x: linkBounds.width - 8, y: linkBounds.height - 8}});
+  await page.waitForURL(`${repository}/issues/1`);
+  await page.goBack();
+  await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
   await page.getByRole('button', {name: 'Planned releases', exact: true}).click();
   await page.getByRole('searchbox', {name: 'Find an item'}).fill('Bulk DNS');
   assert.equal(await page.getByText('1 of 2 public items completed.', {exact: false}).count(), 1);
@@ -149,9 +161,12 @@ try {
   await page.getByLabel('SPF & DKIM', {exact: true}).check();
   await page.getByLabel('What would you like to change?').fill('Please add a useful new capability for our team.');
   await page.getByLabel('What would this help you do?').fill('This would simplify onboarding our client domains.');
+  await page.getByLabel('GitHub username (optional)').fill('example-user');
+  await page.getByLabel('I consent to my GitHub username being published and mentioned on this issue.').check();
   await page.getByLabel('I understand this request will be public.').check();
   await page.getByRole('button', {name: 'Submit request', exact: true}).click();
   await page.getByRole('link', {name: '#42 on GitHub'}).waitFor();
+  await page.getByText('For comments and progress updates, open the issue', {exact: false}).waitFor();
   assert.equal(await page.getByRole('link', {name: '#42 on GitHub'}).getAttribute('href'), `${repository}/issues/42`);
   roadmap.stale = true;
   await page.reload();

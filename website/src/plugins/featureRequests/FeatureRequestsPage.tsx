@@ -44,12 +44,13 @@ function loadTurnstile(): Promise<void> {
 
 function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): ReactNode {
   return <article className={styles.issue}>
+    <a className={styles.issueLink} href={issue.url} aria-label={issue.title}>
     <div className={styles.issueMeta}>
       <span className={styles.issueNumber}>#{issue.number}</span>
       <span className={styles.changeType}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
       <span className={styles.issueStatus} data-status={issue.status}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
     </div>
-    <a className={styles.issueTitle} href={issue.url}>{issue.title}</a>
+    <span className={styles.issueTitle}>{issue.title}</span>
     {issue.areas.length > 0 && <ul className={styles.areas} aria-label="Product areas">
       {issue.areas.map(id => <li key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</li>)}
     </ul>}
@@ -57,6 +58,7 @@ function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): R
     {issue.classificationWarning && <small className={styles.warning}>Classification needs maintainer review</small>}
     {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}
+    </a>
   </article>;
 }
 
@@ -67,6 +69,8 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
   const [changeType, setChangeType] = useState<ChangeType>('feature');
   const [areas, setAreas] = useState<ProductArea[]>([]);
   const [consent, setConsent] = useState(false);
+  const [githubUsername, setGithubUsername] = useState('');
+  const [mentionConsent, setMentionConsent] = useState(false);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -103,7 +107,7 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
     try {
       const response = await fetch(`${api}/requests`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({title, description, useCase, changeType, areas, publicConsent: consent, turnstileToken: token, requestId: requestId.current}),
+        body: JSON.stringify({title, description, useCase, changeType, areas, githubUsername, mentionConsent, publicConsent: consent, turnstileToken: token, requestId: requestId.current}),
         signal: AbortSignal.timeout(30000),
       });
       const data: unknown = await response.json();
@@ -125,7 +129,13 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
     }
   }
 
-  if (receipt) return <p role="status">Request created: <a href={receipt.url}>#{receipt.number} on GitHub</a>. A maintainer will triage it before adding it to the public roadmap.</p>;
+  if (receipt) return <div className={styles.receipt} role="status">
+    <h3>Your request is on GitHub</h3>
+    <p><a className={styles.primaryAction} href={receipt.url}>#{receipt.number} on GitHub</a></p>
+    <p>A maintainer will triage it before adding it to the public roadmap.</p>
+    <p>For comments and progress updates, open the issue while signed in to GitHub and select <strong>Subscribe</strong>.
+      GitHub controls delivery through your notification settings. A mention alone does not guarantee ongoing updates.</p>
+  </div>;
   return <form onSubmit={submit} className={styles.form}>
     <p>Submissions become public GitHub issues, posted by the dotMARC app. Do not include credentials, client details or other sensitive information. No email address is collected.</p>
     <fieldset disabled={busy}>
@@ -151,12 +161,21 @@ function RequestForm({api, siteKey, issues}: {api: string; siteKey: string; issu
         placeholder={changeType === 'bug' ? 'Include steps to reproduce, expected and actual behaviour, and your dotMARC version. Do not include secrets.' : 'Describe the capability or improvement you would like.'} />
       <label htmlFor="request-use-case">What would this help you do?</label>
       <textarea id="request-use-case" required minLength={10} maxLength={2000} rows={3} value={useCase} onChange={event => setUseCase(event.target.value)} />
+      <label htmlFor="request-github">GitHub username (optional)</label>
+      <input id="request-github" aria-describedby="request-github-help" maxLength={40} placeholder="Your GitHub username"
+        value={githubUsername} onChange={event => { setGithubUsername(event.target.value); setMentionConsent(false); }} />
+      <p id="request-github-help" className={styles.updated}>Want to follow this request? We can mention your account on the issue.
+        This username is public and not verified. Open the issue after submitting and select Subscribe for ongoing updates.</p>
+      {githubUsername.trim() && <label className={styles.consent}>
+        <input type="checkbox" required checked={mentionConsent} onChange={event => setMentionConsent(event.target.checked)} />
+        I consent to my GitHub username being published and mentioned on this issue.
+      </label>}
       <label className={styles.consent}>
         <input type="checkbox" required checked={consent} onChange={event => setConsent(event.target.checked)} />
         I understand this request will be public.
       </label>
       <div ref={container} />
-      <button type="submit" disabled={busy || !token || !consent || !areas.length}>{busy ? 'Submitting…' : 'Submit request'}</button>
+      <button type="submit" disabled={busy || !token || !consent || !areas.length || Boolean(githubUsername.trim() && !mentionConsent)}>{busy ? 'Submitting…' : 'Submit request'}</button>
     </fieldset>
     {error && <p role="alert" className={styles.error}>{error}</p>}
   </form>;
