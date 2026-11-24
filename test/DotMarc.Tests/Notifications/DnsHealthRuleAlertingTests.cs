@@ -192,7 +192,7 @@ public sealed class DnsHealthRuleAlertingTests : IAsyncLifetime
         {
             var alert = await verify.AlertEvents.SingleAsync(candidate => candidate.AlertType == AlertTypes.DmarcPolicyBelowTarget);
             Assert.False(alert.IsResolved);
-            Assert.Equal("The DMARC policy for target.example is p=none; its target is p=reject (system-wide).", alert.Message);
+            Assert.Equal("The DMARC policy for target.example is p=none; its target is p=reject (system-wide). Reasons: p is none, target is reject; sp is none, target is reject; np is none, target for subdomains is reject.", alert.Message);
         }
 
         await SetSystemTargetAsync(null);
