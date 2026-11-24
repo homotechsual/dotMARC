@@ -13,7 +13,10 @@ test('publication depends on CI and deploys its artifact without rebuilding', ()
   assert.match(deploy, /needs: validate/);
   assert.match(deploy, /actions\/download-artifact@v4/);
   assert.match(deploy, /name: website-build/);
-  assert.match(deploy, /path: website\/build/);
+  assert.match(deploy, /path: \$\{\{ runner.temp \}\}\/website-deploy\/build/);
+  assert.match(deploy, /workingDirectory: \$\{\{ runner.temp \}\}\/website-deploy/);
+  assert.match(deploy, /packageManager: npm/);
+  assert.doesNotMatch(deploy, /workingDirectory: website/);
   assert.doesNotMatch(deploy, /yarn build|yarn install|always\(\)/);
   assert.match(ci, /ref: \$\{\{ inputs.source-ref \}\}/);
   assert.ok(ci.indexOf('Upload tested website') > ci.indexOf('Test feedback and roadmap in browser'));

@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState, type ReactNode} from 'react';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import {readRoadmap, type Roadmap, type RoadmapIssue} from './roadmap';
+import {readRoadmap, type Roadmap, type RoadmapIssue, type StatusDescriptions} from './roadmap';
 import styles from './styles.module.css';
 import {CHANGE_TYPES, PRODUCT_AREAS, isChangeType, type ChangeType, type ProductArea} from './taxonomy';
 
@@ -42,19 +42,29 @@ function loadTurnstile(): Promise<void> {
   return turnstileLoading;
 }
 
-function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): ReactNode {
+function IssueCard({issue, release, descriptions}: {issue: RoadmapIssue; release?: string; descriptions: StatusDescriptions}): ReactNode {
+  const statusName = Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1];
+  // The hover text is the GitHub label's description, so it is maintained in one place. The card is one link named by
+  // its title, so the status and its meaning are also given to screen readers as the link's description.
+  const statusDescription = descriptions[issue.status as keyof StatusDescriptions];
+  const readyDescription = issue.awaitingRelease ? descriptions.ready : undefined;
+  const describedBy = `roadmap-issue-${issue.number}-status`;
   return <article className={styles.issue}>
-    <a className={styles.issueLink} href={issue.url} aria-label={issue.title}>
+    <a className={styles.issueLink} href={issue.url} aria-label={issue.title} aria-describedby={describedBy}>
+    <span id={describedBy} className={styles.visuallyHidden}>
+      {`${[statusName, statusDescription, issue.awaitingRelease ? 'Completed, awaiting release' : null, readyDescription]
+        .filter((part): part is string => Boolean(part)).map(part => part.replace(/\.$/, '')).join('. ')}.`}
+    </span>
     <div className={styles.issueMeta}>
       <span className={styles.issueNumber}>#{issue.number}</span>
       <span className={styles.changeType}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
-      <span className={styles.issueStatus} data-status={issue.status}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
+      <span className={styles.issueStatus} data-status={issue.status} title={statusDescription}>{statusName}</span>
     </div>
     <span className={styles.issueTitle}>{issue.title}</span>
     {issue.areas.length > 0 && <ul className={styles.areas} aria-label="Product areas">
       {issue.areas.map(id => <li key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</li>)}
     </ul>}
-    {issue.awaitingRelease && <small>Completed, awaiting release</small>}
+    {issue.awaitingRelease && <small title={readyDescription}>Completed, awaiting release</small>}
     {issue.classificationWarning && <small className={styles.warning}>Classification needs maintainer review</small>}
     {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}
@@ -235,7 +245,7 @@ export default function FeatureRequests(): ReactNode {
         <small>Item count, not an estimate of remaining effort.</small>
       </div>
       <div className={styles.issueList}>
-        {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} />) : <p>No matching public items listed yet.</p>}
+        {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} descriptions={data?.statusDescriptions ?? {}} />) : <p>No matching public items listed yet.</p>}
       </div>
     </section>;
   }
@@ -280,7 +290,7 @@ export default function FeatureRequests(): ReactNode {
             const items = filtered.filter(issue => issue.status === status);
             return <section key={status} className={styles.column}>
               <h2>{label} <small>({items.length})</small></h2>
-              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} release={data.milestones.find(plan => plan.number === issue.milestone)?.title} />) : <p className={styles.updated}>No matching items.</p>}
+              {items.length ? items.map(issue => <IssueCard key={issue.number} issue={issue} release={data.milestones.find(plan => plan.number === issue.milestone)?.title} descriptions={data.statusDescriptions} />) : <p className={styles.updated}>No matching items.</p>}
             </section>;
           })}
         </div></> : <>
@@ -290,7 +300,7 @@ export default function FeatureRequests(): ReactNode {
           </div>
           <section className={styles.unscheduled}><div className={styles.releaseHeading}><h2>Unscheduled ideas</h2><span className={styles.updated}>Not yet assigned to a release</span></div>
             <div className={styles.ideaGrid}>
-            {filtered.filter(issue => !data.milestones.some(plan => plan.number === issue.milestone)).map(issue => <IssueCard key={issue.number} issue={issue} />)}
+            {filtered.filter(issue => !data.milestones.some(plan => plan.number === issue.milestone)).map(issue => <IssueCard key={issue.number} issue={issue} descriptions={data.statusDescriptions} />)}
             {!filtered.some(issue => !data.milestones.some(plan => plan.number === issue.milestone)) && <p>No matching unscheduled ideas.</p>}
             </div>
           </section>

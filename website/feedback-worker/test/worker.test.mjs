@@ -39,6 +39,28 @@ test('roadmap omits non-public issues, pull requests, duplicates and declined re
   assert.deepEqual(result.issues.map(value => value.number), [1]);
 });
 
+test('open release:ready work counts as completed and awaiting release, but stays in progress', () => {
+  const plan = milestone(1, 'v0.14.0');
+  const ready = issue(1, {milestone: plan, labels: [{name: 'roadmap:public'}, {name: 'status:in-progress'}, {name: 'release:ready'}]});
+  const underway = issue(2, {milestone: plan, labels: [{name: 'roadmap:public'}, {name: 'status:in-progress'}]});
+  const results = buildRoadmap([ready, underway], [plan], []).issues;
+  const readyResult = results.find(result => result.number === 1);
+  const underwayResult = results.find(result => result.number === 2);
+  assert.deepEqual([readyResult.status, readyResult.completed, readyResult.awaitingRelease, readyResult.statusWarning], ['in-progress', true, true, false]);
+  assert.deepEqual([underwayResult.status, underwayResult.completed, underwayResult.awaitingRelease], ['in-progress', false, false]);
+});
+
+test('status descriptions come from the GitHub label descriptions', () => {
+  const labels = [
+    {name: 'status:planned', description: ' Planned for a release. '}, {name: 'status:in-progress', description: 'Being worked on.'},
+    {name: 'status:shipped', description: ''}, {name: 'release:ready', description: 'Finished, awaiting its release.'},
+    {name: 'area:dns', description: 'Not a status.'},
+  ];
+  assert.deepEqual(buildRoadmap([], [], [], undefined, labels).statusDescriptions,
+    {planned: 'Planned for a release.', 'in-progress': 'Being worked on.', ready: 'Finished, awaiting its release.'});
+  assert.deepEqual(buildRoadmap([], [], []).statusDescriptions, {});
+});
+
 test('completed work is not shipped until a stable GitHub release exists', () => {
   const plan = milestone(1, 'v0.14.0 — Action centre');
   const done = issue(1, {state: 'closed', state_reason: 'completed', milestone: plan});

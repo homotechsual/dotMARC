@@ -7,9 +7,12 @@ export interface RoadmapMilestone {
   number: number; title: string; description: string; url: string;
   dueOn: string | null; released: boolean; releaseUrl: string | null;
 }
+export const ROADMAP_STATUSES = ['triage', 'considering', 'planned', 'in-progress', 'shipped'] as const;
+/** What each status means (and `ready`, for finished work awaiting its release), from the GitHub label descriptions. */
+export type StatusDescriptions = Partial<Record<(typeof ROADMAP_STATUSES)[number] | 'ready', string>>;
 export interface Roadmap {
   updatedAt: string; stale: boolean; submissionsEnabled: boolean;
-  issues: RoadmapIssue[]; milestones: RoadmapMilestone[];
+  issues: RoadmapIssue[]; milestones: RoadmapMilestone[]; statusDescriptions: StatusDescriptions;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -33,6 +36,18 @@ function link(value: unknown): string {
   if (!result.startsWith('https://github.com/homotechsual/dotMARC/')) throw new Error('Invalid roadmap link.');
   return result;
 }
+function descriptions(value: unknown): StatusDescriptions {
+  // Older cached Worker snapshots have no descriptions; show no hover text rather than failing.
+  if (value === undefined) return {};
+  const result: StatusDescriptions = {};
+  for (const [key, description] of Object.entries(record(value))) {
+    if (!([...ROADMAP_STATUSES, 'ready'] as string[]).includes(key) || typeof description !== 'string' || description.length > 300) {
+      throw new Error('Invalid roadmap status description.');
+    }
+    result[key as keyof StatusDescriptions] = description;
+  }
+  return result;
+}
 function date(value: unknown): string {
   const result = text(value);
   if (!Number.isFinite(Date.parse(result))) throw new Error('Invalid roadmap date.');
@@ -46,7 +61,7 @@ export function readRoadmap(value: unknown): Roadmap {
     issues: data.issues.map((value: unknown) => {
       const issue = record(value);
       const status = text(issue.status);
-      if (!['triage', 'considering', 'planned', 'in-progress', 'shipped'].includes(status)) throw new Error('Invalid roadmap status.');
+      if (!(ROADMAP_STATUSES as readonly string[]).includes(status)) throw new Error('Invalid roadmap status.');
       // Older cached Worker snapshots have no taxonomy; show them as unclassified, not new features.
       const changeType = issue.changeType === undefined ? null : issue.changeType;
       const areas = issue.areas === undefined ? [] : issue.areas;
@@ -68,6 +83,7 @@ export function readRoadmap(value: unknown): Roadmap {
         releaseUrl: plan.releaseUrl === null ? null : link(plan.releaseUrl),
       };
     }),
+    statusDescriptions: descriptions(data.statusDescriptions),
   };
 }
 import {isChangeType, isProductArea, type ChangeType, type ProductArea} from './taxonomy.ts';
