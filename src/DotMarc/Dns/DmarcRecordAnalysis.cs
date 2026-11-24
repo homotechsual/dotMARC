@@ -192,7 +192,9 @@ public sealed record DmarcRecordAnalysis(
                 $"{name} is obsolete in RFC 9989 and newer receivers ignore it."));
         }
 
-        var testing = tagsInOrder.Any(tag => tag.IsNamed("t") && string.Equals(tag.Value, "y", StringComparison.OrdinalIgnoreCase));
+        // A repeated t keeps the value that enforces more, so t=n beats t=y.
+        var testValues = tagsInOrder.Where(tag => tag.IsNamed("t")).Select(tag => tag.Value.ToLowerInvariant()).ToList();
+        var testing = testValues.Contains("y") && !testValues.Contains("n");
         if (testing)
         {
             problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.TestingMode, "t",

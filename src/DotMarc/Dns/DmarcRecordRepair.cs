@@ -76,19 +76,24 @@ public static class DmarcRecordRepair
             }
             else
             {
-                foreach (var dropped in occurrences.Skip(1))
+                // A repeated t keeps t=n if there is one, as the value that enforces more; other tags keep the first.
+                var keeper = name == "t"
+                    ? occurrences.FirstOrDefault(tag => string.Equals(tag.Value, "n", StringComparison.OrdinalIgnoreCase)) ?? first
+                    : first;
+                foreach (var dropped in occurrences.Where(tag => !ReferenceEquals(tag, keeper)))
                 {
                     repeatChanges.Add($"Removed the repeated {dropped.Raw}.");
                 }
 
+                kept = keeper;
                 if (name is "rf" or "ri" || (name == "pct" && target is not null))
                 {
                     obsoleteChanges.Add($"Removed the obsolete {first.Raw}.");
                     kept = null;
                 }
-                else if (name == "t" && target is not null && string.Equals(first.Value, "y", StringComparison.OrdinalIgnoreCase))
+                else if (name == "t" && target is not null && string.Equals(keeper.Value, "y", StringComparison.OrdinalIgnoreCase))
                 {
-                    testingChanges.Add($"Removed {first.Raw} (testing mode).");
+                    testingChanges.Add($"Removed {keeper.Raw} (testing mode).");
                     kept = null;
                 }
             }

@@ -135,6 +135,25 @@ public sealed class DmarcRecordRepairTests
     }
 
     [Fact]
+    public void RepeatedTestingTag_KeepsNoOverYes()
+    {
+        AssertRepair(Build(null, "v=DMARC1; p=reject; t=y; t=n"),
+            "v=DMARC1; p=reject; t=n",
+            "Removed the repeated t=y.");
+        AssertRepair(Build(null, "v=DMARC1; p=reject; t=n; t=y"),
+            "v=DMARC1; p=reject; t=n",
+            "Removed the repeated t=y.");
+    }
+
+    [Fact]
+    public void RepeatedTestingTagWithSameValue_KeepsOneWithNoTarget()
+    {
+        AssertRepair(Build(null, "v=DMARC1; p=reject; t=y; t=y"),
+            "v=DMARC1; p=reject; t=y",
+            "Removed the repeated t=y.");
+    }
+
+    [Fact]
     public void TestingModeNoWithTarget_NeedsNoChange()
     {
         Assert.Null(Build(Target(DmarcPolicyLevel.Reject), "v=DMARC1; p=reject; t=n"));

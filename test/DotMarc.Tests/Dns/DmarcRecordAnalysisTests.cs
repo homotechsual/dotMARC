@@ -151,6 +151,23 @@ public sealed class DmarcRecordAnalysisTests
     }
 
     [Fact]
+    public void RepeatedTestingTag_NoBeatsYes()
+    {
+        var analysis = Analyse("v=DMARC1; p=reject; t=n; t=y");
+
+        Assert.False(analysis.Testing);
+        var repeated = Assert.Single(analysis.Problems, problem => problem.Kind == DmarcRecordProblemKind.RepeatedTag);
+        Assert.Equal("t", repeated.Tag);
+        Assert.DoesNotContain(analysis.Problems, problem => problem.Kind == DmarcRecordProblemKind.TestingMode);
+    }
+
+    [Fact]
+    public void RepeatedTestingTagWithSameValue_StaysTesting()
+    {
+        Assert.True(Analyse("v=DMARC1; p=reject; t=y; t=y").Testing);
+    }
+
+    [Fact]
     public void SubdomainAndNonExistentPoliciesInherit()
     {
         var inheriting = Analyse("v=DMARC1; p=reject");
