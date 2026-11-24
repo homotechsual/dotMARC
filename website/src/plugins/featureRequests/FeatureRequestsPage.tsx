@@ -43,28 +43,28 @@ function loadTurnstile(): Promise<void> {
 }
 
 function IssueCard({issue, release, descriptions}: {issue: RoadmapIssue; release?: string; descriptions: StatusDescriptions}): ReactNode {
-  const statusName = Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1];
+  // Finished work that is waiting for its release shows as "Ready for release", not "In progress", so it stands out. The
+  // issue's status stays in progress on GitHub until the release workflow closes it.
+  const ready = issue.awaitingRelease;
+  const statusName = ready ? 'Ready for release' : Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1];
   // The hover text is the GitHub label's description, so it is maintained in one place. The card is one link named by
   // its title, so the status and its meaning are also given to screen readers as the link's description.
-  const statusDescription = descriptions[issue.status as keyof StatusDescriptions];
-  const readyDescription = issue.awaitingRelease ? descriptions.ready : undefined;
+  const statusDescription = ready ? descriptions.ready : descriptions[issue.status as keyof StatusDescriptions];
   const describedBy = `roadmap-issue-${issue.number}-status`;
   return <article className={styles.issue}>
     <a className={styles.issueLink} href={issue.url} aria-label={issue.title} aria-describedby={describedBy}>
     <span id={describedBy} className={styles.visuallyHidden}>
-      {`${[statusName, statusDescription, issue.awaitingRelease ? 'Completed, awaiting release' : null, readyDescription]
-        .filter((part): part is string => Boolean(part)).map(part => part.replace(/\.$/, '')).join('. ')}.`}
+      {`${[statusName, statusDescription].filter((part): part is string => Boolean(part)).map(part => part.replace(/\.$/, '')).join('. ')}.`}
     </span>
     <div className={styles.issueMeta}>
       <span className={styles.issueNumber}>#{issue.number}</span>
       <span className={styles.changeType}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
-      <span className={styles.issueStatus} data-status={issue.status} title={statusDescription}>{statusName}</span>
+      <span className={styles.issueStatus} data-status={ready ? 'ready' : issue.status} title={statusDescription}>{statusName}</span>
     </div>
     <span className={styles.issueTitle}>{issue.title}</span>
     {issue.areas.length > 0 && <ul className={styles.areas} aria-label="Product areas">
       {issue.areas.map(id => <li key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</li>)}
     </ul>}
-    {issue.awaitingRelease && <small title={readyDescription}>Completed, awaiting release</small>}
     {issue.classificationWarning && <small className={styles.warning}>Classification needs maintainer review</small>}
     {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}

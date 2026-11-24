@@ -68,6 +68,9 @@
 .issueStatus::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--cp-border-strong); }
 .issueStatus[data-status="in-progress"]::before { background: var(--cp-accent); }
 .issueStatus[data-status="shipped"]::before { background: var(--cp-success); }
+.issueStatus[data-status="ready"] { padding: 2px 8px; border-radius: var(--cp-radius); background: color-mix(in srgb, var(--cp-success) 14%, transparent); color: var(--ifm-color-success-darkest); font-weight: 600; }
+:global([data-theme='dark']) .issueStatus[data-status="ready"] { color: var(--ifm-color-success-lightest); }
+.issueStatus[data-status="ready"]::before { background: var(--cp-success); }
 .areas { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0; margin: 8px 0 0; list-style: none; }
 .areas li { font-size: 0.75rem; line-height: 1.5; color: var(--cp-text-muted); margin: 0; }
 .releases { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 24px; align-items: start; }
