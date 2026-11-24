@@ -18,6 +18,8 @@ Use seven days for quarantine/reject counts and matching drill-downs, labelled 3
 
 Assigned to 0.15 in the subsequent release-issue planning discussion: baseline profiles/preset purpose tags, drift views, secure score and health-distribution chart, managed overrides that generate baselines, provider-wide selector enumeration, domain-age conditions, Forwarder decisions and per-rule dashboard visibility. The later sections retain their open design decisions; release assignment does not make them 0.14 dependencies or settle their behavioural contracts.
 
+**24 November:** the DMARC target policy (system, group and domain targets, strictest group wins) moved to 0.14 as its own slice. See the [DMARC target policy design](2026-11-24-dmarc-target-policy-design.md). 0.15 profiles build on its resolver.
+
 See the [locked roadmap](../plans/2026-11-20-v0-14-0-roadmap.md) for sequencing and release gates. Routes, component choices and preference-migration mechanics remain detailed-plan decisions within this scope.
 
 ## Intent
