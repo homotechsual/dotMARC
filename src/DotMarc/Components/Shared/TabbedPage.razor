@@ -1,0 +1,47 @@
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<MudText Typo="Typo.h4" Class="mb-2">@Title</MudText>
+<MudTabs Elevation="0" Rounded="false" ActivePanelIndex="ActiveIndex" ActivePanelIndexChanged="OnTabChanged" Class="mb-4">
+    @foreach (var tab in VisibleTabs)
+    {
+        <MudTabPanel Text="@tab.Title" />
+    }
+</MudTabs>
+@ChildContent
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public IReadOnlyList<TabbedPageTab> Tabs { get; set; } = [];
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private IReadOnlyList<TabbedPageTab> VisibleTabs => Tabs.Where(tab => tab.Visible).ToList();
+
+    private int ActiveIndex
+    {
+        get
+        {
+            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/');
+            var index = VisibleTabs.ToList().FindIndex(tab => string.Equals(tab.Href, path, StringComparison.OrdinalIgnoreCase));
+            return Math.Max(index, 0);
+        }
+    }
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args) => InvokeAsync(StateHasChanged);
+
+    private void OnTabChanged(int index)
+    {
+        var visible = VisibleTabs;
+        if (index >= 0 && index < visible.Count && index != ActiveIndex)
+        {
+            Navigation.NavigateTo(visible[index].Href);
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

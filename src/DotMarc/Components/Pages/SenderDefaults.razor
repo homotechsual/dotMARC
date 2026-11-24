@@ -1,7 +1,8 @@
-@page "/senders/baseline"
+@page "/baselines/sender"
 @page "/groups/{GroupId:int}/senders"
 @attribute [Authorize(Policy = "SenderReview")]
 @using DotMarc.Components.Dialogs
+@using DotMarc.Baselines
 @using DotMarc.Data
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
@@ -9,6 +10,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject AuditActorAccessor AuditActorAccessor
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -20,11 +22,24 @@
 
 @if (_rows is not null)
 {
-    @if (GroupId is not null)
+    @if (GroupId is null)
+    {
+        <TabbedPage Title="Baselines" Tabs="_tabs">
+            @SenderContent
+        </TabbedPage>
+    }
+    else
     {
         <MudButton Href="/groups" StartIcon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" Class="mb-2">Back to groups</MudButton>
+        <MudText Typo="Typo.h4" Class="mb-1">@Title</MudText>
+        @SenderContent
     }
-    <MudText Typo="Typo.h4" Class="mb-1">@Title</MudText>
+}
+
+@code {
+    [Parameter] public int? GroupId { get; set; }
+
+    private RenderFragment SenderContent => @<text>
     <MudText Typo="Typo.body1" Class="mb-4">
         @if (GroupId is null)
         {
@@ -48,7 +63,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in _rows)
+            @foreach (var row in _rows!)
             {
                 <tr>
                     <td>@(row.InCatalogue ? row.Name : $"{row.Name} (no longer recognised)")</td>
@@ -79,10 +94,9 @@
             }
         </tbody>
     </MudSimpleTable>
-}
+    </text>;
 
-@code {
-    [Parameter] public int? GroupId { get; set; }
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
 
     private string? _groupName;
     private List<DefaultRow>? _rows;
@@ -146,7 +160,7 @@
         }
     }
 
-    private string Title => GroupId is null ? "Sender baseline" : $"Sender defaults for {_groupName}";
+    private string Title => GroupId is null ? "Baselines" : $"Sender defaults for {_groupName}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -155,6 +169,14 @@
         {
             Navigation.NavigateTo("/AccessDenied");
             return;
+        }
+
+        if (GroupId is null)
+        {
+            _tabs = BaselineTabs.For(
+                user,
+                (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded,
+                (await AuthorizationService.AuthorizeAsync(user, "SenderReview")).Succeeded);
         }
 
         if (GroupId is { } groupId)

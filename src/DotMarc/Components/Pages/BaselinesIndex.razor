@@ -1,0 +1,35 @@
+@page "/baselines"
+@attribute [Authorize]
+@using DotMarc.Baselines
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject NavigationManager Navigation
+
+<AppPageTitle>dotMARC - Baselines</AppPageTitle>
+
+@if (_noAccess)
+{
+    <MudText Typo="Typo.h4" Class="mb-2">Baselines</MudText>
+    <MudText Typo="Typo.body1">You do not have access to any baselines.</MudText>
+}
+
+@code {
+    private bool _noAccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var canManageBaselines = (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded;
+        var canReviewSenders = (await AuthorizationService.AuthorizeAsync(user, "SenderReview")).Succeeded;
+        var first = BaselineTabs.For(user, canManageBaselines, canReviewSenders).FirstOrDefault(tab => tab.Visible);
+        if (first is null)
+        {
+            _noAccess = true;
+            return;
+        }
+
+        Navigation.NavigateTo(first.Href, replace: true);
+    }
+}

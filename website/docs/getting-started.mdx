@@ -135,7 +135,7 @@ You don't have to decide the same sender on every domain. Decisions can be made 
 
 1. **The domain's own decision**, on the service or on a single IP. It overrides everything below.
 2. **The group's defaults**, set from **Manage > Groups** with the **Sender defaults** button on a group.
-3. **The baseline**, set from **Manage > Sender baseline**. It applies to every domain.
+3. **The baseline**, set from **Manage > Baselines > Sender**. It applies to every domain.
 
 For example, authorise Microsoft 365 in the baseline, mark it Unauthorised in the defaults of a client group that has moved away from it, and authorise it again on one domain of that client that still uses it. Each row in the Senders table says where its decision came from: set on this domain, from a group, or from the baseline. Choosing **Reset to inherited** in the dialog removes the domain's own decision, so the row falls back to the level below.
 

@@ -1,0 +1,19 @@
+@page "/senders/baseline"
+@inject NavigationManager Navigation
+
+@code {
+    // Old address to the tab that replaced it. The destination page enforces access, so there is no [Authorize] here.
+    private static readonly Dictionary<string, string> Destinations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["/senders/baseline"] = "/baselines/sender",
+    };
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(Navigation.Uri);
+        if (Destinations.TryGetValue(uri.AbsolutePath.TrimEnd('/'), out var destination))
+        {
+            Navigation.NavigateTo(destination + uri.Query, replace: true);
+        }
+    }
+}

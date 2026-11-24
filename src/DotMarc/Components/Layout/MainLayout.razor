@@ -5,7 +5,9 @@
 @using DotMarc.Demo
 @using DotMarc.Notifications
 @using DotMarc.Components.Shared
+@using DotMarc.Baselines
 @using DotMarc.Reporting
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.Extensions.Options
 @using System.Reflection
 @implements IDisposable
@@ -16,6 +18,7 @@
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuditRecorder AuditRecorder
+@inject IAuthorizationService AuthorizationService
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -71,12 +74,10 @@
             <AuthorizeView Policy="ReportsManage">
                 <MudMenuItem Href="/reports/settings" Icon="@Icons.Material.Filled.Email">Email &amp; reports</MudMenuItem>
             </AuthorizeView>
-            <AuthorizeView Policy="SenderReview">
-                @if (SenderDecisionAccess.MayChangeBaseline(context.User))
-                {
-                    <MudMenuItem Href="/senders/baseline" Icon="@Icons.Material.Filled.Rule">Sender baseline</MudMenuItem>
-                }
-            </AuthorizeView>
+            @if (_showBaselines)
+            {
+                <MudMenuItem Href="/baselines" Icon="@Icons.Material.Filled.Rule">Baselines</MudMenuItem>
+            }
         </MudMenu>
         @if (DemoOptions.Value.Enabled)
         {
@@ -156,6 +157,21 @@
     {
         _versionLabel = DevBuildOptions.VersionLabel(_version, DevBuild.Value.Enabled);
         Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private bool _showBaselines;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            return;
+        }
+
+        var canManageBaselines = (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded;
+        var canReviewSenders = (await AuthorizationService.AuthorizeAsync(user, "SenderReview")).Succeeded;
+        _showBaselines = BaselineTabs.For(user, canManageBaselines, canReviewSenders).Any(tab => tab.Visible);
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args) => await RecordPageViewAsync(args.Location);
