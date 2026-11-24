@@ -6,8 +6,8 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace DotMarc.Baselines;
 
-/// <summary>The tab list both Baselines pages render, so they agree on who sees what. The booleans are the results of the BaselinesManage and
-/// SenderReview policy checks, which the page makes; group scope is decided here.</summary>
+/// <summary>The tab list both Baselines pages render, so they agree on who sees what. Pages and the menu call <see cref="ForAsync"/>, which makes
+/// the BaselinesManage and SenderReview policy checks; <see cref="For"/> takes their results, and group scope is decided here.</summary>
 public static class BaselineTabs
 {
     public const string SenderHref = "/baselines/sender";
@@ -26,4 +26,7 @@ public static class BaselineTabs
         var canReviewSenders = (await authorizationService.AuthorizeAsync(user, nameof(Permission.SenderReview))).Succeeded;
         return For(user, canManageBaselines, canReviewSenders);
     }
+
+    /// <summary>The tab the Baselines landing page sends a person to: the first one they can see, or none.</summary>
+    public static TabbedPageTab? FirstVisible(IReadOnlyList<TabbedPageTab> tabs) => tabs.FirstOrDefault(tab => tab.Visible);
 }

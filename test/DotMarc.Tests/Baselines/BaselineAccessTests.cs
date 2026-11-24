@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Security.Claims;
 using DotMarc.Baselines;
+using DotMarc.Data;
 using DotMarc.Security;
+using DotMarc.Tests.Internal;
 using Xunit;
 
 namespace DotMarc.Tests.Baselines;
@@ -63,5 +65,46 @@ public sealed class BaselineAccessTests
         Assert.False(BaselineAccess.MayChangeGroup(portalUser, 3));
         Assert.False(BaselineAccess.MayChangeDomain(portalUser, [3]));
         Assert.False(BaselineAccess.MayChangeDomain(User(portal: true), []));
+    }
+
+    private static readonly string Manage = nameof(Permission.BaselinesManage);
+
+    [Fact]
+    public async Task TheAsyncChecks_NeedTheBaselinesManagePolicy_AsWellAsScope()
+    {
+        var staff = User(portal: false);
+        var withoutPolicy = new PolicyNamedAuthorizationService();
+        var withPolicy = new PolicyNamedAuthorizationService(Manage);
+
+        Assert.False(await BaselineAccess.MayChangeSystemAsync(staff, withoutPolicy));
+        Assert.False(await BaselineAccess.MayChangeGroupAsync(staff, withoutPolicy, 7));
+        Assert.False(await BaselineAccess.MayChangeDomainAsync(staff, withoutPolicy, [2]));
+        Assert.True(await BaselineAccess.MayChangeSystemAsync(staff, withPolicy));
+        Assert.True(await BaselineAccess.MayChangeGroupAsync(staff, withPolicy, 7));
+        Assert.True(await BaselineAccess.MayChangeDomainAsync(staff, withPolicy, [2]));
+    }
+
+    [Fact]
+    public async Task TheAsyncChecks_StillApplyGroupScope_EvenWithThePolicy()
+    {
+        var staff = User(portal: false, 3, 4);
+        var withPolicy = new PolicyNamedAuthorizationService(Manage);
+
+        Assert.False(await BaselineAccess.MayChangeSystemAsync(staff, withPolicy));
+        Assert.True(await BaselineAccess.MayChangeGroupAsync(staff, withPolicy, 3));
+        Assert.False(await BaselineAccess.MayChangeGroupAsync(staff, withPolicy, 5));
+        Assert.True(await BaselineAccess.MayChangeDomainAsync(staff, withPolicy, [4, 9]));
+        Assert.False(await BaselineAccess.MayChangeDomainAsync(staff, withPolicy, [9]));
+    }
+
+    [Fact]
+    public async Task TheAsyncChecks_RefuseAClientPortalUser_EvenWithThePolicy()
+    {
+        var portalUser = User(portal: true, 3);
+        var withPolicy = new PolicyNamedAuthorizationService(Manage);
+
+        Assert.False(await BaselineAccess.MayChangeSystemAsync(portalUser, withPolicy));
+        Assert.False(await BaselineAccess.MayChangeGroupAsync(portalUser, withPolicy, 3));
+        Assert.False(await BaselineAccess.MayChangeDomainAsync(portalUser, withPolicy, [3]));
     }
 }

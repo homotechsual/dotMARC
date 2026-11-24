@@ -1,6 +1,6 @@
 @page "/baselines/sender"
 @page "/groups/{GroupId:int}/senders"
-@attribute [Authorize(Policy = "SenderReview")]
+@attribute [Authorize(Policy = nameof(Permission.SenderReview))]
 @using DotMarc.Components.Dialogs
 @using DotMarc.Baselines
 @using DotMarc.Data

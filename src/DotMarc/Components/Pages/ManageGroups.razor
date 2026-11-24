@@ -142,10 +142,10 @@
                     <AuthorizeView Policy="ReportsManage" Context="authState">
                         <MudTh>Client reports</MudTh>
                     </AuthorizeView>
-                    <AuthorizeView Policy="SenderReview" Context="senderReviewState">
+                    <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderReviewState">
                         <MudTh>Sender defaults</MudTh>
                     </AuthorizeView>
-                    <AuthorizeView Policy="BaselinesManage" Context="baselinesHeaderState">
+                    <AuthorizeView Policy="@nameof(Permission.BaselinesManage)" Context="baselinesHeaderState">
                         <MudTh>Domain baseline</MudTh>
                     </AuthorizeView>
                     <MudTh></MudTh>
@@ -177,7 +177,7 @@
                     <AuthorizeView Policy="ReportsManage" Context="authState">
                         <MudTh></MudTh>
                     </AuthorizeView>
-                    <AuthorizeView Policy="SenderReview" Context="senderReviewState">
+                    <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderReviewState">
                         <MudTh></MudTh>
                     </AuthorizeView>
                     <MudTh></MudTh>
@@ -262,7 +262,7 @@
                         </div>
                     </MudTd>
                 </AuthorizeView>
-                <AuthorizeView Policy="SenderReview" Context="senderReviewState">
+                <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderReviewState">
                     <MudTd>
                         @if (SenderDecisionAccess.MayChangeGroup(senderReviewState.User, context.Id))
                         {
@@ -272,7 +272,7 @@
                         }
                     </MudTd>
                 </AuthorizeView>
-                <AuthorizeView Policy="BaselinesManage" Context="baselinesState">
+                <AuthorizeView Policy="@nameof(Permission.BaselinesManage)" Context="baselinesState">
                     <MudTd>
                         @if (BaselineAccess.MayChangeGroup(baselinesState.User, context.Id))
                         {
@@ -846,7 +846,13 @@
     private async Task<bool> MayChangeBaselineAsync(int groupId)
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        return (await AuthorizationService.AuthorizeAsync(user, "BaselinesManage")).Succeeded && BaselineAccess.MayChangeGroup(user, groupId);
+        if (await BaselineAccess.MayChangeGroupAsync(user, AuthorizationService, groupId))
+        {
+            return true;
+        }
+
+        Snackbar.Add("You no longer have access to change that group's DMARC target.", Severity.Warning);
+        return false;
     }
 
     private async Task OpenDomainBaselineAsync(GroupRow row)
@@ -900,7 +906,7 @@
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
         {
             Logger.LogWarning(ex, "Saving the DMARC target for group {GroupName} failed.", row.Name);
-            Snackbar.Add($"The target wasn't saved: {ex.Message}", Severity.Error);
+            Snackbar.Add("Could not save the DMARC target. Try again.", Severity.Error);
         }
 
         await LoadAsync();

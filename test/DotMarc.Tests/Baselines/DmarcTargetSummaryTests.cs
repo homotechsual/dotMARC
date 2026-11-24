@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using DotMarc.Baselines;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using DotMarc.Security;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
@@ -132,5 +133,75 @@ public sealed class DmarcTargetSummaryTests : IAsyncLifetime
         Assert.Equal(["Contoso"], summary.Groups.Select(group => group.Name));
         Assert.Equal(["own-below.example"], summary.Overrides.Select(row => row.Name));
         Assert.Equal(1, summary.BelowCount);
+    }
+
+    [Fact]
+    public async Task AGroupLimitedPerson_NeedsCheckingCount_CoversOnlyTheirDomains()
+    {
+        await SetSystemTargetAsync(Reject);
+        int contosoId;
+        await using (var seed = CreateContext())
+        {
+            var contoso = new Group { Name = "Contoso" };
+            var fabrikam = new Group { Name = "Fabrikam" };
+            seed.Domains.AddRange(
+                new Domain { Name = "own-unchecked.example", FirstSeenUtc = CheckedAt, IsMonitored = true, Groups = [contoso] },
+                new Domain { Name = "other-unchecked.example", FirstSeenUtc = CheckedAt, IsMonitored = true, Groups = [fabrikam] },
+                new Domain { Name = "other-unchecked-two.example", FirstSeenUtc = CheckedAt, IsMonitored = true, Groups = [fabrikam] });
+            await seed.SaveChangesAsync();
+            contosoId = contoso.Id;
+        }
+
+        await using var context = CreateContext();
+        var limited = await DmarcTargetSummary.LoadAsync(context, Staff(contosoId), CancellationToken.None);
+        var unlimited = await DmarcTargetSummary.LoadAsync(context, Staff(), CancellationToken.None);
+
+        Assert.Equal(1, limited.NeedsCheckingCount);
+        Assert.Equal(3, unlimited.NeedsCheckingCount);
+    }
+
+    [Fact]
+    public async Task ADomainInAVisibleAndAHiddenGroup_IsCountedOnce_AndShowsOnlyTheVisibleGroupsRow()
+    {
+        await SetSystemTargetAsync(Reject);
+        int contosoId;
+        await using (var seed = CreateContext())
+        {
+            var contoso = new Group { Name = "Contoso" };
+            var fabrikam = new Group { Name = "Fabrikam" };
+            seed.Domains.Add(CheckedDomain("shared.example", monitored: true, DmarcPolicyLevel.None, contoso, fabrikam));
+            await seed.SaveChangesAsync();
+            contosoId = contoso.Id;
+        }
+
+        await using var context = CreateContext();
+        var summary = await DmarcTargetSummary.LoadAsync(context, Staff(contosoId), CancellationToken.None);
+
+        Assert.Equal(1, summary.BelowCount);
+        Assert.Equal(["Contoso"], summary.Groups.Select(group => group.Name));
+    }
+
+    [Theory]
+    [InlineData(DmarcPolicyLevel.Quarantine, 1, DmarcTargetOutcome.Below)]
+    [InlineData(DmarcPolicyLevel.Reject, 0, DmarcTargetOutcome.Meets)]
+    public async Task ADomainInTwoGroupsWithDifferentTargets_IsJudgedAgainstTheStrictestGroup(DmarcPolicyLevel publishedPolicy, int expectedBelowCount, DmarcTargetOutcome expectedOutcome)
+    {
+        // The system target is the weakest, so only the group targets decide.
+        await SetSystemTargetAsync(new DmarcTarget(DmarcPolicyLevel.None, null));
+        await using (var seed = CreateContext())
+        {
+            var lenient = new Group { Name = "Lenient", TargetDmarcPolicy = DmarcPolicyLevel.Quarantine };
+            var strict = new Group { Name = "Strict", TargetDmarcPolicy = DmarcPolicyLevel.Reject };
+            seed.Domains.Add(CheckedDomain("both.example", monitored: true, publishedPolicy, lenient, strict));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext();
+        var summary = await DmarcTargetSummary.LoadAsync(context, Staff(), CancellationToken.None);
+        var domain = await context.Domains.Include(candidate => candidate.Groups).SingleAsync();
+        var outcome = DmarcTargetCheck.Outcome(domain, DmarcTargetResolver.Resolve(domain, await DnsRecordSettingsService.GetAsync(context)));
+
+        Assert.Equal(expectedBelowCount, summary.BelowCount);
+        Assert.Equal(expectedOutcome, outcome);
     }
 }

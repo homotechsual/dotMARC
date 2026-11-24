@@ -1,9 +1,12 @@
 using System.Security.Claims;
+using DotMarc.Data;
 using DotMarc.Portal;
+using Microsoft.AspNetCore.Authorization;
 
 namespace DotMarc.Baselines;
 
-/// <summary>Who may change a DMARC target, by group scope only. The BaselinesManage permission is checked separately, by policy.</summary>
+/// <summary>Who may change a DMARC target. The scope methods decide by group scope only; the Async methods add the BaselinesManage policy, and are what
+/// every page calls just before it shows a target dialog and again just before it saves, so a change of access between the two is caught.</summary>
 public static class BaselineAccess
 {
     /// <summary>The system target applies to every domain, so only staff with no group limit may change it.</summary>
@@ -24,4 +27,16 @@ public static class BaselineAccess
 
         return PortalData.ScopedGroupIds(user).Count == 0 || domainGroupIds.Any(groupId => PortalScope.CanPreview(user, groupId));
     }
+
+    public static async Task<bool> MayChangeSystemAsync(ClaimsPrincipal user, IAuthorizationService authorizationService) =>
+        await HasBaselinesManageAsync(user, authorizationService) && MayChangeSystem(user);
+
+    public static async Task<bool> MayChangeGroupAsync(ClaimsPrincipal user, IAuthorizationService authorizationService, int groupId) =>
+        await HasBaselinesManageAsync(user, authorizationService) && MayChangeGroup(user, groupId);
+
+    public static async Task<bool> MayChangeDomainAsync(ClaimsPrincipal user, IAuthorizationService authorizationService, IReadOnlyCollection<int> domainGroupIds) =>
+        await HasBaselinesManageAsync(user, authorizationService) && MayChangeDomain(user, domainGroupIds);
+
+    private static async Task<bool> HasBaselinesManageAsync(ClaimsPrincipal user, IAuthorizationService authorizationService) =>
+        (await authorizationService.AuthorizeAsync(user, nameof(Permission.BaselinesManage))).Succeeded;
 }

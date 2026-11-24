@@ -1,5 +1,6 @@
 @page "/baselines/domain"
-@attribute [Authorize(Policy = "BaselinesManage")]
+@attribute [Authorize(Policy = nameof(Permission.BaselinesManage))]
+@using System.Security.Claims
 @using DotMarc.Baselines
 @using DotMarc.Components.Dialogs
 @using DotMarc.Data
@@ -110,13 +111,13 @@
 @code {
     private IReadOnlyList<TabbedPageTab> _tabs = [];
     private DmarcTargetSummary? _summary;
-    private System.Security.Claims.ClaimsPrincipal _user = new();
+    private ClaimsPrincipal _user = new();
     private bool _mayChangeSystem;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        _mayChangeSystem = BaselineAccess.MayChangeSystem(_user);
+        _mayChangeSystem = await BaselineAccess.MayChangeSystemAsync(_user, AuthorizationService);
         _tabs = await BaselineTabs.ForAsync(_user, AuthorizationService);
         await ReloadAsync();
     }
@@ -139,14 +140,33 @@
         return result is null || result.Canceled ? null : (DmarcTargetDialog.DmarcTargetDialogResult)result.Data!;
     }
 
+    private const string AccessLostMessage = "You no longer have access to change that DMARC target.";
+
+    /// <summary>Reads the person's access afresh, so a change since the page opened (a removed permission, or a group taken away) is honoured.
+    /// Says so when access was lost, rather than doing nothing.</summary>
+    private async Task<bool> StillMayChangeAsync(Func<ClaimsPrincipal, Task<bool>> mayChange)
+    {
+        _user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _mayChangeSystem = await BaselineAccess.MayChangeSystemAsync(_user, AuthorizationService);
+        if (await mayChange(_user))
+        {
+            return true;
+        }
+
+        Snackbar.Add(AccessLostMessage, Severity.Warning);
+        await ReloadAsync();
+        return false;
+    }
+
     private async Task ChangeSystemAsync()
     {
-        if (!_mayChangeSystem || await AskAsync("System-wide DMARC target", _summary!.System) is not { } choice)
+        Func<ClaimsPrincipal, Task<bool>> mayChange = user => BaselineAccess.MayChangeSystemAsync(user, AuthorizationService);
+        if (!await StillMayChangeAsync(mayChange) || await AskAsync("System-wide DMARC target", _summary!.System) is not { } choice)
         {
             return;
         }
 
-        await SaveAsync("the system-wide target", async (db, actor) =>
+        await SaveAsync("the system-wide target", mayChange, async (db, actor) =>
         {
             await DmarcTargetService.SetSystemAsync(db, actor, choice.Target);
             return true;
@@ -155,16 +175,23 @@
 
     private async Task ChangeGroupAsync(GroupTargetRow group)
     {
-        if (!BaselineAccess.MayChangeGroup(_user, group.Id) || await AskAsync($"DMARC target for {group.Name}", group.Target) is not { } choice)
+        Func<ClaimsPrincipal, Task<bool>> mayChange = user => BaselineAccess.MayChangeGroupAsync(user, AuthorizationService, group.Id);
+        if (!await StillMayChangeAsync(mayChange) || await AskAsync($"DMARC target for {group.Name}", group.Target) is not { } choice)
         {
             return;
         }
 
-        await SaveAsync(group.Name, (db, actor) => DmarcTargetService.SetGroupAsync(db, actor, group.Id, choice.Target));
+        await SaveAsync(group.Name, mayChange, (db, actor) => DmarcTargetService.SetGroupAsync(db, actor, group.Id, choice.Target));
     }
 
-    private async Task SaveAsync(string what, Func<DotMarcDbContext, DotMarc.Audit.AuditActor, Task<bool>> save)
+    private async Task SaveAsync(string what, Func<ClaimsPrincipal, Task<bool>> mayChange, Func<DotMarcDbContext, DotMarc.Audit.AuditActor, Task<bool>> save)
     {
+        // The dialog can stay open while access changes, so check again before saving.
+        if (!await StillMayChangeAsync(mayChange))
+        {
+            return;
+        }
+
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
@@ -180,7 +207,7 @@
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
         {
             Logger.LogWarning(ex, "Saving the DMARC target for {Target} failed.", what);
-            Snackbar.Add($"The target wasn't saved: {ex.Message}", Severity.Error);
+            Snackbar.Add("Could not save the DMARC target. Try again.", Severity.Error);
         }
 
         await ReloadAsync();

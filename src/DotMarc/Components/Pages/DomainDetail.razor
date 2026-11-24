@@ -619,11 +619,27 @@ else
         await SaveTargetAsync(((DmarcTargetDialog.DmarcTargetDialogResult)result.Data!).Target);
     }
 
+    /// <summary>Reads the person's access afresh, since the page was opened with a copy that a change of permissions or groups since would make wrong.
+    /// Says so when access was lost, rather than doing nothing.</summary>
+    private async Task<bool> StillMayChangeTargetAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var currentGroupIds = await db.Domains.AsNoTracking().Where(domain => domain.Id == _domain!.Id).SelectMany(domain => domain.Groups.Select(group => group.Id)).ToListAsync();
+        _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(user, AuthorizationService, currentGroupIds);
+        if (!_canChangeTarget)
+        {
+            Snackbar.Add("You no longer have access to change this domain's DMARC target.", Severity.Warning);
+        }
+
+        return _canChangeTarget;
+    }
+
     private async Task ClearTargetAsync() => await SaveTargetAsync(null);
 
     private async Task SaveTargetAsync(DmarcTarget? target)
     {
-        if (_domain is null || !_canChangeTarget)
+        if (_domain is null || !await StillMayChangeTargetAsync())
         {
             return;
         }
@@ -645,7 +661,7 @@ else
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
         {
             Logger.LogWarning(ex, "Saving the DMARC target for {DomainName} failed.", DomainName);
-            Snackbar.Add($"The target wasn't saved: {ex.Message}", Severity.Error);
+            Snackbar.Add("Could not save the DMARC target. Try again.", Severity.Error);
         }
     }
 
@@ -905,11 +921,10 @@ else
             }
         }
 
-        _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, "SenderReview")).Succeeded;
+        _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.SenderReview))).Succeeded;
         _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
         _decisions = await SenderDecisionService.LoadForDomainAsync(db, _domain.Id);
-        _canChangeTarget = (await AuthorizationService.AuthorizeAsync(authState.User, "BaselinesManage")).Succeeded
-            && BaselineAccess.MayChangeDomain(authState.User, _groupNames.Keys.ToList());
+        _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(authState.User, AuthorizationService, _groupNames.Keys.ToList());
         await ResolveTargetAsync(db);
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();

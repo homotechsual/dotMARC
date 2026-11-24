@@ -4,7 +4,10 @@ using System.Security.Claims;
 using DotMarc.Baselines;
 using DotMarc.Components.Dialogs;
 using DotMarc.Components.Pages;
+using DotMarc.Components.Shared;
+using DotMarc.Data;
 using DotMarc.Security;
+using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Xunit;
@@ -47,7 +50,7 @@ public sealed class BaselinesPagesTests
     {
         Assert.Equal(["/baselines/domain"], Routes(typeof(BaselinesDomain)));
         var authorize = Assert.Single(typeof(BaselinesDomain).GetCustomAttributes<AuthorizeAttribute>());
-        Assert.Equal("BaselinesManage", authorize.Policy);
+        Assert.Equal(nameof(Permission.BaselinesManage), authorize.Policy);
     }
 
     [Fact]
@@ -91,16 +94,6 @@ public sealed class BaselinesPagesTests
         Assert.DoesNotContain(tabs, tab => tab.Visible);
     }
 
-    /// <summary>Grants only the named policies, so a test can see which policy each tab depends on.</summary>
-    private sealed class PolicyNamedAuthorizationService(params string[] grantedPolicies) : IAuthorizationService
-    {
-        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, IEnumerable<IAuthorizationRequirement> requirements) =>
-            throw new NotSupportedException();
-
-        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, string policyName) =>
-            Task.FromResult(grantedPolicies.Contains(policyName) ? AuthorizationResult.Success() : AuthorizationResult.Failed());
-    }
-
     [Theory]
     [InlineData(new[] { "BaselinesManage", "SenderReview" }, new[] { "Sender", "Domain" })]
     [InlineData(new[] { "BaselinesManage" }, new[] { "Domain" })]
@@ -119,5 +112,58 @@ public sealed class BaselinesPagesTests
         var tabs = await BaselineTabs.ForAsync(User(portal: false, 3), new PolicyNamedAuthorizationService("BaselinesManage", "SenderReview"));
 
         Assert.Equal(["Domain"], tabs.Where(tab => tab.Visible).Select(tab => tab.Title));
+    }
+
+    [Fact]
+    public void FirstVisible_IsTheFirstTabThePersonCanSee_OrNone()
+    {
+        var senderHidden = BaselineTabs.For(User(portal: false, 3), canManageBaselines: true, canReviewSenders: true);
+        var nothingVisible = BaselineTabs.For(User(portal: true), canManageBaselines: false, canReviewSenders: false);
+        var both = BaselineTabs.For(User(portal: false), canManageBaselines: true, canReviewSenders: true);
+
+        Assert.Equal(BaselineTabs.DomainHref, BaselineTabs.FirstVisible(senderHidden)?.Href);
+        Assert.Null(BaselineTabs.FirstVisible(nothingVisible));
+        Assert.Equal(BaselineTabs.SenderHref, BaselineTabs.FirstVisible(both)?.Href);
+    }
+
+    [Theory]
+    [InlineData("/senders/baseline", "/baselines/sender")]
+    [InlineData("/senders/baseline/", "/baselines/sender")]
+    [InlineData("/Senders/Baseline", "/baselines/sender")]
+    [InlineData("/senders/baseline?group=3&x=1", "/baselines/sender?group=3&x=1")]
+    public void LegacyRedirectTargets_SendsTheOldAddressToItsReplacement_KeepingTheQuery(string oldPath, string expectedDestination) =>
+        Assert.Equal(expectedDestination, LegacyRedirectTargets.DestinationFor(new Uri("https://dotmarc.example" + oldPath)));
+
+    [Theory]
+    [InlineData("/baselines/sender")]
+    [InlineData("/senders")]
+    [InlineData("/")]
+    public void LegacyRedirectTargets_GivesNullForAnAddressThatIsNotAnOldOne(string path) =>
+        Assert.Null(LegacyRedirectTargets.DestinationFor(new Uri("https://dotmarc.example" + path)));
+
+    private static readonly IReadOnlyList<TabbedPageTab> SenderAndDomainTabs =
+    [
+        new TabbedPageTab("Sender", "/baselines/sender", true),
+        new TabbedPageTab("Domain", "/baselines/domain", true),
+    ];
+
+    [Theory]
+    [InlineData("baselines/sender", 0)]
+    [InlineData("baselines/domain", 1)]
+    [InlineData("baselines/domain/", 1)]
+    [InlineData("Baselines/Domain", 1)]
+    [InlineData("baselines/domain?target=below", 1)]
+    [InlineData("baselines/domain#top", 1)]
+    [InlineData("baselines/other", 0)]
+    [InlineData("", 0)]
+    public void TabbedPageNavigation_PicksTheTabForThePath_AndFallsBackToTheFirst(string baseRelativePath, int expectedIndex) =>
+        Assert.Equal(expectedIndex, TabbedPageNavigation.ActiveIndex(baseRelativePath, SenderAndDomainTabs));
+
+    [Fact]
+    public void TabbedPageNavigation_CountsOnlyTheTabsItIsGiven()
+    {
+        IReadOnlyList<TabbedPageTab> onlyDomain = [new TabbedPageTab("Domain", "/baselines/domain", true)];
+
+        Assert.Equal(0, TabbedPageNavigation.ActiveIndex("baselines/domain", onlyDomain));
     }
 }

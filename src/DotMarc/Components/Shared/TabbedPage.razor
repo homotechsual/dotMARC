@@ -20,15 +20,7 @@
 
     private IReadOnlyList<TabbedPageTab> VisibleTabs => Tabs.Where(tab => tab.Visible).ToList();
 
-    private int ActiveIndex
-    {
-        get
-        {
-            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/');
-            var index = VisibleTabs.ToList().FindIndex(tab => string.Equals(tab.Href, path, StringComparison.OrdinalIgnoreCase));
-            return Math.Max(index, 0);
-        }
-    }
+    private int ActiveIndex => TabbedPageNavigation.ActiveIndex(Navigation.ToBaseRelativePath(Navigation.Uri), VisibleTabs);
 
     protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
 

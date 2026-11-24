@@ -19,6 +19,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuditRecorder AuditRecorder
 @inject IAuthorizationService AuthorizationService
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -177,9 +178,10 @@
                 StateHasChanged();
             });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Nothing to do: a stale menu entry must not end the circuit.
+            // A stale menu entry must not end the circuit, so log it and carry on.
+            Logger.LogWarning(ex, "Refreshing the Baselines menu entry after a sign-in change failed.");
         }
     }
 
