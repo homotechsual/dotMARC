@@ -76,7 +76,8 @@
 .main .primaryAction { padding: 12px 20px; border-radius: 0.625rem; background: var(--cp-accent); color: var(--cp-accent-fg); font-weight: 600; }
 .updated { color: var(--cp-text-muted); font-size: 0.875rem; }
 .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: center; margin: 24px 0; padding: 16px 0; border-top: 1px solid var(--cp-border); border-bottom: 1px solid var(--cp-border); }
-.viewSwitch { display: flex; gap: 8px; }
+.viewSwitch { display: flex; gap: 4px; background: var(--cp-surface-soft); padding: 4px; border: 1px solid var(--cp-border); border-radius: 0.625rem; }
+.main .viewSwitch button { border-color: var(--cp-surface-soft); font-size: 0.875rem; font-weight: 600; }
 .featureSearch { display: flex; gap: 12px; align-items: center; }
 .featureSearch label { font-size: 0.875rem; color: var(--cp-text-muted); }
 .main button {
@@ -104,16 +105,41 @@
 .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin-top: 16px; }
 .column { background: var(--cp-surface-soft); padding: 12px; border-radius: 0.625rem; min-width: 0; }
 .column h2 { font-size: 1rem; }
-.issue { padding: 12px; margin: 12px 0; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); overflow-wrap: anywhere; }
-.issue a { font-weight: 600; }
-.issue small { display: block; margin-top: 8px; color: var(--cp-text-muted); }
-.releases { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.issue { padding: 16px; margin: 12px 0; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); overflow-wrap: anywhere; }
+.issue:hover { border-color: var(--cp-border-strong); }
+.main .issueTitle { display: block; color: var(--cp-text); font-size: 1rem; line-height: 1.5; font-weight: 600; text-decoration: none; }
+.main .issueTitle:hover { color: var(--cp-accent); text-decoration: underline; text-underline-offset: 3px; }
+.issue small { display: block; margin-top: 8px; color: var(--cp-text-muted); font-size: 0.75rem; }
+.issueMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; font-size: 0.75rem; line-height: 1.5; }
+.issueNumber { color: var(--cp-text-muted); font-family: Consolas, "Courier New", Courier, monospace; }
+.changeType { color: var(--cp-accent); font-weight: 600; }
+.issueStatus { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--cp-text-muted); white-space: nowrap; }
+.issueStatus::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--cp-border-strong); }
+.issueStatus[data-status="in-progress"]::before { background: var(--cp-accent); }
+.issueStatus[data-status="shipped"]::before { background: var(--cp-success); }
+.areas { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0; margin: 8px 0 0; list-style: none; }
+.areas li { font-size: 0.75rem; line-height: 1.5; color: var(--cp-text-muted); margin: 0; }
+.releases { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 24px; align-items: start; }
 .release, .request { border: 1px solid var(--cp-border); border-radius: 16px; padding: 20px; background: var(--cp-surface); min-width: 0; }
-.release h2 { font-size: 1.25rem; overflow-wrap: anywhere; }
-.releaseHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.release progress { width: 100%; accent-color: var(--cp-accent); }
-.description { white-space: pre-wrap; overflow-wrap: anywhere; }
-.badge { padding: 4px 8px; border-radius: 0.625rem; background: var(--cp-accent-soft); color: var(--cp-accent); font-size: 0.875rem; }
+.release h2 { font-size: 1.5rem; overflow-wrap: anywhere; margin-bottom: 0; }
+.releaseHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.releaseHeading .eyebrow { margin-bottom: 4px; font-size: 0.625rem; }
+.release progress { display: block; width: 100%; height: 6px; border: 0; border-radius: 0.625rem; overflow: hidden; background: var(--cp-border); accent-color: var(--cp-accent); appearance: none; }
+.release progress::-webkit-progress-bar { background: var(--cp-border); border-radius: 0.625rem; }
+.release progress::-webkit-progress-value { background: var(--cp-accent); border-radius: 0.625rem; }
+.release progress::-moz-progress-bar { background: var(--cp-accent); border-radius: 0.625rem; }
+.releaseProgress { margin: 20px 0; }
+.releaseProgress > div { display: flex; justify-content: space-between; gap: 12px; font-size: 0.8125rem; margin-bottom: 8px; }
+.releaseProgress p { margin: 0; color: var(--cp-text-muted); }
+.releaseProgress span { font-weight: 600; color: var(--cp-text); white-space: nowrap; }
+.releaseProgress small { display: block; margin-top: 8px; color: var(--cp-text-muted); font-size: 0.75rem; }
+.description { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9375rem; line-height: 1.65; }
+.badge { display: inline-flex; padding: 4px 10px; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface-soft); color: var(--cp-text-muted); font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.issueList { border-top: 1px solid var(--cp-border); padding-top: 4px; }
+.unscheduled { margin-top: 32px; }
+.unscheduled h2 { font-size: 1.25rem; margin: 0; }
+.ideaGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.ideaGrid .issue { margin: 0; }
 .request { margin-top: 32px; }
 .history { margin-top: 24px; }
 .main summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
@@ -123,10 +149,10 @@
 .form fieldset { border: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
 .form label { font-weight: 600; }
 .form textarea { resize: vertical; }
-.badges, .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.filters { gap: 12px; align-items: center; }
-.filters label { display: grid; gap: 4px; min-width: 0; }
-.filters select { max-width: 100%; min-width: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 16px; margin: 0 0 24px; background: var(--cp-surface-soft); border-radius: 0.625rem; }
+.filterField { flex: 1 1 200px; min-width: 0; display: grid; gap: 6px; }
+.filters label { font-size: 0.75rem; font-weight: 600; color: var(--cp-text-muted); }
+.filters select { width: 100%; min-width: 0; font-size: 0.875rem; }
 .form .areaChoices { border: 1px solid var(--cp-border); padding: 12px; border-radius: 0.625rem; }
 .areaChoices legend { font-size: 1rem; font-weight: 600; width: auto; }
 .areaChoices label { font-weight: 400; }
