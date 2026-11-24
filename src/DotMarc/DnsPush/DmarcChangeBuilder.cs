@@ -58,7 +58,7 @@ public sealed class DmarcChangeBuilder(IDmarcTxtLookup dmarcTxtLookup, IOptions<
         notes.AddRange(analysis.IgnoredCandidates.Select(value => $"Removes a value that looked like a DMARC record but was malformed: {value}"));
 
         var repaired = repair?.Record ?? analysis.Records[0];
-        if (dmarcValues.Count == 1)
+        if (txtValues.Count == 1 && dmarcValues.Count == 1)
         {
             return MergePlan(request, repaired, dmarcValues[0], settings, notes);
         }

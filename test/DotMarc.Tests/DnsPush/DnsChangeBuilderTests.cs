@@ -209,6 +209,37 @@ public sealed class DnsChangeBuilderTests
     }
 
     [Fact]
+    public async Task Dmarc_OneRecordBesideAVerificationToken_IsReplacedWithoutTouchingTheToken()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none", "google-site-verification=abc"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(["v=DMARC1; p=none"], change.ValuesToRemove);
+        Assert.Equal("v=DMARC1; p=none", change.ExistingValue);
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example", change.DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_ATargetRaiseBesideAVerificationToken_KeepsTheToken()
+    {
+        var plan = await DmarcPlan(["google-site-verification=abc", "v=DMARC1; p=none; rua=mailto:old@example.com"], Effective(DmarcPolicyLevel.Reject));
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(["v=DMARC1; p=none; rua=mailto:old@example.com"], change.ValuesToRemove);
+        Assert.Contains("p=reject", change.DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_AnUpToDateRecordBesideAVerificationToken_HasNothingToChange()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example", "google-site-verification=abc"]);
+
+        Assert.True(DnsPushReview.From(plan).NothingToChange);
+    }
+
+    [Fact]
     public async Task Tlsrpt_RefusesWithoutATlsrptMailbox()
     {
         Assert.Equal("error", (await new TlsrptChangeBuilder(new FakeTlsrptTxtLookup(), Graph(tlsrptMailbox: null)).BuildAsync(Request(), CancellationToken.None)).Refusal);
