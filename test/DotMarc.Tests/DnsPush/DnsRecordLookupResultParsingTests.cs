@@ -49,4 +49,15 @@ public sealed class DnsRecordLookupResultParsingTests
 
         Assert.Equal("v=DMARC1; p=reject;", result.DirectValue);
     }
+
+    [Fact]
+    public void ParseTxtWithCnameDetection_ListsEveryTxtValue_EachJoinedFromItsSegments()
+    {
+        var answers = new[] { (Type: 16, Data: "\"v=DMARC1; \" \"p=none;\""), (Type: 16, Data: "\"google-site-verification=abc\"") };
+
+        var result = DnsRecordLookupParsing.ParseTxtWithCnameDetection(answers);
+
+        Assert.Equal(["v=DMARC1; p=none;", "google-site-verification=abc"], result.TxtValues);
+        Assert.Equal("v=DMARC1; p=none;", result.DirectValue);
+    }
 }

@@ -125,6 +125,81 @@ public sealed class DnsChangeBuilderTests
         Assert.Equal("unmergeable", (await builder.BuildAsync(Request(), CancellationToken.None)).Refusal);
     }
 
+    private static async Task<DnsChangePlan> DmarcPlan(string[] txtValues, EffectiveDmarcTarget? target = null)
+    {
+        var lookup = new FakeDmarcTxtLookup { Result = new(txtValues[0], null) { TxtValues = txtValues } };
+        var builder = new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader { Target = target });
+        return await builder.BuildAsync(Request(), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Dmarc_ACleanRecordAndNoTarget_HasNoNotes()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=reject; rua=mailto:old@example.com"]);
+
+        Assert.Empty(plan.Notes);
+        Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com", Assert.Single(plan.Changes).DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_ARepeatedPolicyTag_BecomesOneMergeWithTheRepairedValueAndNotes()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none; p=reject; rua=mailto:old@example.com"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal((DnsRecordChangeKind.Merge, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com", "v=DMARC1; p=none; p=reject; rua=mailto:old@example.com"),
+            (change.Kind, change.DesiredValue, change.ExistingValue));
+        Assert.Equal("Repairs a malformed DMARC record", plan.Notes[0]);
+        Assert.Contains(plan.Notes, note => note.Contains("repeated", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Dmarc_SeveralRecords_AreReplacedByOneAndNonDmarcValuesAreLeftAlone()
+    {
+        string[] values = ["v=DMARC1; p=none; rua=mailto:a@example.com", "google-site-verification=abc", "v=DMARC1; p=reject"];
+
+        var plan = await DmarcPlan(values);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(["v=DMARC1; p=none; rua=mailto:a@example.com", "v=DMARC1; p=reject"], change.ValuesToRemove);
+        Assert.Contains("p=reject", change.DesiredValue);
+        Assert.DoesNotContain("p=none", change.DesiredValue);
+        Assert.Equal("Repairs a malformed DMARC record", plan.Notes[0]);
+    }
+
+    [Fact]
+    public async Task Dmarc_ATargetRaiseOnACleanRecord_ListsItsChangesButNotTheRepairsNote()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none; rua=mailto:old@example.com"], Effective(DmarcPolicyLevel.Reject));
+
+        Assert.NotEmpty(plan.Notes);
+        Assert.DoesNotContain("Repairs a malformed DMARC record", plan.Notes);
+        Assert.Contains("p=reject", Assert.Single(plan.Changes).DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_ALookAlikeValueBesideAProperRecord_IsRemovedAndNamedInTheNotes()
+    {
+        string[] values = ["v=DMARC1; p=reject", "v=DMARC1 p=none"];
+
+        var plan = await DmarcPlan(values);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(values, change.ValuesToRemove);
+        Assert.Contains("Removes a value that looked like a DMARC record but was malformed: v=DMARC1 p=none", plan.Notes);
+    }
+
+    [Fact]
+    public async Task Dmarc_NeverLowersEnforcement_WhenTheTargetIsWeaker()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=reject; p=none"], Effective(DmarcPolicyLevel.Quarantine));
+
+        Assert.Contains("p=reject", Assert.Single(plan.Changes).DesiredValue);
+        Assert.DoesNotContain("p=none", Assert.Single(plan.Changes).DesiredValue);
+    }
+
     [Fact]
     public async Task Tlsrpt_RefusesWithoutATlsrptMailbox()
     {

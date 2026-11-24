@@ -10,6 +10,17 @@
         }
         else
         {
+            @if (Review.Notes.Count > 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3">
+                    <ul class="my-0">
+                        @foreach (var note in Review.Notes)
+                        {
+                            <li>@note</li>
+                        }
+                    </ul>
+                </MudAlert>
+            }
             <MudText Typo="Typo.body1" Class="mb-2">
                 dotMARC will add the following DNS records@(Review.ZoneName is null ? "" : " to ")@if (Review.ZoneName is not null){<b>@Review.ZoneName</b>}:
             </MudText>

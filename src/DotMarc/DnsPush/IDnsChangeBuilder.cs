@@ -5,6 +5,9 @@ namespace DotMarc.DnsPush;
 /// <summary>The changes to push for one target, or the popup flag explaining why there's nothing to push.</summary>
 public sealed record DnsChangePlan(IReadOnlyList<DnsRecordChange> Changes, string? Refusal)
 {
+    /// <summary>Plain-words lines the review shows above the records, saying what the push repairs. Not part of the plan's fingerprint.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
     public static DnsChangePlan Of(params DnsRecordChange[] changes) => new(changes, null);
 
     public static DnsChangePlan Refuse(string flag) => new([], flag);

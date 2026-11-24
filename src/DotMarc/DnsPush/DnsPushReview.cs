@@ -12,6 +12,9 @@ public sealed record DnsPushReview(
     IReadOnlyList<DnsReviewRecord> Removals,
     IReadOnlyList<DnsReviewRecord> LostDelegations)
 {
+    /// <summary>What the push repairs, in plain words; empty when it only adds or updates records.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
     /// <summary>True when DNS already holds everything the plan would write, so there is nothing to push.</summary>
     public bool NothingToChange => Additions.Count == 0;
 
@@ -71,7 +74,7 @@ public sealed record DnsPushReview(
             }
         }
 
-        return new DnsPushReview(plan.Changes.Select(change => change.ZoneName).FirstOrDefault(), additions, removals, lostDelegations);
+        return new DnsPushReview(plan.Changes.Select(change => change.ZoneName).FirstOrDefault(), additions, removals, lostDelegations) { Notes = plan.Notes };
     }
 
     /// <summary>The record name as most DNS providers' "Host" or "Name" box wants it: relative to the zone, with "@" for the
