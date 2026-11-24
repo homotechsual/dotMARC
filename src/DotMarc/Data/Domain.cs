@@ -20,6 +20,16 @@ public sealed class Domain
     public DmarcPolicyLevel? DmarcPolicy { get; set; }
     public DmarcPolicyLevel? DmarcSubdomainPolicy { get; set; }
     public int? DmarcPercent { get; set; }
+
+    /// <summary>The DMARC policy this domain should reach. Null when none is set.</summary>
+    public DmarcPolicyLevel? TargetDmarcPolicy { get; set; }
+
+    /// <summary>The target subdomain policy. Null follows <see cref="TargetDmarcPolicy"/>.</summary>
+    public DmarcPolicyLevel? TargetDmarcSubdomainPolicy { get; set; }
+
+    /// <summary>The target this row holds, or null when none is set. An unset subdomain policy follows the policy.</summary>
+    public DotMarc.Baselines.DmarcTarget? DmarcTarget =>
+        TargetDmarcPolicy is { } policy ? new(policy, TargetDmarcSubdomainPolicy) : null;
     public TlsrptCheckStatus TlsrptCheckStatus { get; set; }
     public DateTimeOffset? TlsrptCheckedUtc { get; set; }
     public string? TlsrptCheckDetail { get; set; }

@@ -118,4 +118,16 @@ public sealed class DmarcTargetResolverTests
         Assert.NotNull(effective);
         Assert.Equal(DmarcPolicyLevel.Quarantine, effective.SubdomainPolicy);
     }
+
+    [Fact]
+    public void GroupsWithEqualPolicy_NameTheFirstByNameIgnoringCase()
+    {
+        var effective = DmarcTargetResolver.Resolve(
+            null,
+            [Group("Beta", Target(DmarcPolicyLevel.Reject)), Group("alpha", Target(DmarcPolicyLevel.Reject))],
+            null);
+
+        Assert.NotNull(effective);
+        Assert.Equal("alpha", effective.PolicyGroup);
+    }
 }

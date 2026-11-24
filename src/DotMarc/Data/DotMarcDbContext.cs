@@ -85,6 +85,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.DnsProvider).HasConversion<string>();
             entity.Property(d => d.DmarcPolicy).HasConversion<string>();
             entity.Property(d => d.DmarcSubdomainPolicy).HasConversion<string>();
+            entity.Property(d => d.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(d => d.TargetDmarcSubdomainPolicy).HasConversion<string>();
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<string> behind a value converter throws at runtime ("cannot be used as a
@@ -229,6 +231,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<Group>(entity =>
         {
             entity.HasIndex(g => g.Name).IsUnique();
+            entity.Property(g => g.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(g => g.TargetDmarcSubdomainPolicy).HasConversion<string>();
         });
 
         modelBuilder.Entity<Tag>(entity =>
@@ -475,6 +479,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<DnsRecordSettings>(entity =>
         {
             entity.Property(settings => settings.SpfAllQualifier).HasConversion<string>().HasMaxLength(10);
+            entity.Property(settings => settings.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(settings => settings.TargetDmarcSubdomainPolicy).HasConversion<string>();
             entity.Property(settings => settings.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
         });
 

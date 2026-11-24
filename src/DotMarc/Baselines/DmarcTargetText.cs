@@ -18,6 +18,13 @@ public static class DmarcTargetText
             ? $"p={Name(target.Policy)}"
             : $"p={Name(target.Policy)}; sp={Name(target.SubdomainPolicy)}";
 
+    /// <summary>A stored target as an audit field value: p=reject, p=reject; sp=quarantine, or "not set".</summary>
+    public static string Stored(DmarcTarget? target) => target is null
+        ? "not set"
+        : target.SubdomainPolicy is { } subdomainPolicy
+            ? $"p={Name(target.Policy)}; sp={Name(subdomainPolicy)}"
+            : $"p={Name(target.Policy)}";
+
     private static string Name(DmarcPolicyLevel level) => level.ToString().ToLowerInvariant();
 
     private static string JoinNames(IReadOnlyList<string> names) =>

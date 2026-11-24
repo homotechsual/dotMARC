@@ -352,6 +352,12 @@ namespace DotMarc.Migrations
                     b.Property<string>("SpfRangesJson")
                         .HasColumnType("text");
 
+                    b.Property<string>("TargetDmarcPolicy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcSubdomainPolicy")
+                        .HasColumnType("text");
+
                     b.Property<string>("TlsrptCheckDetail")
                         .HasColumnType("text");
 
@@ -451,6 +457,12 @@ namespace DotMarc.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcPolicy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcSubdomainPolicy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -1580,6 +1592,12 @@ namespace DotMarc.Migrations
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<string>("TargetDmarcPolicy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcSubdomainPolicy")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

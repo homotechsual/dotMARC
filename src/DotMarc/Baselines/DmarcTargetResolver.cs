@@ -1,3 +1,6 @@
+using DotMarc.Data;
+using DotMarc.Notifications;
+
 namespace DotMarc.Baselines;
 
 /// <summary>Works out which DMARC target applies to a domain: its own override, else the strictest of its groups' targets
@@ -32,6 +35,13 @@ public static class DmarcTargetResolver
 
         return systemTarget is null ? null : FromSingle(systemTarget, DmarcTargetSource.System);
     }
+
+    /// <summary>Resolves for a domain loaded with its <see cref="Domain.Groups"/>; <paramref name="settings"/> holds the system target.</summary>
+    public static EffectiveDmarcTarget? Resolve(Domain domain, DnsRecordSettings settings) =>
+        Resolve(
+            domain.DmarcTarget,
+            domain.Groups.Where(group => group.DmarcTarget is not null).Select(group => (group.Name, group.DmarcTarget!)),
+            settings.DmarcTarget);
 
     private static EffectiveDmarcTarget FromSingle(DmarcTarget target, DmarcTargetSource source) =>
         new(target.Policy, target.EffectiveSubdomainPolicy, source, [], null, null);

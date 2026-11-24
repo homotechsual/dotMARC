@@ -29,5 +29,6 @@ public enum Permission
     AuditManage,
     ReportsManage,
     SenderReview,
-    AlertRulesManage
+    AlertRulesManage,
+    BaselinesManage
 }
