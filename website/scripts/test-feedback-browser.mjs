@@ -116,6 +116,16 @@ try {
   assert.equal(await page.getByRole('link', {name: 'Bulk DNS push', exact: true}).count(), 1);
   assert.equal(await page.getByRole('link', {name: 'An unscheduled idea', exact: true}).count(), 0);
   await page.getByRole('searchbox', {name: 'Find an item'}).fill('');
+  const issueLink = page.getByRole('link', {name: 'Bulk DNS push', exact: true});
+  await issueLink.focus();
+  assert.equal(await issueLink.evaluate(element => element === document.activeElement), true);
+  const linkBounds = await issueLink.boundingBox();
+  assert.ok(linkBounds);
+  await page.route(`${repository}/issues/1`, route => route.fulfill({contentType: 'text/html', body: '<h1>Issue opened</h1>'}));
+  await issueLink.click({position: {x: linkBounds.width - 8, y: linkBounds.height - 8}});
+  await page.waitForURL(`${repository}/issues/1`);
+  await page.goBack();
+  await page.getByRole('heading', {name: 'v0.14.0', exact: true}).waitFor();
   await page.getByRole('button', {name: 'Planned releases', exact: true}).click();
   await page.getByRole('searchbox', {name: 'Find an item'}).fill('Bulk DNS');
   assert.equal(await page.getByText('1 of 2 public items completed.', {exact: false}).count(), 1);

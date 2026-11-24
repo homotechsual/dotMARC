@@ -44,12 +44,13 @@ function loadTurnstile(): Promise<void> {
 
 function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): ReactNode {
   return <article className={styles.issue}>
+    <a className={styles.issueLink} href={issue.url} aria-label={issue.title}>
     <div className={styles.issueMeta}>
       <span className={styles.issueNumber}>#{issue.number}</span>
       <span className={styles.changeType}>{CHANGE_TYPES.find(type => type.id === issue.changeType)?.name ?? 'Type not classified'}</span>
       <span className={styles.issueStatus} data-status={issue.status}>{Object.entries(STATUS_LABELS).find(([status]) => status === issue.status)?.[1]}</span>
     </div>
-    <a className={styles.issueTitle} href={issue.url}>{issue.title}</a>
+    <span className={styles.issueTitle}>{issue.title}</span>
     {issue.areas.length > 0 && <ul className={styles.areas} aria-label="Product areas">
       {issue.areas.map(id => <li key={id}>{PRODUCT_AREAS.find(area => area.id === id)?.name}</li>)}
     </ul>}
@@ -57,6 +58,7 @@ function IssueCard({issue, release}: {issue: RoadmapIssue; release?: string}): R
     {issue.classificationWarning && <small className={styles.warning}>Classification needs maintainer review</small>}
     {release && <small>Target: {release}</small>}
     {issue.statusWarning && <small className={styles.warning}>Status needs maintainer review</small>}
+    </a>
   </article>;
 }
 
