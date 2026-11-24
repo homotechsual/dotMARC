@@ -71,7 +71,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: website-build
-          path: website/build
+          path: ${{ runner.temp }}/website-deploy/build
 
       - name: Publish to Cloudflare Pages
         id: cloudflare-pages-deploy
@@ -80,7 +80,8 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           wranglerVersion: 4.138.0
-          workingDirectory: website
+          packageManager: npm
+          workingDirectory: ${{ runner.temp }}/website-deploy
           command: pages deploy build --project-name=${{ env.CF_PAGES_PROJECT }} --branch=${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 

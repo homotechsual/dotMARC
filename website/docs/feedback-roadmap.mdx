@@ -19,6 +19,8 @@ Website Publish calls the reusable Website CI workflow first, for previews, prod
 
 Fork pull requests run the same validation with the Turnstile test key, but upload no publishable artifact and cannot deploy. Publication credentials are available only to the Deploy job. The orchestrating workflow owns path triggers and concurrency, so a website change no longer builds independently in both CI and Publish.
 
+Deployment downloads the artifact into an isolated runner temporary directory. Wrangler uses npm there to install only its pinned CLI, without reading the website's Yarn lockfile or installing website dependencies.
+
 ## GitHub setup
 
 Create a GitHub App installed **only** on `homotechsual/dotMARC`:
