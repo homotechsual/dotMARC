@@ -6,7 +6,7 @@ answer: |
 
   Quiet hours can also explain it. **Hold** sends on a later check after the window ends, only if
   the alert is still open. **Mute** never sends that original notification. The Alerts page shows
-  held or muted status. Windows use the time zone on Alert settings, and Critical alerts bypass
+  held or muted status. Windows use the time zone on the Settings tab of Alerts & PSA, and Critical alerts bypass
   them by default unless the rule says otherwise.
 
   Quiet hours don't prevent PSA tickets. Escalation is separate: an enabled escalation can notify

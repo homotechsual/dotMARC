@@ -1,6 +1,6 @@
 question: Can one client have different alert thresholds without changing everyone else?
 answer: |
-  Yes. Under **Manage > Alert rules**, add a rule for that alert kind and scope it to the client's
+  Yes. Under **Manage > Alerts & PSA > Rules**, add a rule for that alert kind and scope it to the client's
   groups, tags or domains. Put it above the default rule and leave **Stop processing more rules**
   on if it should replace the later rules for those domains. Other domains still use the default.
 

@@ -1,7 +1,7 @@
 question: Can dotMARC alert on a low DMARC pass rate or a sudden change in mail volume?
 answer: |
   Yes. **DMARC pass rate low**, **Message volume changed** and **Rejected or quarantined messages
-  high** each have a default rule under **Manage > Alert rules**, but all three ship switched off.
+  high** each have a default rule under **Manage > Alerts & PSA > Rules**, but all three ship switched off.
   Enable the ones you need and choose their thresholds, lookback windows and domain scope.
 
   The checks count messages, not report files. Pass-rate and volume rules have minimum-volume
