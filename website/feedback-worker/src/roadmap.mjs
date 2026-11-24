@@ -15,13 +15,15 @@ export function buildRoadmap(issues, milestones, releases, now = new Date().toIS
       const statuses = STATUSES.filter(status => labels.includes(`status:${status}`));
       const release = issue.milestone ? published.get(version(issue.milestone.title)) : null;
       const completed = issue.state === 'closed' && issue.state_reason === 'completed';
+      // Finished on develop but not yet released: the issue stays open until the release workflow closes it.
+      const ready = issue.state === 'open' && labels.includes('release:ready');
       let status = statuses.length === 1 ? statuses[0] : 'triage';
       if (completed) status = release ? 'shipped' : 'in-progress';
-      else if (status === 'shipped') status = 'in-progress';
+      else if (status === 'shipped' || ready) status = 'in-progress';
       return {
         number: issue.number, title: issue.title, url: issue.html_url,
         status, milestone: issue.milestone?.number ?? null,
-        completed, awaitingRelease: completed && !release,
+        completed: completed || ready, awaitingRelease: (completed && !release) || ready,
         statusWarning: !completed && statuses.length !== 1,
         ...readClassification(labels),
       };
