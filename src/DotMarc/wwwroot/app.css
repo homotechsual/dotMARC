@@ -108,3 +108,22 @@ html:has(.dev-build-banner) .mud-main-content {
         --dev-banner-height: 3.25rem;
     }
 }
+
+/* The tab bar on tabbed pages (TabbedPage): a divider under the whole row, a thick indicator under the active tab, and a bolder active label.
+   Scoped to .tabbed-page-tabs so the tabs inside a page, such as the PSA vendors, keep MudBlazor's own look. */
+.tabbed-page-tabs > .mud-tabs-tabbar {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.tabbed-page-tabs > .mud-tabs-tabbar .mud-tab-slider {
+    height: 3px;
+}
+
+.tabbed-page-tabs > .mud-tabs-tabbar .mud-tab {
+    color: var(--mud-palette-text-primary);
+}
+
+.tabbed-page-tabs > .mud-tabs-tabbar .mud-tab.mud-tab-active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+}

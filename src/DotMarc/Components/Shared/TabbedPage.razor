@@ -3,7 +3,7 @@
 @implements IDisposable
 
 <MudText Typo="Typo.h4" Class="mb-2">@Title</MudText>
-<MudTabs Elevation="0" Rounded="false" ActivePanelIndex="ActiveIndex" ActivePanelIndexChanged="OnTabChanged" Class="mb-4">
+<MudTabs Elevation="0" Rounded="false" SliderColor="Color.Primary" ActivePanelIndex="ActiveIndex" ActivePanelIndexChanged="OnTabChanged" Class="tabbed-page-tabs mb-4">
     @foreach (var tab in VisibleTabs)
     {
         <MudTabPanel Text="@tab.Title" />
