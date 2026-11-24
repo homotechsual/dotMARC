@@ -118,7 +118,7 @@ public sealed class DnsPushBatchRunner(
         {
             DnsPushOutcome.Pushed => DnsPushBatchDomainStatus.Pushed,
             DnsPushOutcome.ZoneNotFound => DnsPushBatchDomainStatus.ZoneNotFound,
-            DnsPushOutcome.ReplaceFailedAfterDelete or DnsPushOutcome.LeftDuplicateRecord => DnsPushBatchDomainStatus.FailedAfterChange,
+            DnsPushOutcome.ReplaceFailedAfterDelete or DnsPushOutcome.LeftDuplicateRecord or DnsPushOutcome.LeftDuplicateDmarcRecord => DnsPushBatchDomainStatus.FailedAfterChange,
             _ => DnsPushBatchDomainStatus.Failed,
         };
 

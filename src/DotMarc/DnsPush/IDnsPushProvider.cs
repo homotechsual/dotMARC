@@ -8,7 +8,8 @@ namespace DotMarc.DnsPush;
 /// every other failure gets.</summary>
 /// LeftDuplicateRecord means an SPF push added the new record but couldn't remove the old one, so the name now has
 /// more than one SPF record (which receivers treat as none) until someone removes the old one by hand.
-public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError, ReplaceFailedAfterDelete, LeftDuplicateRecord }
+/// LeftDuplicateDmarcRecord is the same for a DMARC push: the name now has two DMARC records, which receivers ignore.
+public enum DnsPushOutcome { Pushed, ZoneNotFound, ProviderError, ReplaceFailedAfterDelete, LeftDuplicateRecord, LeftDuplicateDmarcRecord }
 
 public sealed record DnsPushResult(DnsPushOutcome Outcome, string? DetailMessage);
 

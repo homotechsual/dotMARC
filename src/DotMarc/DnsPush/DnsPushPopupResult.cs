@@ -13,6 +13,17 @@ public static class DnsPushPopupResult
 {
     public static IResult Close(string outcome, AppTitle title, string? pushId = null) => Results.Content(Html(outcome, pushId, title), "text/html");
 
+    /// <summary>The coarse flag the popup and the opening page get for a provider outcome.</summary>
+    public static string FlagFor(DnsPushOutcome outcome) => outcome switch
+    {
+        DnsPushOutcome.Pushed => "pushed",
+        DnsPushOutcome.ZoneNotFound => "zone-not-found",
+        DnsPushOutcome.ReplaceFailedAfterDelete => "replace-failed",
+        DnsPushOutcome.LeftDuplicateRecord => "spf-duplicate",
+        DnsPushOutcome.LeftDuplicateDmarcRecord => "dmarc-duplicate",
+        _ => "error"
+    };
+
     public static string Html(string outcome, string? pushId, AppTitle title)
     {
         // The serializer's default encoder escapes <, >, & and quotes, so nothing in the values can end the script.
@@ -62,6 +73,7 @@ public static class DnsPushPopupResult
         "spf-changed" => ("SPF changed", "The SPF record changed since you opened the editor, so nothing was pushed. Reopen the editor to start from the current record."),
         "spf-too-many-lookups" => ("Nothing pushed", "That SPF record would need more than 10 DNS lookups, so it wasn't pushed."),
         "spf-duplicate" => ("Push failed partway", "The new SPF record was added, but the old one couldn't be removed, so the domain has two SPF records. Remove the old one in your DNS provider."),
+        "dmarc-duplicate" => ("Push failed partway", "The new DMARC record was added, but the old one could not be removed, so the name now has two DMARC records. Receivers ignore DMARC when there are two. Delete the old record at your DNS provider."),
         "error" => ("DNS push failed", "The DNS push failed. Try again, or add the record by hand."),
         _ => ("The DNS push finished", "Go back to dotMARC to see the result."),
     };

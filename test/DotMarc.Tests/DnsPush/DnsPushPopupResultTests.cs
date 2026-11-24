@@ -21,6 +21,7 @@ public sealed class DnsPushPopupResultTests
     [InlineData("zone-not-found", "Couldn't find the domain")]
     [InlineData("replace-failed", "no record at that name")]
     [InlineData("spf-duplicate", "two SPF records")]
+    [InlineData("dmarc-duplicate", "two DMARC records")]
     [InlineData("error", "push failed")]
     [InlineData("nothing-to-push", "already matches")]
     [InlineData("batch-started", "Batch started")]
@@ -30,6 +31,26 @@ public sealed class DnsPushPopupResultTests
 
         Assert.Contains(words, html);
         Assert.Contains("You can close this window", html);
+    }
+
+    [Theory]
+    [InlineData(DnsPushOutcome.LeftDuplicateRecord, "spf-duplicate")]
+    [InlineData(DnsPushOutcome.LeftDuplicateDmarcRecord, "dmarc-duplicate")]
+    [InlineData(DnsPushOutcome.Pushed, "pushed")]
+    [InlineData(DnsPushOutcome.ReplaceFailedAfterDelete, "replace-failed")]
+    [InlineData(DnsPushOutcome.ProviderError, "error")]
+    public void EachProviderOutcome_HasItsOwnFlag(DnsPushOutcome outcome, string flag)
+    {
+        Assert.Equal(flag, DnsPushPopupResult.FlagFor(outcome));
+    }
+
+    [Fact]
+    public void ADmarcDuplicate_SaysDmarc_AndNotSpf()
+    {
+        var html = System.Net.WebUtility.HtmlDecode(DnsPushPopupResult.Html("dmarc-duplicate", PushId, Title));
+
+        Assert.Contains("Receivers ignore DMARC when there are two", html);
+        Assert.DoesNotContain("SPF", html);
     }
 
     [Fact]

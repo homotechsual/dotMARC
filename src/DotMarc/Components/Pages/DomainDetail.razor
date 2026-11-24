@@ -1687,6 +1687,11 @@ else
                     "The new SPF record was added, but the old one couldn't be removed, so the domain now has two SPF records and receivers will treat it as having none. Remove the old one in your DNS provider.",
                     Severity.Error, config => config.RequireInteraction = true);
                 break;
+            case "dmarc-duplicate":
+                Snackbar.Add(
+                    "The new DMARC record was added, but the old one could not be removed, so the name now has two DMARC records. Receivers ignore DMARC when there are two. Delete the old record at your DNS provider.",
+                    Severity.Error, config => config.RequireInteraction = true);
+                break;
             case "nothing-to-push":
                 Snackbar.Add("DNS already matches, so there was nothing to push.", Severity.Info);
                 break;

@@ -829,14 +829,7 @@ app.MapGet("/dns-push/{provider}/callback", async (
         await auditRecorder.RecordAsync(pushEntry);
     }
 
-    var resultFlag = result.Outcome switch
-    {
-        DnsPushOutcome.Pushed => "pushed",
-        DnsPushOutcome.ZoneNotFound => "zone-not-found",
-        DnsPushOutcome.ReplaceFailedAfterDelete => "replace-failed",
-        DnsPushOutcome.LeftDuplicateRecord => "spf-duplicate",
-        _ => "error"
-    };
+    var resultFlag = DnsPushPopupResult.FlagFor(result.Outcome);
 
     // The popup's postMessage carries only this coarse flag - DetailMessage never reaches the
     // browser - so this is the only place the specific reason (status codes, provider error text)

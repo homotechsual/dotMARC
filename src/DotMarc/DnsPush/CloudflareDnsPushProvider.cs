@@ -283,8 +283,9 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>Replaces only the given values among the TXT records at change.Name. The new record is created before
-    /// the old ones are deleted, so the name is never left without SPF; if a delete then fails, the name has two SPF
-    /// records, reported as LeftDuplicateRecord so the person is told to remove the old one.</summary>
+    /// the old ones are deleted, so the name is never left without its record; if a delete then fails, the name has two
+    /// records, reported as LeftDuplicateRecord (SPF) or LeftDuplicateDmarcRecord (a _dmarc. name) so the person is told
+    /// to remove the old one.</summary>
     private async Task<DnsPushResult> ReplaceTxtValuesAsync(string zoneId, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
     {
         List<RecordWithContent> existing;
@@ -337,19 +338,29 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
                 var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
                 if (!deleteResponse.IsSuccessStatusCode)
                 {
-                    return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
+                    return new DnsPushResult(DuplicateRecordOutcome(change.Name),
                         $"The new record was added at {change.Name}, but removing the old \"{oldValue}\" failed ({(int)deleteResponse.StatusCode}), so {DuplicateRecordEffect(change.Name)}");
                 }
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
-                return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
+                return new DnsPushResult(DuplicateRecordOutcome(change.Name),
                     $"The new record was added at {change.Name}, but Cloudflare couldn't be reached to remove the old \"{oldValue}\" ({exception.Message}), so {DuplicateRecordEffect(change.Name)}");
             }
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
     }
+
+    /// <summary>The outcome for a leftover old value: DMARC names start with _dmarc., everything else is SPF.</summary>
+    private static DnsPushOutcome DuplicateRecordOutcome(string name) => name.StartsWith("_dmarc.", StringComparison.OrdinalIgnoreCase)
+        ? DnsPushOutcome.LeftDuplicateDmarcRecord
+        : DnsPushOutcome.LeftDuplicateRecord;
+
+    /// <summary>What a leftover old value means at this name, in the words for its record type (DMARC names start with _dmarc.).</summary>
+    private static string DuplicateRecordEffect(string name) => name.StartsWith("_dmarc.", StringComparison.OrdinalIgnoreCase)
+        ? "the name now has more than one DMARC record, which receivers treat as none; delete the old one by hand."
+        : "the name now has more than one SPF record. Remove the old one by hand.";
 
     /// <summary>Cloudflare's own API treats an unquoted TXT content value as non-conformant - it
     /// accepts it and normalizes on their side (functionally identical either way), but flags the
@@ -358,11 +369,6 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     /// text, the MTA-STS asuid verification token) is plain text with no embedded quotes, so the
     /// escape only guards against a value that happens to contain one. CNAME (and any other
     /// non-TXT type) content is never zone-file text and must NOT be quoted.</summary>
-    /// <summary>What a leftover old value means at this name, in the words for its record type (DMARC names start with _dmarc.).</summary>
-    private static string DuplicateRecordEffect(string name) => name.StartsWith("_dmarc.", StringComparison.OrdinalIgnoreCase)
-        ? "the name now has more than one DMARC record, which receivers treat as none; delete the old one by hand."
-        : "the name now has more than one SPF record. Remove the old one by hand.";
-
     private static string BuildContent(DnsRecordChange change) =>
         string.Equals(change.RecordType, "TXT", StringComparison.OrdinalIgnoreCase)
             ? TxtValues.ToQuotedText(change.DesiredValue)

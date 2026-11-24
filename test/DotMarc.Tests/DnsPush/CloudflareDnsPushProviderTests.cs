@@ -248,7 +248,7 @@ public sealed class CloudflareDnsPushProviderTests : IAsyncLifetime
 
         var result = await provider.ExchangeAndPushAsync("code", "verifier", "https://dotmarc.example/callback", [change], CancellationToken.None);
 
-        Assert.Equal(DnsPushOutcome.LeftDuplicateRecord, result.Outcome);
+        Assert.Equal(DnsPushOutcome.LeftDuplicateDmarcRecord, result.Outcome);
         Assert.Contains("more than one DMARC record, which receivers treat as none; delete the old one by hand", result.DetailMessage);
         Assert.DoesNotContain("SPF", result.DetailMessage);
     }
