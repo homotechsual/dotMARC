@@ -12,14 +12,12 @@
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject NavigationManager Navigation
 
-<AppPageTitle>dotMARC - Audit log</AppPageTitle>
+<AppPageTitle>dotMARC - Logs - Audit</AppPageTitle>
 <TabbedPage Title="Logs" Tabs="_tabs">
-    <div class="d-flex align-center mb-1">
-        <DocsLink Href="https://dotmarc.app/docs/audit-log" Text="What the audit log records" />
-    </div>
     <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
         Who changed what, who signed in, and which pages they opened. Entries can't be edited or deleted. They leave
         only once they pass the retention period.
+        <DocsLink Href="https://dotmarc.app/docs/audit-log" Text="What the audit log records" Class="ml-2" />
     </MudText>
 
     <AuthorizeView Policy="AuditManage">
@@ -148,7 +146,8 @@
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
         if (query.Count > 0)
         {
-            _filter = AuditFilter.FromQuery(new Microsoft.AspNetCore.Http.QueryCollection(query));
+            _filter = AuditFilter.FromAddress(new Microsoft.AspNetCore.Http.QueryCollection(query), _filter.From!.Value);
+            _showFilters = _filter.HasColumnFilters;
         }
     }
 
