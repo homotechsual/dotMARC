@@ -26,7 +26,45 @@ public static class DmarcRecordProblemKindExtensions
 
 /// <summary>One problem found in a DMARC record. <paramref name="Tag"/> is set for <see cref="DmarcRecordProblemKind.RepeatedTag"/>
 /// and <see cref="DmarcRecordProblemKind.ObsoleteTag"/>.</summary>
-public sealed record DmarcRecordProblem(DmarcRecordProblemKind Kind, string? Tag, string Description);
+public sealed record DmarcRecordProblem(DmarcRecordProblemKind Kind, string? Tag, string Description)
+{
+    private const string InvalidValueEffect = "Receivers read the record as p=none, or apply no DMARC processing without a valid rua.";
+
+    /// <summary>A problem of this kind, with its plain-words description.</summary>
+    public static DmarcRecordProblem Of(DmarcRecordProblemKind kind, string? tag = null) => new(kind, tag, Describe(kind, tag));
+
+    /// <summary>The plain-words description of a problem, shared by the analyser and by anything that reads a stored problem.</summary>
+    public static string Describe(DmarcRecordProblemKind kind, string? tag) => kind switch
+    {
+        DmarcRecordProblemKind.VersionMissingOrNotFirst => "The record does not start with v=DMARC1. Receivers ignore it.",
+        DmarcRecordProblemKind.MultipleRecords => "There is more than one DMARC record. Receivers discard all of them.",
+        DmarcRecordProblemKind.RepeatedTag => $"The {tag} tag appears more than once. Receivers may ignore the whole record.",
+        DmarcRecordProblemKind.MissingPolicy => "The record has no p tag. Receivers read it as p=none, or apply no DMARC processing without a valid rua.",
+        DmarcRecordProblemKind.InvalidPolicy => $"The p tag has a value that is not none, quarantine or reject. {InvalidValueEffect}",
+        DmarcRecordProblemKind.InvalidSubdomainPolicy => $"The sp tag has a value that is not none, quarantine or reject. {InvalidValueEffect}",
+        DmarcRecordProblemKind.InvalidNonExistentPolicy => $"The np tag has a value that is not none, quarantine or reject. {InvalidValueEffect}",
+        DmarcRecordProblemKind.ObsoleteTag => $"{tag} is obsolete in RFC 9989 and newer receivers ignore it.",
+        _ => "t=y asks receivers not to apply the policy (testing mode)."
+    };
+
+    /// <summary>The text stored for a problem: its kind, then a colon and the tag when the kind names one.</summary>
+    public string Stored => Tag is null || Kind == DmarcRecordProblemKind.TestingMode ? Kind.ToString() : $"{Kind}:{Tag}";
+
+    /// <summary>Reads a stored problem back, or null for text this version does not know, so older rows never break a page.</summary>
+    public static DmarcRecordProblem? Parse(string stored)
+    {
+        var separator = stored.IndexOf(':');
+        var kindText = separator < 0 ? stored : stored[..separator];
+        var tag = separator < 0 ? null : stored[(separator + 1)..];
+        if (!Enum.TryParse<DmarcRecordProblemKind>(kindText, out var kind) || !Enum.IsDefined(kind))
+        {
+            return null;
+        }
+
+        var needsTag = kind is DmarcRecordProblemKind.RepeatedTag or DmarcRecordProblemKind.ObsoleteTag;
+        return needsTag && string.IsNullOrEmpty(tag) ? null : Of(kind, needsTag ? tag : null);
+    }
+}
 
 /// <summary>One tag of a DMARC record: its name and value as written (trimmed).</summary>
 internal sealed record DmarcTag(string Name, string Value)
@@ -138,14 +176,12 @@ public sealed record DmarcRecordAnalysis(
 
         if (proper.Count == 0)
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.VersionMissingOrNotFirst, null,
-                "The record does not start with v=DMARC1. Receivers ignore it."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.VersionMissingOrNotFirst));
         }
 
         if (proper.Count > 1)
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.MultipleRecords, null,
-                $"There are {proper.Count} DMARC records. Receivers discard all of them."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.MultipleRecords));
         }
 
         // Every tag but v, in record order; v is allowed once per record.
@@ -155,8 +191,7 @@ public sealed record DmarcRecordAnalysis(
         {
             if (tagsInOrder.Count(tag => tag.IsNamed(name)) > 1)
             {
-                problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.RepeatedTag, name,
-                    $"The {name} tag appears more than once. Receivers may ignore the whole record."));
+                problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.RepeatedTag, name));
             }
         }
 
@@ -166,31 +201,26 @@ public sealed record DmarcRecordAnalysis(
 
         if (!tagsInOrder.Any(tag => tag.IsNamed("p")))
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.MissingPolicy, null,
-                "The record has no p tag. Receivers read it as p=none, or apply no DMARC processing without a valid rua."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.MissingPolicy));
         }
         else if (tagsInOrder.Any(tag => tag.IsNamed("p") && DmarcTagList.ParseLevel(tag.Value) is null))
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.InvalidPolicy, null,
-                "The p tag has a value that is not none, quarantine or reject. Receivers read the record as p=none, or apply no DMARC processing without a valid rua."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.InvalidPolicy));
         }
 
         if (tagsInOrder.Any(tag => tag.IsNamed("sp") && DmarcTagList.ParseLevel(tag.Value) is null))
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.InvalidSubdomainPolicy, null,
-                "The sp tag has a value that is not none, quarantine or reject. Receivers read the record as p=none, or apply no DMARC processing without a valid rua."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.InvalidSubdomainPolicy));
         }
 
         if (tagsInOrder.Any(tag => tag.IsNamed("np") && DmarcTagList.ParseLevel(tag.Value) is null))
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.InvalidNonExistentPolicy, null,
-                "The np tag has a value that is not none, quarantine or reject. Receivers read the record as p=none, or apply no DMARC processing without a valid rua."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.InvalidNonExistentPolicy));
         }
 
         foreach (var name in ObsoleteTagNames.Where(name => tagsInOrder.Any(tag => tag.IsNamed(name))))
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.ObsoleteTag, name,
-                $"{name} is obsolete in RFC 9989 and newer receivers ignore it."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.ObsoleteTag, name));
         }
 
         // A repeated t keeps the value that enforces more, so t=n beats t=y.
@@ -198,8 +228,7 @@ public sealed record DmarcRecordAnalysis(
         var testing = testValues.Contains("y") && !testValues.Contains("n");
         if (testing)
         {
-            problems.Add(new DmarcRecordProblem(DmarcRecordProblemKind.TestingMode, "t",
-                "t=y asks receivers not to apply the policy (testing mode)."));
+            problems.Add(DmarcRecordProblem.Of(DmarcRecordProblemKind.TestingMode, "t"));
         }
 
         int? percent = tagsInOrder

@@ -83,6 +83,147 @@ public sealed class DmarcTargetCheckTests
             DmarcTargetOutcome.Below,
             DmarcTargetCheck.Outcome(Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.None, DmarcPolicyLevel.None, 100), Effective(DmarcPolicyLevel.Reject)));
 
+    private static Domain RejectingDomain() => Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Reject, DmarcPolicyLevel.Reject, 100);
+
+    [Fact]
+    public void ABreakingProblem_IsBelowEvenWhenPMeetsTheTarget_AndNamesTheProblem()
+    {
+        var domain = RejectingDomain();
+        domain.DmarcProblems = ["RepeatedTag:p"];
+
+        Assert.Equal(DmarcTargetOutcome.Below, DmarcTargetCheck.Outcome(domain, Effective(DmarcPolicyLevel.Reject)));
+        Assert.Equal(
+            ["The record is malformed: The p tag appears more than once. Receivers may ignore the whole record."],
+            DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Theory]
+    [InlineData("ObsoleteTag:pct")]
+    [InlineData("SomethingNew:x")]
+    [InlineData("RepeatedTag")]
+    public void AnInformationalOrUnknownStoredProblem_DoesNotCountAgainstTheTarget(string stored)
+    {
+        var domain = RejectingDomain();
+        domain.DmarcProblems = [stored];
+
+        Assert.Equal(DmarcTargetOutcome.Meets, DmarcTargetCheck.Outcome(domain, Effective(DmarcPolicyLevel.Reject)));
+        Assert.Empty(DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Theory]
+    [InlineData(DmarcPolicyLevel.Quarantine, DmarcTargetOutcome.Below)]
+    [InlineData(DmarcPolicyLevel.Reject, DmarcTargetOutcome.Below)]
+    [InlineData(DmarcPolicyLevel.None, DmarcTargetOutcome.Meets)]
+    public void TestingMode_IsBelowForAnEnforcingTarget_AndMeetsForANoneTarget(DmarcPolicyLevel targetPolicy, DmarcTargetOutcome expected)
+    {
+        var domain = RejectingDomain();
+        domain.DmarcTesting = true;
+
+        var target = Effective(targetPolicy);
+
+        Assert.Equal(expected, DmarcTargetCheck.Outcome(domain, target));
+        Assert.Equal(expected == DmarcTargetOutcome.Below ? ["Testing mode (t=y) is on"] : [], DmarcTargetCheck.Reasons(domain, target));
+    }
+
+    [Fact]
+    public void AWeakNonExistentSubdomainPolicy_IsBelow()
+    {
+        var domain = RejectingDomain();
+        domain.DmarcNonExistentSubdomainPolicy = DmarcPolicyLevel.None;
+
+        Assert.Equal(DmarcTargetOutcome.Below, DmarcTargetCheck.Outcome(domain, Effective(DmarcPolicyLevel.Reject)));
+        Assert.Equal(["np is none, target for subdomains is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void AnAbsentNonExistentSubdomainPolicy_InheritsTheSubdomainPolicy()
+    {
+        var domain = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine, 100);
+
+        Assert.Equal(["sp is quarantine, target is reject", "np is quarantine, target for subdomains is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+        Assert.Equal(DmarcTargetOutcome.Meets, DmarcTargetCheck.Outcome(domain, Effective(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine)));
+    }
+
+    [Fact]
+    public void AStrongNonExistentSubdomainPolicy_CannotMakeUpForAWeakSubdomainPolicy()
+    {
+        var domain = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Reject, DmarcPolicyLevel.None, 100);
+        domain.DmarcNonExistentSubdomainPolicy = DmarcPolicyLevel.Reject;
+
+        Assert.Equal(["sp is none, target is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void AFullPercentage_Meets_AndAnythingLessIsAReason()
+    {
+        Assert.Empty(DmarcTargetCheck.Reasons(RejectingDomain(), Effective(DmarcPolicyLevel.Reject)));
+
+        var partial = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Reject, DmarcPolicyLevel.Reject, 50);
+        Assert.Equal(["pct is 50"], DmarcTargetCheck.Reasons(partial, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void Reasons_AreOrderedProblemsThenPolicyThenTestingThenPercent()
+    {
+        var domain = Checked(DmarcCheckStatus.Misconfigured, DmarcPolicyLevel.None, DmarcPolicyLevel.Quarantine, 50);
+        domain.DmarcNonExistentSubdomainPolicy = DmarcPolicyLevel.None;
+        domain.DmarcTesting = true;
+        domain.DmarcProblems = ["TestingMode", "MissingPolicy"];
+
+        Assert.Equal(
+            [
+                "The record is malformed: The record has no p tag. Receivers read it as p=none, or apply no DMARC processing without a valid rua.",
+                "p is none, target is reject",
+                "sp is quarantine, target is reject",
+                "np is none, target for subdomains is reject",
+                "Testing mode (t=y) is on",
+                "pct is 50"
+            ],
+            DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void Reasons_AreEmptyWithoutATarget_OrWhenTheDomainNeedsChecking()
+    {
+        Assert.Empty(DmarcTargetCheck.Reasons(Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.None, DmarcPolicyLevel.None, 100), null));
+        Assert.Empty(DmarcTargetCheck.Reasons(new Domain { Name = "contoso.example", DmarcCheckStatus = DmarcCheckStatus.NotChecked }, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void AMissingRecord_IsBelowBecauseThereIsNoRecord() =>
+        Assert.Equal(
+            ["There is no DMARC record."],
+            DmarcTargetCheck.Reasons(Checked(DmarcCheckStatus.MissingOwnRecord, null, null, null), Effective(DmarcPolicyLevel.Quarantine)));
+
+    [Fact]
+    public void Outcome_IsBelowExactlyWhenThereAreReasons()
+    {
+        var target = Effective(DmarcPolicyLevel.Reject);
+        var domains = new[]
+        {
+            RejectingDomain(),
+            Checked(DmarcCheckStatus.Misconfigured, null, null, null),
+            Checked(DmarcCheckStatus.MissingOwnRecord, null, null, null),
+            Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Quarantine, DmarcPolicyLevel.Quarantine, 100)
+        };
+
+        foreach (var domain in domains)
+        {
+            Assert.Equal(DmarcTargetCheck.Reasons(domain, target).Count > 0, DmarcTargetCheck.Outcome(domain, target) == DmarcTargetOutcome.Below);
+        }
+    }
+
+    [Fact]
+    public void StoredProblems_ReadBackWithTheAnalysersWording_AndUnknownOnesAreIgnored()
+    {
+        var problem = DotMarc.Dns.DmarcRecordProblem.Parse("RepeatedTag:p");
+
+        Assert.Equal(DotMarc.Dns.DmarcRecordProblemKind.RepeatedTag, problem?.Kind);
+        Assert.Equal(DotMarc.Dns.DmarcRecordAnalysis.Analyse(["v=DMARC1; p=none; p=reject"]).Problems.Single().Description, problem?.Description);
+        Assert.Null(DotMarc.Dns.DmarcRecordProblem.Parse("NotAKind"));
+        Assert.Null(DotMarc.Dns.DmarcRecordProblem.Parse("99"));
+    }
+
     [Fact]
     public void SourceText_NamesWhereTheTargetCameFrom()
     {

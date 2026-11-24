@@ -164,7 +164,7 @@ public static class DnsHealthAlertEvaluator
 
         if (IsConfirmed(state, domain.DmarcCheckedUtc, nowUtc))
         {
-            var message = $"The DMARC policy for {domain.Name} is {DmarcTargetText.Observed(observed)}; its target is {DmarcTargetText.Policy(target!)} ({DmarcTargetText.Source(target!)}).";
+            var message = $"The DMARC policy for {domain.Name} is {DmarcTargetText.Observed(observed)}; its target is {DmarcTargetText.Policy(target!)} ({DmarcTargetText.Source(target!)}). Reasons: {string.Join("; ", DmarcTargetCheck.Reasons(domain, target))}.";
             actions.AddRange(applicable.Select(rule => Raise(AlertTypes.DmarcPolicyBelowTarget, rule, message)));
         }
     }

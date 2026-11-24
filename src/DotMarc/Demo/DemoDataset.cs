@@ -64,6 +64,10 @@ public sealed record DemoDomainSeed(
     DmarcPolicyLevel? DmarcPolicy = null,
     DmarcPolicyLevel? DmarcSubdomainPolicy = null,
     int? DmarcPercent = null,
+    DmarcPolicyLevel? DmarcNonExistentSubdomainPolicy = null,
+    bool DmarcTesting = false,
+    List<string>? DmarcRecords = null,
+    List<string>? DmarcProblems = null,
     string? SpfRangesJson = null,
     IReadOnlyList<string>? AdditionalGroupNames = null);
 

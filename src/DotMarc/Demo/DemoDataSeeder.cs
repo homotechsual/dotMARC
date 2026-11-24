@@ -106,7 +106,11 @@ public static class DemoDataSeeder
                 DnsNameservers = domainSeed.DnsNameservers ?? [],
                 DmarcPolicy = domainSeed.DmarcPolicy,
                 DmarcSubdomainPolicy = domainSeed.DmarcSubdomainPolicy,
-                DmarcPercent = domainSeed.DmarcPercent
+                DmarcPercent = domainSeed.DmarcPercent,
+                DmarcNonExistentSubdomainPolicy = domainSeed.DmarcNonExistentSubdomainPolicy,
+                DmarcTesting = domainSeed.DmarcTesting,
+                DmarcRecords = domainSeed.DmarcRecords ?? [],
+                DmarcProblems = domainSeed.DmarcProblems ?? []
             };
 
             if (domainSeed.GroupName is not null)

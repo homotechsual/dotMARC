@@ -1,5 +1,6 @@
 // test/DotMarc.Tests/Demo/DemoDataGeneratorTests.cs
 using DotMarc.Data;
+using DotMarc.Dns;
 using DotMarc.Demo;
 using DotMarc.Notifications;
 using DotMarc.Reporting;
@@ -296,6 +297,30 @@ public sealed class DemoDataGeneratorTests
         Assert.NotEmpty(mailchimp);
         Assert.All(mailchimp, pair => Assert.Equal(DispositionResult.None, pair.Record.Disposition));
         Assert.Equal(DmarcPolicyLevel.None, dataset.Domains.Single(d => d.Name == "cobalt-freight.example").DmarcPolicy);
+    }
+
+    [Fact]
+    public void NorthstarNonprofit_IsInTestingMode_SoItIsBelowTheQuarantineTargetEvenThoughPMeetsIt()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(seed => seed.Name == "northstar-nonprofit.example");
+
+        Assert.Equal((DmarcCheckStatus.Ok, DmarcPolicyLevel.Quarantine, true), (domain.DmarcCheckStatus, domain.DmarcPolicy, domain.DmarcTesting));
+        Assert.Equal(["TestingMode"], domain.DmarcProblems);
+        Assert.Single(domain.DmarcRecords!);
+        Assert.Contains("t=y", domain.DmarcRecords![0]);
+    }
+
+    [Fact]
+    public void ThistledownConsulting_RepeatsItsPTag_SoItIsMisconfiguredWithTheAnalysersDescription()
+    {
+        var dataset = Generate();
+        var domain = dataset.Domains.Single(seed => seed.Name == "thistledown-consulting.example");
+
+        Assert.Equal(DmarcCheckStatus.Misconfigured, domain.DmarcCheckStatus);
+        Assert.Equal(["RepeatedTag:p"], domain.DmarcProblems);
+        Assert.Equal(DmarcRecordProblem.Parse("RepeatedTag:p")!.Description, domain.DmarcCheckDetail);
+        Assert.Equal(DmarcRecordAnalysis.Analyse(domain.DmarcRecords!).Policy, domain.DmarcPolicy);
     }
 
     [Fact]
