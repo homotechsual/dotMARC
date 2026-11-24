@@ -125,7 +125,7 @@ One new permission, `BaselinesManage`, covers targets at every level. The level 
 * Named for baselines generally, so 0.15 profiles fall under it. The Sender tab keeps `SenderReview`.
 * The Domain tab shows to anyone with `BaselinesManage`. A group-limited holder sees the system target read-only and only their own groups and domains.
 * Viewing a domain's effective target needs only `DomainsView`.
-* On upgrade, the built-in Admin role gains it automatically (`AccessBootstrapper` syncs locked roles to every permission). Custom roles do not, so nobody gains a power by upgrading. The release notes and `permissions-and-access.mdx` say so, and the Access screen lists it with a description.
+* On upgrade, the built-in Admin role gains it automatically (`AccessBootstrapper` syncs locked roles to every permission). Custom roles do not, so nobody gains a power by upgrading. The release notes and `permissions-and-access.mdx` say so, and the Access screen lists it automatically (it shows permission names; the description lives in the docs).
 
 ### Group and domain pages
 
