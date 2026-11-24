@@ -17,16 +17,14 @@
 @inject ILogger<AlertRules> Logger
 @inject NavigationManager Navigation
 
-<AppPageTitle>dotMARC - Alerts &amp; PSA</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA - Rules</AppPageTitle>
 
 <TabbedPage Title="Alerts & PSA" Tabs="_tabs">
-<div class="d-flex align-center mb-1">
-    <DocsLink Href="https://dotmarc.app/docs/alert-rules" Text="How alert rules work" />
-</div>
 <MudText Typo="Typo.body1" Class="mb-4">
     Each rule decides when one kind of alert is raised, for which domains, how serious it is, where it is sent and whether it opens a ticket. For a domain,
     rules of a kind run in the order shown, top to bottom, and stop at the first one that stops processing. The destinations themselves and the global
     cooldown are on the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
+    <DocsLink Href="https://dotmarc.app/docs/alert-rules" Text="How alert rules work" Class="ml-2" />
 </MudText>
 
 @if (!_loaded)

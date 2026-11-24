@@ -15,11 +15,8 @@
 @inject ILogger<AlertsSettings> Logger
 @inject IDialogService DialogService
 
-<AppPageTitle>dotMARC - Alerts &amp; PSA</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA - Settings</AppPageTitle>
 <TabbedPage Title="Alerts & PSA" Tabs="_tabs">
-<div class="d-flex align-center mb-4">
-    <DocsLink Href="https://dotmarc.app/docs/alerts" Text="How alerts work" />
-</div>
 
 @if (_settings is null)
 {
@@ -29,10 +26,11 @@ else
 {
     <MudPaper Class="pa-4">
         <MudGrid>
-            <MudItem xs="12">
+            <MudItem xs="12" Class="d-flex align-center">
                 <FieldWithHelp Topic="Enable notifications" Inline="true" Help="Turns alerting on or off. While it's off, dotMARC raises no alerts, so nothing is sent to any channel and no PSA tickets are opened.">
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
 </FieldWithHelp>
+                <DocsLink Href="https://dotmarc.app/docs/alerts" Text="How alerts work" Class="ml-2" />
             </MudItem>
 
             <MudItem xs="12" md="6">

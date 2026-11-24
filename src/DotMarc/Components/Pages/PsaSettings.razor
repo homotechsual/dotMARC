@@ -9,15 +9,13 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IAuthorizationService AuthorizationService
 
-<AppPageTitle>dotMARC - Alerts &amp; PSA</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA - PSA</AppPageTitle>
 <TabbedPage Title="Alerts & PSA" Tabs="_tabs">
-<div class="d-flex align-center mb-1">
-    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" />
-</div>
 <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
     Turn on any PSA dotMARC should raise tickets in. You can use more than one: each Group or Domain links to a company in
     each, and an alert raises a ticket in every PSA its domain is linked in. Which alert types raise tickets is set under
     the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
+    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" Class="ml-2" />
 </MudText>
 
 <MudTabs @bind-ActivePanelIndex="_activeTab" Class="psa-vendor-tabs" Elevation="0" Rounded="false" SliderColor="Color.Transparent" TabPanelsClass="mt-3">

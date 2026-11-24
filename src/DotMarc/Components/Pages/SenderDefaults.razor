@@ -18,7 +18,7 @@
 @inject ILogger<SenderDefaults> Logger
 @implements IDisposable
 
-<AppPageTitle>dotMARC - @Title</AppPageTitle>
+<AppPageTitle>dotMARC - @(GroupId is null ? "Baselines - Sender" : Title)</AppPageTitle>
 
 @if (_rows is not null)
 {
