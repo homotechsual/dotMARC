@@ -54,7 +54,7 @@ RFC 9989 also adds `np`, the policy for subdomains that do not exist. When a rec
 
 ### Suggested record and repair
 
-When a record has a problem, or sits below its target, the domain page shows a **Suggested record** with a Copy button and a line for each change. dotMARC's [DNS push](./dns-provider-push.mdx#repairing-a-dmarc-record) writes this record too, with dotMARC's report address put first in `rua` (the other `rua` addresses are kept unless **Keep other rua addresses when pushing** is off, up to two in total). The repair:
+When a record has a problem, or sits below its target, the domain page shows a **Suggested record** with a Copy button and a line for each change. dotMARC's [DNS push](./dns-provider-push.mdx#repairing-a-dmarc-record) writes this record too, with dotMARC's report address first in `rua`, then the additional `rua` address from the DNS push settings if one is set, then other existing `rua` addresses only while there is room (a record lists at most two) and only when **Keep other rua addresses when pushing** is on. The additional address is one system-wide setting: it applies to every domain and is not affected by groups, baselines or DMARC targets. The repair:
 
 * puts `v=DMARC1` first and writes each tag once, keeping the other tags in their original order;
 * keeps the strictest valid value of a repeated `p`, `sp` or `np`, so nothing a receiver might have applied is weakened, keeps `t=n` when `t` is repeated, joins repeated `rua` and `ruf` tags into one with each address once, and keeps the first value of any other repeated tag;
