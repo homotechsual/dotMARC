@@ -76,6 +76,8 @@ jobs:
           # Lets the build look up the latest GitHub release (the homepage badge and <LatestVersion /> in the docs)
           # without hitting the anonymous rate limit. See website/lib/latest-version.cjs.
           GITHUB_TOKEN: ${{ github.token }}
+          FEEDBACK_API_URL: https://feedback-api.dotmarc.app
+          TURNSTILE_SITE_KEY: ${{ vars.FEEDBACK_TURNSTILE_SITE_KEY }}
         run: yarn build
 
       - name: Publish to Cloudflare Pages

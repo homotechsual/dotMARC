@@ -18,6 +18,7 @@
     "prebuild": "docusaurus clean-api-docs all && docusaurus gen-api-docs all && tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@docsense/indexer": "0.1.0",
     "@docusaurus/core": "3.10.2",
     "@docusaurus/faster": "3.10.2",
     "@docusaurus/plugin-client-redirects": "3.10.2",
@@ -35,7 +36,9 @@
     "@mdx-js/react": "^3.1.1",
     "@tailwindcss/postcss": "^4.3.5",
     "autoprefixer": "^10.6.2",
+    "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
+    "docusaurus-plugin-docsense": "0.1.0",
     "docusaurus-plugin-openapi-docs": "^5.2.0",
     "docusaurus-theme-github-codeblock": "~2.0.2",
     "docusaurus-theme-openapi-docs": "^5.2.0",

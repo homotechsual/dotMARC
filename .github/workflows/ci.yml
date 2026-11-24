@@ -20,12 +20,14 @@ on:
       - "docker-compose.demo.yml"
       - "scripts/deployment-url.sh"
       - "scripts/verify-deployment.sh"
+      - "scripts/ci-scope.mjs"
+      - "scripts/ci-scope.test.mjs"
       - ".github/workflows/ci.yml"
       - ".github/workflows/publish.yml"
       - ".github/workflows/demo-deploy.yml"
   # No paths filter on pull requests: main requires the "test" check, and a workflow skipped by a path filter never
   # reports it, which would block a docs-only PR for good. Instead the job always runs and skips its steps when the PR
-  # changes nothing outside website/.
+  # changes no application/build inputs. Keep push.paths aligned with scripts/ci-scope.mjs.
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -40,19 +42,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test CI scope detection
+        run: node --test scripts/ci-scope.test.mjs
+
       - name: Check whether the change needs the test suite
         id: scope
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] \
-            && ! git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -qv '^website/'; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-            echo "Only website/ changed, so the .NET build and tests are skipped (the website has its own CI)."
-          else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-          fi
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci-scope.mjs
 
       - name: Test the release scripts
-        if: steps.scope.outputs.needed == 'true'
         run: node --test scripts/release-tags.test.mjs
 
       - name: Set up .NET

@@ -1,0 +1,32 @@
+name: Migrate feedback to GitHub
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Create labels, milestones and issues from the curated legacy snapshot
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Preview or apply migration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          if [ "$APPLY" = "true" ]; then
+            node website/scripts/migrate-feedback.mjs --apply
+          else
+            node website/scripts/migrate-feedback.mjs
+          fi

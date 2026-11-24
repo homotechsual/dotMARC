@@ -46,6 +46,19 @@ const config: Config = {
   url: siteUrl,
   baseUrl: '/',
   trailingSlash: true,
+  customFields: {
+    feedbackApiUrl: process.env.FEEDBACK_API_URL || 'https://feedback-api.dotmarc.app',
+    turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
+  },
+  headTags: [{
+    tagName: 'script',
+    attributes: {},
+    innerHTML: `(() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme = param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();`,
+  }],
 
   organizationName: 'homotechsual',
   projectName: 'dotMARC',
@@ -91,6 +104,7 @@ const config: Config = {
   ],
 
   plugins: [
+    './plugins/docsense.cjs',
     [
       '@docusaurus/plugin-content-docs',
       {
@@ -189,12 +203,17 @@ const config: Config = {
         srcDark: 'img/logo-dark.svg',
       },
       items: [
-        {to: '/docs/getting-started', label: 'Docs', position: 'left'},
-        {to: '/api/dotmarc-api', label: 'API', position: 'left', activeBaseRegex: '^/api/'},
-        {to: '/faqs', label: 'FAQs', position: 'left'},
-        {to: '/releases-updates', label: 'Releases and Updates', position: 'left'},
+        {
+          label: 'Resources', position: 'left',
+          items: [
+            {to: '/docs/getting-started', label: 'Documentation'},
+            {to: '/api/dotmarc-api', label: 'API reference'},
+            {to: '/faqs', label: 'FAQs'},
+          ],
+        },
+        {to: '/releases-updates', label: 'Updates', position: 'left'},
+        {to: '/roadmap', label: 'Features', position: 'left', activeBaseRegex: '^/(roadmap|feedback)(/|$)'},
         {to: 'https://demo.dotmarc.app/', label: 'Demo', position: 'left'},
-        {to: '/feedback', label: 'Feedback', position: 'left'},
         {
           href: 'https://github.com/sponsors/homotechsual',
           html: '<span class="navbar__action-label">Sponsor</span>',
@@ -230,6 +249,7 @@ const config: Config = {
           title: 'More',
           items: [
             {label: 'Releases and Updates', to: '/releases-updates'},
+            {label: 'Features and roadmap', to: '/roadmap'},
             {label: 'Demo', to: 'https://demo.dotmarc.app/'},
             {label: 'GitHub', href: 'https://github.com/homotechsual/dotMARC'},
             {label: 'Sponsor the project', href: 'https://github.com/sponsors/homotechsual'},

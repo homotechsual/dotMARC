@@ -1,0 +1,17 @@
+question: Is PSA integration Halo-only, and can I connect more than one PSA?
+answer: |
+  dotMARC supports **HaloPSA, NinjaOne, ConnectWise, Autotask and SuperOps**. Each has a tab under
+  **Manage > PSA settings**, its own connection and ticket settings, and **Test the integration**.
+
+  You can enable several at once. Each ready PSA gets its own ticket for an eligible domain alert,
+  provided that domain has a company mapping there. Company mappings are resolved independently,
+  so a domain can use one group's Halo client and another group's ConnectWise company.
+
+  A failed provider doesn't prevent tickets in the others. When a linked ticket closes and dotMARC
+  detects it, the alert resolves and its other open PSA tickets are closed too. HaloPSA supports a
+  closure webhook; ticket polling also checks status. Comments, assignments and priority changes
+  aren't synchronised back into dotMARC.
+
+  See [PSA integration](/docs/psa-integration) for the provider-specific setup pages.
+category: Alerts & PSA integration
+order: 10

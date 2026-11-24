@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dotmarc-feedback-api",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "routes": [
+    {"pattern": "feedback-api.dotmarc.app", "custom_domain": true}
+  ],
+  "vars": {
+    "GITHUB_REPOSITORY": "homotechsual/dotMARC",
+    "SITE_ORIGIN": "https://dotmarc.app"
+  },
+  "durable_objects": {
+    "bindings": [
+      {"name": "ROADMAP", "class_name": "RoadmapCache"},
+      {"name": "SUBMISSIONS", "class_name": "SubmissionGate"}
+    ]
+  },
+  "migrations": [
+    {"tag": "v1", "new_sqlite_classes": ["RoadmapCache", "SubmissionGate"]}
+  ],
+  "triggers": {"crons": ["*/10 * * * *"]},
+  "observability": {"enabled": true}
+}

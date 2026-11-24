@@ -1,0 +1,67 @@
+name: Feature, enhancement or bug
+description: Request a new capability, improve an existing one, or report a bug.
+labels:
+  - status:triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search the [public roadmap](https://dotmarc.app/roadmap/) and [existing issues](https://github.com/homotechsual/dotMARC/issues) before submitting.
+
+        Use a short, descriptive issue title (8-160 characters). This request will be public and attributed to your GitHub account. Do not include credentials, client details or other sensitive information.
+
+        New requests need maintainer triage before appearing on the curated roadmap. Submission is not a release commitment.
+  - type: dropdown
+    id: change-type
+    attributes:
+      label: Change type
+      options:
+        - New feature
+        - Enhancement
+        - Bug fix
+    validations:
+      required: true
+  - type: dropdown
+    id: product-areas
+    attributes:
+      label: Product areas
+      multiple: true
+      options:
+        - Dashboard & domain management
+        - DMARC & reporting
+        - DNS & provider push
+        - SPF & DKIM
+        - MTA-STS & TLS reporting
+        - Senders & investigation
+        - Alerts & notifications
+        - PSA integrations
+        - Client reports & portal
+        - Access & API
+        - Deployment & operations
+        - Website & documentation
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Request description
+      description: What would you like to change? Aim for 20-4,000 characters, matching the website form.
+      placeholder: Describe the change, or for a bug include steps to reproduce, expected/actual behaviour and your version. Do not include secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What would this help you do? Aim for 10-2,000 characters, matching the website form.
+      placeholder: Explain the task or problem this would help you solve.
+    validations:
+      required: true
+  - type: checkboxes
+    id: public-consent
+    attributes:
+      label: Public submission
+      options:
+        - label: I understand this request will be public and have not included sensitive information.
+          required: true

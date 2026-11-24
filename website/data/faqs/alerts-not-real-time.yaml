@@ -3,14 +3,18 @@ answer: |
   No, by design. dotMARC is a dashboard you check and an alert feed you get notified through, not
   a paging system - there's no push notification or real-time delivery path.
 
-  Alerts are raised on a poll cycle: `MissedReport` fires once a domain has gone longer than the
-  configured **missing report threshold** (default 2 days) without a DMARC report, checked every
-  **monitor interval** (default 300 seconds). `TlsrptFailure` fires when a polled TLSRPT report
-  contains failed sessions. Both can take up to one interval/threshold window to notice a problem,
-  by design - DMARC aggregate reports themselves are typically daily, so faster polling wouldn't
-  surface anything sooner anyway.
+  Detection depends on the alert. **Missing DMARC report** uses the rule's **Days without a report**
+  (default 2), checked on the **Monitor interval** (default 300 seconds). **TLS delivery failures**
+  depends on a failed-session TLSRPT report arriving and being polled. DNS checks have their own
+  refresh cycle. DMARC aggregate reports are typically daily, so faster polling can't reveal mail
+  that receivers haven't reported yet.
+
+  Thresholds, scope and optional cooldown overrides live under **Manage > Alert rules**. Delivery goes
+  to the rule's destinations, and quiet hours can hold or mute that notification without hiding the
+  alert or preventing an otherwise eligible PSA ticket. Critical alerts bypass quiet hours by default,
+  unless you change that on the rule. A delayed notification doesn't necessarily mean detection failed.
 
   See [Alerts](/docs/alerts#alert-settings) for all the delivery and timing settings, and
-  [Scope](/docs/scope) for what's deliberately not built.
+  [Alert rules](/docs/alert-rules) for rule-specific behaviour.
 category: Alerts & PSA integration
 order: 1

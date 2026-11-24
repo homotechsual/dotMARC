@@ -1,16 +1,22 @@
-question: An alert fired but no HaloPSA ticket was created for it - why not?
+question: An alert fired but no PSA ticket was created for it - why not?
 answer: |
-  A domain only gets a ticket if it can be routed to a Halo client. That routing comes from the
-  **Halo Client** set on the domain's Group (in **Manage groups**), or an individual override on
-  the domain itself (in **Manage domains**). A domain with no Group, or a Group with no Halo Client
-  set, simply doesn't get a ticket - same as leaving the generic webhook URL blank, this is silent
-  by design, not an error.
+  Check these in order, for each PSA you expect to receive the ticket:
 
-  Also worth checking: the **Halo Client** column only appears on Manage Groups/Manage Domains once
-  HaloPSA is both enabled *and* has a saved client secret - enabling the integration alone isn't
-  enough to see or set it.
+  - **The connection is ready.** Enable and save the provider's required settings under **Manage > PSA
+    settings**, then use **Test the integration**. A failed connection to one PSA doesn't stop others.
+  - **The domain has a company mapping.** Set a client, organisation or company on its group under
+    **Manage > Groups**, or override it on **Manage > Domains**. A direct domain mapping works even
+    without a group. With several linked groups, the oldest linked group wins for that PSA.
+  - **Ticket creation is allowed.** The alert rule's **Ticket mode** takes precedence. If it follows
+    ticket rules, the deciding group's override, then the global switch under **Which alerts create
+    tickets**, then the alert type's default decide. A direct domain mapping bypasses group ticket rules.
+  - **There isn't already an open ticket.** dotMARC suppresses another ticket in the same PSA for the
+    same domain and alert type while an earlier unresolved alert still has an open ticket there.
 
-  See [PSA integration: Route tickets to the right client](/docs/psa-integration#route-tickets-to-the-right-client)
-  for how mapping works.
+  No mapping or a rule that disables tickets is an intentional skip. Actual provider failures are
+  logged, so check the application logs if the connection test or ticket creation fails. Changing
+  mappings or rules doesn't retrospectively create tickets for alerts already raised.
+
+  See [PSA integration](/docs/psa-integration) and [Alert rules: Tickets](/docs/alert-rules#tickets).
 category: Alerts & PSA integration
 order: 4

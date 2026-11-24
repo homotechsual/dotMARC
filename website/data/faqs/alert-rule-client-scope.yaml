@@ -1,0 +1,16 @@
+question: Can one client have different alert thresholds without changing everyone else?
+answer: |
+  Yes. Under **Manage > Alert rules**, add a rule for that alert kind and scope it to the client's
+  groups, tags or domains. Put it above the default rule and leave **Stop processing more rules**
+  on if it should replace the later rules for those domains. Other domains still use the default.
+
+  Rules run top to bottom within an alert kind. Turning Stop processing off lets later matching
+  rules raise their own alerts too, so use it deliberately. Switching a rule off or removing a domain
+  from its scope closes its open alerts on the next check.
+
+  Editing rules needs `AlertRulesManage`. Group-limited users don't see the rule-management page,
+  because it contains estate-wide names and scopes.
+
+  See [Alert rules](/docs/alert-rules).
+category: Alerts & PSA integration
+order: 7

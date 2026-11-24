@@ -32,7 +32,9 @@ If a PSA's companies can't be loaded, the page says which PSA and why, and that 
 
 ## Choose which alerts create tickets
 
-By default every alert type opens a ticket, apart from nameserver changes. To change that, open **Manage > Alert settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every PSA. Turning a type off stops it opening tickets. The alert is still recorded, and any Teams, Slack or webhook notification still goes out.
+Ticket creation follows the alert rule's **Ticket mode** first: **Never open a ticket** suppresses it, **Always open a ticket** overrides the ticket switches but still needs a ready PSA connection and company mapping, and **Follow the ticket rules** uses the group/global settings below. See [Alert rules: Tickets](./alert-rules.mdx#tickets). Existing-open-ticket suppression still applies.
+
+Most domain alert types create tickets by default. Nameserver changes, new senders awaiting review and the three metric alert types do not; system alerts about API key expiry, client report failure and PSA connection loss also default to no tickets. To change the ticket rules, open **Manage > Alert settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every PSA when the alert rule follows ticket rules. The alert is still recorded, and notification delivery still follows its destinations and quiet hours.
 
 A Group can override this for its own domains. On **Manage > Groups**, a Group linked to a company has a **Ticket rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create tickets* or *Never create tickets*. A Group with overrides shows a badge such as "2 overrides".
 
