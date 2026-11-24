@@ -57,6 +57,30 @@ public sealed class DmarcPolicyRaiseTests
         Assert.Equal("v=DMARC1; p=reject; rua=mailto:a@x", DmarcPolicyRaise.Apply("v=DMARC1; rua=mailto:a@x", Target(DmarcPolicyLevel.Reject)));
 
     [Fact]
+    public void WritesAValidPolicyWhenOneIsMissingAndTheTargetIsNone() =>
+        Assert.Equal("v=DMARC1; p=none; sp=reject; rua=mailto:a@x", DmarcPolicyRaise.Apply("v=DMARC1; rua=mailto:a@x", Target(DmarcPolicyLevel.None, DmarcPolicyLevel.Reject)));
+
+    [Fact]
+    public void RewritesAnInvalidPolicyEvenWhenTheTargetIsNone() =>
+        Assert.Equal("v=DMARC1; p=none; sp=reject", DmarcPolicyRaise.Apply("v=DMARC1; p=rejct", Target(DmarcPolicyLevel.None, DmarcPolicyLevel.Reject)));
+
+    [Fact]
+    public void RewritesAnInvalidSubdomainPolicyBelowTheTarget() =>
+        Assert.Equal("v=DMARC1; p=quarantine; sp=reject", DmarcPolicyRaise.Apply("v=DMARC1; p=quarantine; sp=bogus", Target(DmarcPolicyLevel.Quarantine, DmarcPolicyLevel.Reject)));
+
+    [Fact]
+    public void RaisesEveryRepeatedPolicyTag() =>
+        Assert.Equal("v=DMARC1; p=reject; p=reject", DmarcPolicyRaise.Apply("v=DMARC1; p=none; p=none", Target(DmarcPolicyLevel.Reject)));
+
+    [Fact]
+    public void RaisesEveryRepeatedSubdomainPolicyTag() =>
+        Assert.Equal("v=DMARC1; p=reject; sp=reject; sp=reject", DmarcPolicyRaise.Apply("v=DMARC1; p=reject; sp=none; sp=none", Target(DmarcPolicyLevel.Reject)));
+
+    [Fact]
+    public void RemovesEveryPartialPercentage() =>
+        Assert.Equal("v=DMARC1; p=reject", DmarcPolicyRaise.Apply("v=DMARC1; pct=50; p=reject; pct=20", Target(DmarcPolicyLevel.Reject)));
+
+    [Fact]
     public void NewRecordPolicy_IsNoneWithoutATarget() =>
         Assert.Equal("p=none", DmarcPolicyRaise.NewRecordPolicy(null));
 

@@ -12,7 +12,9 @@ public static class DmarcPolicyRaise
     public static string NewRecordPolicy(EffectiveDmarcTarget? target) =>
         target is null ? "p=none" : DmarcTargetText.Policy(target);
 
-    /// <summary>Raises p and sp to at least the target and drops a pct below 100. An sp is added after p only when the
+    /// <summary>Raises p and sp to at least the target and drops a pct below 100. Every repeated p and sp tag is raised
+    /// and every partial pct removed, so the record reads the same whichever occurrence a receiver uses. A missing or
+    /// invalid p is written as a valid one, because receivers ignore sp without it. An sp is added after p only when the
     /// record has none and the target's sp is stricter than the record's new p. Returns the record unchanged when it
     /// already meets the target.</summary>
     public static string Apply(string record, EffectiveDmarcTarget target)
@@ -24,60 +26,88 @@ public static class DmarcPolicyRaise
         }
 
         var parts = record.Split(';').ToList();
-        var policyIndex = IndexOfTag(parts, "p");
-        var subdomainIndex = IndexOfTag(parts, "sp");
-        var percentIndex = IndexOfTag(parts, "pct");
-
         var newPolicy = (DmarcPolicyLevel)Math.Max((int)current.Policy, (int)target.Policy);
         var newSubdomainPolicy = (DmarcPolicyLevel)Math.Max((int)current.SubdomainPolicy, (int)target.SubdomainPolicy);
         var changed = false;
+        var hasPolicy = false;
+        var hasSubdomainPolicy = false;
 
-        // Rewrite values in place first (indexes stay valid), then remove pct, then insert, adjusting indexes as parts move.
-        if (subdomainIndex >= 0 && newSubdomainPolicy > current.SubdomainPolicy)
+        for (var index = parts.Count - 1; index >= 0; index--)
         {
-            parts[subdomainIndex] = WithValue(parts[subdomainIndex], Name(newSubdomainPolicy));
-            changed = true;
+            var tagName = TagName(parts[index]);
+            if (tagName is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(tagName, "p", StringComparison.OrdinalIgnoreCase))
+            {
+                hasPolicy = true;
+                var level = ParseLevel(TagValue(parts[index]));
+                if (level is null || level < newPolicy)
+                {
+                    parts[index] = WithValue(parts[index], Name(newPolicy));
+                    changed = true;
+                }
+            }
+            else if (string.Equals(tagName, "sp", StringComparison.OrdinalIgnoreCase))
+            {
+                hasSubdomainPolicy = true;
+                // An invalid sp is ignored by receivers, so it effectively is p.
+                var level = ParseLevel(TagValue(parts[index])) ?? newPolicy;
+                if (level < newSubdomainPolicy)
+                {
+                    parts[index] = WithValue(parts[index], Name(newSubdomainPolicy));
+                    changed = true;
+                }
+            }
+            else if (string.Equals(tagName, "pct", StringComparison.OrdinalIgnoreCase)
+                     && int.TryParse(TagValue(parts[index]), NumberStyles.Integer, CultureInfo.InvariantCulture, out var percent)
+                     && percent is >= 0 and < 100)
+            {
+                parts.RemoveAt(index);
+                changed = true;
+            }
         }
 
-        if (policyIndex >= 0 && newPolicy > current.Policy)
-        {
-            parts[policyIndex] = WithValue(parts[policyIndex], Name(newPolicy));
-            changed = true;
-        }
-
-        if (percentIndex >= 0 && current.Percent < 100)
-        {
-            parts.RemoveAt(percentIndex);
-            if (policyIndex > percentIndex) policyIndex--;
-            if (subdomainIndex > percentIndex) subdomainIndex--;
-            changed = true;
-        }
-
-        if (policyIndex < 0 && newPolicy > current.Policy)
+        if (!hasPolicy)
         {
             // No p tag at all: put one straight after the version tag.
             parts.Insert(1, $" p={Name(newPolicy)}");
-            policyIndex = 1;
-            if (subdomainIndex >= 1) subdomainIndex++;
             changed = true;
         }
 
-        if (subdomainIndex < 0 && target.SubdomainPolicy > newPolicy)
+        if (!hasSubdomainPolicy && target.SubdomainPolicy > newPolicy)
         {
             // The implicit sp follows p, so an explicit one is only needed when the target wants sp stricter than p.
-            parts.Insert(Math.Max(policyIndex, 0) + 1, $" sp={Name(target.SubdomainPolicy)}");
+            parts.Insert(IndexOfTag(parts, "p") + 1, $" sp={Name(target.SubdomainPolicy)}");
             changed = true;
         }
 
         return changed ? string.Join(';', parts) : record;
     }
 
+    private static string? TagName(string part)
+    {
+        var separator = part.IndexOf('=');
+        return separator > 0 ? part[..separator].Trim() : null;
+    }
+
+    private static string TagValue(string part) => part[(part.IndexOf('=') + 1)..].Trim();
+
+    private static DmarcPolicyLevel? ParseLevel(string text) => text.ToLowerInvariant() switch
+    {
+        "none" => DmarcPolicyLevel.None,
+        "quarantine" => DmarcPolicyLevel.Quarantine,
+        "reject" => DmarcPolicyLevel.Reject,
+        _ => null
+    };
+
     private static int IndexOfTag(List<string> parts, string tagName)
     {
         for (var index = 0; index < parts.Count; index++)
         {
-            var separator = parts[index].IndexOf('=');
-            if (separator > 0 && string.Equals(parts[index][..separator].Trim(), tagName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(TagName(parts[index]), tagName, StringComparison.OrdinalIgnoreCase))
             {
                 return index;
             }
