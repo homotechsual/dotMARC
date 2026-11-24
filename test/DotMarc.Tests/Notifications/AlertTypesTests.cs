@@ -33,7 +33,7 @@ public sealed class AlertTypesTests
         Assert.Equal(
             ["MissedReport", "SuspiciousRejectActivity", "TlsrptFailure", "UnexpectedActivityOnNullRoutedDomain",
              "DmarcRecordBroken", "DmarcAuthorizationBroken", "TlsrptRecordBroken", "SpfRecordBroken", "MxRecordBroken",
-             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "NameserversChanged", "ApiKeyExpiring", "ClientReportFailed", "PsaConnectionLost",
+             "DkimRecordBroken", "MtaStsFailing", "DmarcPolicyWeakened", "DmarcPolicyBelowTarget", "NameserversChanged", "ApiKeyExpiring", "ClientReportFailed", "PsaConnectionLost",
              "NewUnreviewedSender", "UnauthorisedSenderDelivered", "PassRateLow", "VolumeChanged", "RejectedMessagesHigh"],
             AlertTypes.All.Select(alertType => alertType.Key));
     }
@@ -45,7 +45,7 @@ public sealed class AlertTypesTests
         {
             Assert.False(string.IsNullOrWhiteSpace(alertType.DisplayName));
             Assert.False(string.IsNullOrWhiteSpace(alertType.Description));
-            Assert.Equal(alertType.Key is not (AlertTypes.NameserversChanged or AlertTypes.ApiKeyExpiring or AlertTypes.ClientReportFailed or AlertTypes.PsaConnectionLost or AlertTypes.NewUnreviewedSender
+            Assert.Equal(alertType.Key is not (AlertTypes.NameserversChanged or AlertTypes.DmarcPolicyBelowTarget or AlertTypes.ApiKeyExpiring or AlertTypes.ClientReportFailed or AlertTypes.PsaConnectionLost or AlertTypes.NewUnreviewedSender
                 or AlertTypes.PassRateLow or AlertTypes.VolumeChanged or AlertTypes.RejectedMessagesHigh), alertType.CreatesTicketByDefault);
         }
     }
@@ -60,9 +60,9 @@ public sealed class AlertTypesTests
     }
 
     [Fact]
-    public void DnsHealth_ListsTheNineDnsHealthAlertTypes()
+    public void DnsHealth_ListsTheTenDnsHealthAlertTypes()
     {
-        Assert.Equal(9, AlertTypes.DnsHealth.Count);
+        Assert.Equal(10, AlertTypes.DnsHealth.Count);
         Assert.All(AlertTypes.DnsHealth, key => Assert.NotNull(AlertTypes.Find(key)));
     }
 }

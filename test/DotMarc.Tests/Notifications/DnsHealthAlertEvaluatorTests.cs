@@ -1,3 +1,4 @@
+using DotMarc.Baselines;
 using DotMarc.Data;
 using DotMarc.Notifications;
 using Xunit;
@@ -120,7 +121,7 @@ public sealed class DnsHealthAlertEvaluatorTests
         var actions = Run(HealthyDomain(), states);
 
         Assert.Empty(Raised(actions));
-        Assert.Equal(9, states.Count);
+        Assert.Equal(10, states.Count);
         Assert.All(states, state => Assert.Equal(7, state.DomainId));
         Assert.All(DnsHealthChecks.All, check => Assert.True(State(states, check.Item).HasPassed));
         Assert.Equal("p=reject; sp=reject; pct=100", State(states, DnsHealthItems.DmarcPolicy).Baseline);
@@ -376,5 +377,92 @@ public sealed class DnsHealthAlertEvaluatorTests
     {
         Assert.Equal("a.example;b.example", DnsHealthAlertEvaluator.NameserverKey(["B.example.", " a.example ", "b.example"]));
         Assert.Null(DnsHealthAlertEvaluator.NameserverKey([]));
+    }
+
+    private static EffectiveDmarcTarget RejectTargetFromGroup() =>
+        new(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Reject, DmarcTargetSource.Group, ["Contoso"], "Contoso", "Contoso");
+
+    private static List<DnsHealthAlertAction> RunWithTarget(Domain domain, List<DomainAlertState> states, EffectiveDmarcTarget? target, DateTimeOffset? now = null) =>
+        DnsHealthAlertEvaluator.Evaluate(domain, states, AlertRuleSet.Defaults(new NotificationSettings()), now ?? Now, target).ToList();
+
+    [Fact]
+    public void WithNoTarget_TheBelowTargetAlertResolves_AndRaisesNothing()
+    {
+        var domain = HealthyDomain();
+        domain.DmarcPolicy = DmarcPolicyLevel.None;
+
+        var actions = RunWithTarget(domain, [], null);
+
+        Assert.True(Resolves(actions, AlertTypes.DmarcPolicyBelowTarget));
+        Assert.DoesNotContain(Raised(actions), alertType => alertType == AlertTypes.DmarcPolicyBelowTarget);
+    }
+
+    [Fact]
+    public void ADomainMeetingItsTarget_ResolvesTheBelowTargetAlert()
+    {
+        var actions = RunWithTarget(HealthyDomain(), [], RejectTargetFromGroup());
+
+        Assert.True(Resolves(actions, AlertTypes.DmarcPolicyBelowTarget));
+        Assert.DoesNotContain(Raised(actions), alertType => alertType == AlertTypes.DmarcPolicyBelowTarget);
+    }
+
+    [Fact]
+    public void ADomainBelowItsTarget_IsConfirmedThenRaised_WithBothSidesInTheMessage()
+    {
+        var states = new List<DomainAlertState>();
+        var domain = HealthyDomain();
+        (domain.DmarcPolicy, domain.DmarcSubdomainPolicy, domain.DmarcPercent, domain.DmarcCheckedUtc) = (DmarcPolicyLevel.None, DmarcPolicyLevel.None, 50, Now);
+
+        Assert.DoesNotContain(RunWithTarget(domain, states, RejectTargetFromGroup()), action => action.Kind == DnsHealthActionKind.Raise);
+        Assert.NotNull(State(states, DnsHealthItems.DmarcTarget).PendingSinceUtc);
+
+        domain.DmarcCheckedUtc = Now.AddMinutes(16);
+        var actions = RunWithTarget(domain, states, RejectTargetFromGroup(), Now.AddMinutes(20));
+
+        var raised = Assert.Single(actions, action => action.Kind == DnsHealthActionKind.Raise);
+        Assert.Equal(AlertTypes.DmarcPolicyBelowTarget, raised.AlertType);
+        Assert.Equal("The DMARC policy for contoso.com is p=none; pct=50; its target is p=reject (from group Contoso).", raised.Message);
+    }
+
+    [Fact]
+    public void AMissingRecord_ClearsThePendingBelowTarget_AndNeitherRaisesNorResolves()
+    {
+        var states = new List<DomainAlertState>();
+        var domain = HealthyDomain();
+        domain.DmarcPolicy = DmarcPolicyLevel.None;
+        RunWithTarget(domain, states, RejectTargetFromGroup());
+        Assert.NotNull(State(states, DnsHealthItems.DmarcTarget).PendingSinceUtc);
+
+        (domain.DmarcCheckStatus, domain.DmarcPolicy, domain.DmarcSubdomainPolicy, domain.DmarcPercent) = (DmarcCheckStatus.MissingOwnRecord, null, null, null);
+        var actions = RunWithTarget(domain, states, RejectTargetFromGroup());
+
+        Assert.Null(State(states, DnsHealthItems.DmarcTarget).PendingSinceUtc);
+        Assert.DoesNotContain(actions, action => action.AlertType == AlertTypes.DmarcPolicyBelowTarget);
+    }
+
+    [Fact]
+    public void ADomainNeverChecked_ClearsThePendingBelowTarget_AndNeitherRaisesNorResolves()
+    {
+        var states = new List<DomainAlertState> { new() { DomainId = 7, Item = DnsHealthItems.DmarcTarget, PendingSinceUtc = Now, RecheckDueUtc = Now.AddMinutes(15) } };
+        var domain = HealthyDomain();
+        (domain.DmarcCheckStatus, domain.DmarcCheckedUtc) = (DmarcCheckStatus.NotChecked, null);
+
+        var actions = RunWithTarget(domain, states, RejectTargetFromGroup());
+
+        Assert.Null(State(states, DnsHealthItems.DmarcTarget).PendingSinceUtc);
+        Assert.DoesNotContain(actions, action => action.AlertType == AlertTypes.DmarcPolicyBelowTarget);
+    }
+
+    [Fact]
+    public void WithNoApplicableRule_TheBelowTargetAlertResolves_AndPendingClears()
+    {
+        var states = new List<DomainAlertState> { new() { DomainId = 7, Item = DnsHealthItems.DmarcTarget, PendingSinceUtc = Now, RecheckDueUtc = Now.AddMinutes(15) } };
+        var domain = HealthyDomain();
+        domain.DmarcPolicy = DmarcPolicyLevel.None;
+
+        var actions = DnsHealthAlertEvaluator.Evaluate(domain, states, new AlertRuleSet([]), Now, RejectTargetFromGroup()).ToList();
+
+        Assert.True(Resolves(actions, AlertTypes.DmarcPolicyBelowTarget));
+        Assert.Null(State(states, DnsHealthItems.DmarcTarget).PendingSinceUtc);
     }
 }

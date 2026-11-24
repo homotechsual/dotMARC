@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 
 namespace DotMarc.Baselines;
 
@@ -17,6 +18,16 @@ public static class DmarcTargetText
         target.SubdomainPolicy == target.Policy
             ? $"p={Name(target.Policy)}"
             : $"p={Name(target.Policy)}; sp={Name(target.SubdomainPolicy)}";
+
+    /// <summary>What a domain's record says, in the same form as <see cref="Policy"/>: sp only when it differs from p, and
+    /// pct only when below 100.</summary>
+    public static string Observed(DmarcPolicyTags observed)
+    {
+        var text = observed.SubdomainPolicy == observed.Policy
+            ? $"p={Name(observed.Policy)}"
+            : $"p={Name(observed.Policy)}; sp={Name(observed.SubdomainPolicy)}";
+        return observed.Percent < 100 ? $"{text}; pct={observed.Percent}" : text;
+    }
 
     /// <summary>A stored target as an audit field value: p=reject, p=reject; sp=quarantine, or "not set".</summary>
     public static string Stored(DmarcTarget? target) => target is null

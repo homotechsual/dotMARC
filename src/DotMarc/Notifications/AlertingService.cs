@@ -1,3 +1,4 @@
+using DotMarc.Baselines;
 using DotMarc.Dns;
 using System.Globalization;
 using DotMarc.Audit;
@@ -380,13 +381,14 @@ public sealed class AlertingService : IAlertingService
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var openAlerts = await LoadOpenAlertsAsync(db, AlertTypes.DnsHealth, cancellationToken).ConfigureAwait(false);
+        var recordSettings = await DnsRecordSettingsService.GetAsync(db, cancellationToken).ConfigureAwait(false);
         var applicable = new ApplicableRules();
 
         var actionsByDomain = new List<(Domain Domain, IReadOnlyList<DnsHealthAlertAction> Actions)>();
         foreach (var domain in domains)
         {
             var domainStates = states.Where(state => state.DomainId == domain.Id).ToList();
-            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, rules, nowUtc)));
+            actionsByDomain.Add((domain, DnsHealthAlertEvaluator.Evaluate(domain, domainStates, rules, nowUtc, DmarcTargetResolver.Resolve(domain, recordSettings))));
             db.DomainAlertStates.AddRange(domainStates.Where(state => state.Id == 0));
 
             var facts = FactsFor(domain);

@@ -1,3 +1,4 @@
+using DotMarc.Baselines;
 using DotMarc.Data;
 using DotMarc.Dns;
 
@@ -31,7 +32,7 @@ public static class DnsHealthAlertEvaluator
 
     /// <summary>The rules decide which alerts may be raised for the domain and how: a check is quiet when no rule applies to it,
     /// and each applicable rule's mode decides whether it alerts.</summary>
-    public static IReadOnlyList<DnsHealthAlertAction> Evaluate(Domain domain, List<DomainAlertState> states, AlertRuleSet rules, DateTimeOffset nowUtc)
+    public static IReadOnlyList<DnsHealthAlertAction> Evaluate(Domain domain, List<DomainAlertState> states, AlertRuleSet rules, DateTimeOffset nowUtc, EffectiveDmarcTarget? dmarcTarget = null)
     {
         var facts = new DomainFacts(domain.Id, domain.Groups.Select(group => group.Id).ToHashSet(), domain.Tags.Select(tag => tag.Id).ToHashSet());
         var actions = new List<DnsHealthAlertAction>();
@@ -41,6 +42,7 @@ public static class DnsHealthAlertEvaluator
         }
 
         EvaluatePolicy(domain, StateFor(states, domain, DnsHealthItems.DmarcPolicy), rules.For(AlertTypes.DmarcPolicyWeakened, facts), nowUtc, actions);
+        EvaluateTarget(domain, StateFor(states, domain, DnsHealthItems.DmarcTarget), rules.For(AlertTypes.DmarcPolicyBelowTarget, facts), dmarcTarget, nowUtc, actions);
         EvaluateNameservers(domain, StateFor(states, domain, DnsHealthItems.Nameservers), rules.For(AlertTypes.NameserversChanged, facts), nowUtc, actions);
         return actions;
     }
@@ -135,6 +137,35 @@ public static class DnsHealthAlertEvaluator
         {
             var message = $"The DMARC policy for {domain.Name} went from {baseline.Format()} to {current.Format()}.";
             actions.AddRange(applicable.Select(rule => Raise(AlertTypes.DmarcPolicyWeakened, rule, message)));
+        }
+    }
+
+    private static void EvaluateTarget(Domain domain, DomainAlertState state, IReadOnlyList<ResolvedAlertRule> applicable, EffectiveDmarcTarget? target, DateTimeOffset nowUtc, List<DnsHealthAlertAction> actions)
+    {
+        var outcome = applicable.Count == 0 ? DmarcTargetOutcome.NoTarget : DmarcTargetCheck.Outcome(domain, target);
+        switch (outcome)
+        {
+            case DmarcTargetOutcome.NoTarget:
+            case DmarcTargetOutcome.Meets:
+                ClearPending(state);
+                actions.Add(DnsHealthAlertAction.Resolve(AlertTypes.DmarcPolicyBelowTarget));
+                return;
+            case DmarcTargetOutcome.NeedsChecking:
+                ClearPending(state);
+                return;
+        }
+
+        if (DmarcPolicyTags.Of(domain) is not { } observed)
+        {
+            // No record: the DMARC record broken alert covers it. Leave this one as it is until the record is back.
+            ClearPending(state);
+            return;
+        }
+
+        if (IsConfirmed(state, domain.DmarcCheckedUtc, nowUtc))
+        {
+            var message = $"The DMARC policy for {domain.Name} is {DmarcTargetText.Observed(observed)}; its target is {DmarcTargetText.Policy(target!)} ({DmarcTargetText.Source(target!)}).";
+            actions.AddRange(applicable.Select(rule => Raise(AlertTypes.DmarcPolicyBelowTarget, rule, message)));
         }
     }
 

@@ -162,7 +162,7 @@ public sealed class DnsHealthAlertingTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.Empty(verify.AlertEvents);
         Assert.Equal(0, notifier.CallCount);
-        Assert.Equal(18, await verify.DomainAlertStates.CountAsync());
+        Assert.Equal(20, await verify.DomainAlertStates.CountAsync());
     }
 
     [Fact]

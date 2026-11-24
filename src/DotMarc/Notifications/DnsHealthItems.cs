@@ -11,5 +11,6 @@ public static class DnsHealthItems
     public const string Dkim = "Dkim";
     public const string MtaSts = "MtaSts";
     public const string DmarcPolicy = "DmarcPolicy";
+    public const string DmarcTarget = "DmarcTarget";
     public const string Nameservers = "Nameservers";
 }

@@ -374,7 +374,7 @@ public sealed class PollingService : BackgroundService
             var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
                 .Where(d => d.DmarcCheckedUtc == null || d.DmarcCheckedUtc < cutoff
-                    || d.AlertStates.Any(state => (state.Item == DnsHealthItems.Dmarc || state.Item == DnsHealthItems.DmarcPolicy) && state.RecheckDueUtc <= nowUtc && d.DmarcCheckedUtc < state.RecheckDueUtc))
+                    || d.AlertStates.Any(state => (state.Item == DnsHealthItems.Dmarc || state.Item == DnsHealthItems.DmarcPolicy || state.Item == DnsHealthItems.DmarcTarget) && state.RecheckDueUtc <= nowUtc && d.DmarcCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
