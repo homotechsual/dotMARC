@@ -99,7 +99,8 @@ public sealed record DmarcRecordAnalysis(
     DmarcPolicyLevel? NonExistentPolicy,
     int? Percent,
     bool Testing,
-    bool HasValidRua)
+    bool HasValidRua,
+    IReadOnlyList<string> IgnoredCandidates)
 {
     private static readonly string[] ObsoleteTagNames = ["pct", "rf", "ri"];
 
@@ -132,7 +133,7 @@ public sealed record DmarcRecordAnalysis(
         var problems = new List<DmarcRecordProblem>();
         if (records.Count == 0)
         {
-            return new DmarcRecordAnalysis(records, problems, null, null, null, null, false, false);
+            return new DmarcRecordAnalysis(records, problems, null, null, null, null, false, false, []);
         }
 
         if (proper.Count == 0)
@@ -208,6 +209,7 @@ public sealed record DmarcRecordAnalysis(
 
         var hasValidRua = records.Any(record => DmarcRua.Parse(record).Any(entry => entry.HasMailtoScheme));
 
-        return new DmarcRecordAnalysis(records, problems, policy, subdomainPolicy, nonExistentPolicy, percent, testing, hasValidRua);
+        return new DmarcRecordAnalysis(records, problems, policy, subdomainPolicy, nonExistentPolicy, percent, testing, hasValidRua,
+            proper.Count > 0 ? candidates : []);
     }
 }

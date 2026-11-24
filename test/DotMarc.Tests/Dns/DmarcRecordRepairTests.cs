@@ -68,6 +68,7 @@ public sealed class DmarcRecordRepairTests
     {
         AssertRepair(Build(null, "v=DMARC1; p=none; rua=mailto:a@x", "v=DMARC1; p=reject"),
             "v=DMARC1; p=reject; rua=mailto:a@x",
+            "Combined 2 DMARC records into one.",
             "Removed the repeated p=none.");
     }
 
@@ -176,11 +177,39 @@ public sealed class DmarcRecordRepairTests
     }
 
     [Fact]
-    public void SubdomainPolicyIsNotWrittenWhenTheRaisedPolicyAlreadyMeetsIt()
+    public void RaisingPolicyWithNoSubdomainPolicy_WritesTheTargetSubdomainPolicy()
     {
         AssertRepair(Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine), "v=DMARC1; p=none; rua=mailto:a@x"),
+            "v=DMARC1; p=reject; sp=quarantine; rua=mailto:a@x",
+            "Raised p from none to reject.",
+            "Set sp to quarantine so subdomains keep their policy.");
+        AssertRepair(Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.None), "v=DMARC1; p=none"),
+            "v=DMARC1; p=reject; sp=none",
+            "Raised p from none to reject.",
+            "Set sp to none so subdomains keep their policy.");
+    }
+
+    [Fact]
+    public void RaisingPolicyKeepsTheStricterOriginalSubdomainBehaviour()
+    {
+        AssertRepair(Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine), "v=DMARC1; p=quarantine"),
+            "v=DMARC1; p=reject; sp=quarantine",
+            "Raised p from quarantine to reject.",
+            "Set sp to quarantine so subdomains keep their policy.");
+    }
+
+    [Fact]
+    public void PolicyAlreadyAtTargetWithTargetSubdomainPolicyNone_NeedsNoChange()
+    {
+        Assert.Null(Build(Target(DmarcPolicyLevel.Reject, DmarcPolicyLevel.None), "v=DMARC1; p=reject"));
+    }
+
+    [Fact]
+    public void TwoNonOverlappingRecords_AreCombined()
+    {
+        AssertRepair(Build(null, "v=DMARC1; p=reject", "v=DMARC1; rua=mailto:a@x"),
             "v=DMARC1; p=reject; rua=mailto:a@x",
-            "Raised p from none to reject.");
+            "Combined 2 DMARC records into one.");
     }
 
     [Fact]

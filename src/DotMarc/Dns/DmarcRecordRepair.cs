@@ -26,6 +26,11 @@ public static class DmarcRecordRepair
         var raiseChanges = new List<string>();
         var testingChanges = new List<string>();
 
+        if (analysis.Records.Count > 1)
+        {
+            versionChanges.Add($"Combined {analysis.Records.Count} DMARC records into one.");
+        }
+
         var parsedRecords = analysis.Records.Select(DmarcTagList.Parse).ToList();
         if (analysis.Problems.Any(problem => problem.Kind == DmarcRecordProblemKind.VersionMissingOrNotFirst))
         {
@@ -130,10 +135,13 @@ public static class DmarcRecordRepair
     {
         var policyIndex = output.FindIndex(tag => tag.IsNamed("p"));
         var policy = DmarcTagList.ParseLevel(output[policyIndex].Value)!.Value;
+        var originalPolicy = policy;
+        var policyRaised = false;
         if (policy < target.Policy)
         {
             raiseChanges.Add($"Raised {output[policyIndex].Name} from {DmarcTagList.Name(policy)} to {DmarcTagList.Name(target.Policy)}.");
             policy = target.Policy;
+            policyRaised = true;
             output[policyIndex] = new DmarcTag(output[policyIndex].Name, DmarcTagList.Name(policy));
         }
 
@@ -147,10 +155,17 @@ public static class DmarcRecordRepair
                 output[subdomainIndex] = new DmarcTag(output[subdomainIndex].Name, DmarcTagList.Name(target.SubdomainPolicy));
             }
         }
-        else if (policy < target.SubdomainPolicy)
+        else
         {
-            raiseChanges.Add($"Added sp={DmarcTagList.Name(target.SubdomainPolicy)}.");
-            output.Insert(policyIndex + 1, new DmarcTag("sp", DmarcTagList.Name(target.SubdomainPolicy)));
+            // With no sp, subdomains followed p. Write the stricter of that and the target's sp when it differs from the
+            // new p, so raising p does not push subdomains past what they had or what the target asks.
+            var subdomainPolicy = originalPolicy > target.SubdomainPolicy ? originalPolicy : target.SubdomainPolicy;
+            if (subdomainPolicy != policy)
+            {
+                var level = DmarcTagList.Name(subdomainPolicy);
+                raiseChanges.Add(policyRaised ? $"Set sp to {level} so subdomains keep their policy." : $"Added sp={level}.");
+                output.Insert(policyIndex + 1, new DmarcTag("sp", level));
+            }
         }
 
         // An absent np follows sp, which now meets the target; only a written np can be weaker.

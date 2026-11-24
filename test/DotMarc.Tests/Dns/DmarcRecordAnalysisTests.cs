@@ -79,6 +79,14 @@ public sealed class DmarcRecordAnalysisTests
     }
 
     [Fact]
+    public void IgnoredCandidates_ListsLookAlikesOnlyWhenAProperRecordExists()
+    {
+        Assert.Equal(["v=dmarc1; p=none"], Analyse("v=dmarc1; p=none", "v=DMARC1; p=reject").IgnoredCandidates);
+        Assert.Empty(Analyse("v=dmarc1; p=none").IgnoredCandidates);
+        Assert.Empty(Analyse("v=DMARC1; p=reject").IgnoredCandidates);
+    }
+
+    [Fact]
     public void RepeatedTag_IsReportedOncePerTagAndPolicyIsTheStrictest()
     {
         var analysis = Analyse("v=DMARC1; p=none; p=reject; p=quarantine");
