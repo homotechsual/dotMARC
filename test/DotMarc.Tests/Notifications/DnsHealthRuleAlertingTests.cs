@@ -161,7 +161,8 @@ public sealed class DnsHealthRuleAlertingTests : IAsyncLifetime
         {
             Name = "target.example", IsMonitored = true, FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-30), LastReportReceivedUtc = DateTimeOffset.UtcNow,
             DmarcCheckStatus = DmarcCheckStatus.Ok, DmarcCheckedUtc = DateTimeOffset.UtcNow.AddMinutes(-5),
-            DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100
+            DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100,
+            DmarcRecords = ["v=DMARC1; p=none"]
         };
         domain.AlertStates.Add(new DomainAlertState
         {
@@ -192,7 +193,7 @@ public sealed class DnsHealthRuleAlertingTests : IAsyncLifetime
         {
             var alert = await verify.AlertEvents.SingleAsync(candidate => candidate.AlertType == AlertTypes.DmarcPolicyBelowTarget);
             Assert.False(alert.IsResolved);
-            Assert.Equal("The DMARC policy for target.example is p=none; its target is p=reject (system-wide). Reasons: p is none, target is reject; sp is none, target is reject.", alert.Message);
+            Assert.Equal("The DMARC policy for target.example is p=none; its target is p=reject (system-wide). Reasons: p is none, target is reject.", alert.Message);
         }
 
         await SetSystemTargetAsync(null);

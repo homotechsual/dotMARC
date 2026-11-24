@@ -244,23 +244,57 @@ public sealed class DmarcTargetCheckTests
         Assert.Equal("p=reject; sp=quarantine", DmarcTargetText.Policy(Effective(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine)));
     }
 
+    /// <summary>The shape the poller writes: the effective sp (sp, or p when sp is not published) plus the raw records.</summary>
+    private static Domain Polled(DmarcPolicyLevel policy, DmarcPolicyLevel effectiveSubdomainPolicy, string record)
+    {
+        var domain = Checked(DmarcCheckStatus.Ok, policy, effectiveSubdomainPolicy, 100);
+        domain.DmarcRecords = [record];
+        return domain;
+    }
+
     [Fact]
     public void ABarePolicyOfNone_GivesOnlyThePolicyReason()
     {
-        var domain = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.None, null, 100);
+        var domain = Polled(DmarcPolicyLevel.None, DmarcPolicyLevel.None, "v=DMARC1; p=none");
 
         Assert.Equal(["p is none, target is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+        Assert.Equal(DmarcTargetOutcome.Below, DmarcTargetCheck.Outcome(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void APublishedSpAtNone_IsReportedSeparately()
+    {
+        var domain = Polled(DmarcPolicyLevel.None, DmarcPolicyLevel.None, "v=DMARC1; p=none; sp=none");
+
+        Assert.Equal(["p is none, target is reject", "sp is none, target is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
     }
 
     [Fact]
     public void AnInheritedSubdomainPolicyBelowTheTarget_IsBelowWithAReasonWhenPMeetsIt()
     {
-        var domain = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Reject, null, 100);
+        var domain = Polled(DmarcPolicyLevel.Quarantine, DmarcPolicyLevel.Quarantine, "v=DMARC1; p=quarantine");
         var target = Effective(DmarcPolicyLevel.Quarantine, DmarcPolicyLevel.Reject);
-        domain.DmarcPolicy = DmarcPolicyLevel.Quarantine;
 
         Assert.Equal(DmarcTargetOutcome.Below, DmarcTargetCheck.Outcome(domain, target));
         Assert.Equal(["sp follows p (quarantine), target for subdomains is reject"], DmarcTargetCheck.Reasons(domain, target));
+    }
+
+    [Fact]
+    public void ARecordBeforeTheRecordsWereStored_WithAnSpAboveP_IsStillJudgedOnThatSp()
+    {
+        // Checked before the raw records were kept: sp must have been published for it to differ from p.
+        var domain = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.Reject, DmarcPolicyLevel.None, 100);
+
+        Assert.Equal(DmarcTargetOutcome.Below, DmarcTargetCheck.Outcome(domain, Effective(DmarcPolicyLevel.Reject)));
+        Assert.Equal(["sp is none, target is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
+    }
+
+    [Fact]
+    public void ARecordBeforeTheRecordsWereStored_WithSpEqualToP_TreatsSpAsFollowingP()
+    {
+        var domain = Checked(DmarcCheckStatus.Ok, DmarcPolicyLevel.None, DmarcPolicyLevel.None, 100);
+
+        Assert.Equal(["p is none, target is reject"], DmarcTargetCheck.Reasons(domain, Effective(DmarcPolicyLevel.Reject)));
     }
 
     [Fact]

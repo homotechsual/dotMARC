@@ -69,7 +69,7 @@ public static class DmarcTargetCheck
             reasons.Add($"p is {Name(policy)}, target is {Name(target.Policy)}");
         }
 
-        if (domain.DmarcSubdomainPolicy is { } publishedSubdomainPolicy)
+        if (PublishedSubdomainPolicy(domain, policy) is { } publishedSubdomainPolicy)
         {
             if (publishedSubdomainPolicy < target.SubdomainPolicy)
             {
@@ -100,6 +100,20 @@ public static class DmarcTargetCheck
         }
 
         return reasons;
+    }
+
+    /// <summary>The sp the record publishes, or null when it publishes none. The poller stores the effective sp (sp, or p
+    /// when there is no sp tag), so whether sp was published is read from the stored records. A domain checked before the
+    /// records were kept has none stored; there the effective sp can only differ from p if sp was published.</summary>
+    private static DmarcPolicyLevel? PublishedSubdomainPolicy(Domain domain, DmarcPolicyLevel policy)
+    {
+        if (domain.DmarcRecords.Count > 0)
+        {
+            var recordSubdomainPolicy = DmarcRecordAnalysis.Analyse(domain.DmarcRecords).SubdomainPolicy;
+            return recordSubdomainPolicy is null ? null : domain.DmarcSubdomainPolicy ?? recordSubdomainPolicy;
+        }
+
+        return domain.DmarcSubdomainPolicy is { } stored && stored != policy ? stored : null;
     }
 
     private static string Name(DmarcPolicyLevel level) => level.ToString().ToLowerInvariant();

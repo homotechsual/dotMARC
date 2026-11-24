@@ -412,6 +412,7 @@ public sealed class DnsHealthAlertEvaluatorTests
         var states = new List<DomainAlertState>();
         var domain = HealthyDomain();
         (domain.DmarcPolicy, domain.DmarcSubdomainPolicy, domain.DmarcPercent, domain.DmarcCheckedUtc) = (DmarcPolicyLevel.None, DmarcPolicyLevel.None, 50, Now);
+        domain.DmarcRecords = ["v=DMARC1; p=none; pct=50"];
 
         Assert.DoesNotContain(RunWithTarget(domain, states, RejectTargetFromGroup()), action => action.Kind == DnsHealthActionKind.Raise);
         Assert.NotNull(State(states, DnsHealthItems.DmarcTarget).PendingSinceUtc);
@@ -421,7 +422,7 @@ public sealed class DnsHealthAlertEvaluatorTests
 
         var raised = Assert.Single(actions, action => action.Kind == DnsHealthActionKind.Raise);
         Assert.Equal(AlertTypes.DmarcPolicyBelowTarget, raised.AlertType);
-        Assert.Equal("The DMARC policy for contoso.com is p=none; pct=50; its target is p=reject (from group Contoso). Reasons: p is none, target is reject; sp is none, target is reject; pct is 50.", raised.Message);
+        Assert.Equal("The DMARC policy for contoso.com is p=none; pct=50; its target is p=reject (from group Contoso). Reasons: p is none, target is reject; pct is 50.", raised.Message);
     }
 
     [Fact]
