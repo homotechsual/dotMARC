@@ -20,7 +20,7 @@
     the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
 </MudText>
 
-<MudTabs @bind-ActivePanelIndex="_activeTab">
+<MudTabs @bind-ActivePanelIndex="_activeTab" Class="psa-vendor-tabs" Elevation="0" Rounded="false" SliderColor="Color.Transparent" TabPanelsClass="mt-3">
     <MudTabPanel Text="HaloPSA" Icon="@TabIcon(_haloEnabled)">
         <div class="pt-4"><HaloPsaSettingsTab EnabledChanged="@(enabled => _haloEnabled = enabled)" /></div>
     </MudTabPanel>
