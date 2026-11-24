@@ -6,6 +6,7 @@
 @using DotMarc.Notifications
 @using DotMarc.Components.Shared
 @using DotMarc.Baselines
+@using DotMarc.ServerLogs
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.Extensions.Options
@@ -60,12 +61,10 @@
                 <MudMenuItem Href="/access" Icon="@Icons.Material.Filled.ManageAccounts">Access</MudMenuItem>
                 <MudMenuItem Href="/branding/settings" Icon="@Icons.Material.Filled.Palette">Branding</MudMenuItem>
             </AuthorizeView>
-            <AuthorizeView Policy="LogsView">
-                <MudMenuItem Href="/logs" Icon="@Icons.Material.Filled.Article">Server logs</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="AuditView">
-                <MudMenuItem Href="/audit" Icon="@Icons.Material.Filled.History">Audit log</MudMenuItem>
-            </AuthorizeView>
+            @if (_logsHref is not null)
+            {
+                <MudMenuItem Href="@_logsHref" Icon="@Icons.Material.Filled.Article">Logs</MudMenuItem>
+            }
             <AuthorizeView Policy="ReportsManage">
                 <MudMenuItem Href="/reports/settings" Icon="@Icons.Material.Filled.Email">Email &amp; reports</MudMenuItem>
             </AuthorizeView>
@@ -156,6 +155,7 @@
 
     private bool _showBaselines;
     private string? _alertsPsaHref;
+    private string? _logsHref;
 
     protected override async Task OnInitializedAsync()
     {
@@ -176,7 +176,7 @@
         catch (Exception ex)
         {
             // A stale menu entry must not end the circuit, so log it and carry on.
-            Logger.LogWarning(ex, "Refreshing the Baselines and Alerts & PSA menu entries after a sign-in change failed.");
+            Logger.LogWarning(ex, "Refreshing the Baselines, Alerts & PSA and Logs menu entries after a sign-in change failed.");
         }
     }
 
@@ -185,6 +185,7 @@
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
         var signedIn = user.Identity?.IsAuthenticated == true;
         _showBaselines = signedIn && (await BaselineTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible);
+        _logsHref = signedIn && (await LogsTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible) ? "/logs" : null;
         _alertsPsaHref = signedIn ? TabbedPageNavigation.FirstVisible(await AlertsPsaTabs.ForAsync(user, AuthorizationService))?.Href : null;
     }
 

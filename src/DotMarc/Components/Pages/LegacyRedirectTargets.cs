@@ -7,6 +7,7 @@ public static class LegacyRedirectTargets
     {
         ["/senders/baseline"] = "/baselines/sender",
         ["/psa/settings"] = "/alerts/psa",
+        ["/audit"] = "/logs/audit",
     };
 
     /// <summary>Where an old address now lives, with its query string kept, or null when the address is not an old one.</summary>

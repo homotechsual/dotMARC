@@ -150,7 +150,7 @@
                 @if (_destinations.Count == 0)
                 {
                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
-                        There are no destinations yet, so this rule's alerts would not be sent anywhere. Add one on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+                        There are no destinations yet, so this rule's alerts would not be sent anywhere. Add one on the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
                     </MudAlert>
                 }
                 else
@@ -187,7 +187,7 @@
             <MudText Typo="Typo.subtitle1" Class="mt-4">Quiet hours</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
                 Keeps this rule's notifications back during a daily window. The alert is still raised and recorded, and any ticket still opens. The time zone is set on
-                <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+                the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
             </MudText>
             <MudGrid>
                 <MudItem xs="12" sm="4">
@@ -229,7 +229,7 @@
                 @if (_destinations.Count == 0)
                 {
                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
-                        There are no destinations to escalate to. Add one on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+                        There are no destinations to escalate to. Add one on the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
                     </MudAlert>
                 }
                 else
