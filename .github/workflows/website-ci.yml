@@ -1,22 +1,19 @@
 name: Website CI
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'website/**'
-      - 'infra/**'
-      - '.github/workflows/website-ci.yml'
-  pull_request:
-    paths:
-      - 'website/**'
-      - 'infra/**'
-      - '.github/workflows/website-ci.yml'
+  workflow_call:
+    inputs:
+      source-ref:
+        description: Exact commit to validate.
+        required: true
+        type: string
+      publish-build:
+        description: Build with deployment configuration and upload the tested output.
+        required: true
+        type: boolean
 
-concurrency:
-  group: website-ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -30,6 +27,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source-ref }}
 
       - name: Remove built-in Yarn
         run: npm uninstall -g yarn
@@ -53,16 +52,39 @@ jobs:
       - name: Test roadmap response contract
         run: node --test feedback-worker/test/roadmap-client.test.mjs
 
+      - name: Test publication workflow contract
+        run: node --test ../scripts/website-workflows.test.mjs
+
       - name: Install pinned Bicep compiler
         run: az bicep install --version v0.46.1
 
       - name: Build
         env:
-          TURNSTILE_SITE_KEY: 1x00000000000000000000AA
-        run: yarn build
+          GITHUB_TOKEN: ${{ github.token }}
+          FEEDBACK_API_URL: https://feedback-api.dotmarc.app
+          TURNSTILE_SITE_KEY: ${{ inputs.publish-build && vars.FEEDBACK_TURNSTILE_SITE_KEY || '1x00000000000000000000AA' }}
+          PUBLISH_BUILD: ${{ inputs.publish-build }}
+          CONFIGURED_SITE_KEY: ${{ vars.FEEDBACK_TURNSTILE_SITE_KEY }}
+        run: |
+          if [ "$PUBLISH_BUILD" = "true" ] && [ -z "$CONFIGURED_SITE_KEY" ]; then
+            echo "::error::FEEDBACK_TURNSTILE_SITE_KEY is required for a publishable build."
+            exit 1
+          fi
+          yarn build
 
       - name: Install browser for feedback checks
         run: yarn exec playwright install --with-deps chromium
 
       - name: Test feedback and roadmap in browser
         run: node scripts/test-feedback-browser.mjs
+
+      - name: Upload tested website
+        if: inputs.publish-build
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-build
+          path: website/build
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
