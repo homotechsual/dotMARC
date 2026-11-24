@@ -102,7 +102,7 @@ The list endpoints take filters as query parameters, so a script asks for just w
 
 ### Alert rules
 
-`GET /api/v1/alert-rules` and `GET /api/v1/alert-rules/{id}` need the AlertsView permission and return the [alert rules](./alert-rules.mdx): kind, name, whether it is on, severity, order, settings, where it sends (`destinationMode` and `destinations`), `ticketMode`, `quietHours` (times as `HH:mm` in the time zone set on Alert settings), `escalation`, and the groups, tags and domains it applies to. Filter the list by `kind` and `enabled`. `GET /api/v1/alert-destinations` lists the destinations' ids, names, kinds and whether they are on. A destination's webhook URL is a secret and is never returned. These endpoints read only: rules and destinations are changed in dotMARC.
+`GET /api/v1/alert-rules` and `GET /api/v1/alert-rules/{id}` need the AlertsView permission and return the [alert rules](./alert-rules.mdx): kind, name, whether it is on, severity, order, settings, where it sends (`destinationMode` and `destinations`), `ticketMode`, `quietHours` (times as `HH:mm` in the time zone set on the Settings tab), `escalation`, and the groups, tags and domains it applies to. Filter the list by `kind` and `enabled`. `GET /api/v1/alert-destinations` lists the destinations' ids, names, kinds and whether they are on. A destination's webhook URL is a secret and is never returned. These endpoints read only: rules and destinations are changed in dotMARC.
 
 Rules name groups, tags and domains across the whole estate, so a key limited to groups gets a `404` on the rule endpoints and an empty list of destinations.
 

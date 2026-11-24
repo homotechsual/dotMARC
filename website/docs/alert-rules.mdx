@@ -5,7 +5,7 @@ description: Control when each kind of alert is raised, for which clients, how s
 
 # Alert rules
 
-Each kind of alert is controlled by **alert rules**, under **Manage > Alert rules** (`/alerts/rules`). A rule decides when that kind of alert is raised, for which domains, how serious it is and how it behaves. dotMARC ships one **default rule** for every kind of alert, applying to every domain, so alerting works the same as always until someone changes a rule.
+Each kind of alert is controlled by **alert rules**, under **Manage > Alerts & PSA > Rules** (`/alerts/rules`). A rule decides when that kind of alert is raised, for which domains, how serious it is and how it behaves. dotMARC ships one **default rule** for every kind of alert, applying to every domain, so alerting works the same as always until someone changes a rule.
 
 Anyone with `AlertsView` and no group limit can read the rules. Creating, changing, ordering, deleting and resetting them needs the `AlertRulesManage` permission, which the Admin role has. A custom role has to be given it on the Access page. Rules name groups, tags and domains across your whole estate, so someone limited to some groups doesn't see the page, and the Rule column on the Alerts page and the `rule` field in the API are empty for them. Every change is recorded in the [audit log](./audit-log.mdx).
 
@@ -18,7 +18,7 @@ Anyone with `AlertsView` and no group limit can read the rules. Creating, changi
 | Enabled | A rule that is off raises nothing, and the alerts it has open are closed on the next check. |
 | Applies to | The groups, tags and domains the rule covers, and any to leave out. Empty means every domain. A domain matches if it is in any group or tag chosen, or is one of the domains chosen, and isn't excluded. |
 | Settings | The kind's own thresholds, such as days without a report. Each has a range, and a value outside it is refused with a message naming it. |
-| Cooldown | Overrides the cooldown on Alert settings for this rule. Empty uses the global one. |
+| Cooldown | Overrides the cooldown on the Settings tab for this rule. Empty uses the global one. |
 | Close after (days) | For DMARC policy weakened and nameservers changed only: closes the alert by itself, as if acknowledged. Empty keeps it open until someone acknowledges it. |
 | Stop processing more rules | See below. |
 | Where it goes | All destinations, or only the destinations you choose. See [Destinations](./alerts.mdx#destinations). |
@@ -56,7 +56,7 @@ A rule can keep its notifications back during a daily window, for example 22:00 
 * **Hold, then send when it ends**: the alert is recorded and shown on the Alerts page straight away, but its notification waits. When the window ends it is sent, if the alert is still open. An alert that was resolved or acknowledged in the meantime is never sent.
 * **Mute (never send)**: the alert is recorded and shown, and its notification is never sent.
 
-The window runs from the start time up to, but not including, the end time, in the **Time zone** set on Alert settings (`UTC` until you change it). A window that ends earlier than it starts runs overnight, so 22:00 to 07:00 covers the night. Clocks changing for daylight saving are followed, because the window is read in local time.
+The window runs from the start time up to, but not including, the end time, in the **Time zone** set on the Settings tab (`UTC` until you change it). A window that ends earlier than it starts runs overnight, so 22:00 to 07:00 covers the night. Clocks changing for daylight saving are followed, because the window is read in local time.
 
 **Critical alerts ignore quiet hours** is on by default, so a Critical alert is sent straight away even inside a window. Turn it off on a rule to hold or mute its Critical alerts like the rest.
 

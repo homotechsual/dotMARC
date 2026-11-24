@@ -24,7 +24,7 @@ Each of these is a kind of alert with its own [rules](./alert-rules.mdx). By def
 
 ## Cooldown and re-firing
 
-Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for a domain, a new occurrence of the same condition is suppressed until the configured **cooldown** elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle. A rule can set its own cooldown instead of the one on Alert settings. The cooldown applies per rule, so two rules that both apply to a domain each keep their own.
+Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for a domain, a new occurrence of the same condition is suppressed until the configured **cooldown** elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle. A rule can set its own cooldown instead of the one on the Settings tab. The cooldown applies per rule, so two rules that both apply to a domain each keep their own.
 
 ## The Alerts page
 
@@ -36,7 +36,7 @@ Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge*
 
 ## Alert settings
 
-**Alert settings** (`/alerts/settings`) configures delivery. It requires the `AlertsManage` permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](./alert-rules.mdx), and where each rule's alerts go is chosen from the destinations set up here.
+The **Settings** tab of **Manage > Alerts & PSA** (`/alerts/settings`) configures delivery. It requires the `AlertsManage` permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](./alert-rules.mdx), and where each rule's alerts go is chosen from the destinations set up here.
 
 | Setting | Description |
 | --- | --- |
@@ -50,11 +50,11 @@ Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no `https
 
 ### Destinations
 
-A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you need under **Where alerts go** on Alert settings, for example one shared Teams channel and one Slack channel per client. A destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
+A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you need under **Where alerts go** on the Settings tab, for example one shared Teams channel and one Slack channel per client. A destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
 
 Each [alert rule](./alert-rules.mdx) either sends to **all destinations** (the default) or only to the destinations you choose for it. A rule that sends to chosen destinations and has none ticked still raises and records its alerts, but doesn't send them anywhere, which is how to keep a kind of alert in the Alerts page without posting it. Deleting a destination removes it from every rule that chose it, and says how many did first. A rule that chose only that destination then sends nowhere.
 
-The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the [audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with `AlertsManage`. The Alert rules page shows destination names, never URLs.
+The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the [audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with `AlertsManage`. The Rules tab shows destination names, never URLs.
 
 **Upgrading.** Alerts raised before quiet hours existed count as already notified, so an upgrade never sends them again, and every existing rule has quiet hours and escalation switched off. The Teams, Slack and generic webhook channels you had before become destinations on upgrade, named `Teams`, `Slack` and `Generic webhook`, keeping their URL and on/off switch. A channel with no URL becomes nothing. Every rule sends to all destinations until someone changes it, so alerts go to the same places as before.
 
@@ -167,7 +167,7 @@ Sent as a `POST` to a Slack incoming webhook, using Slack's Block Kit layout: a 
 
 1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
 2. Under **Incoming Webhooks**, turn them on, then **Add New Webhook to Workspace** and pick the channel.
-3. On Alert settings, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
+3. On the Settings tab, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
 
 </details>
 
