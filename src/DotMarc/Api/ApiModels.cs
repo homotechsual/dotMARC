@@ -66,13 +66,13 @@ public sealed record ApiDnsProvider(string Provider, string? Zone);
 
 public sealed record ApiDomainDetail(
     int Id, string Name, bool Monitored, IReadOnlyList<ApiNamedRef> Groups, IReadOnlyList<ApiNamedRef> Tags,
-    DateTimeOffset? LastReportReceivedUtc, double? PassRate, ApiDomainHealth Health, ApiDmarcPolicy DmarcPolicy, ApiDnsProvider DnsProvider)
+    DateTimeOffset? LastReportReceivedUtc, double? PassRate, ApiDmarcTarget? DmarcTarget, ApiDomainHealth Health, ApiDmarcPolicy DmarcPolicy, ApiDnsProvider DnsProvider)
 {
-    public static ApiDomainDetail From(Domain domain, ApiScope scope, double? passRate)
+    public static ApiDomainDetail From(Domain domain, ApiScope scope, double? passRate, ApiDmarcTarget? dmarcTarget)
     {
-        var summary = ApiDomain.From(domain, scope, passRate, dmarcTarget: null);
+        var summary = ApiDomain.From(domain, scope, passRate, dmarcTarget);
         return new ApiDomainDetail(
-            summary.Id, summary.Name, summary.Monitored, summary.Groups, summary.Tags, summary.LastReportReceivedUtc, summary.PassRate,
+            summary.Id, summary.Name, summary.Monitored, summary.Groups, summary.Tags, summary.LastReportReceivedUtc, summary.PassRate, summary.DmarcTarget,
             new ApiDomainHealth(
                 new ApiCheck(domain.DmarcCheckStatus.ToString(), domain.DmarcCheckedUtc, domain.DmarcCheckDetail),
                 new ApiCheck(domain.SpfCheckStatus.ToString(), domain.SpfCheckedUtc, domain.SpfCheckDetail),

@@ -732,6 +732,19 @@
           "dmarcPolicy": {
             "$ref": "#/components/schemas/ApiDmarcPolicy"
           },
+          "dmarcTarget": {
+            "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/ApiDmarcTarget"
+              }
+            ]
+          },
           "dnsProvider": {
             "$ref": "#/components/schemas/ApiDnsProvider"
           },
@@ -779,6 +792,7 @@
           "tags",
           "lastReportReceivedUtc",
           "passRate",
+          "dmarcTarget",
           "health",
           "dmarcPolicy",
           "dnsProvider"

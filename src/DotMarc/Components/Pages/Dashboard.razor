@@ -420,6 +420,7 @@ else
     private string? _mtaStsFilter;
     private string? _dkimFilter;
     private DmarcTargetOutcome? _targetFilter;
+    private bool _allScopedGroups;
     private bool _showFilters;
 
     /// <summary>Set by the Baselines page's links: below, checking or meets.</summary>
@@ -498,6 +499,7 @@ else
             ApplyPreferences(new DashboardPreferences());
             _targetFilter = linkedOutcome;
             _showFilters = true;
+            _allScopedGroups = true;
         }
 
         await LoadAsync();
@@ -581,7 +583,8 @@ else
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var scopedGroupClaims = authState.User.FindAll(DotMarc.Security.UserAccessClaimsTransformation.ScopedGroupClaimType).ToList();
         _scopedGroupIds = scopedGroupClaims.Count == 0 ? null : scopedGroupClaims.Select(c => int.Parse(c.Value)).ToList();
-        if (_scopedGroupIds is not null && (_selectedGroupId is null || !_scopedGroupIds.Contains(_selectedGroupId.Value)))
+        // A person limited to some groups sees one of them at a time, unless a Baselines link asked for all of them.
+        if (_scopedGroupIds is not null && !_allScopedGroups && (_selectedGroupId is null || !_scopedGroupIds.Contains(_selectedGroupId.Value)))
         {
             _selectedGroupId = _scopedGroupIds[0];
         }
@@ -606,7 +609,7 @@ else
         }
         if (_selectedGroupId is { } savedGroup && _allGroups.All(g => g.Id != savedGroup))
         {
-            _selectedGroupId = _scopedGroupIds?[0];
+            _selectedGroupId = _allScopedGroups ? null : _scopedGroupIds?[0];
         }
 
         var cutoff = DomainStatistics.GetWindowCutoffUtc();
@@ -628,6 +631,11 @@ else
         if (_selectedGroupId is { } groupId)
         {
             query = query.Where(d => d.Groups.Any(g => g.Id == groupId));
+        }
+        else if (_scopedGroupIds is { } scopedIds)
+        {
+            // No single group chosen: still only the person's own groups' domains, never another's.
+            query = query.Where(d => d.Groups.Any(g => scopedIds.Contains(g.Id)));
         }
         if (_selectedTagId is { } tagId)
         {
@@ -670,6 +678,7 @@ else
 
     private async Task OnGroupFilterChangedAsync(int? groupId)
     {
+        _allScopedGroups = false;
         _selectedGroupId = groupId;
         await LoadAsync();
     }

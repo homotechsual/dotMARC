@@ -255,7 +255,8 @@ public static class DomainReadEndpoints
         }
 
         var passRates = await PassRatesAsync(context, [found.Id], DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow()), cancellationToken);
-        return TypedResults.Ok(ApiDomainDetail.From(found, scope, PassRateOf(passRates, found.Id)));
+        var settings = await DnsRecordSettingsService.GetAsync(context, cancellationToken);
+        return TypedResults.Ok(ApiDomainDetail.From(found, scope, PassRateOf(passRates, found.Id), ApiDmarcTarget.For(found, settings)));
     }
 
     private static async Task<Results<Ok<ApiReportSummary>, ValidationProblem, ProblemHttpResult>> GetReportSummaryAsync(

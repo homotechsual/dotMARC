@@ -84,7 +84,7 @@ The list endpoints take filters as query parameters, so a script asks for just w
 - **Domains** can be given by id or name. A domain the key can't see is a 404.
 - **Dates** are a day (`2026-10-01`, from midnight UTC) or a time with its zone (`2026-10-01T09:30:00Z`). Filters ending `After` include the time you give; filters ending `Before` don't, so back-to-back ranges never overlap. In a URL a `+` offset should be sent as `%2B` (`2026-10-01T10:30:00%2B01:00`); dotMARC also reads an unencoded `+`, which arrives as a space, the same way.
 - **A value dotMARC doesn't recognise** is a 400 that names the filter and lists the values it accepts.
-- **DMARC target:** each domain in the list has a `dmarcTarget` with the `policy` and `subdomainPolicy` it should reach, its `source` (`domain`, `group` or `system`) and its `outcome`: `meets`, `below`, or `checking` when the domain has not been checked yet. It is null when no target applies. `dmarcTarget=meets,below,checking` filters the list by outcome, for monitored domains only, matching the counts on the Baselines page.
+- **DMARC target:** each domain in the list, and a single domain's details, has a `dmarcTarget` with the `policy` and `subdomainPolicy` it should reach, its `source` (`domain`, `group` or `system`) and its `outcome`: `meets`, `below`, or `checking` when the domain has not been checked yet. It is null when no target applies. `dmarcTarget=meets,below,checking` filters the list by outcome, for monitored domains only, matching the counts on the Baselines page.
 
 <details>
 <summary>Filtering examples</summary>

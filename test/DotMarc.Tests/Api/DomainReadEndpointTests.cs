@@ -562,4 +562,17 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
         Assert.Equal([ownDomainId], page!.Items.Select(domain => domain.Id));
         Assert.Equal(1, page.TotalCount);
     }
+
+    [Fact]
+    public async Task GetDomain_ShowsTheSameDmarcTargetAsTheList()
+    {
+        await SetSystemTargetAsync(DmarcPolicyLevel.Quarantine);
+        var domainId = await _host.SeedDomainAsync("api-target-detail.example", configure: domain => PublishPolicy(domain, DmarcPolicyLevel.Reject));
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var detail = await client.GetFromJsonAsync<ApiDomainDetail>($"/api/v1/domains/{domainId}");
+
+        Assert.Equal(new ApiDmarcTarget("quarantine", "quarantine", "system", "meets"), detail!.DmarcTarget);
+    }
 }
