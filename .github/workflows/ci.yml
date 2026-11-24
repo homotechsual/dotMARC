@@ -53,7 +53,7 @@ jobs:
         run: node scripts/ci-scope.mjs
 
       - name: Test the release scripts
-        run: node --test scripts/release-tags.test.mjs
+        run: node --test scripts/release-tags.test.mjs scripts/release-issues.test.mjs
 
       - name: Set up .NET
         if: steps.scope.outputs.needed == 'true'

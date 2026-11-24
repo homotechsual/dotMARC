@@ -285,6 +285,31 @@ jobs:
             - GHCR: `${{ needs.publish-images.outputs.ghcr_image }}:${{ needs.publish-images.outputs.version }}`
             - Docker Hub: `${{ needs.publish-images.outputs.dockerhub_image }}:${{ needs.publish-images.outputs.version }}`
 
+  # Issues stay open as status:in-progress until their release is cut. Now the release exists: close the milestone's
+  # release:ready issues as shipped, move every other open issue in it to the next milestone, and close the milestone.
+  # Pre-release tags are skipped by the script.
+  close-out-issues:
+    name: Close out the release's issues
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Test the close-out plan
+        run: node --test scripts/release-issues.test.mjs
+
+      - name: Close shipped issues and move the rest to the next milestone
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-issues.mjs "${GITHUB_REF_NAME}"
+
   # The website says which version is latest (the homepage and any <LatestVersion /> in the docs), worked out at
   # build time from the newest GitHub release. That release exists now, so rebuild the site on main to pick it up.
   # A dispatch on main is what publishes to production: a release event would deploy a preview of the tag instead.
