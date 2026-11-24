@@ -114,6 +114,11 @@ public static class DemoDataSeeder
                 domain.Groups.Add(groupsByName[domainSeed.GroupName]);
             }
 
+            foreach (var additionalGroupName in domainSeed.AdditionalGroupNames ?? [])
+            {
+                domain.Groups.Add(groupsByName[additionalGroupName]);
+            }
+
             foreach (var reportSeed in domainSeed.Reports)
             {
                 var report = new Report

@@ -45,7 +45,7 @@ public static class DemoDataGenerator
         var groups = new List<DemoGroupSeed>
         {
             new("Aurora Retail"),
-            new("Brightline Legal"),
+            new("Brightline Legal", DmarcPolicyLevel.Quarantine),
             new("Cobalt Freight", DmarcPolicyLevel.Reject),
             new("Driftwood Media"),
             new("Emberwood Finance"),
@@ -273,11 +273,16 @@ public static class DemoDataGenerator
         var cobaltIndex = domains.FindIndex(domain => domain.Name == "cobalt-freight.example");
         domains[cobaltIndex] = domains[cobaltIndex] with { DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100 };
 
-        // The DMARC target story: the system target is quarantine and Cobalt Freight sets reject. Aurora Retail meets the system target,
+        // The DMARC target story: the system target is quarantine, Cobalt Freight sets reject and Brightline Legal sets quarantine. Aurora Retail meets the system target,
         // Brightline Legal is stricter than it, Emberwood Finance is on quarantine but only at 50 percent so is below, and Cobalt Freight
         // (and the domains with no record) are below. Each uses the check status the domain already has, so nothing else changes.
         SetObservedPolicy(domains, "brightline-legal.example", DmarcPolicyLevel.Reject, 100);
         SetObservedPolicy(domains, "emberwood-finance.example", DmarcPolicyLevel.Quarantine, 50);
+
+        // Two group targets, and a domain in both: Brightline Legal sets quarantine and Cobalt Freight reject, so brightline-legal.example, which is in
+        // both groups, is held to the strictest (reject) and its page says so. It publishes reject, so it still meets.
+        var brightlineIndex = domains.FindIndex(domain => domain.Name == "brightline-legal.example");
+        domains[brightlineIndex] = domains[brightlineIndex] with { AdditionalGroupNames = ["Cobalt Freight"] };
 
         var alertEvents = BuildAlertEvents(nowUtc, domains);
         alertEvents.AddRange(BuildSenderAlertEvents(nowUtc, domains));

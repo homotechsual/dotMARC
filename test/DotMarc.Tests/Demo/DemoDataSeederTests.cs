@@ -1,3 +1,4 @@
+using DotMarc.Baselines;
 using DotMarc.Data;
 using DotMarc.Demo;
 using DotMarc.Psa;
@@ -315,8 +316,27 @@ public sealed class DemoDataSeederTests : IAsyncLifetime
 
         using var verify = CreateContext();
         Assert.Equal(DmarcPolicyLevel.Quarantine, (await verify.DnsRecordSettings.SingleAsync()).TargetDmarcPolicy);
-        var groupTargets = await verify.Groups.Where(group => group.TargetDmarcPolicy != null).ToListAsync();
-        var cobalt = Assert.Single(groupTargets);
-        Assert.Equal(("Cobalt Freight", DmarcPolicyLevel.Reject), (cobalt.Name, cobalt.TargetDmarcPolicy));
+        var groupTargets = await verify.Groups.Where(group => group.TargetDmarcPolicy != null).OrderBy(group => group.Name).ToListAsync();
+        Assert.Equal(
+            [("Brightline Legal", DmarcPolicyLevel.Quarantine), ("Cobalt Freight", DmarcPolicyLevel.Reject)],
+            groupTargets.Select(group => (group.Name, group.TargetDmarcPolicy)));
+    }
+
+    [Fact]
+    public async Task ResetAsync_PutsADomainInTwoGroupsWithDifferentTargets_AndItStillMeetsTheStrictestOfThem()
+    {
+        using (var context = CreateContext())
+        {
+            await DemoDataSeeder.ResetAsync(context, SampleDataset(), CancellationToken.None);
+        }
+
+        using var verify = CreateContext();
+        var settings = await verify.DnsRecordSettings.AsNoTracking().SingleAsync();
+        var domain = await verify.Domains.AsNoTracking().Include(candidate => candidate.Groups).SingleAsync(candidate => candidate.Name == "brightline-legal.example");
+        var effectiveTarget = DmarcTargetResolver.Resolve(domain, settings);
+
+        Assert.Equal(["Brightline Legal", "Cobalt Freight"], domain.Groups.Select(group => group.Name).Order());
+        Assert.Equal(DmarcPolicyLevel.Reject, effectiveTarget?.Policy);
+        Assert.Equal(DmarcTargetOutcome.Meets, DmarcTargetCheck.Outcome(domain, effectiveTarget));
     }
 }

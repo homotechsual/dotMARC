@@ -64,7 +64,8 @@ public sealed record DemoDomainSeed(
     DmarcPolicyLevel? DmarcPolicy = null,
     DmarcPolicyLevel? DmarcSubdomainPolicy = null,
     int? DmarcPercent = null,
-    string? SpfRangesJson = null);
+    string? SpfRangesJson = null,
+    IReadOnlyList<string>? AdditionalGroupNames = null);
 
 public sealed record DemoTlsrptReportSeed(
     string ReportingOrg,
