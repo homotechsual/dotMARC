@@ -13,6 +13,8 @@ The navbar groups documentation, API reference and FAQs under Resources; Updates
 
 Release cards use compact metadata above each item's title: issue number, change type and status. Product areas are a secondary text list rather than large competing badges. Planned releases use wider columns, with unscheduled ideas in their own section below. Completion percentages and bars always use the full public milestone, even while filters are active.
 
+Each issue card is one link to its GitHub issue, including its metadata and padding. It supports keyboard navigation and standard browser link actions such as opening in a new tab.
+
 Website Publish calls the reusable Website CI workflow first, for previews, production and manual runs. CI checks the exact deployment commit, builds once with the configured public Turnstile key, and runs typechecking, roadmap contract tests and browser regressions before uploading `website-build`. The Deploy job requires successful validation and downloads that same artifact without rebuilding. Failed or cancelled validation blocks deployment; the deployment fails if its artifact is unavailable. Rerunning just Deploy reuses the retained artifact (seven days); after expiry, rerun the whole workflow.
 
 Fork pull requests run the same validation with the Turnstile test key, but upload no publishable artifact and cannot deploy. Publication credentials are available only to the Deploy job. The orchestrating workflow owns path triggers and concurrency, so a website change no longer builds independently in both CI and Publish.
