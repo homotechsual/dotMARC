@@ -150,6 +150,21 @@ public sealed class DnsPushBatchRunnerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ALeftoverDmarcRecord_FailsThatDomainAfterTheChange_IsAudited_AndTheBatchCarriesOn()
+    {
+        var (batchId, _) = await ReviewedBatchAsync("leftover.example", "fine.example");
+        _provider.ResultsByZone["leftover.example"] = new DnsPushResult(DnsPushOutcome.LeftDuplicateDmarcRecord, "the name now has more than one DMARC record");
+
+        await RunAsync(batchId);
+
+        Assert.Equal(
+            [DnsPushBatchDomainStatus.FailedAfterChange, DnsPushBatchDomainStatus.Pushed],
+            StatusesOf(await ReloadAsync(batchId)));
+        Assert.Equal(2, _provider.Pushes.Count);
+        Assert.Equal(["dns.push_failed", "dns.pushed"], await AuditActionsAsync());
+    }
+
+    [Fact]
     public async Task ADomainWhoseDnsMovedToAnotherProviderSinceReview_IsZoneNotFound_AndNeverPushed()
     {
         var (batchId, _) = await ReviewedBatchAsync("moved.example", "stays.example");
