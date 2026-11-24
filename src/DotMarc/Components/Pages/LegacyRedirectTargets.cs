@@ -6,6 +6,7 @@ public static class LegacyRedirectTargets
     private static readonly Dictionary<string, string> Destinations = new(StringComparer.OrdinalIgnoreCase)
     {
         ["/senders/baseline"] = "/baselines/sender",
+        ["/psa/settings"] = "/alerts/psa",
     };
 
     /// <summary>Where an old address now lives, with its query string kept, or null when the address is not an old one.</summary>

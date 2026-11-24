@@ -18,4 +18,7 @@ public static class TabbedPageNavigation
 
         return 0;
     }
+
+    /// <summary>The first tab a person can see, or none. Menu entries and landing pages send people there.</summary>
+    public static TabbedPageTab? FirstVisible(IReadOnlyList<TabbedPageTab> tabs) => tabs.FirstOrDefault(tab => tab.Visible);
 }

@@ -856,14 +856,14 @@ app.MapGet("/psa/ninjaone/connect", async (HttpContext httpContext, DotMarc.Psa.
     var actor = DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User);
     var state = stateProtector.Protect(DotMarc.Psa.NinjaOne.NinjaOneStateProtector.UserKey(actor), timeProvider.GetUtcNow());
     var url = await connector.BuildAuthorizationUrlAsync(DotMarc.Psa.NinjaOne.NinjaOneConnector.RedirectUri(httpContext.Request), state, httpContext.RequestAborted);
-    return Results.Redirect(url ?? "/psa/settings?psa=ninjaone&ninjaone=not-configured");
+    return Results.Redirect(url ?? "/alerts/psa?psa=ninjaone&ninjaone=not-configured");
 }).RequireAuthorization(nameof(Permission.AlertsManage));
 
 app.MapGet(DotMarc.Psa.NinjaOne.NinjaOneConnector.CallbackPath, async (string? code, string? state, string? error, HttpContext httpContext, DotMarc.Psa.NinjaOne.NinjaOneConnector connector) =>
 {
     var outcome = await connector.CompleteAsync(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), state, code, error,
         DotMarc.Psa.NinjaOne.NinjaOneConnector.RedirectUri(httpContext.Request), httpContext.RequestAborted);
-    return Results.Redirect($"/psa/settings?psa=ninjaone&ninjaone={DotMarc.Psa.NinjaOne.NinjaOneConnector.OutcomeKey(outcome)}");
+    return Results.Redirect($"/alerts/psa?psa=ninjaone&ninjaone={DotMarc.Psa.NinjaOne.NinjaOneConnector.OutcomeKey(outcome)}");
 }).RequireAuthorization(nameof(Permission.AlertsManage));
 
 // Unauthenticated by necessity - HaloPSA's own outbound webhook config isn't confirmed to support

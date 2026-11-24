@@ -5,17 +5,20 @@
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject ILogger<AlertsSettings> Logger
 @inject IDialogService DialogService
 
-<AppPageTitle>dotMARC - Alert Settings</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA</AppPageTitle>
+<TabbedPage Title="Alerts & PSA" Tabs="_tabs">
 <div class="d-flex align-center mb-4">
-    <MudText Typo="Typo.h4">Alert settings</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/alerts" Text="How alerts work" Class="ml-2" />
+    <DocsLink Href="https://dotmarc.app/docs/alerts" Text="How alerts work" />
 </div>
 
 @if (_settings is null)
@@ -108,7 +111,7 @@ else
 
 <MudPaper Class="pa-4 mt-4">
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-        PSA connections have moved to <MudLink Href="/psa/settings">PSA settings</MudLink>.
+        PSA connections have moved to <MudLink Href="/alerts/psa">PSA settings</MudLink>.
     </MudAlert>
     <MudText Typo="Typo.h5" Class="mb-1">Which alerts create tickets</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
@@ -129,8 +132,10 @@ else
         </div>
     }
 </MudPaper>
+</TabbedPage>
 
 @code {
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
     private NotificationSettings? _settings;
     private IReadOnlyList<AlertDestinationSummary>? _destinations;
     private IReadOnlyList<string> _zones = [];
@@ -229,6 +234,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _tabs = await AlertsPsaTabs.ForAsync(user, AuthorizationService);
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await NotificationSettingsService.GetAsync(db);
         _globalTicketRules = await AlertTicketRuleService.GetGlobalAsync(db);

@@ -1,14 +1,18 @@
-@page "/psa/settings"
+@page "/alerts/psa"
 @attribute [Authorize(Policy = "AlertsManage")]
 @using DotMarc.Components.Psa
 @using DotMarc.Components.Shared
 @using DotMarc.Psa
+@using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 
-<AppPageTitle>dotMARC - PSA Settings</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA</AppPageTitle>
+<TabbedPage Title="Alerts & PSA" Tabs="_tabs">
 <div class="d-flex align-center mb-1">
-    <MudText Typo="Typo.h4">PSA settings</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" Class="ml-2" />
+    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" />
 </div>
 <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
     Turn on any PSA dotMARC should raise tickets in. You can use more than one: each Group or Domain links to a company in
@@ -33,8 +37,11 @@
         <div class="pt-4"><SuperOpsSettingsTab EnabledChanged="@(enabled => _superOpsEnabled = enabled)" /></div>
     </MudTabPanel>
 </MudTabs>
+</TabbedPage>
 
 @code {
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
+
     /// <summary>Which PSA's tab to open, such as "ninjaone" after its sign-in.</summary>
     [SupplyParameterFromQuery(Name = "psa")] public string? Psa { get; set; }
 
@@ -47,8 +54,11 @@
     private bool _autotaskEnabled;
     private bool _superOpsEnabled;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _tabs = await AlertsPsaTabs.ForAsync(user, AuthorizationService);
+
         // The tabs are in PsaKind order.
         if (Enum.GetValues<PsaKind>().ToList().FindIndex(psa => string.Equals(psa.ToString(), Psa, StringComparison.OrdinalIgnoreCase)) is var index and >= 0)
         {

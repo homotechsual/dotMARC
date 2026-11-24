@@ -28,5 +28,5 @@ public static class BaselineTabs
     }
 
     /// <summary>The tab the Baselines landing page sends a person to: the first one they can see, or none.</summary>
-    public static TabbedPageTab? FirstVisible(IReadOnlyList<TabbedPageTab> tabs) => tabs.FirstOrDefault(tab => tab.Visible);
+    public static TabbedPageTab? FirstVisible(IReadOnlyList<TabbedPageTab> tabs) => TabbedPageNavigation.FirstVisible(tabs);
 }

@@ -17,11 +17,11 @@
 @inject ILogger<AlertRules> Logger
 @inject NavigationManager Navigation
 
-<AppPageTitle>dotMARC - Alert rules</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA</AppPageTitle>
 
+<TabbedPage Title="Alerts & PSA" Tabs="_tabs">
 <div class="d-flex align-center mb-1">
-    <MudText Typo="Typo.h4">Alert rules</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/alert-rules" Text="How alert rules work" Class="ml-2" />
+    <DocsLink Href="https://dotmarc.app/docs/alert-rules" Text="How alert rules work" />
 </div>
 <MudText Typo="Typo.body1" Class="mb-4">
     Each rule decides when one kind of alert is raised, for which domains, how serious it is, where it is sent and whether it opens a ticket. For a domain,
@@ -155,8 +155,10 @@ else
         </MudPaper>
     }
 }
+</TabbedPage>
 
 @code {
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
     private bool _loaded;
     private bool _canManage;
     private List<AlertRuleKind> _kinds = [];
@@ -180,6 +182,8 @@ else
             Navigation.NavigateTo("/AccessDenied");
             return;
         }
+
+        _tabs = await AlertsPsaTabs.ForAsync(user, AuthorizationService);
 
         await ReloadAsync();
     }

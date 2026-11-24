@@ -52,16 +52,10 @@
             <AuthorizeView Policy="DnsPushManage">
                 <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
             </AuthorizeView>
-            <AuthorizeView Policy="AlertsView">
-                @if (AlertRuleAccess.MayView(context.User))
-                {
-                    <MudMenuItem Href="/alerts/rules" Icon="@Icons.Material.Filled.Rule">Alert rules</MudMenuItem>
-                }
-            </AuthorizeView>
-            <AuthorizeView Policy="AlertsManage">
-                <MudMenuItem Href="/alerts/settings" Icon="@Icons.Material.Filled.NotificationsActive">Alert settings</MudMenuItem>
-                <MudMenuItem Href="/psa/settings" Icon="@Icons.Material.Filled.ConfirmationNumber">PSA settings</MudMenuItem>
-            </AuthorizeView>
+            @if (_alertsPsaHref is not null)
+            {
+                <MudMenuItem Href="@_alertsPsaHref" Icon="@Icons.Material.Filled.NotificationsActive">Alerts &amp; PSA</MudMenuItem>
+            }
             <AuthorizeView Policy="AccessManage">
                 <MudMenuItem Href="/access" Icon="@Icons.Material.Filled.ManageAccounts">Access</MudMenuItem>
                 <MudMenuItem Href="/branding/settings" Icon="@Icons.Material.Filled.Palette">Branding</MudMenuItem>
@@ -161,11 +155,12 @@
     }
 
     private bool _showBaselines;
+    private string? _alertsPsaHref;
 
     protected override async Task OnInitializedAsync()
     {
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
-        await RefreshBaselinesAsync();
+        await RefreshTabbedMenuEntriesAsync();
     }
 
     private async void OnAuthenticationStateChanged(Task<AuthenticationState> authenticationState)
@@ -174,22 +169,23 @@
         {
             await InvokeAsync(async () =>
             {
-                await RefreshBaselinesAsync();
+                await RefreshTabbedMenuEntriesAsync();
                 StateHasChanged();
             });
         }
         catch (Exception ex)
         {
             // A stale menu entry must not end the circuit, so log it and carry on.
-            Logger.LogWarning(ex, "Refreshing the Baselines menu entry after a sign-in change failed.");
+            Logger.LogWarning(ex, "Refreshing the Baselines and Alerts & PSA menu entries after a sign-in change failed.");
         }
     }
 
-    private async Task RefreshBaselinesAsync()
+    private async Task RefreshTabbedMenuEntriesAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        _showBaselines = user.Identity?.IsAuthenticated == true
-            && (await BaselineTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible);
+        var signedIn = user.Identity?.IsAuthenticated == true;
+        _showBaselines = signedIn && (await BaselineTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible);
+        _alertsPsaHref = signedIn ? TabbedPageNavigation.FirstVisible(await AlertsPsaTabs.ForAsync(user, AuthorizationService))?.Href : null;
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args) => await RecordPageViewAsync(args.Location);
