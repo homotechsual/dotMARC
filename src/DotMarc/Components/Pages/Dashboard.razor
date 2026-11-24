@@ -1,7 +1,9 @@
 @page "/dashboard"
 @attribute [Authorize(Policy = "DomainsView")]
+@using DotMarc.Baselines
 @using DotMarc.Components.Shared
 @using DotMarc.Data
+@using DotMarc.Notifications
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -244,6 +246,7 @@ else
                     <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.PassRate ?? -1)">Pass rate (30d)</MudTableSortLabel></MudTh>
                     <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.LastReportReceivedUtc ?? DateTimeOffset.MinValue)">Last report</MudTableSortLabel></MudTh>
                     <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.IsMonitored)">Monitored</MudTableSortLabel></MudTh>
+                    <MudTh rowspan="2"><MudTableSortLabel SortBy="new Func<DashboardDomainRow, object>(r => r.TargetOutcome)">Target</MudTableSortLabel></MudTh>
                     <MudTh colspan="3" Style="text-align:center">DNS Status</MudTh>
                 </tr>
                 <tr>
@@ -271,6 +274,13 @@ else
                         <MudSelect T="bool?" Value="_monitoredFilter" ValueChanged="@(v => _monitoredFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
                             <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
                             <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                        </MudSelect>
+                    </MudTh>
+                    <MudTh>
+                        <MudSelect T="DmarcTargetOutcome?" Value="_targetFilter" ValueChanged="@(v => _targetFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
+                            <MudSelectItem T="DmarcTargetOutcome?" Value="DmarcTargetOutcome.Below">Below target</MudSelectItem>
+                            <MudSelectItem T="DmarcTargetOutcome?" Value="DmarcTargetOutcome.NeedsChecking">Needs checking</MudSelectItem>
+                            <MudSelectItem T="DmarcTargetOutcome?" Value="DmarcTargetOutcome.Meets">Meets target</MudSelectItem>
                         </MudSelect>
                     </MudTh>
                     <MudTh>
@@ -322,6 +332,23 @@ else
                             @(context.IsMonitored ? "Yes" : "No")
                         </NotAuthorized>
                     </AuthorizeView>
+                </MudTd>
+                <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
+                    @switch (context.TargetOutcome)
+                    {
+                        case DmarcTargetOutcome.Meets:
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Meets target</MudChip>
+                            break;
+                        case DmarcTargetOutcome.Below:
+                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">Below target</MudChip>
+                            break;
+                        case DmarcTargetOutcome.NeedsChecking:
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">Needs checking</MudChip>
+                            break;
+                        default:
+                            <span class="mud-text-secondary">No target</span>
+                            break;
+                    }
                 </MudTd>
                 <MudTd @onclick="@(() => Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(context.Name)}"))" Style="cursor:pointer">
                     <MudChip T="string" Color="@DmarcStatusPresentation.GetColor(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)" Size="Size.Small">@DmarcStatusPresentation.GetLabel(context.DmarcCheckStatus, context.DmarcAuthorizationCheckStatus)</MudChip>
@@ -392,7 +419,11 @@ else
     private string? _dmarcFilter;
     private string? _mtaStsFilter;
     private string? _dkimFilter;
+    private DmarcTargetOutcome? _targetFilter;
     private bool _showFilters;
+
+    /// <summary>Set by the Baselines page's links: below, checking or meets.</summary>
+    [SupplyParameterFromQuery(Name = "target")] public string? Target { get; set; }
     private bool _groupedView;
     private IReadOnlyList<DashboardDomainGroup> _groupedTables = [];
 
@@ -436,6 +467,11 @@ else
         {
             return false;
         }
+        // Monitored domains only, so the list matches the counts the Baselines page links from.
+        if (_targetFilter is { } outcome && (!row.IsMonitored || row.TargetOutcome != outcome))
+        {
+            return false;
+        }
         return true;
     }
 
@@ -455,6 +491,15 @@ else
             }
         }
 
+        if (TargetOutcomeFromQuery(Target) is { } linkedOutcome)
+        {
+            // A link from the Baselines page counts every domain the person can see, so a saved default's group, tag or
+            // column filters would make the list disagree with the count it was linked from.
+            ApplyPreferences(new DashboardPreferences());
+            _targetFilter = linkedOutcome;
+            _showFilters = true;
+        }
+
         await LoadAsync();
 
         if (RendererInfo.IsInteractive)
@@ -462,6 +507,14 @@ else
             ShowDnsPushResultToast();
         }
     }
+
+    private static DmarcTargetOutcome? TargetOutcomeFromQuery(string? value) => value?.ToLowerInvariant() switch
+    {
+        "below" => DmarcTargetOutcome.Below,
+        "checking" => DmarcTargetOutcome.NeedsChecking,
+        "meets" => DmarcTargetOutcome.Meets,
+        _ => null,
+    };
 
     private DashboardPreferences CurrentPreferences() => new(
         _groupedView, _selectedGroupId, _selectedTagId, _showFilters, _statusFilter, _minPassRatePercentFilter, _monitoredFilter, _dmarcFilter, _mtaStsFilter, _dkimFilter);
@@ -585,7 +638,8 @@ else
 
         var parseFailureCount = await db.ParseFailures.CountAsync();
 
-        (_summary, _rows) = DashboardSummary.Build(domains, parseFailureCount);
+        var targetSettings = await DnsRecordSettingsService.GetAsync(db);
+        (_summary, _rows) = DashboardSummary.Build(domains, parseFailureCount, targetSettings);
 
         var visibleGroups = (_selectedGroupId is { } onlyGroup ? _allGroups.Where(g => g.Id == onlyGroup) : _allGroups).Select(g => (g.Id, g.Name)).ToList();
         _groupedTables = DashboardGrouping.Group(

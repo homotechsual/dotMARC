@@ -84,6 +84,7 @@ The list endpoints take filters as query parameters, so a script asks for just w
 - **Domains** can be given by id or name. A domain the key can't see is a 404.
 - **Dates** are a day (`2026-10-01`, from midnight UTC) or a time with its zone (`2026-10-01T09:30:00Z`). Filters ending `After` include the time you give; filters ending `Before` don't, so back-to-back ranges never overlap. In a URL a `+` offset should be sent as `%2B` (`2026-10-01T10:30:00%2B01:00`); dotMARC also reads an unencoded `+`, which arrives as a space, the same way.
 - **A value dotMARC doesn't recognise** is a 400 that names the filter and lists the values it accepts.
+- **DMARC target:** each domain in the list has a `dmarcTarget` with the `policy` and `subdomainPolicy` it should reach, its `source` (`domain`, `group` or `system`) and its `outcome`: `meets`, `below`, or `checking` when the domain has not been checked yet. It is null when no target applies. `dmarcTarget=meets,below,checking` filters the list by outcome, for monitored domains only, matching the counts on the Baselines page.
 
 <details>
 <summary>Filtering examples</summary>
@@ -92,6 +93,7 @@ The list endpoints take filters as query parameters, so a script asks for just w
 | --- | --- |
 | Domains in group 3 whose SPF has too many lookups or is misconfigured | `GET /api/v1/domains?group=3&spf=TooManyLookups,Misconfigured` |
 | Domains that need attention, as the client portal shows them | `GET /api/v1/domains?status=NeedsAttention` |
+| Monitored domains below their DMARC target | `GET /api/v1/domains?dmarcTarget=below` |
 | Open SPF and DKIM alerts raised this week | `GET /api/v1/alerts?type=SpfRecordBroken,DkimRecordBroken&raisedAfter=2026-10-05` |
 | Everything that happened to one domain | `GET /api/v1/audit?domain=contoso.example` |
 | Sign-ins in September | `GET /api/v1/audit?kind=signIn&occurredAfter=2026-09-01&occurredBefore=2026-10-01` |

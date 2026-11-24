@@ -603,6 +603,29 @@
         ],
         "type": "object"
       },
+      "ApiDmarcTarget": {
+        "properties": {
+          "outcome": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subdomainPolicy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy",
+          "subdomainPolicy",
+          "source",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "ApiDnsProvider": {
         "properties": {
           "provider": {
@@ -621,6 +644,12 @@
       },
       "ApiDomain": {
         "example": {
+          "dmarcTarget": {
+            "outcome": "below",
+            "policy": "reject",
+            "source": "group",
+            "subdomainPolicy": "reject"
+          },
           "groups": [
             {
               "id": 3,
@@ -640,6 +669,19 @@
           ]
         },
         "properties": {
+          "dmarcTarget": {
+            "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/ApiDmarcTarget"
+              }
+            ]
+          },
           "groups": {
             "items": {
               "$ref": "#/components/schemas/ApiNamedRef"
@@ -680,7 +722,8 @@
           "groups",
           "tags",
           "lastReportReceivedUtc",
-          "passRate"
+          "passRate",
+          "dmarcTarget"
         ],
         "type": "object"
       },
@@ -3285,6 +3328,22 @@
                   "Ns1",
                   "DnsMadeEasy",
                   "Vercel"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "One or more outcomes against the DMARC target that applies to the domain: meets, below, or checking (not yet checked). Only monitored domains with a target match, as on the Baselines page. Repeat it or separate values with commas.",
+            "in": "query",
+            "name": "dmarcTarget",
+            "schema": {
+              "items": {
+                "enum": [
+                  "meets",
+                  "below",
+                  "checking"
                 ],
                 "type": "string"
               },

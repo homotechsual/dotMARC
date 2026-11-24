@@ -1,4 +1,6 @@
+using DotMarc.Baselines;
 using DotMarc.Data;
+using DotMarc.Notifications;
 
 namespace DotMarc.Api;
 
@@ -10,19 +12,48 @@ public sealed record ApiGroup(int Id, string Name, int DomainCount);
 
 public sealed record ApiTag(int Id, string Name, string Color, int DomainCount);
 
+/// <summary>The DMARC policy a domain should reach, where it comes from (domain, group or system) and whether the domain
+/// meets it (meets, below or checking, meaning not yet checked). All lower case.</summary>
+public sealed record ApiDmarcTarget(string Policy, string SubdomainPolicy, string Source, string Outcome)
+{
+    /// <summary>The words the API uses for each outcome, as in the domain list's dmarcTarget filter.</summary>
+    public static readonly IReadOnlyList<string> OutcomeNames = ["meets", "below", "checking"];
+
+    /// <summary>Null when no target applies. Needs the domain's Groups loaded (all of them, whatever the key's scope).</summary>
+    public static ApiDmarcTarget? For(Domain domain, DnsRecordSettings settings)
+    {
+        var target = DmarcTargetResolver.Resolve(domain, settings);
+        return target is null
+            ? null
+            : new ApiDmarcTarget(
+                target.Policy.ToString().ToLowerInvariant(),
+                target.SubdomainPolicy.ToString().ToLowerInvariant(),
+                target.Source.ToString().ToLowerInvariant(),
+                OutcomeName(DmarcTargetCheck.Outcome(domain, target)));
+    }
+
+    private static string OutcomeName(DmarcTargetOutcome outcome) => outcome switch
+    {
+        DmarcTargetOutcome.Meets => "meets",
+        DmarcTargetOutcome.Below => "below",
+        _ => "checking",
+    };
+}
+
 public sealed record ApiDomain(
     int Id, string Name, bool Monitored, IReadOnlyList<ApiNamedRef> Groups, IReadOnlyList<ApiNamedRef> Tags,
-    DateTimeOffset? LastReportReceivedUtc, double? PassRate)
+    DateTimeOffset? LastReportReceivedUtc, double? PassRate, ApiDmarcTarget? DmarcTarget)
 {
     /// <summary>Needs Groups and Tags loaded; the pass rate comes from DomainReadEndpoints.PassRatesAsync.</summary>
-    public static ApiDomain From(Domain domain, ApiScope scope, double? passRate) => new(
+    public static ApiDomain From(Domain domain, ApiScope scope, double? passRate, ApiDmarcTarget? dmarcTarget) => new(
         domain.Id,
         domain.Name,
         domain.IsMonitored,
         domain.Groups.Where(group => scope.Includes(group.Id)).OrderBy(group => group.Name).Select(group => new ApiNamedRef(group.Id, group.Name)).ToList(),
         domain.Tags.OrderBy(tag => tag.Name).Select(tag => new ApiNamedRef(tag.Id, tag.Name)).ToList(),
         domain.LastReportReceivedUtc,
-        passRate);
+        passRate,
+        dmarcTarget);
 }
 
 public sealed record ApiCheck(string Status, DateTimeOffset? CheckedUtc, string? Detail);
@@ -39,7 +70,7 @@ public sealed record ApiDomainDetail(
 {
     public static ApiDomainDetail From(Domain domain, ApiScope scope, double? passRate)
     {
-        var summary = ApiDomain.From(domain, scope, passRate);
+        var summary = ApiDomain.From(domain, scope, passRate, dmarcTarget: null);
         return new ApiDomainDetail(
             summary.Id, summary.Name, summary.Monitored, summary.Groups, summary.Tags, summary.LastReportReceivedUtc, summary.PassRate,
             new ApiDomainHealth(

@@ -464,4 +464,102 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
             breakdown.InferredSpfFailure, breakdown.InferredDkimFailure, breakdown.InferredBothFailure), summary.ReasonBreakdown);
         Assert.Equal(sources, summary.TopSources);
     }
+
+    private async Task SetSystemTargetAsync(DmarcPolicyLevel policy)
+    {
+        await using var context = _host.CreateContext();
+        var settings = await context.DnsRecordSettings.SingleAsync();
+        settings.TargetDmarcPolicy = policy;
+        await context.SaveChangesAsync();
+    }
+
+    private static void PublishPolicy(Domain domain, DmarcPolicyLevel policy)
+    {
+        domain.DmarcCheckStatus = DmarcCheckStatus.Ok;
+        domain.DmarcCheckedUtc = DateTimeOffset.UtcNow.AddHours(-1);
+        domain.DmarcPolicy = policy;
+        domain.DmarcPercent = 100;
+    }
+
+    [Fact]
+    public async Task ListDomains_ShowsTheDmarcTargetOutcome_AndItsSource()
+    {
+        await SetSystemTargetAsync(DmarcPolicyLevel.Reject);
+        var tagId = await _host.SeedTagAsync("api-target-outcome");
+        await _host.SeedDomainAsync("api-target-below.example", tagIds: [tagId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var page = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?tag={tagId}");
+
+        var domain = Assert.Single(page!.Items);
+        Assert.Equal(new ApiDmarcTarget("reject", "reject", "system", "below"), domain.DmarcTarget);
+    }
+
+    [Fact]
+    public async Task ListDomains_HasNoDmarcTarget_WhenNoTargetIsSet()
+    {
+        var tagId = await _host.SeedTagAsync("api-target-none");
+        await _host.SeedDomainAsync("api-target-none.example", tagIds: [tagId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var page = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?tag={tagId}");
+
+        Assert.Null(Assert.Single(page!.Items).DmarcTarget);
+    }
+
+    [Fact]
+    public async Task ListDomains_FiltersByDmarcTargetOutcome_AndCountsAcrossPages()
+    {
+        await SetSystemTargetAsync(DmarcPolicyLevel.Quarantine);
+        var tagId = await _host.SeedTagAsync("api-target-filter");
+        await _host.SeedDomainAsync("api-target-a-below.example", tagIds: [tagId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        await _host.SeedDomainAsync("api-target-b-meets.example", tagIds: [tagId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.Reject));
+        await _host.SeedDomainAsync("api-target-c-below.example", tagIds: [tagId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        await _host.SeedDomainAsync("api-target-d-unchecked.example", tagIds: [tagId]);
+        await _host.SeedDomainAsync("api-target-e-unmonitored.example", tagIds: [tagId], monitored: false, configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var firstPage = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?tag={tagId}&dmarcTarget=below&pageSize=1");
+        var secondPage = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?tag={tagId}&dmarcTarget=below&pageSize=1&page=2");
+        var checking = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?tag={tagId}&dmarcTarget=checking");
+        var meetsOrChecking = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?tag={tagId}&dmarcTarget=meets,checking");
+
+        Assert.Equal(2, firstPage!.TotalCount);
+        Assert.Equal(["api-target-a-below.example", "api-target-c-below.example"], firstPage.Items.Concat(secondPage!.Items).Select(domain => domain.Name));
+        Assert.Equal(["api-target-d-unchecked.example"], checking!.Items.Select(domain => domain.Name));
+        Assert.Equal(2, meetsOrChecking!.TotalCount);
+    }
+
+    [Fact]
+    public async Task ListDomains_RefusesAnUnknownDmarcTargetValue()
+    {
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+
+        var response = await client.GetAsync("/api/v1/domains?dmarcTarget=nonsense");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.GetProperty("errors").TryGetProperty("dmarcTarget", out _));
+    }
+
+    [Fact]
+    public async Task ListDomains_FiltersByDmarcTargetOnlyWithinAScopedKeysGroups()
+    {
+        await SetSystemTargetAsync(DmarcPolicyLevel.Reject);
+        var ownGroupId = await _host.SeedGroupAsync("api-target-own");
+        var otherGroupId = await _host.SeedGroupAsync("api-target-other");
+        var ownDomainId = await _host.SeedDomainAsync("api-target-scope-own.example", groupIds: [ownGroupId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        await _host.SeedDomainAsync("api-target-scope-other.example", groupIds: [otherGroupId], configure: domain => PublishPolicy(domain, DmarcPolicyLevel.None));
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView], scopedGroupIds: [ownGroupId]);
+        using var client = _host.ClientFor(secret);
+
+        var page = await client.GetFromJsonAsync<ApiPage<ApiDomain>>("/api/v1/domains?dmarcTarget=below");
+
+        Assert.Equal([ownDomainId], page!.Items.Select(domain => domain.Id));
+        Assert.Equal(1, page.TotalCount);
+    }
 }

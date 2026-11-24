@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using DotMarc.Audit;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -72,7 +73,8 @@ public static class DomainWriteEndpoints
         var domainId = await context.Domains.Where(domain => domain.Name == normalizedName).Select(domain => domain.Id).SingleAsync(cancellationToken);
         var added = await DomainReadEndpoints.LoadForApiAsync(context, scope, domainId, cancellationToken);
         // Just added, so it has no reports and no pass rate yet.
-        return TypedResults.Created($"/api/v1/domains/{domainId}", ApiDomain.From(added!, scope, passRate: null));
+        var settings = await DnsRecordSettingsService.GetAsync(context, cancellationToken);
+        return TypedResults.Created($"/api/v1/domains/{domainId}", ApiDomain.From(added!, scope, passRate: null, ApiDmarcTarget.For(added!, settings)));
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> SetGroupsAsync(

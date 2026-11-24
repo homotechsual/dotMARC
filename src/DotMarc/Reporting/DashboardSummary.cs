@@ -1,4 +1,6 @@
+using DotMarc.Baselines;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using MudBlazor;
 
 namespace DotMarc.Reporting;
@@ -19,7 +21,9 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
         return missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
     }
 
-    public static (DashboardSummary Summary, List<DashboardDomainRow> Rows) Build(IReadOnlyList<Domain> domains, int parseFailureCount)
+    /// <summary>Needs each domain's Groups loaded when <paramref name="settings"/> is given, to work out its DMARC target outcome;
+    /// without settings every row has no target.</summary>
+    public static (DashboardSummary Summary, List<DashboardDomainRow> Rows) Build(IReadOnlyList<Domain> domains, int parseFailureCount, DnsRecordSettings? settings = null)
     {
         var rows = domains
             .OrderBy(d => d.SortOrder)
@@ -30,8 +34,9 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
 
                 var status = StatusOf(d, passRate);
                 var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
+                var targetOutcome = settings is null ? DmarcTargetOutcome.NoTarget : DmarcTargetCheck.Outcome(d, DmarcTargetResolver.Resolve(d, settings));
 
-                return new DashboardDomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsMonitored, d.DmarcCheckStatus, d.DmarcAuthorizationCheckStatus, d.MtaStsStatus, d.SpfCheckStatus, d.DkimCheckStatus);
+                return new DashboardDomainRow(d.Id, d.Name, status, color, passRate, d.LastReportReceivedUtc, d.IsMonitored, d.DmarcCheckStatus, d.DmarcAuthorizationCheckStatus, d.MtaStsStatus, d.SpfCheckStatus, d.DkimCheckStatus, targetOutcome);
             })
             .ToList();
 
@@ -51,4 +56,4 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
 }
 
 /// <summary>One domain's row in the Dashboard's table.</summary>
-public sealed record DashboardDomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsMonitored, DmarcCheckStatus DmarcCheckStatus, DmarcAuthorizationCheckStatus DmarcAuthorizationCheckStatus, MtaStsStatus MtaStsStatus, SpfCheckStatus SpfCheckStatus, DkimCheckStatus DkimCheckStatus);
+public sealed record DashboardDomainRow(int Id, string Name, string Status, Color StatusColor, double? PassRate, DateTimeOffset? LastReportReceivedUtc, bool IsMonitored, DmarcCheckStatus DmarcCheckStatus, DmarcAuthorizationCheckStatus DmarcAuthorizationCheckStatus, MtaStsStatus MtaStsStatus, SpfCheckStatus SpfCheckStatus, DkimCheckStatus DkimCheckStatus, DmarcTargetOutcome TargetOutcome = DmarcTargetOutcome.NoTarget);
