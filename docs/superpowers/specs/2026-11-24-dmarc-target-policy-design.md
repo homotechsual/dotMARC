@@ -77,6 +77,60 @@ Stricter than the target counts as meeting it. Outcomes:
 
 The observed values are already stored on `Domain` (`DmarcPolicy`, `DmarcSubdomainPolicy`, `DmarcPercent`) by the DMARC check, with `sp` and `pct` defaults filled in.
 
+**Superseded in part by "RFC 9989 alignment" below**, which adds conditions (valid record, `np`, `t`) and changes how invalid records count.
+
+### RFC 9989 alignment (decided with the user, 24 November)
+
+RFC 9989 (May 2026) obsoletes RFC 7489 and is the current DMARC standard. dotMARC judges records against RFC 9989 and takes the cautious reading where RFC 7489 receivers, still in service, would behave differently. Sources: RFC 9989 sections 4.7, 4.8, 4.10, 4.10.1, Appendix A.6 and C; RFC 6376 section 3.2 (DKIM tag-list rule, which DMARC's syntax adopts by reference).
+
+#### What the standard says, as dotMARC applies it
+
+* `v=DMARC1` must be the first tag. If it is absent, not first or not exactly `DMARC1`, receivers ignore the whole record.
+* More than one DMARC record at `_dmarc.<domain>`: receivers discard all of them. TXT values that do not start with `v=DMARC1` are not DMARC records and are ignored when counting.
+* A repeated tag name makes the tag-list invalid (RFC 6376 section 3.2, adopted by reference; RFC 9989 has no explicit text). dotMARC treats the record as malformed: receivers may discard it.
+* A missing or invalid `p`, or an invalid `sp` or `np`: receivers treat the record as `p=none` when it has a valid `rua`, otherwise they apply no DMARC processing (RFC 9989 section 4.10.1).
+* `np` (new) is the policy for non-existent subdomains; when absent, `sp` applies, else `p`.
+* `t` (new, `y` or `n`, default `n`): `t=y` asks receivers not to apply the policy and to apply one level lower. It replaces `pct=0`.
+* `pct`, `rf` and `ri` are removed (registry status "historic"). RFC 9989 receivers ignore them; RFC 7489 receivers still apply `pct`.
+* Unknown tags are ignored.
+
+#### Meeting the target (replaces the list above)
+
+A domain meets its target when all of these hold for the last DMARC check:
+
+* the record is valid: exactly one DMARC record, `v=DMARC1` first, no repeated tag, a valid `p`, and valid `sp` and `np` when present;
+* observed `p` is at least as strict as target `p`;
+* observed effective `sp` (`sp`, else `p`) is at least as strict as target `sp`;
+* observed effective `np` (`np`, else `sp`, else `p`) is at least as strict as target `sp`. The target's `sp` covers existing and non-existent subdomains; there is no separate `np` target;
+* `t` is not `y`;
+* `pct` is absent or 100. A `pct` below 100 stays below target (RFC 7489 receivers apply it partially).
+
+Stricter counts as meeting it. An invalid record is **Below target** with its problem named, never "needs checking". A missing record is Below target as before. "Needs checking" remains only for a domain never checked (see the stale-observation note in the release notes).
+
+#### Record problems shown on the domain page
+
+The DMARC check names each problem. Two kinds:
+
+* **Breaking** (the record may be ignored or read as `p=none`): `v=DMARC1` missing or not first; more than one DMARC record; a repeated tag; a missing or invalid `p`; an invalid `sp` or `np`. A breaking problem sets the DMARC check status to Misconfigured with the problem in its detail, so the existing "DMARC record broken" alert covers it. Release note: domains with genuinely broken records may raise that alert after upgrading.
+* **Informational** (the record works but is out of date or not enforcing): `pct`, `rf` or `ri` present (obsolete in RFC 9989); `t=y` (testing mode). These do not change the check status or raise an alert. They show on the domain page and, where they affect the target (`pct` below 100, `t=y`), as the reason the domain is below target.
+
+#### Suggested clean record and push
+
+For any record with a problem, the domain page shows a suggested clean record with a copy action, and the `dmarc` push writes it:
+
+* `v=DMARC1` first, each tag once, other tags kept in their original order.
+* A repeated `p`, `sp` or `np` keeps its strictest valid value, so nothing a receiver might have applied is weakened. Any other repeated tag keeps its first value.
+* A missing or invalid `p` is written as the strictest valid `p` found, else `none`. An invalid `sp` or `np` is dropped (it then inherits).
+* `rf` and `ri` are dropped (no effect on enforcement).
+* Without a target, `pct` and `t` are kept as they are (dropping them would change enforcement without anyone asking); they stay flagged as informational.
+* With a target, the record is also raised to it: `p`, `sp` and `np` raised (never lowered), `pct` removed, `t=y` removed.
+* More than one DMARC record at the name: the push removes every existing DMARC value and writes the one clean record, built from the values combined by the same rules. Non-DMARC TXT values at the name are left alone.
+* The review screen labels a repair as "Repairs a malformed DMARC record" and lists each change in plain words (for example "Removed the repeated p=none", "Removed the obsolete pct=50").
+
+This supersedes the earlier "rewrite every copy of a repeated tag" behaviour and replaces the separate raise step. A valid record with no problems and no target still produces exactly today's push plan.
+
+**Not in 0.14:** DMARC discovery by tree walk (a subdomain without its own record inherits its organisational domain's `sp` or `np`, so it should not show as missing); rollout warnings from RFC 9989 section 7.4 (general-purpose mail domains should not publish `p=reject`; a month at `p=none`, then at `p=quarantine`, before `p=reject`); `psd` support.
+
 ### Alert
 
 * New alert type `DmarcPolicyBelowTarget`, display name "DMARC policy below target". It is a DNS health alert with domain scope, confirmed and resolved the same way as the other DNS health alerts, and auto-closes when the domain meets its target, stops having a target, or stops being monitored.
