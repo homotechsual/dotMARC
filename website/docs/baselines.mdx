@@ -41,16 +41,19 @@ A group's target also **replaces** the system target for its domains, even when 
 
 ### Meeting a target
 
-A domain meets its target when its last DMARC check found all of these:
+dotMARC judges records against [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), which replaced RFC 7489 in May 2026. Where RFC 7489 receivers still in service would behave differently, dotMARC takes the cautious reading. A domain meets its target when its last DMARC check found all of these:
 
+* A valid record: exactly one DMARC record, `v=DMARC1` first, no repeated tag, a valid `p`, and a valid `sp` and `np` when present. See [record problems](./dmarc-and-mta-sts.mdx#record-problems).
 * `p` at least as strict as the target's `p`.
 * `sp` (which is `p` when the record has no `sp`) at least as strict as the target's `sp`.
-* `pct` of 100 (which is the default when the record has no `pct`).
+* `np`, the policy for subdomains that do not exist (which is `sp` when the record has no `np`, else `p`), at least as strict as the target's `sp`. A target's `sp` covers existing and non-existent subdomains, so there is no separate `np` target.
+* Testing mode off. `t=y` asks receivers not to apply the policy, so it counts against any target that asks for enforcement. It has no effect on a target of `none`.
+* `pct` absent or 100. RFC 9989 removed `pct`, but receivers that still follow RFC 7489 apply it, so a record with a `pct` below 100 stays below target.
 
 A policy stricter than the target counts as meeting it. There are four outcomes:
 
-* **Meets target**: all three hold.
-* **Below target**: the record was read and one does not hold, or the domain has no DMARC record.
+* **Meets target**: all of the above hold.
+* **Below target**: the record was read and one does not hold, the record is invalid, or the domain has no DMARC record. The domain page lists each reason in plain words, for example "p is none, target is reject" or "Testing mode (t=y) is on".
 * **Needs checking**: the domain has not been checked yet. It is not counted as below target until it has.
 * **No target**: no level applies.
 

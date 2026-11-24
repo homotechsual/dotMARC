@@ -112,7 +112,7 @@ dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM 
 
 | Type | Raised when | Resolves when | Severity |
 | --- | --- | --- | --- |
-| `DmarcRecordBroken` | The DMARC record is missing or broken. | The check passes again. | Warning |
+| `DmarcRecordBroken` | The DMARC record is missing or broken. Broken includes the [record problems](./dmarc-and-mta-sts.mdx#record-problems) that make receivers ignore the record: a repeated tag, several records, `v=DMARC1` not first, or a missing or invalid `p`, `sp` or `np`. The obsolete `pct`, `rf` and `ri` tags and testing mode (`t=y`) are flagged on the domain page but do not alert. | The check passes again. | Warning |
 | `DmarcAuthorizationBroken` | The record that lets reports go to dotMARC's mailbox is missing. | The check passes again. | Warning |
 | `TlsrptRecordBroken` | The TLS-RPT record is missing or broken. | The check passes again. | Warning |
 | `SpfRecordBroken` | The SPF record is missing, duplicated or broken. A `-all`-only record counts as passing. | The check passes again. | Warning |

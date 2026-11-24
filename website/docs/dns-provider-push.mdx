@@ -49,11 +49,19 @@ The ending for new records is set under **Manage → DNS push settings → DNS r
 
 ## DMARC policy and your target
 
-If a [DMARC target](./baselines.mdx#domain) applies to a domain, the DMARC push uses it. A new record is written with the domain's effective target (`p`, and `sp` when it differs). An existing record that falls short is raised to the target: a weaker `p` or `sp` is raised, and a `pct` below 100 is removed. Other tags, their order and the record's spacing are kept, and the plan shows the change like any other before anything is written.
+If a [DMARC target](./baselines.mdx#domain) applies to a domain, the DMARC push uses it. A new record is written with the domain's effective target (`p`, and `sp` when it differs). An existing record that falls short is raised to the target: a weaker `p`, `sp` or `np` is raised, and a `pct` or `t=y` is removed. Other tags, their order and the record's spacing are kept, and the plan shows the change like any other before anything is written.
 
 The push never lowers a policy. A record that is already stricter than the target is left as it is, and a record that already meets the target is unchanged. This holds for a single push and for a bulk push.
 
 With no target set at any level, the push behaves as it always has: a new record starts at `p=none`, and an existing record keeps its policy.
+
+## Repairing a DMARC record
+
+When the DMARC record has a [problem](./dmarc-and-mta-sts.mdx#record-problems), the DMARC push writes the one clean record that the domain page shows as its **Suggested record**, and the review screen labels it "Repairs a malformed DMARC record" and lists each change in plain words, for example "Removed the repeated p=none". A repeated `p`, `sp` or `np` keeps its strictest value, and `v=DMARC1` goes first.
+
+If the name holds more than one DMARC record, the push removes every one of them and writes a single clean record built from their combined values, because receivers discard all records when there is more than one. TXT values at the name that are not DMARC records, such as a verification token, are left alone. A single DMARC record beside such values is updated without touching them.
+
+Without a target, `pct` and `t` are kept as they are, and `rf` and `ri` are dropped. With a target, `pct` and `t=y` are removed too. A valid record with no problems and no target produces exactly the plan it always did.
 
 ## DKIM records
 

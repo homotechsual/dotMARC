@@ -31,6 +31,38 @@ v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@example.uk
 
 dotMARC's **DMARC record** check confirms a record exists, starts with `v=DMARC1`, and that its `rua=` matches the configured mailbox - not just that a DMARC record exists at all.
 
+### Record problems
+
+dotMARC judges the record against [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), the current DMARC standard. It replaced RFC 7489 in May 2026. The DMARC record check names each problem it finds, on the domain page under **Record problems**. There are two kinds.
+
+**Breaking problems** are ones where receivers may ignore the record or read it as `p=none`. They set the check to Misconfigured, so the **DMARC record broken** alert covers them (see [DNS health alerts](./alerts.mdx#dns-health-alerts)).
+
+| Problem | What receivers do |
+| --- | --- |
+| `v=DMARC1` missing, not first, or not exactly `DMARC1` | Ignore the whole record. |
+| More than one DMARC record at `_dmarc.<domain>` | Discard all of them. TXT values at that name that do not start with `v=DMARC1` are not DMARC records and are not counted. |
+| A tag that appears more than once | RFC 9989 does not say what to do with a repeated tag. dotMARC follows the DKIM tag-list rule that DMARC's syntax inherits (RFC 6376 section 3.2), under which the record is malformed, so receivers may ignore it. |
+| No `p` tag, or a `p` that is not `none`, `quarantine` or `reject` | Treat the record as `p=none` when it has a valid `rua`, otherwise apply no DMARC processing (RFC 9989 section 4.10.1). |
+| An invalid `sp` or `np` | The same: `p=none`, or no DMARC processing without a valid `rua`. |
+
+**Informational problems** mean the record works but is out of date or not enforcing. They do not change the check status or raise an alert. They show on the domain page, and where they affect a [target](./baselines.mdx#meeting-a-target) they appear as the reason the domain is below it.
+
+* `pct`, `rf` or `ri` present. RFC 9989 removed all three. Receivers that follow it ignore them, but older receivers still apply `pct`, so a `pct` below 100 counts against a target.
+* `t=y`, testing mode. RFC 9989 added `t` (`y` or `n`, default `n`) to replace `pct=0`. With `t=y` the domain asks receivers not to apply the policy and to act one level lower, so `p=reject` is treated as `quarantine`. Turn it off once you are confident in the policy.
+
+RFC 9989 also adds `np`, the policy for subdomains that do not exist. When a record has no `np`, those subdomains follow `sp`, and then `p`.
+
+### Suggested record and repair
+
+When a record has a problem, or sits below its target, the domain page shows a **Suggested record** with a Copy button and a line for each change. dotMARC's [DNS push](./dns-provider-push.mdx#repairing-a-dmarc-record) writes the same record. The repair:
+
+* puts `v=DMARC1` first and writes each tag once, keeping the other tags in their original order;
+* keeps the strictest valid value of a repeated `p`, `sp` or `np`, so nothing a receiver might have applied is weakened, and the first value of any other repeated tag;
+* writes a missing or invalid `p` as `p=none`, or as the strictest valid `p` found, and drops an invalid `sp` or `np` so it inherits;
+* combines several DMARC records into one by the same rules, and leaves unrelated TXT values at the name alone;
+* drops `rf` and `ri`, which have no effect on enforcement;
+* keeps `pct` and `t` as they are when there is no target, because removing them would change enforcement without anyone asking. They stay flagged. With a target, `pct` and `t=y` are removed and `p`, `sp` and `np` are raised to it, never lowered.
+
 ### More than one `rua=` address
 
 A record can list several report addresses, separated by commas. That is useful while you trial dotMARC beside another DMARC tool, so dotMARC reads the list rather than only the first address:

@@ -100,6 +100,15 @@ else
                 {
                     <MudText Typo="Typo.body1">DMARC target: @DmarcTargetText.Policy(effectiveTarget), @DmarcTargetText.Source(effectiveTarget)</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@TargetOutcomeLabel</MudText>
+                    @if (_targetOutcome == DmarcTargetOutcome.Below && _targetReasons.Count > 0)
+                    {
+                        <ul class="mt-1 mb-0" style="padding-left:20px;">
+                            @foreach (var reason in _targetReasons)
+                            {
+                                <li><MudText Typo="Typo.body2">@reason</MudText></li>
+                            }
+                        </ul>
+                    }
                 }
                 else
                 {
@@ -170,6 +179,36 @@ else
                         </AuthorizeView>
                     </ActionContent>
                 </DomainHealthCheckRow>
+
+                @if (_recordProblems.Count > 0 || _suggestedRecord is not null)
+                {
+                    <div class="py-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                        @if (_recordProblems.Count > 0)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Record problems</MudText>
+                            @foreach (var problem in _recordProblems)
+                            {
+                                <MudAlert Severity="@(problem.Kind.IsBreaking() ? Severity.Error : Severity.Info)" Dense="true" Class="mb-1">@problem.Description</MudAlert>
+                            }
+                        }
+                        @if (_suggestedRecord is { } suggestedRecord)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Suggested record</MudText>
+                            <div class="d-flex align-center" style="gap:8px;">
+                                <code style="word-break:break-all;">@suggestedRecord.Record</code>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy"
+                                           OnClick="CopySuggestedRecordAsync">Copy</MudButton>
+                            </div>
+                            <ul class="mt-1 mb-0" style="padding-left:20px;">
+                                @foreach (var change in suggestedRecord.Changes)
+                                {
+                                    <li><MudText Typo="Typo.body2">@change</MudText></li>
+                                }
+                            </ul>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">dotMARC's DNS push writes this record.</MudText>
+                        }
+                    </div>
+                }
 
                 <DomainHealthCheckRow Title="DMARC authorization record"
                                       StatusColor="@DmarcAuthorizationStatusPresentation.GetColor(_domain.DmarcAuthorizationCheckStatus)"
@@ -589,11 +628,39 @@ else
         _ => "No target"
     };
 
+    private IReadOnlyList<string> _targetReasons = [];
+    private List<DmarcRecordProblem> _recordProblems = [];
+    private DmarcRecordRepairResult? _suggestedRecord;
+
+    private async Task CopySuggestedRecordAsync()
+    {
+        if (_suggestedRecord is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _suggestedRecord.Record);
+        }
+        catch (JSException)
+        {
+            // The clipboard API needs a secure context (HTTPS or localhost) and can be refused by the browser.
+            Snackbar.Add("Couldn't copy automatically. Select the text and copy it manually.", Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add("Record copied.", Severity.Success);
+    }
+
     private async Task ResolveTargetAsync(DotMarcDbContext db)
     {
         var settings = await DnsRecordSettingsService.GetAsync(db);
         _effectiveTarget = DmarcTargetResolver.Resolve(_domain!, settings);
         _targetOutcome = DmarcTargetCheck.Outcome(_domain!, _effectiveTarget);
+        _targetReasons = DmarcTargetCheck.Reasons(_domain!, _effectiveTarget);
+        _recordProblems = _domain!.DmarcProblems.Select(DmarcRecordProblem.Parse).OfType<DmarcRecordProblem>().ToList();
+        _suggestedRecord = DmarcRecordRepair.Build(DmarcRecordAnalysis.Analyse(_domain.DmarcRecords), _effectiveTarget);
     }
 
     private async Task ChangeTargetAsync()
@@ -1264,6 +1331,10 @@ else
             _domain.DmarcPolicy = domain.DmarcPolicy;
             _domain.DmarcSubdomainPolicy = domain.DmarcSubdomainPolicy;
             _domain.DmarcPercent = domain.DmarcPercent;
+            _domain.DmarcNonExistentSubdomainPolicy = domain.DmarcNonExistentSubdomainPolicy;
+            _domain.DmarcTesting = domain.DmarcTesting;
+            _domain.DmarcRecords = domain.DmarcRecords;
+            _domain.DmarcProblems = domain.DmarcProblems;
             await ResolveTargetAsync(db);
         }
         finally
