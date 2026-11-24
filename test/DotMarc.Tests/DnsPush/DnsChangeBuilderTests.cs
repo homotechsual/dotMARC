@@ -75,11 +75,16 @@ public sealed class DnsChangeBuilderTests
     }
 
     [Fact]
-    public async Task Dmarc_RefusesARecordItCantMergeInto()
+    public async Task Dmarc_AddsARecordBesideAValueThatIsNotDmarc()
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("not dmarc", null) };
 
-        Assert.Equal("unmergeable", (await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None)).Refusal);
+        var plan = await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Null(plan.Refusal);
+        Assert.Equal((DnsRecordChangeKind.ReplaceTxtValues, "v=DMARC1; p=none; rua=mailto:rua@dotmarc.example"), (change.Kind, change.DesiredValue));
+        Assert.Empty(change.ValuesToRemove!);
     }
 
     private static EffectiveDmarcTarget Effective(DmarcPolicyLevel policy, DmarcPolicyLevel? subdomainPolicy = null) =>
@@ -117,12 +122,15 @@ public sealed class DnsChangeBuilderTests
             (await DmarcChange(null, Effective(DmarcPolicyLevel.Reject), "contoso.dmarc-service.example")).DesiredValue);
 
     [Fact]
-    public async Task Dmarc_StillRefusesAnUnmergeableRecord_WhenThereIsATarget()
+    public async Task Dmarc_AddsTheTargetPolicyBesideAValueThatIsNotDmarc()
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("not dmarc", null) };
         var builder = new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader { Target = Effective(DmarcPolicyLevel.Reject) });
 
-        Assert.Equal("unmergeable", (await builder.BuildAsync(Request(), CancellationToken.None)).Refusal);
+        var change = Assert.Single((await builder.BuildAsync(Request(), CancellationToken.None)).Changes);
+
+        Assert.Equal((DnsRecordChangeKind.ReplaceTxtValues, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example"), (change.Kind, change.DesiredValue));
+        Assert.Empty(change.ValuesToRemove!);
     }
 
     private static async Task<DnsChangePlan> DmarcPlan(string[] txtValues, EffectiveDmarcTarget? target = null)

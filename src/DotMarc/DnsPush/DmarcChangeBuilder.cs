@@ -43,8 +43,8 @@ public sealed class DmarcChangeBuilder(IDmarcTxtLookup dmarcTxtLookup, IOptions<
         var dmarcValues = analysis.Records.Concat(analysis.IgnoredCandidates).ToList();
         if (dmarcValues.Count == 0)
         {
-            // Nothing at the name reads as DMARC, so there is nothing to repair; merging into the value refuses it.
-            return MergePlan(request, existing.DirectValue, existing.DirectValue, settings, []);
+            // Other TXT values sit at the name but none is DMARC: add the record beside them and leave them alone.
+            return new DnsChangePlan([new DnsRecordChange(DnsRecordChangeKind.ReplaceTxtValues, "TXT", $"_dmarc.{domainName}", newRecord, null, request.DomainZone!, ValuesToRemove: [])], null);
         }
 
         var repair = DmarcRecordRepair.Build(analysis, target);
