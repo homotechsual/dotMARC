@@ -50,6 +50,17 @@ test('open release:ready work counts as completed and awaiting release, but stay
   assert.deepEqual([underwayResult.status, underwayResult.completed, underwayResult.awaitingRelease], ['in-progress', false, false]);
 });
 
+test('status descriptions come from the GitHub label descriptions', () => {
+  const labels = [
+    {name: 'status:planned', description: ' Planned for a release. '}, {name: 'status:in-progress', description: 'Being worked on.'},
+    {name: 'status:shipped', description: ''}, {name: 'release:ready', description: 'Finished, awaiting its release.'},
+    {name: 'area:dns', description: 'Not a status.'},
+  ];
+  assert.deepEqual(buildRoadmap([], [], [], undefined, labels).statusDescriptions,
+    {planned: 'Planned for a release.', 'in-progress': 'Being worked on.', ready: 'Finished, awaiting its release.'});
+  assert.deepEqual(buildRoadmap([], [], []).statusDescriptions, {});
+});
+
 test('completed work is not shipped until a stable GitHub release exists', () => {
   const plan = milestone(1, 'v0.14.0 — Action centre');
   const done = issue(1, {state: 'closed', state_reason: 'completed', milestone: plan});

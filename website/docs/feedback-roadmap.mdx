@@ -11,7 +11,7 @@ The site's Features navigation opens planned releases. Both `/roadmap` and `/fee
 
 The navbar groups documentation, API reference and FAQs under Resources; Updates retains the release-note archive. Site search covers documentation, API and updates, separately from the features page's title filter.
 
-Release cards use compact metadata above each item's title: issue number, change type and status. Product areas are a secondary text list rather than large competing badges. Planned releases use wider columns, with unscheduled ideas in their own section below. Completion percentages and bars always use the full public milestone, even while filters are active.
+Release cards use compact metadata above each item's title: issue number, change type and status. Hovering a status shows what it means, and so does hovering "Completed, awaiting release" (shown for open issues with `release:ready`). That text is the GitHub label's description (`status:*` and `release:ready`), read by the Worker on each refresh, so edit the label description in GitHub to change it; screen readers get the same text. Keep those descriptions written for visitors, not maintainers. Product areas are a secondary text list rather than large competing badges. Planned releases use wider columns, with unscheduled ideas in their own section below. Completion percentages and bars always use the full public milestone, even while filters are active.
 
 Each issue card is one link to its GitHub issue, including its metadata and padding. It supports keyboard navigation and standard browser link actions such as opening in a new tab.
 
