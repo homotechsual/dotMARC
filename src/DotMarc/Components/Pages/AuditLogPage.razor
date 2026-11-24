@@ -1,6 +1,7 @@
 @page "/logs/audit"
 @attribute [Authorize(Policy = "AuditView")]
 @using DotMarc.Components.Shared
+@using DotMarc.Audit
 @using DotMarc.Data
 @using DotMarc.ServerLogs
 @using Microsoft.AspNetCore.Authorization
@@ -9,6 +10,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject NavigationManager Navigation
 
 <AppPageTitle>dotMARC - Audit log</AppPageTitle>
 <TabbedPage Title="Logs" Tabs="_tabs">
@@ -142,6 +144,12 @@
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
         _tabs = await LogsTabs.ForAsync(user, AuthorizationService);
+        // An address with a query string, such as an old /audit link or a shared filter, opens with those filters applied.
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
+        if (query.Count > 0)
+        {
+            _filter = AuditFilter.FromQuery(new Microsoft.AspNetCore.Http.QueryCollection(query));
+        }
     }
 
     private async Task<TableData<AuditEntry>> LoadPageAsync(TableState state, CancellationToken cancellationToken)
