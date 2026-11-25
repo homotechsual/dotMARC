@@ -61,8 +61,8 @@ else
         <AuthorizeView Policy="DomainsAdd">
             <MudPaper id="add-domain" Class="pa-3 mb-3" Outlined="true">
                 <div class="domain-list-toolbar">
-                    <MudTextField T="string" Label="Domain name" @bind-Value="_newDomain" Error="@(_addError is not null)" ErrorText="_addError" />
-                    <MudButton OnClick="AddAsync" Variant="Variant.Filled" Color="Color.Primary">Add domain</MudButton>
+                    <MudTextField T="string" Label="Domain name" @bind-Value="_newDomain" Immediate="true" Disabled="@(!RendererInfo.IsInteractive || _adding)" Error="@(_addError is not null)" ErrorText="@_addError" />
+                    <MudButton OnClick="AddAsync" Disabled="@(!RendererInfo.IsInteractive || _adding)" Variant="Variant.Filled" Color="Color.Primary">Add domain</MudButton>
                 </div>
             </MudPaper>
         </AuthorizeView>

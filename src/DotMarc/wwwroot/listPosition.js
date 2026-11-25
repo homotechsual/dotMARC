@@ -90,6 +90,14 @@ export function top() {
     window.scrollTo(0, 0);
 }
 
+export function focusAddDomain() {
+    const form = document.getElementById("add-domain");
+    const input = form?.querySelector("input");
+    if (!form || !input || input.disabled) throw new Error("The Add domain form is not ready.");
+    form.scrollIntoView({ block: "center", behavior: "instant" });
+    input.focus({ preventScroll: true });
+}
+
 export function leave() {
     if (current && location.pathname === current.route) save();
     document.removeEventListener("click", openDomain, true);

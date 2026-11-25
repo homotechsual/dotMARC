@@ -38,6 +38,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     private int? _draggedId;
     private int _loadVersion;
     private bool _loading;
+    private bool _focusAddDomain, _adding;
     private IReadOnlyCollection<int> _scope = [];
     private List<Group> _groups = [];
     private List<Tag> _tags = [];
@@ -68,6 +69,7 @@ public partial class DomainWorkspace : IAsyncDisposable
         await ReadDefaultAsync();
         ReadQuery();
         _lastUri = Navigation.Uri;
+        _focusAddDomain = Inventory && new Uri(Navigation.Uri).Fragment == "#add-domain";
         Navigation.LocationChanged += LocationChanged;
         await LoadAsync();
     }
@@ -122,6 +124,7 @@ public partial class DomainWorkspace : IAsyncDisposable
         _ = InvokeAsync(async () =>
         {
             _lastUri = args.Location;
+            _focusAddDomain = Inventory && new Uri(args.Location).Fragment == "#add-domain";
             await ReadDefaultAsync();
             ReadQuery();
             _scrollTop = true;
@@ -327,6 +330,8 @@ public partial class DomainWorkspace : IAsyncDisposable
 
     private async Task AddAsync()
     {
+        if (_adding) return;
+        _adding = true;
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
@@ -361,6 +366,7 @@ public partial class DomainWorkspace : IAsyncDisposable
             Logger.LogWarning(exception, "Adding a domain failed");
             _addError = "Could not add the domain. Try again.";
         }
+        finally { _adding = false; }
     }
 
     private async Task DeleteAsync(int id)
@@ -415,6 +421,13 @@ public partial class DomainWorkspace : IAsyncDisposable
             await _memory.InvokeVoidAsync("update", _state);
             if (_restoreScroll) { _restoreScroll = false; await _memory.InvokeVoidAsync("restore"); }
             if (_scrollTop) { _scrollTop = false; await _memory.InvokeVoidAsync("top"); }
+            if (_focusAddDomain)
+            {
+                _focusAddDomain = false;
+                var user = (await Authentication.GetAuthenticationStateAsync()).User;
+                if ((await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsAdd))).Succeeded)
+                    await _memory.InvokeVoidAsync("focusAddDomain");
+            }
         }
         catch (Exception exception) when (exception is JSException or FormatException)
         {

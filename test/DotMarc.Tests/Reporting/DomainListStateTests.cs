@@ -21,6 +21,16 @@ public sealed class DomainListStateTests
     }
 
     [Fact]
+    public void MultipleAttentionCategoriesRoundTrip_AndRejectInvalidCombinations()
+    {
+        var state = new DomainListState { AttentionView = "dns,senders,missing" };
+        state.Validate();
+        Assert.Equal(state, DomainListState.FromQuery(new Uri("https://dotmarc.example" + state.ToUrl("/dashboard"))));
+        Assert.Throws<FormatException>(() => (state with { AttentionView = "dns,unknown" }).Validate());
+        Assert.Throws<FormatException>(() => (state with { AttentionView = "dns," }).Validate());
+    }
+
+    [Fact]
     public void FiltersAreAppliedBeforeGrouping_AndCountsAreDistinct()
     {
         var rows = new[] { Row(1, "alpha.example", 0.99), Row(2, "beta.example", 0.8) };

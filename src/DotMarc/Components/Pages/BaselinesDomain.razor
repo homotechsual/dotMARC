@@ -21,44 +21,46 @@
 {
     <TabbedPage Title="Baselines" Tabs="_tabs">
         <MudText Typo="Typo.body1" Class="mb-4">
-            The DMARC policy your domains should reach. Set it for every domain, for a group, or for one domain, and dotMARC shows which domains fall short.
+            Set the DMARC policy you want domains to reach, make exceptions where needed, then review the gaps. Saving a target changes dotMARC's expectations, not published DNS.
             <DocsLink Href="https://dotmarc.app/docs/baselines" Text="How baselines work" Class="ml-2" />
         </MudText>
 
-        <MudAlert Severity="Severity.Info" Class="mb-4">
-            A domain in more than one group uses the strictest of those groups' targets. A group's target replaces the system-wide target for its domains, even when it is weaker. A domain's own target replaces both.
-        </MudAlert>
-
-        <MudText Typo="Typo.h6" Class="mb-1">System-wide target</MudText>
+        <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">1 · Set the default</MudText>
+        <MudText Typo="Typo.h6" Class="mb-1">System-wide DMARC target</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Used when a domain has neither its own target nor a group target. It is a default, not a minimum enforced over exceptions.</MudText>
         <div class="d-flex align-center mb-4" style="gap:12px;">
-            <MudText Typo="Typo.body1">@DmarcTargetText.Stored(_summary.System)</MudText>
+            <MudText Typo="Typo.h6">@(_summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System))</MudText>
             @if (_mayChangeSystem)
             {
-                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeSystemAsync">Change</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeSystemAsync">@(_summary.System is null ? "Set default target" : "Edit default target")</MudButton>
             }
         </div>
-
-        <MudText Typo="Typo.h6" Class="mb-1">Domains against their targets</MudText>
-        <div class="mb-4">
-            <MudLink Href="/domains?target=below">@_summary.BelowCount @(_summary.BelowCount == 1 ? "domain" : "domains") below target</MudLink>
-            <span class="mx-2">|</span>
-            <MudLink Href="/domains?target=checking">@_summary.NeedsCheckingCount @(_summary.NeedsCheckingCount == 1 ? "needs" : "need") checking</MudLink>
-        </div>
-
-        <MudText Typo="Typo.h6" Class="mb-1">Group targets</MudText>
+        </MudPaper>
+        <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">2 · Add exceptions only where needed</MudText>
+        <MudText Typo="Typo.h6" Class="mb-1">Group and domain overrides</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Leave a group inheriting the default unless it needs a different target. An override can be stricter or weaker; a domain's own target takes precedence.</MudText>
+        <details class="mb-3">
+            <summary>How targets are inherited</summary>
+            <MudText Typo="Typo.body2" Class="mt-2">Domain override → strictest target among its groups → system-wide default. Multiple group targets are compared separately for p and sp. With no target at any level, a domain is not assessed against a target.</MudText>
+        </details>
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Group overrides</MudText>
         @if (_summary.Groups.Count == 0)
         {
             <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">There are no groups.</MudText>
         }
         else
         {
+            <details class="mb-4">
+            <summary>View @_summary.Groups.Count group targets and edit overrides</summary>
             <MudSimpleTable Dense="true" Hover="true" Class="mb-4" Style="overflow-x:auto;">
                 <thead>
                     <tr>
                         <th>Group</th>
                         <th>Domains</th>
-                        <th>Target</th>
-                        <th></th>
+                        <th>Target at this level</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -67,23 +69,29 @@
                         <tr>
                             <td>@group.Name</td>
                             <td>@group.DomainCount</td>
-                            <td>@DmarcTargetText.Stored(group.Target)</td>
+                            <td>
+                                <MudText Typo="Typo.body2">@(group.Target is null ? "Inherits system default" : DmarcTargetText.Stored(group.Target))</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(group.Target is null ? _summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System) : "Group override") · domain and other group targets may take precedence</MudText>
+                            </td>
                             <td>
                                 @if (BaselineAccess.MayChangeGroup(_user, group.Id))
                                 {
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeGroupAsync(group))">Change</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeGroupAsync(group))" aria-label="@($"{(group.Target is null ? "Set override" : "Edit override")} for {group.Name}")">@(group.Target is null ? "Set override" : "Edit override")</MudButton>
                                 }
                             </td>
                         </tr>
                     }
                 </tbody>
             </MudSimpleTable>
+            </details>
         }
 
-        <MudText Typo="Typo.h6" Class="mb-1">Domain targets</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Individual domain overrides</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Open a domain's Overview to set or clear its own target and see exactly which target applies.</MudText>
+        <MudButton Href="/domains" Size="Size.Small" Variant="Variant.Outlined" Class="mb-3">Choose a domain in Inventory</MudButton>
         @if (_summary.Overrides.Count == 0)
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">No domain has its own target.</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No individual overrides. Domains inherit their group target or the system default where one is set.</MudText>
         }
         else
         {
@@ -105,6 +113,17 @@
                 </tbody>
             </MudSimpleTable>
         }
+        </MudPaper>
+        <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">3 · Review and resolve gaps</MudText>
+            <MudText Typo="Typo.h6" Class="mb-2">Monitored domains against their effective targets</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Counts cover your authorised groups and current stored DNS checks. Unchecked domains are not confirmed failures; domains without a target are not counted below target.</MudText>
+            <div class="domain-list-toolbar mb-3">
+                <MudButton Href="/domains?target=below" Variant="Variant.Outlined" Color="Color.Warning">Review @_summary.BelowCount below target</MudButton>
+                <MudButton Href="/domains?target=checking" Variant="Variant.Outlined" Color="Color.Info">Review @_summary.NeedsCheckingCount needing checks</MudButton>
+            </div>
+            <MudText Typo="Typo.body2">Open an affected domain → compare the observed record with its target → review the proposed DNS changes or update DNS manually. Saving a target does not publish records, and a DNS push never lowers a stricter policy.</MudText>
+        </MudPaper>
     </TabbedPage>
 }
 
@@ -128,12 +147,14 @@
         _summary = await DmarcTargetSummary.LoadAsync(db, _user);
     }
 
-    private async Task<DmarcTargetDialog.DmarcTargetDialogResult?> AskAsync(string heading, DmarcTarget? current)
+    private async Task<DmarcTargetDialog.DmarcTargetDialogResult?> AskAsync(string heading, DmarcTarget? current, string unsetLabel, string scopeDescription)
     {
         var parameters = new DialogParameters<DmarcTargetDialog>
         {
             { x => x.Heading, heading },
             { x => x.Current, current },
+            { x => x.UnsetLabel, unsetLabel },
+            { x => x.ScopeDescription, scopeDescription },
         };
         var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var result = await dialogRef.Result;
@@ -161,7 +182,7 @@
     private async Task ChangeSystemAsync()
     {
         Func<ClaimsPrincipal, Task<bool>> mayChange = user => BaselineAccess.MayChangeSystemAsync(user, AuthorizationService);
-        if (!await StillMayChangeAsync(mayChange) || await AskAsync("System-wide DMARC target", _summary!.System) is not { } choice)
+        if (!await StillMayChangeAsync(mayChange) || await AskAsync("System-wide DMARC target", _summary!.System, "No default target", "Applies to domains without a group or individual override. Removing it stops target assessment only where no other target applies.") is not { } choice)
         {
             return;
         }
@@ -176,7 +197,7 @@
     private async Task ChangeGroupAsync(GroupTargetRow group)
     {
         Func<ClaimsPrincipal, Task<bool>> mayChange = user => BaselineAccess.MayChangeGroupAsync(user, AuthorizationService, group.Id);
-        if (!await StillMayChangeAsync(mayChange) || await AskAsync($"DMARC target for {group.Name}", group.Target) is not { } choice)
+        if (!await StillMayChangeAsync(mayChange) || await AskAsync($"DMARC target for {group.Name}", group.Target, "Inherit system default", $"Overrides the system default for domains in {group.Name}. Other group targets and individual domain overrides may take precedence. Removing this override restores inheritance.") is not { } choice)
         {
             return;
         }

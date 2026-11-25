@@ -8,6 +8,16 @@ namespace DotMarc.Reporting;
 public sealed record DashboardProblem(string Description, string Action, string Tab, bool NeedsChecking = false);
 public sealed record DashboardAttention(Domain Domain, IReadOnlyList<DashboardProblem> Problems, int SenderReviews, double? PassRate, bool MissingReport)
 {
+    public bool MatchesCategory(string category) => category switch
+    {
+        "dns" => Problems.Any(problem => !problem.NeedsChecking && problem.Action != "Investigate reports"),
+        "missing" => MissingReport,
+        "senders" => SenderReviews > 0,
+        "checking" => Problems.Any(problem => problem.NeedsChecking),
+        "action" => HasConfirmedProblem || SenderReviews > 0,
+        _ => throw new ArgumentException("Unknown attention category.", nameof(category))
+    };
+    public bool MatchesCategories(string? categories) => categories is null || categories.Split(',').Any(MatchesCategory);
     public bool HasConfirmedProblem => Problems.Any(problem => !problem.NeedsChecking);
     public int Priority => HasConfirmedProblem ? 0 : SenderReviews > 0 ? 1 : 2;
 }

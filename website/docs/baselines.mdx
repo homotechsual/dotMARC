@@ -11,9 +11,29 @@ description: Set the DMARC policy your domains should reach, system-wide, per gr
 
 The Sender tab is the Sender baseline: a decision recorded here applies to every domain unless a group or a domain says otherwise. It works exactly as it did before it moved. How decisions are made, and how a group's or a domain's decision overrides the baseline, is described in [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised). The tab needs the `SenderReview` permission.
 
+Follow the three sections:
+
+1. **Set default decisions.** Record an estate-wide decision only when it is appropriate for the service across the estate. Rows show the effective decision and its origin; observed 30-day domain counts are evidence, not a guarantee that those domains inherit the default.
+2. **Review undecided senders.** Open the Dashboard sender-review queue, choose a domain and inspect Sources before deciding. Under review is already a recorded decision.
+3. **Add exceptions where needed.** Use group sender defaults or a domain's Sources decisions for narrower intent. Removing an estate default leaves the sender unreviewed where no other decision applies; restoring a group decision to inherited uses the estate default.
+
+The service table is collapsed initially so the complete pathway stays visible. Expand **View services and set decisions** to inspect and edit individual services.
+
+Decisions change dotMARC's labels and alerts, not DNS or receiver enforcement. The save dialog identifies the scope you are changing.
+
 ## Domain
 
 The Domain tab sets a **target DMARC policy**: the policy a domain should publish. dotMARC then shows which domains fall short, raises an alert for them, and can raise their records for you with the [DNS provider push](./dns-provider-push.mdx#dmarc-policy-and-your-target). Nothing changes until a target is set: with no target at any level there are no new alerts, no below-target counts, and pushes behave exactly as before.
+
+The page follows **Set the default → Add exceptions only where needed → Review and resolve gaps**:
+
+1. Set or edit the system-wide default. Saving sets dotMARC's expectation; it does not publish DNS.
+2. Leave groups inheriting the system default unless they need an override. The table distinguishes inheritance from a group override, with **Set override** or **Edit override** actions. Other group targets and individual overrides can still take precedence. Choose a domain in Inventory to view or change its individual target on Overview.
+3. Open the below-target or needs-checking list, choose a domain, compare its observed record with its effective target, then review DNS changes or update DNS manually. Counts are monitored domains in your authorised scope. Unchecked evidence is not a confirmed failure.
+
+Group targets are collapsed initially because exceptions are optional. Expand **View group targets and edit overrides** when needed; inheritance details are available separately.
+
+The target dialog explains the scope and distinguishes removing the system default from restoring group/domain inheritance. Target saves may affect below-target alerts but never change mail handling themselves.
 
 ### What a target is
 

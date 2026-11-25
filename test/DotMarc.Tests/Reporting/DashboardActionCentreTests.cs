@@ -6,6 +6,21 @@ namespace DotMarc.Tests.Reporting;
 
 public sealed class DashboardActionCentreTests
 {
+    [Fact]
+    public void CategorySelectionMatchesAny_WithoutDuplicatingDomainsOrTreatingUnknownAsDnsFailure()
+    {
+        var domain = Healthy();
+        var missing = new DashboardAttention(domain, [new("Missing", "Investigate reports", "overview")], 0, null, true);
+        var dns = new DashboardAttention(domain, [new("SPF missing", "Review configuration", "overview")], 2, null, false);
+        var checking = new DashboardAttention(domain, [new("Unchecked", "Check configuration", "overview", true)], 0, null, false);
+        Assert.False(missing.MatchesCategories("dns"));
+        Assert.True(missing.MatchesCategories("dns,missing"));
+        Assert.True(dns.MatchesCategories("dns,senders"));
+        Assert.False(checking.MatchesCategories("dns,senders"));
+        Assert.True(checking.MatchesCategories("checking"));
+        Assert.Equal(2, new[] { missing, dns, checking }.Count(row => row.MatchesCategories("dns,missing,senders")));
+        Assert.True(checking.MatchesCategories(null));
+    }
     private static readonly DateTimeOffset Now = new(2026, 11, 25, 16, 0, 0, TimeSpan.Zero);
     private static readonly IReadOnlyDictionary<int, int> NoReviews = new Dictionary<int, int>();
     private static Domain Healthy(int id = 1) => new()

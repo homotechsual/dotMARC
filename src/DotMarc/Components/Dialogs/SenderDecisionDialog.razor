@@ -6,13 +6,17 @@
         <MudText Typo="Typo.body2" Class="mb-2">
             This is your team's record, and it changes what dotMARC tells you. It doesn't change DNS or block any mail: your DMARC policy decides what receivers do.
         </MudText>
+        @if (ScopeDescription is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@ScopeDescription</MudText>
+        }
         @if (!string.IsNullOrEmpty(InheritedText))
         {
             <MudText Typo="Typo.caption" Class="d-block mb-2 mud-text-secondary">@InheritedText</MudText>
         }
         <MudRadioGroup T="SenderDecisionStatus?" @bind-Value="_status">
-            <MudRadio T="SenderDecisionStatus?" Value="_authorised">Authorised: it should send as this domain</MudRadio>
-            <MudRadio T="SenderDecisionStatus?" Value="_unauthorised">Unauthorised: it should not send as this domain</MudRadio>
+            <MudRadio T="SenderDecisionStatus?" Value="_authorised">Authorised: it should send as @Subject</MudRadio>
+            <MudRadio T="SenderDecisionStatus?" Value="_unauthorised">Unauthorised: it should not send as @Subject</MudRadio>
             <MudRadio T="SenderDecisionStatus?" Value="_underReview">Under review: still finding out</MudRadio>
         </MudRadioGroup>
         <MudText Typo="Typo.caption" Class="d-block mt-2 mud-text-secondary">
@@ -23,7 +27,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton OnClick="Reset" Disabled="@(!HasOwnDecision)">Reset to inherited</MudButton>
+        <MudButton OnClick="Reset" Disabled="@(!HasOwnDecision)">@ResetLabel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(_status is null)">Save</MudButton>
     </DialogActions>
 </MudDialog>
@@ -39,6 +43,9 @@
 
     [Parameter] public string? CurrentNote { get; set; }
     [Parameter] public bool HasOwnDecision { get; set; }
+    [Parameter] public string? ScopeDescription { get; set; }
+    [Parameter] public string ResetLabel { get; set; } = "Reset to inherited";
+    [Parameter] public string Subject { get; set; } = "this domain";
 
     /// <summary>What the sender inherits while this domain has no decision of its own, such as "Currently Authorised, from the baseline."</summary>
     [Parameter] public string? InheritedText { get; set; }

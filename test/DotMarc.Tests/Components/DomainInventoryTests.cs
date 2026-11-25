@@ -95,9 +95,36 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         var dashboard = await client.GetStringAsync("/dashboard");
         Assert.DoesNotContain("domain-inventory", dashboard);
         Assert.Contains("Domains needing attention", dashboard);
+        Assert.DoesNotContain("missing expected reports", dashboard, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"Issue categories\"", dashboard);
+        Assert.Contains("DNS/configuration", dashboard);
+        Assert.Contains("Missing reports", dashboard);
         Assert.Contains("Quarantines and rejects to investigate", dashboard);
         Assert.Contains("data-domain-link", await client.GetStringAsync("/domains"));
         Assert.Contains("Show management columns", await client.GetStringAsync("/domains"));
+    }
+
+    [Fact]
+    public async Task BaselineTabsExplainDefaultExceptionAndReviewFlow()
+    {
+        using var client = await SignInAsync("admin");
+        var domain = await client.GetStringAsync("/baselines/domain");
+        Assert.Contains("Saving a target changes", domain);
+        Assert.Contains("Inherits system default", domain);
+        Assert.Contains("Edit default target", domain);
+        Assert.Contains("Set override", domain);
+        Assert.Contains("Choose a domain in Inventory", domain);
+        Assert.True(domain.IndexOf("Set the default", StringComparison.Ordinal) < domain.IndexOf("Add exceptions only where needed", StringComparison.Ordinal));
+        Assert.True(domain.IndexOf("Add exceptions only where needed", StringComparison.Ordinal) < domain.IndexOf("Review and resolve gaps", StringComparison.Ordinal));
+        Assert.Contains("href=\"/domains?target=below\"", domain);
+        var sender = await client.GetStringAsync("/baselines/sender");
+        Assert.Contains("Estate-wide sender decisions", sender);
+        Assert.Contains("Where it comes from", sender);
+        Assert.Contains("Review outstanding sender decisions", sender);
+        Assert.Contains("attention=senders", sender);
+        Assert.Contains("Choose a domain", sender);
+        Assert.True(sender.IndexOf("Set default decisions", StringComparison.Ordinal) < sender.IndexOf("Review undecided senders", StringComparison.Ordinal));
+        Assert.True(sender.IndexOf("Review undecided senders", StringComparison.Ordinal) < sender.IndexOf("Add exceptions where needed", StringComparison.Ordinal));
     }
 
     [Fact]

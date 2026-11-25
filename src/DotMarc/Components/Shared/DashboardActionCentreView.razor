@@ -26,12 +26,23 @@
 <MudPaper id="dashboard-attention" Outlined="true" Class="pa-4 dashboard-attention">
     <div class="domain-list-toolbar mb-2">
         <MudText Typo="Typo.h6">Domains needing attention</MudText>
-        <MudButton Size="Size.Small" OnClick="@(() => ShowAttention("missing"))">@Data.MissingReports missing expected reports</MudButton>
         @if (AttentionMode != "all")
         {
             <MudButton Size="Size.Small" OnClick="@(() => ShowAttention(null))">Show all attention</MudButton>
         }
     </div>
+    <div class="domain-list-toolbar mb-2" role="group" aria-label="Issue categories">
+        <MudButton Size="Size.Small" Variant="@(State.AttentionView is null ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                   aria-pressed="@(State.AttentionView is null ? "true" : "false")" OnClick="@(() => ShowAttention(null))">All (@Data.Attention.Count)</MudButton>
+        @foreach (var category in Categories)
+        {
+            <MudButton Size="Size.Small" Variant="@(SelectedCategories.Contains(category.Key) ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                       aria-pressed="@(SelectedCategories.Contains(category.Key) ? "true" : "false")" OnClick="@(() => ToggleCategory(category.Key))">
+                @category.Value (@Data.Attention.Count(row => row.MatchesCategory(category.Key)))
+            </MudButton>
+        }
+    </div>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Select multiple issue categories to match any. These narrow this queue only; domain filters still apply to the whole Dashboard.</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" aria-live="polite">@AttentionDescription · @AttentionRows.Count domains. Confirmed problems first, then sender decisions, then unchecked evidence.</MudText>
     @if (Data.DomainCount == 0)
     {
@@ -47,7 +58,7 @@
             <HeaderContent><MudTh>Domain / reporting</MudTh><MudTh>Why it needs attention / next action</MudTh><MudTh>Report context (30d)</MudTh></HeaderContent>
             <RowTemplate Context="row">
                 <MudTd DataLabel="Domain / reporting">
-                    <a href="@DashboardActionCentre.DomainUrl(row.Domain)" data-domain-link>@row.Domain.Name</a>
+                    <a class="dashboard-domain-name" href="@DashboardActionCentre.DomainUrl(row.Domain)" data-domain-link>@row.Domain.Name</a>
                     <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">@(row.Domain.SpfCheckStatus == SpfCheckStatus.NullSpf ? "No senders (null SPF)" : row.Domain.IsMonitored ? "Reports expected" : "Reports not required")</MudText>
                 </MudTd>
                 <MudTd DataLabel="Why it needs attention / next action">
@@ -67,14 +78,17 @@
                     }
                     @if (row.SenderReviews > 0)
                     {
-                        <div class="dashboard-problem"><MudChip T="string" Size="Size.Small" Color="Color.Warning">Sender review</MudChip>
-                            <a href="@DashboardActionCentre.DomainUrl(row.Domain, "sources")" data-domain-link>Review @row.SenderReviews sender decisions</a>
+                        <div class="dashboard-sender-review">
+                            <span class="dashboard-issue-kind">Sender review</span>
+                            <a class="dashboard-issue-action" href="@DashboardActionCentre.DomainUrl(row.Domain, "sources")" data-domain-link>Review @row.SenderReviews @(row.SenderReviews == 1 ? "sender decision" : "sender decisions")</a>
                         </div>
                     }
                 </MudTd>
                 <MudTd DataLabel="Report context (30d)">
-                    <MudText Typo="Typo.body2" Class="domain-percentage">@(row.PassRate?.ToString("P1") ?? "No message data")</MudText>
-                    <MudText Typo="Typo.caption">Last report: @(row.Domain.LastReportReceivedUtc?.ToString("g") ?? "never")</MudText>
+                    <MudText Typo="Typo.body2" Class="domain-percentage dashboard-pass-rate">@(row.PassRate?.ToString("P1") ?? "No message data")</MudText>
+                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">DMARC pass rate · 30 days</MudText>
+                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary mt-2">Last report</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(row.Domain.LastReportReceivedUtc?.ToString("g") ?? "never")</MudText>
                 </MudTd>
             </RowTemplate>
             <PagerContent><MudTablePager PageSizeOptions="@([5, 10, 25])" /></PagerContent>
@@ -125,21 +139,21 @@
     [Parameter, EditorRequired] public DomainListState State { get; set; } = new();
     [Parameter] public EventCallback<DomainListState> Changed { get; set; }
     private string AttentionMode => State.AttentionView ?? "all";
-    private IReadOnlyList<DashboardAttention> AttentionRows => Data.Attention.Where(row => AttentionMode switch
-    {
-        "action" => row.HasConfirmedProblem || row.SenderReviews > 0,
-        "checking" => row.Problems.Any(problem => problem.NeedsChecking),
-        "senders" => row.SenderReviews > 0,
-        "missing" => row.MissingReport,
-        _ => true
-    }).ToList();
+    private static readonly KeyValuePair<string, string>[] Categories =
+    [
+        new("dns", "DNS/configuration"), new("missing", "Missing reports"),
+        new("senders", "Sender review"), new("checking", "Needs checking")
+    ];
+    private HashSet<string> SelectedCategories => (State.AttentionView?.Split(',') ?? []).ToHashSet();
+    private IReadOnlyList<DashboardAttention> AttentionRows => Data.Attention.Where(row => row.MatchesCategories(State.AttentionView)).ToList();
     private string AttentionDescription => AttentionMode switch
     {
         "action" => "Confirmed problems and sender decisions",
         "checking" => "Unconfirmed checks (not confirmed failures)",
         "senders" => "Outstanding sender decisions from the last 30 days",
         "missing" => "Missing expected reports (over two days or never received)",
-        _ => "Current stored DNS checks, report expectations and 30-day sender decisions"
+        "all" => "Current stored DNS checks, report expectations and 30-day sender decisions",
+        _ => string.Join(" or ", Categories.Where(category => SelectedCategories.Contains(category.Key)).Select(category => category.Value))
     };
     private List<ChartSeries<double>> ChartSeries =>
     [
@@ -148,9 +162,19 @@
     ];
     private string[] ChartLabels => Data.Days.Select(day => day.Date.ToString("dd MMM")).ToArray();
     private Task ShowAttention(string? mode) => Changed.InvokeAsync(State with { AttentionView = mode });
-    private static RenderFragment ProblemLine(Domain domain, DashboardProblem problem) => @<div class="dashboard-problem">
-        <span class="@(problem.NeedsChecking ? "mud-info-text" : "")">@(problem.NeedsChecking ? "Needs checking: " : "")@problem.Description.TrimEnd('.').</span>
-        <a href="@DashboardActionCentre.DomainUrl(domain, problem.Tab)" data-domain-link>@problem.Action</a>
+    private Task ToggleCategory(string category)
+    {
+        var selected = SelectedCategories;
+        selected.Remove("action");
+        if (!selected.Add(category)) selected.Remove(category);
+        return ShowAttention(selected.Count == 0 ? null : string.Join(",", Categories.Where(option => selected.Contains(option.Key)).Select(option => option.Key)));
+    }
+    private static RenderFragment ProblemLine(Domain domain, DashboardProblem problem) => @<div class="@($"dashboard-problem {(problem.NeedsChecking ? "dashboard-problem-checking" : "")}")">
+        <div class="dashboard-issue-copy">
+            <span class="dashboard-issue-kind">@(problem.NeedsChecking ? "Needs checking" : "Action needed")</span>
+            <span class="dashboard-issue-description">@problem.Description.TrimEnd('.').</span>
+        </div>
+        <a class="dashboard-issue-action" href="@DashboardActionCentre.DomainUrl(domain, problem.Tab)" data-domain-link>@problem.Action</a>
     </div>;
     private Task InvestigateAsync(DashboardInvestigation row) => Dialogs.ShowAsync<DashboardInvestigationDialog>(
         $"Seven-day evidence: {row.Domain.Name}",

@@ -96,7 +96,7 @@ public sealed record DomainListState
             || MinPassRatePercent is { } percent && !double.IsFinite(percent)
             || MinReportCount is < 0 || Sort is not null && !SortKeys.Contains(Sort)
             || Status is not null and not ("OK" or "Warning" or "Missing")
-            || AttentionView is not null and not ("action" or "checking" or "senders" or "missing")
+            || AttentionView is not null && AttentionView.Split(',').Any(category => category is not ("action" or "dns" or "checking" or "senders" or "missing"))
             || Target is not null && Target is not (DmarcTargetOutcome.Below or DmarcTargetOutcome.NeedsChecking or DmarcTargetOutcome.Meets)
             || Companies?.Any(pair => !Enum.IsDefined(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)) == true
             || Dmarc is not null && !Enum.GetValues<Data.DmarcCheckStatus>().SelectMany(status => Enum.GetValues<Data.DmarcAuthorizationCheckStatus>().Select(authorization => DmarcStatusPresentation.GetLabel(status, authorization))).Contains(Dmarc)
