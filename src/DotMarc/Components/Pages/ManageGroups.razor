@@ -1,5 +1,5 @@
 @page "/groups"
-@attribute [Authorize(Policy = "GroupsOrTagsWrite")]
+@attribute [Authorize(Policy = "GroupsManage")]
 @using DotMarc.Baselines
 @using DotMarc.Psa
 @using DotMarc.Data
@@ -296,108 +296,12 @@
     }
 </MudPaper>
 
-<MudPaper Class="pa-4" Elevation="1">
-    <MudText Typo="Typo.h6" Class="mb-2">Tags</MudText>
-    <AuthorizeView Policy="TagsAdd">
-        <MudGrid>
-            <MudItem xs="6">
-                <MudTextField @bind-Value="_newTagName" Label="Tag name" Placeholder="primary" Variant="Variant.Outlined"
-                              Error="@(_addTagError is not null)" ErrorText="@_addTagError" Immediate="true" />
-            </MudItem>
-            <MudItem xs="3">
-                <MudSelect T="Color" @bind-Value="_newTagColor" Label="Color" Variant="Variant.Outlined">
-                    @foreach (var color in TagManagementService.AllowedColors)
-                    {
-                        <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="3" Class="d-flex align-start">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="AddTagAsync">Add tag</MudButton>
-            </MudItem>
-        </MudGrid>
-    </AuthorizeView>
-
-    @if (_tags is { Count: > 0 })
-    {
-        <MudTable Items="_tags" Hover="true" T="TagRow" Class="mt-4" CustomHeader="true" Filter="TagMatchesFilters">
-            <ToolBarContent>
-                <MudSpacer />
-                <MudButton Variant="@(_showTagFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                           OnClick="@(() => _showTagFilters = !_showTagFilters)">@(_showTagFilters ? "Hide filters" : "Filters")</MudButton>
-            </ToolBarContent>
-            <HeaderContent>
-                <tr>
-                    <MudTh>Preview</MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(t => t.Name)">Name</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(t => t.Color.ToString())">Color</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(t => t.DomainCount)">Domains</MudTableSortLabel></MudTh>
-                    <MudTh></MudTh>
-                </tr>
-                @if (_showTagFilters)
-                {
-                <tr>
-                    <MudTh></MudTh>
-                    <MudTh><MudTextField T="string" @bind-Value="_tagNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                    <MudTh>
-                        <MudSelect T="Color?" Value="_tagColorFilter" ValueChanged="@(v => _tagColorFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                            @foreach (var color in TagManagementService.AllowedColors)
-                            {
-                                <MudSelectItem T="Color?" Value="color">@color</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudTh>
-                    <MudTh><MudNumericField T="int?" @bind-Value="_tagMinDomainsFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
-                    <MudTh></MudTh>
-                </tr>
-                }
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd><MudChip T="string" Color="context.Color">@context.Name</MudChip></MudTd>
-                <MudTd>
-                    <AuthorizeView Policy="TagsEdit" Context="authState">
-                        <Authorized>
-                            <MudTextField T="string" Value="context.Name" ValueChanged="@(v => UpdateTagAsync(context, v, context.Color))" />
-                        </Authorized>
-                        <NotAuthorized>
-                            @context.Name
-                        </NotAuthorized>
-                    </AuthorizeView>
-                </MudTd>
-                <MudTd>
-                    <AuthorizeView Policy="TagsEdit" Context="authState">
-                        <Authorized>
-                            <MudSelect T="Color" Value="context.Color" ValueChanged="@(v => UpdateTagAsync(context, context.Name, v))">
-                                @foreach (var color in TagManagementService.AllowedColors)
-                                {
-                                    <MudSelectItem T="Color" Value="color">@color</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </Authorized>
-                        <NotAuthorized>
-                            <MudChip T="string" Color="context.Color">@context.Name</MudChip>
-                        </NotAuthorized>
-                    </AuthorizeView>
-                </MudTd>
-                <MudTd>@context.DomainCount</MudTd>
-                <MudTd>
-                    <AuthorizeView Policy="TagsDelete" Context="authState">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteTagAsync(context))" />
-                    </AuthorizeView>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
-    else if (_tags is not null)
-    {
-        <MudText Typo="Typo.body2" Class="mt-4">No tags yet - add one above.</MudText>
-    }
-</MudPaper>
+<AuthorizeView Policy="TagsManage">
+    <MudButton Href="/tags" StartIcon="@Icons.Material.Filled.Label">Manage tags</MudButton>
+</AuthorizeView>
 
 @code {
     private List<GroupRow>? _groups;
-    private List<TagRow>? _tags;
     private List<PsaCompanyList> _psaLists = [];
     private List<PsaCompanyList> _loadedLists = [];
     private PsaKind? _withoutGroupPsa;
@@ -409,9 +313,6 @@
     private HashSet<int> _failedReportGroupIds = [];
     private string _newGroupName = "";
     private string? _addGroupError;
-    private string _newTagName = "";
-    private Color _newTagColor = Color.Primary;
-    private string? _addTagError;
 
     private string? _clientNameFilter;
     private bool _showClientFilters;
@@ -422,10 +323,6 @@
     private bool? _groupHasTicketOverridesFilter;
     private bool _showGroupFilters;
 
-    private string? _tagNameFilter;
-    private Color? _tagColorFilter;
-    private int? _tagMinDomainsFilter;
-    private bool _showTagFilters;
 
     private bool CompanyWithoutGroupMatchesFilters(PsaCompany company) =>
         string.IsNullOrWhiteSpace(_clientNameFilter) || company.Name.Contains(_clientNameFilter, StringComparison.OrdinalIgnoreCase);
@@ -454,23 +351,6 @@
         return true;
     }
 
-    private bool TagMatchesFilters(TagRow row)
-    {
-        if (!string.IsNullOrWhiteSpace(_tagNameFilter) && !row.Name.Contains(_tagNameFilter, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-        if (_tagColorFilter is { } color && row.Color != color)
-        {
-            return false;
-        }
-        if (_tagMinDomainsFilter is { } minDomains && row.DomainCount < minDomains)
-        {
-            return false;
-        }
-        return true;
-    }
-
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
@@ -484,11 +364,6 @@
         _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
         _brandedGroupIds = (await db.GroupBrandings.Select(branding => branding.GroupId).ToListAsync()).ToHashSet();
         await LoadReportChipsAsync(db);
-        _tags = await db.Tags
-            .AsNoTracking()
-            .OrderBy(t => t.Name)
-            .Select(t => new TagRow(t.Id, t.Name, t.Color, t.Domains.Count))
-            .ToListAsync();
 
         await using var psaDb = await DbFactory.CreateDbContextAsync();
         _psaLists = (await PsaDirectory.LoadAsync(psaDb)).ToList();
@@ -707,88 +582,6 @@
         }
     }
 
-    private async Task AddTagAsync()
-    {
-        _addTagError = null;
-        TagManagementService.AddTagResult result;
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            result = await TagManagementService.AddTagAsync(db, await AuditActorAccessor.GetAsync(), _newTagName, _newTagColor, CancellationToken.None);
-        }
-        catch (Exception)
-        {
-            _addTagError = "Something went wrong adding the tag. Try again.";
-            return;
-        }
-
-        _addTagError = result switch
-        {
-            TagManagementService.AddTagResult.InvalidName => "Enter a tag name.",
-            TagManagementService.AddTagResult.AlreadyExists => "A tag with that name already exists.",
-            TagManagementService.AddTagResult.InvalidColor => "Choose one of the available colors.",
-            _ => null
-        };
-
-        if (result == TagManagementService.AddTagResult.Added)
-        {
-            _newTagName = "";
-            _newTagColor = Color.Primary;
-            await LoadAsync();
-        }
-    }
-
-    private async Task UpdateTagAsync(TagRow row, string newName, Color newColor)
-    {
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var result = await TagManagementService.UpdateTagAsync(db, await AuditActorAccessor.GetAsync(), row.Id, newName, newColor, CancellationToken.None);
-            var error = result switch
-            {
-                TagManagementService.AddTagResult.InvalidName => "Tag name can't be empty.",
-                TagManagementService.AddTagResult.AlreadyExists => "A tag with that name already exists.",
-                TagManagementService.AddTagResult.InvalidColor => "Choose one of the available colors.",
-                _ => null
-            };
-            if (error is not null)
-            {
-                Snackbar.Add(error, Severity.Error);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add($"Failed to update {row.Name}. Try again.", Severity.Error);
-        }
-        await LoadAsync();
-    }
-
-    private async Task DeleteTagAsync(TagRow row)
-    {
-        var parameters = new DialogParameters<ConfirmDeleteLabelDialog>
-        {
-            { x => x.Kind, "tag" },
-            { x => x.LabelName, row.Name },
-            { x => x.DomainCount, row.DomainCount }
-        };
-        var dialogRef = await DialogService.ShowAsync<ConfirmDeleteLabelDialog>(parameters);
-        var result = await dialogRef.Result;
-
-        if (result is { Canceled: false })
-        {
-            try
-            {
-                await using var db = await DbFactory.CreateDbContextAsync();
-                await TagManagementService.RemoveTagAsync(db, await AuditActorAccessor.GetAsync(), row.Id, CancellationToken.None);
-                await LoadAsync();
-            }
-            catch (Exception)
-            {
-                Snackbar.Add($"Failed to remove {row.Name}. Try again.", Severity.Error);
-            }
-        }
-    }
-
     private async Task SetPsaCompanyAsync(GroupRow row, PsaKind psa, PsaCompany? company)
     {
         try
@@ -958,5 +751,4 @@
     }
 
     private sealed record GroupRow(int Id, string Name, int DomainCount, List<PsaCompanyLink> Links);
-    private sealed record TagRow(int Id, string Name, Color Color, int DomainCount);
 }

@@ -1,0 +1,5 @@
+@page "/domains"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "DomainsView")]
+@using DotMarc.Components.Shared
+
+<DomainWorkspace Inventory="true" />

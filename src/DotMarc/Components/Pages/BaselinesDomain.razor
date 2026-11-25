@@ -40,9 +40,9 @@
 
         <MudText Typo="Typo.h6" Class="mb-1">Domains against their targets</MudText>
         <div class="mb-4">
-            <MudLink Href="/dashboard?target=below">@_summary.BelowCount @(_summary.BelowCount == 1 ? "domain" : "domains") below target</MudLink>
+            <MudLink Href="/domains?target=below">@_summary.BelowCount @(_summary.BelowCount == 1 ? "domain" : "domains") below target</MudLink>
             <span class="mx-2">|</span>
-            <MudLink Href="/dashboard?target=checking">@_summary.NeedsCheckingCount @(_summary.NeedsCheckingCount == 1 ? "needs" : "need") checking</MudLink>
+            <MudLink Href="/domains?target=checking">@_summary.NeedsCheckingCount @(_summary.NeedsCheckingCount == 1 ? "needs" : "need") checking</MudLink>
         </div>
 
         <MudText Typo="Typo.h6" Class="mb-1">Group targets</MudText>

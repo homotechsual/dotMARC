@@ -161,3 +161,21 @@ html:has(.dev-build-banner) .mud-main-content {
     border-color: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text);
 }
+.domain-list-toolbar, .domain-filter-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.domain-percentage { white-space: nowrap; }
+.domain-inventory .mud-input-control { min-width: 10rem; }
+.domain-filter-bar > span { min-width: 0; overflow-wrap: anywhere; }
+.domain-sort {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+}
+.domain-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

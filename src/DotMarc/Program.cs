@@ -456,6 +456,13 @@ builder.Services.AddAuthorization(options =>
         nameof(Permission.GroupsAdd), nameof(Permission.GroupsRename), nameof(Permission.GroupsDelete),
         nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
 
+    options.AddPolicy("GroupsManage", policy => policy.RequireClaim(
+        DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
+        nameof(Permission.GroupsAdd), nameof(Permission.GroupsRename), nameof(Permission.GroupsDelete)));
+    options.AddPolicy("TagsManage", policy => policy.RequireClaim(
+        DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
+        nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
+
     ApiPolicies.Add(options);
 
     // The client portal's own policy. ClientPortalGate fails every other policy for portal users.

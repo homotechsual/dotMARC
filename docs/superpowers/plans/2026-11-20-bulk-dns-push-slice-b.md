@@ -4,7 +4,7 @@
 
 **Goal:** A person can select domains on the dedicated Domain Inventory page, choose a target, review what will change for each domain, sign in once, watch the batch run and see a result per domain, all working on the demo instance with a fake provider. Dashboard is the action centre, not a bulk-selection entry point.
 
-**Prerequisite:** Coordinate Tasks 7 and 8 with the Inventory move and preference/navigation migration in roadmap items 13 to 18. Inventory's route, component name and row mapping are not settled yet; resolve them in that plan before wiring selection. Do not add a temporary Dashboard selection flow that would immediately be removed.
+**Prerequisite:** Coordinate Tasks 7 and 8 with the [Inventory, filter and navigation implementation](2026-11-25-domain-inventory-filters-and-navigation.md). Inventory is `/domains`, with the `DomainInventory` route component and shared `DomainWorkspace`. Its `_rows` collection is filtered and sorted before grouping, contains distinct domain IDs, and is the selection source; grouped copies must share that identity. Add the batch action to the one page-level toolbar, never per-group filter controls. Do not add a temporary Dashboard selection flow.
 
 **Architecture:** Slice A already stores, reviews, claims and runs a batch (`DnsPushBatchService`, `DnsPushBatchGate`, `DnsPushBatchCallback`, `DnsPushBatchRunner`, `DnsPushBatchWorker`) and exposes `/dns-push/{provider}/start-batch`. Slice B adds the pages and dialogs on top, stores each domain's review text on its batch row so the review page never re-plans, and registers a demo DNS push provider with demo lookups so the whole flow runs without a real DNS account. The page follows the batch by reading its stored state on a timer, which works on any replica.
 
@@ -186,14 +186,14 @@ Today the demo registers only the three real providers and the real detector and
 
 **Files:**
 - Create: `src/DotMarc/Components/Dialogs/StartDnsPushBatchDialog.razor`, `src/DotMarc/Components/Shared/DnsPushSelectionBar.razor`
-- Modify: the Domain Inventory page/component and its row mapping selected by the coordinated Inventory plan (add `DnsProvider` to that row contract; reuse the existing reporting projection where applicable)
+- Modify: `src/DotMarc/Components/Shared/DomainWorkspace.razor` and its code-behind, reached through `Pages/DomainInventory.razor` at `/domains`. Reuse the distinct filtered `_rows` IDs and server-side `_domainsById` metadata; expose `DnsProvider` in the chooser's read model without loading domains again per row.
 - Test: `test/DotMarc.Tests/DnsPush/DnsPushStartModelTests.cs`, additions to the Inventory row and permission tests
 
 **Interfaces:**
 - Consumes: `DnsPushSelection.Group`, `IEnumerable<IDnsPushProvider>.FindConfiguredAsync`, `IEnumerable<IDnsChangeBuilder>`, `IAuthorizationService`, `DnsPushBatchService.CreateAsync`, `DnsPushBatchService.BulkTargets`.
 - Produces:
   - The Inventory row's `DnsProvider` (`DetectedDnsProvider`).
-  - Inventory keeps one page-level `HashSet<int> _selectedDomainIds` and renders a checkbox in each row's first cell and a header "select all shown" checkbox for the rows the current filters show. It does not use `MudTable.MultiSelection`, because the By group view builds several tables and each would own a separate selection. A selection survives sorting, filtering and switching between All domains and By group. Clicking the checkbox must not trigger the row's navigation to the domain. Dashboard links to Inventory rather than duplicating selection controls.
+  - Inventory keeps one page-level `HashSet<int> _selectedDomainIds` and renders a checkbox in each row's first cell and a header "select all shown" checkbox for the rows the current filters show. It does not use `MudTable.MultiSelection`, because the By group view builds several tables and each would own a separate selection. A selection survives sorting and switching between All domains and By group. In accordance with the 25 November Inventory plan, filtering or access changes remove selected IDs that are no longer visible/authorised, with visible feedback; select-all counts distinct current matches once. Clicking a checkbox must not trigger the domain link or a management control. Dashboard links to Inventory rather than duplicating selection controls.
   - `DnsPushSelectionBar` (shown only when something is selected and `AvailableTargets` contains at least one authorised bulk target): "N selected", **Push DNS records**, **Clear**. Evaluate each builder's `RequiredPolicy`; do not require `DomainsEdit` as an extra umbrella permission. An `MtaStsManage`-only user can open the chooser for `mta-sts`.
   - `StartDnsPushBatchDialog` takes the selected `SelectedDomain` list. It lets the person choose a target from `BulkTargets`, offering only the targets whose `RequiredPolicy` they hold. It shows the grouping from `DnsPushSelection.Group` (a card per provider with its count and a **Review** button, and a "Set up manually" list with each reason) and says plainly when a group is over 50. **Review** calls `CreateAsync` for that group, shows a spinner while the live lookups run, then navigates to `/dns-push/batch/{id}`. A `DnsPushBatchException` message is shown as the dialog's error.
   - A pure `DnsPushStartModel` with `AvailableTargets(IReadOnlySet<string> heldPolicies, IEnumerable<IDnsChangeBuilder>)`, which the dialog uses.
@@ -207,12 +207,12 @@ Today the demo registers only the three real providers and the real detector and
 ### Task 8: Preserve management controls in the Inventory workflow
 
 **Files:**
-- Modify: the Inventory and existing `src/DotMarc/Components/Pages/ManageDomains.razor` integration according to the coordinated Inventory plan
-- Test: additions to the Inventory/Manage domains navigation and access tests
+- Modify: `src/DotMarc/Components/Shared/DomainWorkspace.razor` and its code-behind; the old `ManageDomains.razor` has been replaced by Inventory.
+- Test: additions to `test/DotMarc.Tests/Components/DomainInventoryTests.cs` and the Inventory browser checks
 
 **Interfaces:**
 - Consumes: `DnsPushSelectionBar`, `StartDnsPushBatchDialog`, `SelectedDomain` (Tasks 2 and 7).
-- Produces: one authoritative inventory selection flow, accessible to read-only inventory viewers without granting edit actions. Preserve group/tag/delete controls under their existing permissions. If Manage domains is retained separately, provide navigation to Inventory for bulk selection instead of duplicating its full table or selection state.
+- Produces: one authoritative inventory selection flow, accessible to read-only inventory viewers without granting edit actions. Preserve Inventory's existing management columns and handler-level policy/scope checks. Do not reintroduce a separate Manage domains table or selection state.
 
 - [ ] **Step 1: Write the failing tests** for management-to-Inventory navigation, preservation of read-only access and edit-only actions, and clicking a selection checkbox without invoking row navigation or another control.
 - [ ] **Step 2: Run.** Expected: FAIL.

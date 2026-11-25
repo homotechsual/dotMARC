@@ -57,7 +57,7 @@ A policy stricter than the target counts as meeting it. There are four outcomes:
 * **Needs checking**: the domain has not been checked yet. It is not counted as below target until it has.
 * **No target**: no level applies.
 
-The Domain tab shows how many domains are below target and how many need checking, each linking to the Dashboard with the **Target** filter applied (`/dashboard?target=below` and `/dashboard?target=checking`). The filter covers monitored domains only. The [API](./api.mdx) returns the same outcome as `dmarcTarget` on each domain and takes a `dmarcTarget` filter (`meets`, `below` or `checking`) on the domain list.
+The Domain tab shows how many domains are below target and how many need checking, each linking to Inventory with the **DMARC target** filter applied (`/domains?target=below` and `/domains?target=checking`). These links cover all authorised groups and do not inherit unrelated saved filters. The old Dashboard target links still forward to Inventory. The filter covers monitored domains only. The [API](./api.mdx) returns the same outcome as `dmarcTarget` on each domain and takes a `dmarcTarget` filter (`meets`, `below` or `checking`) on the domain list.
 
 ### The alert
 

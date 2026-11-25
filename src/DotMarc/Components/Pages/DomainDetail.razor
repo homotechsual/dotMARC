@@ -40,7 +40,7 @@
 @implements IDisposable
 
 <AppPageTitle>dotMARC - @DomainName</AppPageTitle>
-<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudButton OnClick="BackToListAsync" Disabled="@(!RendererInfo.IsInteractive)" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
 @if (_domain is not null && _domain.DnsProvider.ToProviderKey() is not null)
 {
@@ -77,7 +77,7 @@ else
             {
                 <MudAlert Severity="Severity.Info" Dense="true" Class="my-4">
                     No DMARC reports received for this domain in the last 30 days. If they should be arriving, check mailbox
-                    access on the <MudLink Href="/dashboard">dashboard</MudLink>.
+                    access in <MudLink Href="/domains">Inventory</MudLink>.
                 </MudAlert>
             }
             @if (_reasonBreakdown is { Total: > 0 } breakdown)
@@ -597,6 +597,20 @@ else
 }
 
 @code {
+    private async Task BackToListAsync()
+    {
+        try
+        {
+            await using var module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./listPosition.js");
+            await module.InvokeVoidAsync("back");
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "Returning to the domain list failed");
+            Snackbar.Add("The previous list position is unavailable.", Severity.Warning);
+            Navigation.NavigateTo("/domains");
+        }
+    }
     private static readonly SemaphoreSlim EnrichmentThrottle = new(4);
     private static readonly string[] TabSlugs = ["overview", "mta-sts", "tls-reports", "sources", "raw-reports"];
 
@@ -933,7 +947,7 @@ else
     {
         _activeTabIndex = index;
         var slug = TabSlugs[index >= 0 && index < TabSlugs.Length ? index : 0];
-        Navigation.NavigateTo($"/domains/{DomainName}/{slug}", replace: true);
+        Navigation.NavigateTo($"/domains/{DomainName}/{slug}", new NavigationOptions { ReplaceHistoryEntry = true, HistoryEntryState = Navigation.HistoryEntryState });
         return Task.CompletedTask;
     }
 

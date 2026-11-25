@@ -40,15 +40,18 @@
                 <MudButton Href="/dashboard" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Dashboard">Dashboard</MudButton>
             </Authorized>
         </AuthorizeView>
+        <AuthorizeView Policy="DomainsView">
+            <MudButton Href="/domains" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Language">Inventory</MudButton>
+        </AuthorizeView>
         <AuthorizeView Policy="AlertsView">
             <MudButton Href="/alerts" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Notifications">Alerts</MudButton>
         </AuthorizeView>
         <MudMenu Label="Manage" Color="Color.Inherit" EndIcon="@Icons.Material.Filled.ExpandMore">
-            <AuthorizeView Policy="DomainsWrite">
-                <MudMenuItem Href="/domains" Icon="@Icons.Material.Filled.Language">Domains</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="GroupsOrTagsWrite">
+            <AuthorizeView Policy="GroupsManage">
                 <MudMenuItem Href="/groups" Icon="@Icons.Material.Filled.GroupWork">Groups</MudMenuItem>
+            </AuthorizeView>
+            <AuthorizeView Policy="TagsManage">
+                <MudMenuItem Href="/tags" Icon="@Icons.Material.Filled.Label">Tags</MudMenuItem>
             </AuthorizeView>
             <AuthorizeView Policy="DnsPushManage">
                 <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
