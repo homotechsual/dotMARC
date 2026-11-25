@@ -3210,7 +3210,9 @@
                   "NotConfigured",
                   "Ok",
                   "Missing",
-                  "Misconfigured"
+                  "Misconfigured",
+                  "NoSendingKeys",
+                  "UnexpectedSendingKey"
                 ],
                 "type": "string"
               },
