@@ -10,6 +10,7 @@ internal sealed class FakeDkimDnsChecker : IDkimDnsChecker
     public List<string> CheckedDomains { get; } = [];
 
     public IReadOnlyList<DkimExpectedRecord>? LastExpectedRecords { get; private set; }
+    public bool ExpectsNoSenders { get; private set; }
 
     /// <summary>What each selector has published, by selector name; anything else has nothing.</summary>
     public Dictionary<string, DotMarc.DnsPush.DnsRecordLookupResult> Published { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -17,8 +18,9 @@ internal sealed class FakeDkimDnsChecker : IDkimDnsChecker
     public Task<DotMarc.DnsPush.DnsRecordLookupResult> LookupSelectorAsync(string domainName, string selector, CancellationToken cancellationToken) =>
         Task.FromResult(Published.TryGetValue(selector, out var published) ? published : new DotMarc.DnsPush.DnsRecordLookupResult(null, null));
 
-    public Task<DkimCheckResult> CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken cancellationToken, IReadOnlyList<DkimExpectedRecord>? expectedRecords = null)
+    public Task<DkimCheckResult> CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken cancellationToken, IReadOnlyList<DkimExpectedRecord>? expectedRecords = null, bool expectsNoSenders = false)
     {
+        ExpectsNoSenders = expectsNoSenders;
         LastExpectedRecords = expectedRecords;
         CheckedDomains.Add(domainName);
         if (ShouldThrow)

@@ -125,6 +125,10 @@ public static class DnsHealthAlertEvaluator
             return;
         }
 
+        // Older baselines did not observe np or testing. Learn those fields without inventing a historical change.
+        if (!DmarcTagList.Parse(state.Baseline!).Any(tag => tag.IsNamed("t")))
+            baseline = baseline with { NonExistentSubdomainPolicy = current.NonExistentSubdomainPolicy, Testing = current.Testing };
+
         if (!current.IsWeakerThan(baseline))
         {
             state.Baseline = current.Format();

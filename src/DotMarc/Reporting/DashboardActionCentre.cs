@@ -141,15 +141,22 @@ public sealed record DashboardActionCentre(
             Add("SPF has not been checked", true);
         else if (domain.SpfCheckStatus is not (SpfCheckStatus.Ok or SpfCheckStatus.NullSpf))
             Add($"SPF: {SpfStatusPresentation.GetLabel(domain.SpfCheckStatus)}");
-        if (domain.SpfCheckStatus != SpfCheckStatus.NullSpf)
+        if (domain.DkimSelectors.Count > 0)
         {
-            if (domain.DkimSelectors.Count > 0)
+            if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
             {
-                if (domain.DkimCheckStatus == DkimCheckStatus.NotConfigured)
-                    Add("Configured DKIM selectors have not been checked", true);
-                else if (domain.DkimCheckStatus != DkimCheckStatus.Ok)
+                if (domain.DkimCheckStatus is DkimCheckStatus.NotConfigured or DkimCheckStatus.Missing or DkimCheckStatus.Ok)
+                    Add("DKIM no-sender state needs verification", true);
+                else if (domain.DkimCheckStatus != DkimCheckStatus.NoSendingKeys)
                     Add($"DKIM: {DkimStatusPresentation.GetLabel(domain.DkimCheckStatus)}");
             }
+            else if (domain.DkimCheckStatus == DkimCheckStatus.NotConfigured)
+                Add("Configured DKIM selectors have not been checked", true);
+            else if (domain.DkimCheckStatus != DkimCheckStatus.Ok)
+                Add($"DKIM: {DkimStatusPresentation.GetLabel(domain.DkimCheckStatus)}");
+        }
+        if (domain.SpfCheckStatus != SpfCheckStatus.NullSpf)
+        {
             if (domain.MtaStsEnabled)
             {
                 if (domain.MtaStsStatus == MtaStsStatus.Failed)

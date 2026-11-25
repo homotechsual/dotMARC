@@ -7,6 +7,15 @@ namespace DotMarc.Tests.Portal;
 
 public sealed class PortalStatusTests
 {
+    [Theory]
+    [InlineData(DkimCheckStatus.NoSendingKeys, false)]
+    [InlineData(DkimCheckStatus.UnexpectedSendingKey, true)]
+    public void NullDomainDkimHealthUsesNoSenderResults(DkimCheckStatus dkim, bool failing)
+    {
+        var domain = HealthyDomain(domain => { domain.SpfCheckStatus = SpfCheckStatus.NullSpf; domain.DkimCheckStatus = dkim; });
+        Assert.Equal(failing, PortalStatus.FailingChecks(domain).Any(reason => reason.StartsWith("DKIM:")));
+    }
+
     private static Domain HealthyDomain(Action<Domain>? change = null)
     {
         var domain = new Domain

@@ -3,11 +3,11 @@ using DotMarc.Data;
 
 namespace DotMarc.Dns;
 
-/// <summary>A DMARC record's policy tags, with sp and pct filled in from their defaults (sp is p; pct is 100). Also
+/// <summary>A DMARC record's policy tags, including np and testing, with sp and pct filled in from their defaults. Also
 /// the format the DMARC policy weakened alert stores its accepted policy in.</summary>
-public sealed record DmarcPolicyTags(DmarcPolicyLevel Policy, DmarcPolicyLevel SubdomainPolicy, int Percent)
+public sealed record DmarcPolicyTags(DmarcPolicyLevel Policy, DmarcPolicyLevel SubdomainPolicy, int Percent, DmarcPolicyLevel? NonExistentSubdomainPolicy = null, bool Testing = false)
 {
-    /// <summary>Reads p, sp and pct from a DMARC record, or from a baseline written by <see cref="Format"/>. Null only
+    /// <summary>Reads policy tags from a DMARC record, or from a baseline written by <see cref="Format"/>. Null only
     /// when there's no text; a missing or invalid p reads as none. Tag names and values ignore case and spaces, and the first
     /// of a repeated tag wins.</summary>
     public static DmarcPolicyTags? Parse(string? record)
@@ -37,20 +37,28 @@ public sealed record DmarcPolicyTags(DmarcPolicyLevel Policy, DmarcPolicyLevel S
                       && parsedPercent is >= 0 and <= 100
             ? parsedPercent
             : 100;
-        return new DmarcPolicyTags(policy, subdomainPolicy, percent);
+        var nonExistentPolicy = tags.TryGetValue("np", out var nonExistentText) ? ParseLevel(nonExistentText) : null;
+        var testing = tags.TryGetValue("t", out var testingText) && string.Equals(testingText, "y", StringComparison.OrdinalIgnoreCase);
+        return new DmarcPolicyTags(policy, subdomainPolicy, percent, nonExistentPolicy, testing);
     }
 
     /// <summary>A domain's policy as the DMARC check last stored it, or null if it had no DMARC record.</summary>
     public static DmarcPolicyTags? Of(Domain domain) =>
         domain.DmarcPolicy is { } policy
-            ? new DmarcPolicyTags(policy, domain.DmarcSubdomainPolicy ?? policy, domain.DmarcPercent ?? 100)
+            ? new DmarcPolicyTags(policy, domain.DmarcSubdomainPolicy ?? policy, domain.DmarcPercent ?? 100, domain.DmarcNonExistentSubdomainPolicy, domain.DmarcTesting)
             : null;
 
-    public string Format() => $"p={Name(Policy)}; sp={Name(SubdomainPolicy)}; pct={Percent.ToString(CultureInfo.InvariantCulture)}";
+    public string Format() => $"p={Name(Policy)}; sp={Name(SubdomainPolicy)}; pct={Percent.ToString(CultureInfo.InvariantCulture)}"
+        + (NonExistentSubdomainPolicy is { } policy ? $"; np={Name(policy)}" : "")
+        + (Testing ? "; t=y" : "; t=n");
 
-    /// <summary>True if any of p, sp or pct is lower than in <paramref name="other"/>.</summary>
+    /// <summary>True if policy is lower, or sampling is lower where the baseline enforced a policy.</summary>
     public bool IsWeakerThan(DmarcPolicyTags other) =>
-        Policy < other.Policy || SubdomainPolicy < other.SubdomainPolicy || Percent < other.Percent;
+        Policy < other.Policy || SubdomainPolicy < other.SubdomainPolicy
+        || (NonExistentSubdomainPolicy ?? SubdomainPolicy) < (other.NonExistentSubdomainPolicy ?? other.SubdomainPolicy)
+        || ((Percent < other.Percent || Testing && !other.Testing)
+            && (other.Policy != DmarcPolicyLevel.None || other.SubdomainPolicy != DmarcPolicyLevel.None
+                || other.NonExistentSubdomainPolicy is DmarcPolicyLevel.Quarantine or DmarcPolicyLevel.Reject));
 
     private static DmarcPolicyLevel? ParseLevel(string text) => text.ToLowerInvariant() switch
     {

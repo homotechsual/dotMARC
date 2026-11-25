@@ -112,18 +112,33 @@ dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM 
 
 | Type | Raised when | Resolves when | Severity |
 | --- | --- | --- | --- |
-| `DmarcRecordBroken` | The DMARC record is missing or broken. Broken includes the [record problems](./dmarc-and-mta-sts.mdx#record-problems) that make receivers ignore the record: a repeated tag, several records, `v=DMARC1` not first, or a missing or invalid `p`, `sp` or `np`. The obsolete `pct`, `rf` and `ri` tags and testing mode (`t=y`) are flagged on the domain page but do not alert. | The check passes again. | Warning |
+| `DmarcRecordBroken` | The DMARC record is missing or broken. Broken includes the [record problems](./dmarc-and-mta-sts.mdx#record-problems) that make receivers ignore the record: a repeated tag, several records, `v=DMARC1` not first, or a missing or invalid `p`, `sp` or `np`. Obsolete tags and testing mode are not syntax failures; testing may still cause a policy-weakened or below-target alert. | The check passes again. | Warning |
 | `DmarcAuthorizationBroken` | The record that lets reports go to dotMARC's mailbox is missing. | The check passes again. | Warning |
 | `TlsrptRecordBroken` | The TLS-RPT record is missing or broken. | The check passes again. | Warning |
 | `SpfRecordBroken` | The SPF record is missing, duplicated or broken. A `-all`-only record counts as passing. | The check passes again. | Warning |
 | `MxRecordBroken` | There's no MX record, or the mail server's name doesn't resolve. A null MX counts as passing. | The check passes again. | Warning |
-| `DkimRecordBroken` | A DKIM selector set for the domain is missing or broken. | The check passes again, or the selectors are removed. | Warning |
+| `DkimRecordBroken` | A configured sending selector is missing or broken; on a null-SPF domain, a configured selector publishes a key or malformed revocation rather than being absent or revoked. | The check passes again, or the selectors are removed. | Warning |
 | `MtaStsFailing` | dotMARC stopped being able to serve the domain's MTA-STS policy. | MTA-STS is active again, or turned off. | Warning |
-| `DmarcPolicyWeakened` | `p`, `sp` or `pct` went down, for example from `p=reject` to `p=quarantine`. | The policy goes back up, or the alert is closed (see below). | Warning |
+| `DmarcPolicyWeakened` | `p`, effective `sp` or effective `np` went down, testing was enabled on an enforcing policy, or legacy `pct` fell on an enforcing policy. Sampling changes on an entirely monitoring-only policy do not weaken enforcement. | The policy goes back up, or the alert is closed (see below). | Warning |
 | `DmarcPolicyBelowTarget` | The domain's DMARC policy is below the [target](./baselines.mdx#domain) set for it. It never fires without a target, stays quiet while the DMARC record is missing or unreadable, and doesn't raise tickets by default. | The domain meets its target, or the target is removed. | Warning |
 | `NameserversChanged` | The domain's nameservers changed, often the start of a DNS migration. | They change back, or the alert is closed (see below). | Info |
 
 A check that hasn't run yet, or doesn't apply (no DKIM selectors, MTA-STS turned off or still being set up), never alerts.
+
+### Non-sending and parked domains
+
+dotMARC uses an observed SPF record containing only `v=spf1 -all` to identify a no-sender domain. Null MX (`0 .`) separately declares no inbound mail; it does not establish that a domain sends no mail.
+
+For a domain that neither sends nor receives mail, the expected posture is:
+
+* **SPF:** `v=spf1 -all`.
+* **MX:** a null MX, `0 .`, as defined by [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505).
+* **DKIM:** no published keys at known selectors, or an explicitly revoked key such as `v=DKIM1; p=`. [RFC 6376 section 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) defines an empty `p` as revocation; an absent `p` is malformed, not revoked. A published key can still permit aligned DKIM to pass despite null SPF, so unused keys remain visible for investigation.
+* **DMARC:** a valid enforcing record such as `v=DMARC1; p=reject`, with subdomains inheriting reject unless explicitly set. Avoid weaker `sp`/`np`, testing mode and partial legacy enforcement. A `rua` destination is optional for this posture; dotMARC does not require its reporting mailbox or reporting-authorization record on a null-SPF domain. See [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989).
+
+DKIM checks cover **only configured selectors**, including their CNAME targets; DNS does not offer reliable enumeration of every selector. No configured selectors means **Not configured**, not proof that every key is absent. Confirmed absent/revoked configured selectors produce `NoSendingKeys`; a published key produces `UnexpectedSendingKey`. Both are exposed by the API and its DKIM filter. A DNS resolver error, malformed response or truncated answer is logged as a failed lookup and keeps the last recorded result and timestamp, never establishing healthy absence.
+
+Null SPF never suppresses a real DMARC policy downgrade. Older accepted policies learn previously untracked `np`/testing fields before comparing later changes, without inventing a historical downgrade. After upgrading, recheck existing null-SPF domains to replace older sending-key/reporting statuses; old missing-key evidence appears as needing verification rather than a recommendation to publish a sending key.
 
 ### When a check alerts
 

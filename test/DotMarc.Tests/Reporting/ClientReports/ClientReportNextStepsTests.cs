@@ -7,6 +7,19 @@ namespace DotMarc.Tests.Reporting.ClientReports;
 
 public sealed class ClientReportNextStepsTests
 {
+    [Theory]
+    [InlineData(DkimCheckStatus.Missing, "Recheck configured DKIM selectors")]
+    [InlineData(DkimCheckStatus.UnexpectedSendingKey, "Remove or revoke unused DKIM keys")]
+    public void NullDomainsAreNotToldToPublishReplacementSendingKeys(DkimCheckStatus dkim, string expected)
+    {
+        var domain = Healthy();
+        domain.SpfCheckStatus = SpfCheckStatus.NullSpf;
+        domain.DkimCheckStatus = dkim;
+        var steps = ClientReportNextSteps.For([domain], [Row(domain.Name, 100)]);
+        Assert.Contains(steps, step => step.StartsWith(expected));
+        Assert.DoesNotContain(steps, step => step.Contains("Publish it again"));
+    }
+
     private static Domain Healthy(string name = "aurora-retail.example", DmarcPolicyLevel policy = DmarcPolicyLevel.Reject) => new()
     {
         Name = name, IsMonitored = true, DmarcPolicy = policy,

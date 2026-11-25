@@ -47,7 +47,8 @@ public static class PortalStatus
             yield return $"SPF: {SpfStatusPresentation.GetLabel(domain.SpfCheckStatus)}";
         if (domain.MxCheckStatus is MxCheckStatus.MissingRecord or MxCheckStatus.UnresolvableTarget)
             yield return $"MX: {MxStatusPresentation.GetLabel(domain.MxCheckStatus)}";
-        if (domain.DkimCheckStatus is DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured)
+        if (domain.DkimCheckStatus is DkimCheckStatus.Misconfigured or DkimCheckStatus.UnexpectedSendingKey
+            || domain.DkimCheckStatus == DkimCheckStatus.Missing && domain.SpfCheckStatus != SpfCheckStatus.NullSpf)
             yield return $"DKIM: {DkimStatusPresentation.GetLabel(domain.DkimCheckStatus)}";
         if (domain.TlsrptCheckStatus is TlsrptCheckStatus.MissingOwnRecord or TlsrptCheckStatus.Misconfigured)
             yield return $"TLS reporting: {TlsrptStatusPresentation.GetLabel(domain.TlsrptCheckStatus)}";

@@ -45,6 +45,32 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     }
 
     [Fact]
+    public async Task NullDomainDkimLabelsRemainVisibleAndDoNotOfferSendingKeyPush()
+    {
+        using var client = await SignInAsync("admin");
+        var factory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var domain = new Domain
+        {
+            Name = "parked-health.example", IsMonitored = true, SpfCheckStatus = SpfCheckStatus.NullSpf,
+            DmarcCheckStatus = DmarcCheckStatus.Ok, DmarcPolicy = DmarcPolicyLevel.Reject,
+            DkimSelectors = ["old"], DkimCheckStatus = DkimCheckStatus.UnexpectedSendingKey,
+            DkimCheckedUtc = DateTimeOffset.UtcNow, FirstSeenUtc = DateTimeOffset.UtcNow
+        };
+        domain.DkimRecords.Add(new DomainDkimRecord { Selector = "old", RecordType = DkimRecordType.Txt, Value = "v=DKIM1; p=ABC" });
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        Assert.Contains("Sending key on no-sender domain", await client.GetStringAsync("/dashboard?search=parked-health"));
+        Assert.Contains("Sending key on no-sender domain", await client.GetStringAsync("/domains?search=parked-health"));
+        var overview = await client.GetStringAsync("/domains/parked-health.example");
+        Assert.Contains("Sending key on no-sender domain", overview);
+        Assert.DoesNotContain(">Push DKIM records<", overview);
+        domain.DkimCheckStatus = DkimCheckStatus.NoSendingKeys;
+        await db.SaveChangesAsync();
+        Assert.Contains("No keys at configured selectors", await client.GetStringAsync("/domains?search=parked-health"));
+    }
+
+    [Fact]
     public async Task InventoryIsViewableByScopedViewer_WithoutWriteControlsOrHiddenDomains()
     {
         Assert.Equal("DomainsView", Assert.Single(typeof(DomainInventory).GetCustomAttributes<AuthorizeAttribute>()).Policy);

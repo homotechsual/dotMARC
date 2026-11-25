@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using DotMarc.Data;
 
 namespace DotMarc.Dns;
@@ -11,13 +9,11 @@ namespace DotMarc.Dns;
 /// record at all costs one query, not two.</summary>
 public sealed class DmarcDnsChecker : IDmarcDnsChecker
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly TxtRecordLookup _lookup;
 
-    private readonly HttpClient _http;
+    public DmarcDnsChecker(HttpClient http) => _lookup = new TxtRecordLookup(http);
 
-    public DmarcDnsChecker(HttpClient http) => _http = http;
-
-    public async Task<DmarcCheckResult> CheckAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken)
+    public async Task<DmarcCheckResult> CheckAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken, bool expectsReports = true)
     {
         var txtValues = await QueryAllTxtAsync($"_dmarc.{domainName}", cancellationToken).ConfigureAwait(false);
         var analysis = DmarcRecordAnalysis.Analyse(txtValues);
@@ -30,7 +26,7 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
 
         // A policy is filled in for anything that looks like a DMARC record, a missing or invalid p reading as none.
         var policyLevel = analysis.Policy ?? DmarcPolicyLevel.None;
-        var policy = new DmarcPolicyTags(policyLevel, analysis.EffectiveSubdomainPolicy ?? policyLevel, analysis.Percent ?? 100);
+        var policy = new DmarcPolicyTags(policyLevel, analysis.EffectiveSubdomainPolicy ?? policyLevel, analysis.Percent ?? 100, analysis.NonExistentPolicy, analysis.Testing);
 
         // Breaking problems come first: receivers may ignore the record or read it as p=none, so the rua checks
         // below would be judging a record that does not work. Informational problems never change the status.
@@ -40,6 +36,9 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
             return new DmarcCheckResult(DmarcCheckStatus.Misconfigured,
                 string.Join(" ", breaking.Select(problem => problem.Description)), policy, analysis);
         }
+
+        if (!expectsReports)
+            return new DmarcCheckResult(DmarcCheckStatus.Ok, "Valid DMARC record. Reporting to dotMARC is optional for a domain with null SPF.", policy, analysis);
 
         var ownRecord = analysis.Records[0];
         var ruaEntries = DmarcRua.Parse(ownRecord);
@@ -118,47 +117,12 @@ public sealed class DmarcDnsChecker : IDmarcDnsChecker
     }
 
     /// <summary>Returns the first TXT record's value (quotes stripped, multi-segment values
-    /// joined), or null if the name doesn't resolve or has no TXT records (Cloudflare's JSON API
-    /// omits Answer entirely for both NXDOMAIN and NODATA - no need to branch on Status).</summary>
+    /// joined), or null for a successful NODATA or NXDOMAIN lookup. DNS errors throw.</summary>
     private async Task<string?> QueryTxtAsync(string name, CancellationToken cancellationToken) =>
         (await QueryAllTxtAsync(name, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
     /// <summary>Returns every TXT record's value at the name (same format as <see cref="QueryTxtAsync"/>), in the
     /// order DNS gave them; empty when there are none.</summary>
-    private async Task<List<string>> QueryAllTxtAsync(string name, CancellationToken cancellationToken)
-    {
-        // The Accept header is also set by Program.cs's AddHttpClient<IDmarcDnsChecker,
-        // DmarcDnsChecker> registration; it's set again here so this checker is self-sufficient
-        // and doesn't silently break every check if that DI configuration is ever refactored away.
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type=TXT");
-        request.Headers.Accept.ParseAdd("application/dns-json");
-        var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
-
-        // Some DMARC hosting providers have customers publish a CNAME at _dmarc.example.com
-        // pointing at a provider-managed TXT record; Cloudflare's JSON API returns the full answer
-        // chain (CNAME then TXT), so the TXT record (type 16) must be selected explicitly rather
-        // than trusting it to be first.
-        var values = new List<string>();
-        foreach (var answer in parsed.Answer?.Where(candidate => candidate.Type == 16) ?? [])
-        {
-            // Cloudflare's JSON API returns the TXT record's data as one or more double-quoted
-            // segments (multiple only for a value over 255 bytes, split across DNS's own
-            // character-string length limit) - e.g. "\"v=DMARC1; p=quarantine\"" for a short record,
-            // or "\"first part\" \"second part\"" for a long one. Splitting on `" "` between quoted
-            // segments and stripping the outer quotes from what's left reconstructs the original value.
-            values.Add(string.Join("", answer.Data.Split("\" \"")).Trim('"'));
-        }
-
-        return values;
-    }
-
-    private sealed record DnsOverHttpsResponse(
-        [property: JsonPropertyName("Status")] int Status,
-        [property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
-    private sealed record DnsAnswer(
-        [property: JsonPropertyName("type")] int Type,
-        [property: JsonPropertyName("data")] string Data);
+    private async Task<List<string>> QueryAllTxtAsync(string name, CancellationToken cancellationToken) =>
+        (await _lookup.GetTxtValuesAsync(name, cancellationToken).ConfigureAwait(false)).ToList();
 }

@@ -341,9 +341,13 @@ else
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDkimAsync" title="Recheck now" />
                                 }
-                                @if (_domain.DkimRecords.Count > 0 && _domain.DkimCheckStatus is DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured)
+                                @if (_domain.SpfCheckStatus != SpfCheckStatus.NullSpf && _domain.DkimRecords.Count > 0 && _domain.DkimCheckStatus is DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured)
                                 {
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync" OnClick="PushDkimRecordsAsync">Push DKIM records</MudButton>
+                                }
+                                @if (_domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
+                                {
+                                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">Null SPF: check known selectors for absent or revoked keys. No selectors configured does not prove all keys are absent.</MudText>
                                 }
                                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenDkimSelectorsDialogAsync">Configure selectors</MudButton>
                             </Authorized>
@@ -1444,6 +1448,9 @@ else
             _domain!.SpfCheckStatus = domain.SpfCheckStatus;
             _domain.SpfCheckedUtc = domain.SpfCheckedUtc;
             _domain.SpfCheckDetail = domain.SpfCheckDetail;
+            _domain.DkimCheckedUtc = domain.DkimCheckedUtc;
+            _domain.DmarcCheckedUtc = domain.DmarcCheckedUtc;
+            _domain.DmarcAuthorizationCheckedUtc = domain.DmarcAuthorizationCheckedUtc;
         }
         finally
         {

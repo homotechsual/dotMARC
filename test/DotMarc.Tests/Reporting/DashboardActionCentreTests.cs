@@ -79,7 +79,7 @@ public sealed class DashboardActionCentreTests
         domain.SpfCheckStatus = SpfCheckStatus.NullSpf;
         domain.LastReportReceivedUtc = null;
         domain.DkimSelectors = ["old"];
-        domain.DkimCheckStatus = DkimCheckStatus.Missing;
+        domain.DkimCheckStatus = DkimCheckStatus.NoSendingKeys;
         domain.MtaStsEnabled = true;
         domain.MtaStsStatus = MtaStsStatus.Failed;
         domain.DmarcCheckStatus = DmarcCheckStatus.Misconfigured;
@@ -89,6 +89,21 @@ public sealed class DashboardActionCentreTests
         Assert.Empty(result.Attention);
         Assert.Equal(0, result.MissingReports);
         Assert.Null(result.PassRate);
+    }
+
+    [Theory]
+    [InlineData(DkimCheckStatus.UnexpectedSendingKey, false)]
+    [InlineData(DkimCheckStatus.Missing, true)]
+    public void NullDomainDkimProblemsAndUnverifiedAbsenceAreNotHidden(DkimCheckStatus status, bool checking)
+    {
+        var domain = Healthy();
+        domain.SpfCheckStatus = SpfCheckStatus.NullSpf;
+        domain.DkimSelectors = ["old"];
+        domain.DkimCheckStatus = status;
+        var row = Assert.Single(DashboardActionCentre.Build([domain], NoReviews, new(), Now).Attention);
+        var problem = Assert.Single(row.Problems);
+        Assert.Contains("DKIM", problem.Description);
+        Assert.Equal(checking, problem.NeedsChecking);
     }
 
     [Fact]

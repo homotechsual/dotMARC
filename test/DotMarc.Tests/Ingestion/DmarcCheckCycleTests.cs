@@ -40,6 +40,18 @@ public sealed class DmarcCheckCycleTests : IAsyncLifetime
         new(new FakeGraphMailboxClient(), context, NullLogger<PollingService>.Instance);
 
     [Fact]
+    public async Task NullSpfChecksPolicyWithoutRequiringReportingAuthorization()
+    {
+        var domain = new Domain { Name = "parked.example", SpfCheckStatus = SpfCheckStatus.NullSpf };
+        var checker = new FakeDmarcDnsChecker();
+        await PollingService.RunSingleDmarcCheckAsync(domain, checker, "reports@example.com", CancellationToken.None);
+        Assert.False(checker.ExpectsReports);
+        await PollingService.RunSingleDmarcAuthorizationCheckAsync(domain, checker, "reports@example.com", CancellationToken.None);
+        Assert.Empty(checker.AuthorizationCheckedDomains);
+        Assert.Equal(DmarcAuthorizationCheckStatus.NotApplicable, domain.DmarcAuthorizationCheckStatus);
+    }
+
+    [Fact]
     public async Task RunDmarcCheckCycleAsync_ChecksADomainNeverCheckedBefore()
     {
         using var context = CreateContext();

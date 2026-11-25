@@ -8,13 +8,15 @@ internal sealed class FakeDmarcDnsChecker : IDmarcDnsChecker
     public DmarcCheckResult Result { get; set; } = new(DmarcCheckStatus.Ok, null);
     public bool ShouldThrow { get; set; }
     public List<string> CheckedDomains { get; } = [];
+    public bool ExpectsReports { get; private set; }
 
     public DmarcAuthorizationCheckResult AuthorizationResult { get; set; } = new(DmarcAuthorizationCheckStatus.NotApplicable, null);
     public bool AuthorizationShouldThrow { get; set; }
     public List<string> AuthorizationCheckedDomains { get; } = [];
 
-    public Task<DmarcCheckResult> CheckAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken)
+    public Task<DmarcCheckResult> CheckAsync(string domainName, string mailboxAddress, CancellationToken cancellationToken, bool expectsReports = true)
     {
+        ExpectsReports = expectsReports;
         CheckedDomains.Add(domainName);
         if (ShouldThrow)
         {

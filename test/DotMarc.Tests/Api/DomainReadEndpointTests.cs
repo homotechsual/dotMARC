@@ -21,6 +21,21 @@ public sealed class DomainReadEndpointTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _host.DisposeAsync();
 
+    [Theory]
+    [InlineData(DkimCheckStatus.NoSendingKeys)]
+    [InlineData(DkimCheckStatus.UnexpectedSendingKey)]
+    public async Task NullDomainDkimResultsAreExposedAndFilterable(DkimCheckStatus status)
+    {
+        var name = $"parked-{status.ToString().ToLowerInvariant()}.example";
+        var id = await _host.SeedDomainAsync(name, configure: domain => { domain.SpfCheckStatus = SpfCheckStatus.NullSpf; domain.DkimCheckStatus = status; });
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView]);
+        using var client = _host.ClientFor(secret);
+        var detail = await client.GetFromJsonAsync<ApiDomainDetail>($"/api/v1/domains/{id}");
+        Assert.Equal(status.ToString(), detail!.Health.Dkim.Status);
+        var page = await client.GetFromJsonAsync<ApiPage<ApiDomain>>($"/api/v1/domains?dkim={status}");
+        Assert.Equal(id, Assert.Single(page!.Items).Id);
+    }
+
     private static Report ReportWith(DateTimeOffset receivedUtc, params (string SourceIp, int MessageCount, AuthResult Spf, AuthResult Dkim)[] records)
     {
         var report = new Report

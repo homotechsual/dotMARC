@@ -16,6 +16,43 @@ public class DmarcDnsCheckerTests
 
     private const string NxDomainResponse = """{"Status":3}""";
 
+    [Theory]
+    [InlineData("""{"Status":2}""")]
+    [InlineData("""{"Status":5}""")]
+    [InlineData("""{}""")]
+    [InlineData("""null""")]
+    [InlineData("""{"Status":0,"TC":true}""")]
+    public async Task FailedOrIncompleteDnsDoesNotBecomeAMissingRecord(string response)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = response;
+        await Assert.ThrowsAsync<HttpRequestException>(() => checker.CheckAsync("parked.example", "reports@other.example", CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() => checker.CheckAuthorizationAsync("parked.example", "reports@other.example", CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("v=DMARC1; p=reject")]
+    [InlineData("v=DMARC1; p=reject; rua=mailto:another@example.com")]
+    public async Task NoSenderDomainDoesNotRequireDotMarcRua(string record)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers(record);
+        var result = await checker.CheckAsync("parked.example", "reports@example.com", CancellationToken.None, expectsReports: false);
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+        Assert.Equal(DmarcPolicyLevel.Reject, result.Policy!.Policy);
+        Assert.True(result.Analysis!.IsValid);
+    }
+
+    [Theory]
+    [InlineData("v=DMARC1; p=reject; p=none")]
+    [InlineData("v=DMARC1; p=bogus")]
+    public async Task NoSenderDomainStillRequiresValidDmarc(string record)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers(record);
+        Assert.Equal(DmarcCheckStatus.Misconfigured, (await checker.CheckAsync("parked.example", "reports@example.com", CancellationToken.None, expectsReports: false)).Status);
+    }
+
     [Fact]
     public async Task CheckAsync_ReturnsMissingOwnRecord_WhenNoDmarcRecordExists()
     {
