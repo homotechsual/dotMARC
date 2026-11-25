@@ -107,7 +107,7 @@ try {
   await enter('/domains?target=below');
   assert((await page.locator('a[data-domain-link]').count()) > 0);
   await enter('/dashboard');
-  assert.equal(await page.locator('a[data-domain-link]').count(), 0);
+  assert.equal(await page.locator('.domain-inventory').count(), 0);
   assert.equal(await page.getByRole('button', {name: /^Filters \(/}).count(), 1);
   await page.goto(`${base}/dashboard?target=below`);
   await page.waitForURL(url => url.pathname === '/domains' && url.searchParams.get('target') === 'below');

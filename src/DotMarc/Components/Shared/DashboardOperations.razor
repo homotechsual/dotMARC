@@ -1,0 +1,137 @@
+@using DotMarc.Data
+@using DotMarc.Psa
+@using DotMarc.ServerLogs
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IEnumerable<IPsaProvider> Providers
+@inject InMemoryLogStore Logs
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject ILogger<DashboardOperations> Logger
+@inject TimeProvider Clock
+
+@if (_canViewLogs || _canManagePsa || _canViewParseFailures)
+{
+    <MudPaper Outlined="true" Class="pa-4 mb-4 dashboard-operations">
+        <div class="domain-list-toolbar">
+            <MudText Typo="Typo.h6">Integration and ingestion status</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">All domains · independent of domain filters</MudText>
+        </div>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error">@_error <MudButton OnClick="LoadAsync">Retry</MudButton></MudAlert>
+        }
+        @if (_canViewLogs && _error is null)
+        {
+            @if (_poll is null)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">Mailbox has not been polled yet. Check the polling diagnostics below.</MudAlert>
+            }
+            else if (!_poll.Succeeded)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
+                    Mailbox polling failed at @_poll.PolledUtc.ToString("g"). New reports may not be arriving.
+                    <MudLink Href="/logs/polling">Review polling logs</MudLink>
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mt-2">Mailbox: last poll succeeded at @_poll.PolledUtc.ToString("g") · @_poll.ReportsParsed reports parsed.</MudText>
+            }
+        }
+        @if (_canViewParseFailures && ParseFailures > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                @ParseFailures unparseable messages retained (all history).
+                <MudLink Href="/parse-failures">Review parse failures</MudLink>
+            </MudAlert>
+        }
+        @foreach (var provider in _readiness)
+        {
+            if (provider.Readiness.Missing.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                    @provider.Kind.DisplayName() is enabled but not ready: @string.Join(", ", provider.Readiness.Missing).
+                    <MudLink Href="@($"/alerts/psa?psa={provider.Kind}")">Review integration settings</MudLink>
+                </MudAlert>
+            }
+        }
+        @if (_readiness.Any(provider => provider.Readiness.IsReady))
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">PSA configuration ready: @string.Join(" · ", _readiness.Where(provider => provider.Readiness.IsReady).Select(provider => provider.Kind.DisplayName())). Not a live connection test.</MudText>
+        }
+        @if (_canManagePsa && _readiness.Count == 0 && _error is null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">No PSA integrations enabled. <MudLink Href="/alerts/psa">Configure an integration</MudLink></MudText>
+        }
+        @if (_canViewLogs)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-3">Recent integration warnings and failures</MudText>
+            @if (!Logs.IsCapturing)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Live integration logs are not captured in demo mode.</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Latest five warnings/errors retained on this instance in the last 24 hours. Historical events may already be resolved; logs reset on restart.
+                </MudText>
+                @if (Recent.Count == 0)
+                {
+                    <MudText Typo="Typo.body2">No recent integration failures in the retained log buffer. This is not a connection-health check.</MudText>
+                }
+                @foreach (var entry in Recent)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2 dashboard-log">
+                        @entry.TimestampUtc.ToString("g") · @LogRedactor.Redact(entry.Message)
+                    </MudAlert>
+                }
+                <MudLink Href="/logs/server">Open server logs</MudLink>
+            }
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public int ParseFailures { get; set; }
+    private bool _canViewLogs, _canManagePsa, _canViewParseFailures;
+    private string? _error;
+    private PollCycle? _poll;
+    private List<(PsaKind Kind, PsaReadiness Readiness)> _readiness = [];
+    private IReadOnlyList<LogEntry> Recent => Logs.Query(LogLevel.Warning, null, Logs.Capacity)
+        .Where(entry => entry.TimestampUtc >= Clock.GetUtcNow().AddDays(-1)
+            && (entry.Category.StartsWith("DotMarc.Psa.", StringComparison.Ordinal)
+                || entry.Category.StartsWith("DotMarc.Notifications.", StringComparison.Ordinal)
+                || entry.Category.StartsWith("DotMarc.Email.", StringComparison.Ordinal)
+                || entry.Category.StartsWith("DotMarc.Graph.", StringComparison.Ordinal)))
+        .Take(5).ToList();
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync()
+    {
+        var user = (await Authentication.GetAuthenticationStateAsync()).User;
+        _canViewLogs = (await Authorization.AuthorizeAsync(user, "LogsView")).Succeeded;
+        _canManagePsa = (await Authorization.AuthorizeAsync(user, "AlertsManage")).Succeeded;
+        _canViewParseFailures = (await Authorization.AuthorizeAsync(user, "DomainsWrite")).Succeeded;
+        _readiness = [];
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (_canViewLogs)
+                _poll = await db.PollCycles.AsNoTracking().OrderByDescending(poll => poll.PolledUtc).FirstOrDefaultAsync();
+            if (_canManagePsa)
+                foreach (var provider in Providers.OrderBy(provider => provider.Kind))
+                {
+                    var readiness = await provider.GetReadinessAsync(db);
+                    if (readiness.Enabled) _readiness.Add((provider.Kind, readiness));
+                }
+            _error = null;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Loading dashboard integration status failed");
+            _error = "Integration status could not be loaded. Do not assume integrations are healthy.";
+        }
+    }
+}

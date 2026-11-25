@@ -8,6 +8,19 @@ namespace DotMarc.Tests.Reporting;
 public sealed class DomainListStateTests
 {
     [Fact]
+    public void DashboardAttentionViewRoundTripsForBack_ButIsNotADomainFilterOrSavedDefault()
+    {
+        var state = new DomainListState { Search = "alpha", AttentionView = "senders" };
+        var restored = DomainListState.FromQuery(new Uri("https://dotmarc.example" + state.ToUrl("/dashboard")));
+        Assert.Equal(state, restored);
+        Assert.Single(state.ActiveFilters);
+        Assert.Null(state.AsDefault().AttentionView);
+        Assert.DoesNotContain("attention", state.ToUrl("/domains"));
+        Assert.Throws<FormatException>(() => DomainListState.FromQuery(new Uri("https://dotmarc.example/domains?attention=senders")));
+        Assert.Throws<FormatException>(() => (state with { AttentionView = "unknown" }).Validate());
+    }
+
+    [Fact]
     public void FiltersAreAppliedBeforeGrouping_AndCountsAreDistinct()
     {
         var rows = new[] { Row(1, "alpha.example", 0.99), Row(2, "beta.example", 0.8) };

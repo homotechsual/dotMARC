@@ -1,0 +1,43 @@
+@using DotMarc.Data
+@using DotMarc.Reporting
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Quarantine and reject records received from @SnapshotUtc.UtcDateTime.Date.AddDays(-6).ToString("dd MMM yyyy") 00:00 UTC
+            through @SnapshotUtc.ToString("dd MMM yyyy HH:mm") UTC.
+            @Investigation.Quarantined.ToString("N0") quarantined and @Investigation.Rejected.ToString("N0") rejected messages.
+            These are receiver-reported outcomes, not a recommendation to weaken policy.
+        </MudText>
+        <MudTable T="Evidence" Items="Records" Dense="true" RowsPerPage="10" Class="dashboard-queue">
+            <HeaderContent><MudTh>Received (UTC) / reporter</MudTh><MudTh>Source / From</MudTh><MudTh>Disposition / messages</MudTh><MudTh>Alignment / evidence</MudTh></HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Received (UTC) / reporter">@context.Report.ReceivedUtc.ToString("yyyy-MM-dd HH:mm")<br />@context.Report.ReportingOrg</MudTd>
+                <MudTd DataLabel="Source / From">@context.Record.SourceIp<br />@context.Record.HeaderFrom</MudTd>
+                <MudTd DataLabel="Disposition / messages">@context.Record.Disposition<br />@context.Record.MessageCount.ToString("N0")</MudTd>
+                <MudTd DataLabel="Alignment / evidence">
+                    SPF: @context.Record.SpfResult · DKIM: @context.Record.DkimResult
+                    <MudText Typo="Typo.caption" Class="d-block">
+                        @(context.Record.OverrideReasons.Count > 0 ? string.Join("; ", context.Record.OverrideReasons.Select(reason => reason.Type.ToString())) : "No receiver override reason supplied")
+                    </MudText>
+                    @foreach (var detail in context.Record.AuthDetails)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block">@detail.Mechanism: @detail.Domain (@detail.Result) @detail.Selector</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <PagerContent><MudTablePager /></PagerContent>
+        </MudTable>
+        <MudText Typo="Typo.caption" Class="mt-3">For broader context, the domain's Sources tab shows its separate 30-day reporting window.</MudText>
+    </DialogContent>
+    <DialogActions><MudButton OnClick="@(() => Dialog.Close())">Close</MudButton></DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter, EditorRequired] public DashboardInvestigation Investigation { get; set; } = null!;
+    [Parameter] public DateTimeOffset SnapshotUtc { get; set; }
+    private sealed record Evidence(Report Report, ReportRecord Record);
+    private IEnumerable<Evidence> Records => Investigation.Reports.OrderByDescending(report => report.ReceivedUtc).SelectMany(report =>
+        report.Records.Where(record => record.Disposition is DispositionResult.Quarantine or DispositionResult.Reject).Select(record => new Evidence(report, record)));
+}

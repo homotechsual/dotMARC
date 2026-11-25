@@ -1,0 +1,30 @@
+<MudPaper Outlined="true" Class="dashboard-metric">
+    @if (Href is not null)
+    {
+        <a class="dashboard-metric-action" href="@Href" aria-label="@($"{Label}: {Value}. {Detail}")">@Content()</a>
+    }
+    else if (Clicked.HasDelegate)
+    {
+        <button type="button" class="dashboard-metric-action" @onclick="Clicked" aria-controls="dashboard-attention" aria-label="@($"{Label}: {Value}. {Detail}")">
+            @Content()
+        </button>
+    }
+    else
+    {
+        <div class="dashboard-metric-content">@Content()</div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string Detail { get; set; } = "";
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public Color Color { get; set; } = Color.Default;
+    [Parameter] public EventCallback Clicked { get; set; }
+    private RenderFragment Content() => @<div>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Label</MudText>
+        <MudText Typo="Typo.h4" Color="Color" Class="domain-percentage my-2">@Value</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Detail</MudText>
+    </div>;
+}

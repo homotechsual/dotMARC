@@ -4,11 +4,15 @@ using DotMarc.Components.Pages;
 using DotMarc.Data;
 using DotMarc.Demo;
 using DotMarc.Reporting;
+using DotMarc.Psa;
+using DotMarc.ServerLogs;
 using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace DotMarc.Tests.Components;
@@ -88,7 +92,10 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     public async Task DashboardHasNoInventoryTable_AndInventoryRetainsManagementProjection()
     {
         using var client = await SignInAsync("admin");
-        Assert.DoesNotContain("data-domain-link", await client.GetStringAsync("/dashboard"));
+        var dashboard = await client.GetStringAsync("/dashboard");
+        Assert.DoesNotContain("domain-inventory", dashboard);
+        Assert.Contains("Domains needing attention", dashboard);
+        Assert.Contains("Quarantines and rejects to investigate", dashboard);
         Assert.Contains("data-domain-link", await client.GetStringAsync("/domains"));
         Assert.Contains("Show management columns", await client.GetStringAsync("/domains"));
     }
@@ -126,8 +133,99 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.Contains($"href=\"{WebUtility.HtmlEncode(new DomainListState { ShowFilters = true }.ToUrl("/domains"))}\"", html);
         var factory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
         await using var db = await factory.CreateDbContextAsync();
-        var text = System.Text.RegularExpressions.Regex.Replace(WebUtility.HtmlDecode(html), @"<[^>]*>|\s+", "");
-        Assert.Contains($"{await db.Domains.CountAsync()}domainsinscope", text);
+        Assert.Contains($"Domains in scope: {await db.Domains.CountAsync()}.", html);
+    }
+
+    [Fact]
+    public async Task DashboardQueuesAndMetricsAreScoped_AndGlobalOperationsArePermissionGated()
+    {
+        using var client = await SignInAsync("viewer");
+        var html = await client.GetStringAsync("/dashboard?group=all");
+        Assert.Contains("aurora-retail.example", html);
+        Assert.DoesNotContain("cobalt-freight.example", html);
+        Assert.DoesNotContain("Integration and ingestion status", html);
+        Assert.DoesNotContain("unparseable messages retained", html);
+        Assert.DoesNotContain("Review integration settings", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "aria-controls=\"domain-filters\"").Cast<object>());
+        var empty = await client.GetStringAsync("/dashboard?search=not-a-domain");
+        Assert.Contains("Domains in scope: 0.", empty);
+        Assert.Contains("No domains in the current scope.", empty);
+        Assert.Contains("No message data is available", empty);
+    }
+
+    [Fact]
+    public async Task DashboardSenderCountUsesDecisions_AndUpdatesWithFilters()
+    {
+        using var client = await SignInAsync("admin");
+        var factory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var now = DateTimeOffset.UtcNow;
+        var domain = new Domain { Name = "action-centre-test.example", SpfCheckStatus = SpfCheckStatus.Ok,
+            DmarcCheckStatus = DmarcCheckStatus.Ok, DmarcAuthorizationCheckStatus = DmarcAuthorizationCheckStatus.NotApplicable };
+        domain.Reports.Add(new Report
+        {
+            ReportId = "dashboard-test", ReportingOrg = "receiver.example", ReceivedUtc = now.AddMinutes(-1), RawXml = "",
+            Records = [new() { SourceIp = "192.0.2.240", HeaderFrom = domain.Name, MessageCount = 10 }]
+        });
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        var html = await client.GetStringAsync("/dashboard?search=action-centre-test");
+        Assert.Contains("Sender decisions outstanding: 1.", html);
+        db.SenderDecisions.Add(new SenderDecision
+        {
+            Scope = SenderDecisionScope.Domain, DomainId = domain.Id, Kind = SenderDecisionKind.Ip, Key = "192.0.2.240",
+            Status = SenderDecisionStatus.UnderReview, DecidedBy = "test", DecidedByName = "Test", DecidedUtc = now
+        });
+        await db.SaveChangesAsync();
+        html = await client.GetStringAsync("/dashboard?search=action-centre-test");
+        Assert.Contains("Sender decisions outstanding: 0.", html);
+        Assert.DoesNotContain("Review 1 sender decisions", html);
+    }
+
+    [Fact]
+    public async Task DashboardShowsIntegrationFailuresWithoutCallingRemoteProviders_AndLabelsLogLimitations()
+    {
+        var store = new InMemoryLogStore(true);
+        store.Add(DateTimeOffset.UtcNow, LogLevel.Warning, "DotMarc.Psa.PsaTicketPoller",
+            "Checking HaloPSA tickets failed: token=private-value", null);
+        store.Add(DateTimeOffset.UtcNow.AddDays(-2), LogLevel.Error, "DotMarc.Psa.PsaTicketPoller", "Expired failure should not display", null);
+        store.Add(DateTimeOffset.UtcNow, LogLevel.Error, "Unrelated.Component", "Unrelated failure should not display", null);
+        await using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IPsaProvider>();
+            services.AddSingleton<IPsaProvider>(new IncompletePsa());
+            services.RemoveAll<InMemoryLogStore>();
+            services.AddSingleton(store);
+        }));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await client.PostAsync("/demo/sign-in/admin", null);
+        var dbFactory = factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.PollCycles.Add(new PollCycle { PolledUtc = DateTimeOffset.UtcNow.AddDays(1), Succeeded = false, ErrorMessage = "Test polling failure" });
+        await db.SaveChangesAsync();
+        var html = await client.GetStringAsync("/dashboard?search=not-a-domain");
+        Assert.Contains("enabled but not ready", html);
+        Assert.Contains("client secret", html);
+        Assert.Contains("Mailbox polling failed", html);
+        Assert.Contains("Checking HaloPSA tickets failed", html);
+        Assert.Contains("[redacted]", html);
+        Assert.DoesNotContain("private-value", html);
+        Assert.DoesNotContain("Expired failure should not display", html);
+        Assert.DoesNotContain("Unrelated failure should not display", html);
+        Assert.Contains("Historical events may already be resolved", html);
+        Assert.Contains("independent of domain filters", html);
+    }
+
+    private sealed class IncompletePsa : IPsaProvider
+    {
+        public PsaKind Kind => PsaKind.HaloPsa;
+        public Task<PsaReadiness> GetReadinessAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PsaReadiness(true, ["client secret"]));
+        public Task<IReadOnlyList<PsaCompany>> ListCompaniesAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Dashboard must not query a remote PSA.");
+        public Task<string> CreateTicketAsync(DotMarcDbContext context, PsaTicketRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PsaTicketState> GetTicketStateAsync(DotMarcDbContext context, string ticketId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task CloseTicketAsync(DotMarcDbContext context, string ticketId, string note, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string?> GetTicketUrlTemplateAsync(DotMarcDbContext context, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     [Fact]

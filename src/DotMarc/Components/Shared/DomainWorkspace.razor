@@ -15,6 +15,11 @@
     {
         <AuthorizeView Policy="DomainsAdd"><MudButton Href="/domains/import" StartIcon="@Icons.Material.Filled.UploadFile">Import domains</MudButton></AuthorizeView>
     }
+    else
+    {
+        <AuthorizeView Policy="DomainsAdd"><MudButton Href="@($"{_state.ToUrl("/domains")}#add-domain")" StartIcon="@Icons.Material.Filled.Add">Add domain</MudButton></AuthorizeView>
+        <MudButton OnClick="LoadAsync" Disabled="_loading" StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+    }
 </div>
 @if (_error is not null)
 {
@@ -54,7 +59,7 @@ else
     @if (Inventory)
     {
         <AuthorizeView Policy="DomainsAdd">
-            <MudPaper Class="pa-3 mb-3" Outlined="true">
+            <MudPaper id="add-domain" Class="pa-3 mb-3" Outlined="true">
                 <div class="domain-list-toolbar">
                     <MudTextField T="string" Label="Domain name" @bind-Value="_newDomain" Error="@(_addError is not null)" ErrorText="_addError" />
                     <MudButton OnClick="AddAsync" Variant="Variant.Filled" Color="Color.Primary">Add domain</MudButton>
@@ -89,29 +94,9 @@ else
             @DomainTable(_rows)
         }
     }
-    else if (_summary is not null)
+    else if (_actionCentre is not null)
     {
-        <MudGrid Class="mb-4">
-            <MudItem xs="6" md="2"><MudPaper Class="pa-3"><MudText Typo="Typo.h5">@_summary.DomainCount</MudText><MudText Typo="Typo.caption">domains in scope</MudText></MudPaper></MudItem>
-            <MudItem xs="6" md="2"><MudPaper Class="pa-3"><MudText Typo="Typo.h5" Class="domain-percentage">@_summary.OverallPassRate.ToString("P1")</MudText><MudText Typo="Typo.caption">overall pass rate (30d)</MudText></MudPaper></MudItem>
-            <MudItem xs="6" md="2"><MudPaper Class="pa-3"><MudLink Href="@((_state with { Status = "Warning" }).ToUrl("/domains"))">@_summary.WarningCount domains with warnings</MudLink></MudPaper></MudItem>
-            <MudItem xs="6" md="2"><MudPaper Class="pa-3"><MudLink Href="@((_state with { Status = "Missing" }).ToUrl("/domains"))">@_summary.MissingCount missing expected report</MudLink></MudPaper></MudItem>
-            <AuthorizeView Policy="DomainsWrite">
-                <MudItem xs="6" md="2"><MudPaper Class="pa-3"><MudLink Href="/parse-failures">@_summary.ParseFailureCount unparseable messages (all domains)</MudLink></MudPaper></MudItem>
-            </AuthorizeView>
-            <MudItem xs="6" md="2"><MudPaper Class="pa-3"><MudText Typo="Typo.h5">@_summary.SourceCount</MudText><MudText Typo="Typo.caption">sources provided reports (30d)</MudText></MudPaper></MudItem>
-        </MudGrid>
-        @if (_summary.ReasonBreakdown.Total > 0)
-        {
-            <MudPaper Class="pa-4 mb-4">
-                <MudText Typo="Typo.subtitle1">Why rejects/quarantines happened, filtered domains (30d)</MudText>
-                <MudChart ChartType="ChartType.Donut" T="double"
-                          ChartSeries="@([new double[] { _summary.ReasonBreakdown.BenignOverride, _summary.ReasonBreakdown.LocalPolicy, _summary.ReasonBreakdown.Other, _summary.ReasonBreakdown.InferredSpfFailure, _summary.ReasonBreakdown.InferredDkimFailure, _summary.ReasonBreakdown.InferredBothFailure, _summary.ReasonBreakdown.NoReasonGiven }])"
-                          ChartLabels="@(new[] { "Benign override", "Local policy", "Other", "SPF failure (inferred)", "DKIM failure (inferred)", "SPF & DKIM failure (inferred)", "No reason given" })" Width="220px" Height="220px" />
-                <ReasonBreakdownList Breakdown="_summary.ReasonBreakdown" />
-            </MudPaper>
-        }
-        <DashboardPolling />
+        <DashboardActionCentreView @key="_snapshotUtc" Data="_actionCentre" ParseFailures="_parseFailures" State="_state" Changed="ChangeFiltersAsync" />
     }
 }
 

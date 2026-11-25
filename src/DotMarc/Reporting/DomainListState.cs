@@ -27,6 +27,7 @@ public sealed record DomainListState
     public Dictionary<PsaKind, string>? Companies { get; init; }
     public string? Sort { get; init; }
     public bool Descending { get; init; }
+    public string? AttentionView { get; init; }
 
     public static readonly string[] SortKeys = ["name", "status", "pass", "last", "monitored", "target", "dmarc", "mta", "dkim", "reports", "groups", "tags"];
 
@@ -87,7 +88,7 @@ public sealed record DomainListState
         return (Descending ? rows.OrderByDescending(key) : rows.OrderBy(key)).ThenBy(row => row.Id);
     }
 
-    public DomainListState AsDefault() => this with { Search = null, LastReport = null };
+    public DomainListState AsDefault() => this with { Search = null, LastReport = null, AttentionView = null };
 
     public void Validate()
     {
@@ -95,6 +96,7 @@ public sealed record DomainListState
             || MinPassRatePercent is { } percent && !double.IsFinite(percent)
             || MinReportCount is < 0 || Sort is not null && !SortKeys.Contains(Sort)
             || Status is not null and not ("OK" or "Warning" or "Missing")
+            || AttentionView is not null and not ("action" or "checking" or "senders" or "missing")
             || Target is not null && Target is not (DmarcTargetOutcome.Below or DmarcTargetOutcome.NeedsChecking or DmarcTargetOutcome.Meets)
             || Companies?.Any(pair => !Enum.IsDefined(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)) == true
             || Dmarc is not null && !Enum.GetValues<Data.DmarcCheckStatus>().SelectMany(status => Enum.GetValues<Data.DmarcAuthorizationCheckStatus>().Select(authorization => DmarcStatusPresentation.GetLabel(status, authorization))).Contains(Dmarc)
@@ -114,6 +116,7 @@ public sealed record DomainListState
         if (GroupedView) Set("view", "group");
         if (ShowFilters) Set("open", "true");
         Set("sort", Sort);
+        if (route == "/dashboard") Set("attention", AttentionView);
         if (Descending) Set("desc", "true");
         if (Companies is not null)
             foreach (var (psa, company) in Companies) Set($"company.{psa}", company);
@@ -129,7 +132,7 @@ public sealed record DomainListState
     {
         var query = QueryHelpers.ParseQuery(uri.Query);
         if (query.Count == 0 || query.Keys.All(key => key == "dnsPush")) return null;
-        var allowed = new[] { "filters", "group", "tag", "search", "status", "minPass", "last", "monitored", "target", "dmarc", "mta", "dkim", "minReports", "view", "open", "sort", "desc" };
+        var allowed = new[] { "filters", "group", "tag", "search", "status", "minPass", "last", "monitored", "target", "dmarc", "mta", "dkim", "minReports", "view", "open", "sort", "desc", "attention" };
         if (query.Any(pair => pair.Value.Count != 1 || !allowed.Contains(pair.Key) && !pair.Key.StartsWith("company.", StringComparison.Ordinal)))
             throw new FormatException("Unrecognised domain filter.");
         string? Read(string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
@@ -143,6 +146,7 @@ public sealed record DomainListState
         }
         var target = Read("target") switch { null => (DmarcTargetOutcome?)null, "below" => DmarcTargetOutcome.Below, "checking" => DmarcTargetOutcome.NeedsChecking, "meets" => DmarcTargetOutcome.Meets, _ => throw new FormatException("Invalid target filter.") };
         if (Read("view") is not null and not "group") throw new FormatException("Invalid view.");
+        if (Read("attention") is not null && uri.AbsolutePath != "/dashboard") throw new FormatException("Attention categories belong to Dashboard.");
         var result = new DomainListState
         {
             GroupId = Read("group") == "all" ? null : Number("group"), AllMyGroups = Read("group") == "all" || target is not null && !query.ContainsKey("group"),
@@ -151,6 +155,7 @@ public sealed record DomainListState
             LastReport = Read("last"), Monitored = Flag("monitored"), Target = target, Dmarc = Read("dmarc"), MtaSts = Read("mta"), Dkim = Read("dkim"),
             MinReportCount = Number("minReports"), GroupedView = Read("view") == "group", ShowFilters = Flag("open") == true,
             Sort = Read("sort"), Descending = Flag("desc") == true, Companies = companies.Count == 0 ? null : companies,
+            AttentionView = Read("attention"),
         };
         result.Validate();
         return result;

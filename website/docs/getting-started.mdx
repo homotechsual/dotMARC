@@ -44,7 +44,7 @@ Not sure? [**Deploy with Docker**](./deploy-with-docker.mdx) is the faster path 
 
 ## What you'll see
 
-Once your first DMARC report arrives, **Dashboard** shows summary pass rates, report warnings and polling status. **Inventory** in the main navigation is the full domain list, with per-domain report and DNS status. The screenshot below shows the earlier combined layout; in 0.14 the list has its own page.
+Once your first DMARC report arrives, **Dashboard** shows the action centre: message volume and pass rates, domains needing attention, outstanding sender decisions, and quarantines/rejects to investigate. **Inventory** in the main navigation is the full domain list, with per-domain report and DNS status. The screenshot below shows the earlier combined layout; in 0.14 the list has its own page.
 
 <ThemedImage
   alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
@@ -63,6 +63,18 @@ Collapsing Filters leaves the criteria active and shows a summary beside the but
 Use **Show management columns** for group/tag assignment, PSA overrides, report counts and deletion, subject to your existing permissions. Manual drag ordering requires All domains with no active filters or column sort. Add and Import are available with domain-creation permission. **Manage > Tags** now owns tag creation, renaming, colours and deletion, separately from Groups.
 
 Opening a domain and using its **Back** button or browser Back restores the list's filters, sort and position for up to 30 minutes in the same tab. Fresh navigation starts from that page's saved default. A directly opened domain falls back to Inventory.
+
+### Dashboard action centre
+
+The summary cards and both domain queues share the single **Filters** panel and your authorised group scope. Large numbers, labels and reporting windows are shown consistently; a missing pass rate reads **No data**, not 0% or an all-clear.
+
+**Domains needing attention** explains each confirmed DNS/configuration problem, overdue expected report or unresolved sender decision, with links to the relevant domain tab. Confirmed problems appear first, then sender decisions, then unchecked evidence, with deterministic name tie-breaking. Click an action, sender-review or needs-checking card to narrow this queue; **Show all attention** restores the whole queue without changing the domain filters. This queue category survives Back navigation but is not saved as a domain-filter default or carried into Inventory. Unknown checks are labelled **Needs checking**, not confirmed failures. DKIM selectors and MTA-STS are assessed only when configured, and null-SPF domains do not require incoming DMARC reports, usable DKIM selectors or MTA-STS. This is a view of existing observations, not the deferred baseline-aware security score.
+
+Sender-review counts use the same unresolved-decision resolver as Domain Overview, including domain/group/default decisions: **Under review** is already a decision, not an unresolved sender. Counts cover 30 days and are per sender per domain, not globally unique organisations. Dashboard uses cached sender attribution without performing new DNS or IP lookups; Domain Sources can refine attribution when its live lookups finish.
+
+**Quarantines and rejects to investigate** is separate from configuration problems: rejecting spoofing can mean protection is working. Its chart, domain counts and **View records** evidence all use the same seven UTC calendar dates, including today through the displayed snapshot time, bucketed by when reports arrived. Counts are messages, not report or record counts. The evidence dialog shows receiver, receipt time, source IP, disposition, aligned SPF/DKIM results and any supplied override/authentication evidence. The domain Sources page retains its separate 30-day view.
+
+Authorised users also see **Integration and ingestion status**, explicitly global and unaffected by domain filters: the latest mailbox poll result, retained parse failures and enabled PSA configuration problems. Recent integration warnings/errors come from this instance's retained log buffer (up to five events in the last 24 hours), may already be resolved and reset on restart. A ready configuration or an empty log buffer is not a successful live connection test. Polling diagnostics remain collapsed below the queues. **Add domain** opens Inventory's existing creation control with the current group context and permissions.
 
 Drill into any domain for a 30-day pass/quarantine/reject chart, its DMARC record status, and a breakdown of why any rejected/quarantined mail happened - a benign forwarder tripping alignment reads very differently from no reason given at all:
 

@@ -1,5 +1,7 @@
 using DotMarc.Components.Dialogs;
 using DotMarc.Data;
+using DotMarc.Dns;
+using DotMarc.IpEnrichment;
 using DotMarc.Notifications;
 using DotMarc.Portal;
 using DotMarc.Psa;
@@ -27,6 +29,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     [Inject] private PsaDirectory Directory { get; set; } = null!;
     [Inject] private ILogger<DomainWorkspace> Logger { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
+    [Inject] private TimeProvider Clock { get; set; } = null!;
 
     private DomainListState _state = new();
     private string? _userKey, _error, _addError;
@@ -34,6 +37,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     private bool _loaded, _hasDefault, _management, _canReorder, _disposed, _restoreScroll, _memoryAttempted, _memoryFailed, _scrollTop;
     private int? _draggedId;
     private int _loadVersion;
+    private bool _loading;
     private IReadOnlyCollection<int> _scope = [];
     private List<Group> _groups = [];
     private List<Tag> _tags = [];
@@ -42,7 +46,9 @@ public partial class DomainWorkspace : IAsyncDisposable
     private Dictionary<int, int> _reportCounts = [];
     private List<DashboardDomainRow> _allRows = [], _rows = [];
     private IReadOnlyList<DashboardDomainGroup> _grouped = [];
-    private DashboardSummary? _summary;
+    private DashboardActionCentre? _actionCentre;
+    private Dictionary<int, int> _senderReviews = [];
+    private DateTimeOffset _snapshotUtc;
     private DnsRecordSettings _settings = new();
     private int _parseFailures;
     private IReadOnlyList<PsaCompanyList> _psaLists = [];
@@ -127,14 +133,16 @@ public partial class DomainWorkspace : IAsyncDisposable
     private async Task LoadAsync()
     {
         var version = ++_loadVersion;
+        _loading = true;
         try
         {
             var user = (await Authentication.GetAuthenticationStateAsync()).User;
             var scope = PortalData.ScopedGroupIds(user);
+            var snapshotUtc = Clock.GetUtcNow();
             await using var db = await DbFactory.CreateDbContextAsync();
             var groups = await db.Groups.AsNoTracking().Where(group => scope.Count == 0 || scope.Contains(group.Id)).OrderBy(group => group.Name).ToListAsync();
             var tags = await db.Tags.AsNoTracking().OrderBy(tag => tag.Name).ToListAsync();
-            var cutoff = DomainStatistics.GetWindowCutoffUtc();
+            var cutoff = DomainStatistics.GetWindowCutoffUtc(snapshotUtc);
             var domains = await db.Domains.AsNoTracking().Where(domain => scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id)))
                 .Include(domain => domain.Groups).Include(domain => domain.Tags).Include(domain => domain.PsaCompanyLinks)
                 .Include(domain => domain.Reports.Where(report => report.ReceivedUtc >= cutoff)).ThenInclude(report => report.Records).ThenInclude(record => record.OverrideReasons)
@@ -145,10 +153,28 @@ public partial class DomainWorkspace : IAsyncDisposable
             var settings = await DnsRecordSettingsService.GetAsync(db);
             var parseFailures = (await Authorization.AuthorizeAsync(user, "DomainsWrite")).Succeeded ? await db.ParseFailures.CountAsync() : 0;
             var canEdit = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded;
+            var senderReviews = new Dictionary<int, int>();
+            if (!Inventory)
+            {
+                var groupIds = domains.SelectMany(domain => domain.Groups).Select(group => group.Id).Distinct().ToList();
+                var decisions = await db.SenderDecisions.AsNoTracking().Where(decision =>
+                    decision.Scope == SenderDecisionScope.Baseline
+                    || decision.DomainId != null && ids.Contains(decision.DomainId.Value)
+                    || decision.GroupId != null && groupIds.Contains(decision.GroupId.Value)).ToListAsync();
+                var ips = domains.SelectMany(domain => domain.Reports).SelectMany(report => report.Records).Select(record => record.SourceIp).Distinct().ToList();
+                var cached = await IpInfoService.GetCachedAsync(db, ips, CancellationToken.None);
+                var ranges = await IpInfoService.GetCachedRangesAsync(db, CancellationToken.None);
+                var owners = IpInfoService.OwnerByIp(cached, ranges, ips, snapshotUtc);
+                foreach (var domain in domains)
+                    senderReviews[domain.Id] = SenderDecisionSummaries.Summarise(
+                        domain.Reports.Where(report => report.ReceivedUtc <= snapshotUtc).ToList(), owners, decisions,
+                        domain.Id, domain.Groups.Select(group => group.Id).ToList(), SpfServiceRanges.Parse(domain.SpfRangesJson)).UnreviewedSenders;
+            }
             IReadOnlyList<PsaCompanyList> lists = [];
             if (Inventory && canEdit) lists = await Directory.LoadAsync(db);
             if (_disposed || version != _loadVersion) return;
             _scope = scope; _groups = groups; _tags = tags; _domains = domains;
+            _senderReviews = senderReviews; _snapshotUtc = snapshotUtc;
             _domainsById = domains.ToDictionary(domain => domain.Id); _reportCounts = counts; _settings = settings; _parseFailures = parseFailures;
             _canReorder = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsReorder))).Succeeded;
             _psaLists = lists;
@@ -164,6 +190,10 @@ public partial class DomainWorkspace : IAsyncDisposable
         {
             Logger.LogError(exception, "Loading domain workspace failed");
             _error = "Could not load domains. Try again.";
+        }
+        finally
+        {
+            if (version == _loadVersion) _loading = false;
         }
     }
 
@@ -200,7 +230,8 @@ public partial class DomainWorkspace : IAsyncDisposable
         };
         _rows = _state.Order(matched, row => CountOf(row)).ToList();
         var ids = _rows.Select(row => row.Id).ToHashSet();
-        (_summary, _) = DashboardSummary.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _parseFailures, _settings);
+        if (!Inventory)
+            _actionCentre = DashboardActionCentre.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _senderReviews, _settings, _snapshotUtc);
         _grouped = DashboardGrouping.Group(_rows, _domains.ToDictionary(domain => domain.Id, domain => (IReadOnlyList<int>)VisibleGroups(domain)),
             _groups.Where(group => _state.GroupId is null || group.Id == _state.GroupId).Select(group => (group.Id, group.Name)).ToList());
     }
