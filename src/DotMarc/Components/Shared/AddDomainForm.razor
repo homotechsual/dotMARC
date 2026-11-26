@@ -16,7 +16,7 @@
 <AuthorizeView Policy="DomainsAdd">
     @if (!_portal)
     {
-        @if (Collapsed)
+        @if (Collapsed && !HideToggle)
         {
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                        OnClick="@(() => _expanded = !_expanded)" aria-expanded="@_expanded.ToString().ToLowerInvariant()" aria-controls="add-domain" Class="mb-3">
@@ -101,6 +101,8 @@
 @code {
     [Parameter] public int? GroupId { get; set; }
     [Parameter] public bool Collapsed { get; set; }
+    [Parameter] public bool HideToggle { get; set; }
+    [Parameter] public bool Open { get; set; }
     [Parameter] public EventCallback<string> Added { get; set; }
     private List<SelectOption<int?>> _groups = [];
     private int? _selectedGroup, _previousGroup;
@@ -143,7 +145,8 @@
 
     protected override void OnParametersSet()
     {
-        if (new Uri(Navigation.Uri).Fragment == "#add-domain") _expanded = true;
+        if (HideToggle) _expanded = Open;
+        else if (new Uri(Navigation.Uri).Fragment == "#add-domain") _expanded = true;
         if (_previousGroup != GroupId)
         {
             _selectedGroup = GroupId;

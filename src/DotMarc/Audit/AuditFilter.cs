@@ -52,8 +52,7 @@ public sealed record AuditFilter
         return query.ContainsKey("from") || query.ContainsKey("to") ? filter : filter with { From = defaultFrom };
     }
 
-    /// <summary>True when Kind, Who, Action, Target or Summary is set, which are the filters that live in the table's
-    /// header row. The page shows that row for such a filter so a filtered table never has hidden filters.</summary>
+    /// <summary>True when a text or kind criterion is set. The page opens the advanced filters for incoming filtered links.</summary>
     public bool HasColumnFilters =>
         Kind is not null
         || !string.IsNullOrWhiteSpace(Who)

@@ -74,22 +74,15 @@
             {
             <MudTable Items="_companiesWithoutGroup" T="PsaCompany" Dense="true" Hover="true" CustomHeader="true" Filter="CompanyWithoutGroupMatchesFilters">
                 <ToolBarContent>
-                    <MudSpacer />
-                    <MudButton Variant="@(_showClientFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                               OnClick="@(() => _showClientFilters = !_showClientFilters)">@(_showClientFilters ? "Hide filters" : "Filters")</MudButton>
+                    <ListToolbar Label="Company controls" SearchLabel="Search companies" @bind-Search="_clientNameFilter">
+                        <SortContent><ListTableSort TItem="PsaCompany" @ref="_tableSort" /></SortContent>
+                    </ListToolbar>
                 </ToolBarContent>
                 <HeaderContent>
                     <tr>
-                        <MudTh><MudTableSortLabel SortBy="new Func<PsaCompany, object>(company => company.Name)">@withoutGroupPsa.CompanyLabel()</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Company name" SortBy="new Func<PsaCompany, object>(company => company.Name)">@withoutGroupPsa.CompanyLabel()</MudTableSortLabel></MudTh>
                         <MudTh></MudTh>
                     </tr>
-                    @if (_showClientFilters)
-                    {
-                    <tr>
-                        <MudTh><MudTextField T="string" @bind-Value="_clientNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                        <MudTh></MudTh>
-                    </tr>
-                    }
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.Name</MudTd>
@@ -107,23 +100,40 @@
 
 <MudPaper Class="pa-4 mb-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>
-    <div class="group-list-toolbar mb-3">
-        <MudTextField T="string" @bind-Value="_groupNameFilter" Label="Group search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" Variant="Variant.Outlined" />
+    <ListToolbar Label="Group controls" SearchLabel="Group search" @bind-Search="_groupNameFilter" @bind-Expanded="_showGroupFilters" FilterId="group-filters"
+                 FilterCount="ActiveGroupFilterCount" ClearFilters="ClearGroupFilters">
+    <SortContent>
         <MudSelect T="string" Label="Sort groups" @bind-Value="_groupSort" Margin="Margin.Dense" Variant="Variant.Outlined">
             <MudSelectItem Value="@("name")">Name (A to Z)</MudSelectItem>
             <MudSelectItem Value="@("name-desc")">Name (Z to A)</MudSelectItem>
             <MudSelectItem Value="@("domains-desc")">Most domains</MudSelectItem>
             <MudSelectItem Value="@("domains")">Fewest domains</MudSelectItem>
         </MudSelect>
-        <MudButton Variant="@(_showGroupFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
-                   Disabled="@(!RendererInfo.IsInteractive)" aria-controls="group-filters" aria-expanded="@_showGroupFilters.ToString().ToLowerInvariant()"
-                   OnClick="@(() => _showGroupFilters = !_showGroupFilters)">Filters (@ActiveGroupFilterCount)</MudButton>
+    </SortContent>
+    <Actions>
         <AuthorizeView Policy="GroupsAdd">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _showAddGroup = !_showAddGroup)" aria-controls="add-group" aria-expanded="@_showAddGroup.ToString().ToLowerInvariant()">
                 @(_showAddGroup ? "Close add group" : "Add group")
             </MudButton>
         </AuthorizeView>
-    </div>
+    </Actions>
+    <FiltersContent>
+        <MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Label="Minimum domains" Margin="Margin.Dense" Min="0" />
+        @foreach (var list in _psaLists)
+        {
+            <MudSelect T="bool?" Label="@($"{list.Psa.DisplayName()} company link")" Value="@_hasCompanyFilters.GetValueOrDefault(list.Psa)"
+                       ValueChanged="@(linked => _hasCompanyFilters[list.Psa] = linked)" Clearable="true" Margin="Margin.Dense">
+                <MudSelectItem T="bool?" Value="true">Linked</MudSelectItem><MudSelectItem T="bool?" Value="false">Not linked</MudSelectItem>
+            </MudSelect>
+        }
+        @if (_psaLists.Count > 0)
+        {
+            <MudSelect T="bool?" Label="Ticket rule overrides" @bind-Value="_groupHasTicketOverridesFilter" Clearable="true" Margin="Margin.Dense">
+                <MudSelectItem T="bool?" Value="true">Has overrides</MudSelectItem><MudSelectItem T="bool?" Value="false">No overrides</MudSelectItem>
+            </MudSelect>
+        }
+    </FiltersContent>
+    </ListToolbar>
     <AuthorizeView Policy="GroupsAdd">
         <div id="add-group" hidden="@(!_showAddGroup)">
         <MudGrid>
@@ -144,27 +154,6 @@
         <div class="group-list-toolbar mt-4 mb-3">
             <MudText Typo="Typo.body2" aria-live="polite">@FilteredGroups.Count of @_groups.Count groups</MudText>
         </div>
-        <MudCollapse Expanded="_showGroupFilters">
-            <div id="group-filters" class="group-filter-grid mb-4">
-                <MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Label="Minimum domains" Margin="Margin.Dense" Min="0" />
-                @foreach (var list in _psaLists)
-                {
-                    <MudSelect T="bool?" Label="@($"{list.Psa.DisplayName()} company link")" Value="@_hasCompanyFilters.GetValueOrDefault(list.Psa)"
-                               ValueChanged="@(linked => _hasCompanyFilters[list.Psa] = linked)" Clearable="true" Margin="Margin.Dense">
-                        <MudSelectItem T="bool?" Value="true">Linked</MudSelectItem>
-                        <MudSelectItem T="bool?" Value="false">Not linked</MudSelectItem>
-                    </MudSelect>
-                }
-                @if (_psaLists.Count > 0)
-                {
-                    <MudSelect T="bool?" Label="Ticket rule overrides" Value="_groupHasTicketOverridesFilter" ValueChanged="@(value => _groupHasTicketOverridesFilter = value)" Clearable="true" Margin="Margin.Dense">
-                        <MudSelectItem T="bool?" Value="true">Has overrides</MudSelectItem>
-                        <MudSelectItem T="bool?" Value="false">No overrides</MudSelectItem>
-                    </MudSelect>
-                }
-                <MudButton OnClick="ClearGroupFilters" Size="Size.Small">Clear group filters</MudButton>
-            </div>
-        </MudCollapse>
         @if (FilteredGroups.Count == 0)
         {
             <MudAlert Severity="Severity.Info">No groups match these filters. Change or clear the group filters.</MudAlert>
@@ -301,6 +290,8 @@
 </AuthorizeView>
 
 @code {
+    private ListTableSort<PsaCompany>? _tableSort;
+    private Task RefreshSort(SortDirection _) => _tableSort?.RefreshAsync() ?? Task.CompletedTask;
     private List<GroupRow>? _groups;
     private List<PsaCompanyList> _psaLists = [];
     private List<PsaCompanyList> _loadedLists = [];
@@ -315,7 +306,6 @@
     private string? _addGroupError;
 
     private string? _clientNameFilter;
-    private bool _showClientFilters;
 
     private string? _groupNameFilter;
     private int? _groupMinDomainsFilter;
@@ -334,8 +324,7 @@
     private static string PolicyLabel(DmarcTarget target) => target.EffectiveSubdomainPolicy == target.Policy
         ? target.Policy.ToString() : $"{target.Policy}; subdomains: {target.EffectiveSubdomainPolicy}";
 
-    private int ActiveGroupFilterCount => (string.IsNullOrWhiteSpace(_groupNameFilter) ? 0 : 1)
-        + (_groupMinDomainsFilter is null ? 0 : 1) + _hasCompanyFilters.Count(filter => filter.Value is not null)
+    private int ActiveGroupFilterCount => (_groupMinDomainsFilter is null ? 0 : 1) + _hasCompanyFilters.Count(filter => filter.Value is not null)
         + (_groupHasTicketOverridesFilter is null ? 0 : 1);
 
     private IReadOnlyList<GroupRow> FilteredGroups
@@ -355,7 +344,6 @@
 
     private void ClearGroupFilters()
     {
-        _groupNameFilter = null;
         _groupMinDomainsFilter = null;
         _hasCompanyFilters.Clear();
         _groupHasTicketOverridesFilter = null;

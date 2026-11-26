@@ -59,6 +59,15 @@
         {
             <details class="mb-4">
             <summary>View @_summary.Groups.Count group targets and edit overrides</summary>
+            <ListToolbar Label="Group target controls" SearchLabel="Search group targets" @bind-Search="_groupSearch" @bind-Expanded="_showGroupFilters"
+                         FilterCount="@(_groupOverrideFilter is null ? 0 : 1)" ClearFilters="@(() => _groupOverrideFilter = null)">
+                <SortContent><ListNameSort @bind-Descending="_groupDescending" /></SortContent>
+                <FiltersContent>
+                    <MudSelect T="bool?" Label="Target at this level" @bind-Value="_groupOverrideFilter" Clearable="true">
+                        <MudSelectItem T="bool?" Value="true">Group override</MudSelectItem><MudSelectItem T="bool?" Value="false">Inherited</MudSelectItem>
+                    </MudSelect>
+                </FiltersContent>
+            </ListToolbar>
             <MudSimpleTable Dense="true" Hover="true" Class="mb-4" Style="overflow-x:auto;">
                 <thead>
                     <tr>
@@ -69,7 +78,9 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var group in _summary.Groups)
+                    @foreach (var group in (_groupDescending ? _summary.Groups.OrderByDescending(group => group.Name) : _summary.Groups.OrderBy(group => group.Name))
+                        .Where(group => (string.IsNullOrWhiteSpace(_groupSearch) || group.Name.Contains(_groupSearch, StringComparison.OrdinalIgnoreCase))
+                            && (_groupOverrideFilter is null || (group.Target is not null) == _groupOverrideFilter)))
                     {
                         <tr>
                             <td>@group.Name</td>
@@ -101,6 +112,9 @@
         }
         else
         {
+            <ListToolbar Label="Domain override controls" SearchLabel="Search domain overrides" @bind-Search="_domainSearch">
+                <SortContent><ListNameSort @bind-Descending="_domainDescending" /></SortContent>
+            </ListToolbar>
             <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
                 <thead>
                     <tr>
@@ -109,7 +123,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var domainOverride in _summary.Overrides)
+                    @foreach (var domainOverride in (_domainDescending ? _summary.Overrides.OrderByDescending(domain => domain.Name) : _summary.Overrides.OrderBy(domain => domain.Name))
+                        .Where(domain => string.IsNullOrWhiteSpace(_domainSearch) || domain.Name.Contains(_domainSearch, StringComparison.OrdinalIgnoreCase)))
                     {
                         <tr>
                             <td><MudLink Href="@($"/domains/{domainOverride.Name}")">@domainOverride.Name</MudLink></td>
@@ -134,6 +149,9 @@
 }
 
 @code {
+    private string? _groupSearch, _domainSearch;
+    private bool _showGroupFilters, _groupDescending, _domainDescending;
+    private bool? _groupOverrideFilter;
     private IReadOnlyList<TabbedPageTab> _tabs = [];
     private DmarcTargetSummary? _summary;
     private ClaimsPrincipal _user = new();

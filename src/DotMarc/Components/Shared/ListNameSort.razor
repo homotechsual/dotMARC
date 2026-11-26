@@ -1,0 +1,10 @@
+<MudSelect T="bool" Label="@Label" Value="Descending" ValueChanged="DescendingChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Class="list-sort">
+    <MudSelectItem Value="false">Name (A to Z)</MudSelectItem>
+    <MudSelectItem Value="true">Name (Z to A)</MudSelectItem>
+</MudSelect>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Sort";
+    [Parameter] public bool Descending { get; set; }
+    [Parameter] public EventCallback<bool> DescendingChanged { get; set; }
+}

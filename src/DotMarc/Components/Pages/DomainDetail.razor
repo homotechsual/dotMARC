@@ -436,35 +436,28 @@ else
             {
                 <MudTable Items="_tlsrptReports" Hover="true" T="TlsrptReport" CustomHeader="true" Filter="TlsrptReportMatchesFilters">
                     <ToolBarContent>
-                        <MudSpacer />
-                        <MudButton Variant="@(_showTlsrptFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                                   OnClick="@(() => _showTlsrptFilters = !_showTlsrptFilters)">@(_showTlsrptFilters ? "Hide filters" : "Filters")</MudButton>
+                        <ListToolbar Label="TLS report controls" SearchLabel="Search TLS report senders" @bind-Search="_tlsrptFromFilter" @bind-Expanded="_showTlsrptFilters"
+                                     FilterCount="@TlsFilterCount" ClearFilters="ClearTlsFilters">
+                            <SortContent><ListTableSort TItem="TlsrptReport" @ref="_tlsSort" /></SortContent>
+                            <FiltersContent>
+                                <MudTextField Label="Date range contains" @bind-Value="_tlsrptDateRangeFilter" Immediate="true" />
+                                <MudTextField Label="Policy contains" @bind-Value="_tlsrptPolicyFilter" Immediate="true" />
+                                <MudSelect T="bool?" Label="Failed sessions" @bind-Value="_tlsrptHasFailuresFilter" Clearable="true">
+                                    <MudSelectItem T="bool?" Value="true">Some failed</MudSelectItem><MudSelectItem T="bool?" Value="false">None failed</MudSelectItem>
+                                </MudSelect>
+                                <MudTextField Label="Failure details contain" @bind-Value="_tlsrptFailureDetailFilter" Immediate="true" />
+                            </FiltersContent>
+                        </ListToolbar>
                     </ToolBarContent>
                     <HeaderContent>
                         <tr>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="From" SortBy="new Func<TlsrptReport, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Date range" SortBy="new Func<TlsrptReport, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
                             <MudTh>Policy</MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.SuccessfulSessionCount))">Successful sessions</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.FailedSessionCount))">Failed sessions</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Successful sessions" SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.SuccessfulSessionCount))">Successful sessions</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Failed sessions" SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.FailedSessionCount))">Failed sessions</MudTableSortLabel></MudTh>
                             <MudTh>Failure details</MudTh>
                         </tr>
-                        @if (_showTlsrptFilters)
-                        {
-                        <tr>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptFromFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptDateRangeFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptPolicyFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                            <MudTh></MudTh>
-                            <MudTh>
-                                <MudSelect T="bool?" Value="_tlsrptHasFailuresFilter" ValueChanged="@(v => _tlsrptHasFailuresFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                    <MudSelectItem T="bool?" Value="true">Some failed</MudSelectItem>
-                                    <MudSelectItem T="bool?" Value="false">None failed</MudSelectItem>
-                                </MudSelect>
-                            </MudTh>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptFailureDetailFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                        </tr>
-                        }
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.ReportingOrg</MudTd>
@@ -485,69 +478,44 @@ else
             <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">Per-IP decisions are available by expanding a service's Source IPs above.</MudText>
             <MudTable Items="_sources" Hover="true" T="SourceRow" CustomHeader="true" Filter="SourceMatchesFilters">
                 <ToolBarContent>
-                    <MudSpacer />
-                    <MudButton Variant="@(_showSourceFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                               OnClick="@(() => _showSourceFilters = !_showSourceFilters)">@(_showSourceFilters ? "Hide filters" : "Filters")</MudButton>
+                    <ListToolbar Label="Source IP controls" SearchLabel="Search source IPs" @bind-Search="_sourceIpFilter" @bind-Expanded="_showSourceFilters"
+                                 FilterCount="@SourceFilterCount" ClearFilters="ClearSourceFilters">
+                        <SortContent><ListTableSort TItem="SourceRow" @ref="_sourceSort" /></SortContent>
+                        <FiltersContent>
+                            <MudNumericField T="int?" Label="Minimum volume" @bind-Value="_sourceMinVolumeFilter" Min="0" />
+                            <MudSelect T="bool?" Label="First seen" @bind-Value="_sourceIsNewFilter" Clearable="true">
+                                <MudSelectItem T="bool?" Value="true">New</MudSelectItem><MudSelectItem T="bool?" Value="false">Seen before</MudSelectItem>
+                            </MudSelect>
+                            <MudSelect T="string" Label="SPF" @bind-Value="_sourceSpfFilter" Clearable="true">
+                                @foreach (var result in _sources.Select(s => s.SpfResult).Distinct().Order()) { <MudSelectItem Value="result">@result</MudSelectItem> }
+                            </MudSelect>
+                            <MudSelect T="string" Label="DKIM" @bind-Value="_sourceDkimFilter" Clearable="true">
+                                @foreach (var result in _sources.Select(s => s.DkimResult).Distinct().Order()) { <MudSelectItem Value="result">@result</MudSelectItem> }
+                            </MudSelect>
+                            <MudSelect T="string" Label="Disposition" @bind-Value="_sourceDispositionFilter" Clearable="true">
+                                @foreach (var disposition in _sources.Select(s => s.Disposition).Distinct().Order()) { <MudSelectItem Value="disposition">@disposition</MudSelectItem> }
+                            </MudSelect>
+                            <MudTextField Label="Reason contains" @bind-Value="_sourceReasonFilter" Immediate="true" />
+                            <MudTextField Label="Owner contains" @bind-Value="_sourceOwnerFilter" Immediate="true" />
+                            <SearchableSelect TValue="string" Label="Country" Options="@(_sources.Where(s => s.Country is not null).Select(s => s.Country!).Distinct().Order().Select(country => new SelectOption<string>(country, country)).ToList())"
+                                              Value="_sourceCountryFilter" ValueChanged="@(v => _sourceCountryFilter = v)" Clearable="true" />
+                        </FiltersContent>
+                    </ListToolbar>
                 </ToolBarContent>
                 <HeaderContent>
                     <tr>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.SourceIp)">Source IP</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => ServiceFor(s.SourceIp))">Service</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Volume)">Volume</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Source IP" SortBy="new Func<SourceRow, object>(s => s.SourceIp)">Source IP</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Service" SortBy="new Func<SourceRow, object>(s => ServiceFor(s.SourceIp))">Service</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Volume" SortBy="new Func<SourceRow, object>(s => s.Volume)">Volume</MudTableSortLabel></MudTh>
                         <MudTh>7d trend</MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.FirstSeenUtc ?? DateTimeOffset.MinValue)">First seen</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.SpfResult)">SPF</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.DkimResult)">DKIM</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Disposition)">Disposition</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.ReasonSummary)">Reason</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Organization ?? string.Empty)">Owner</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Country ?? string.Empty)">Country</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="First seen" SortBy="new Func<SourceRow, object>(s => s.FirstSeenUtc ?? DateTimeOffset.MinValue)">First seen</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="SPF" SortBy="new Func<SourceRow, object>(s => s.SpfResult)">SPF</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="DKIM" SortBy="new Func<SourceRow, object>(s => s.DkimResult)">DKIM</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Disposition" SortBy="new Func<SourceRow, object>(s => s.Disposition)">Disposition</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Reason" SortBy="new Func<SourceRow, object>(s => s.ReasonSummary)">Reason</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Owner" SortBy="new Func<SourceRow, object>(s => s.Organization ?? string.Empty)">Owner</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Country" SortBy="new Func<SourceRow, object>(s => s.Country ?? string.Empty)">Country</MudTableSortLabel></MudTh>
                     </tr>
-                    @if (_showSourceFilters)
-                    {
-                    <tr>
-                        <MudTh><MudTextField T="string" @bind-Value="_sourceIpFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                        <MudTh></MudTh>
-                        <MudTh><MudNumericField T="int?" @bind-Value="_sourceMinVolumeFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
-                        <MudTh></MudTh>
-                        <MudTh>
-                            <MudSelect T="bool?" Value="_sourceIsNewFilter" ValueChanged="@(v => _sourceIsNewFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                <MudSelectItem T="bool?" Value="true">New</MudSelectItem>
-                                <MudSelectItem T="bool?" Value="false">Seen before</MudSelectItem>
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh>
-                            <MudSelect T="string" Value="_sourceSpfFilter" ValueChanged="@(v => _sourceSpfFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var result in _sources.Select(s => s.SpfResult).Distinct().OrderBy(r => r))
-                                {
-                                    <MudSelectItem T="string" Value="result">@result</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh>
-                            <MudSelect T="string" Value="_sourceDkimFilter" ValueChanged="@(v => _sourceDkimFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var result in _sources.Select(s => s.DkimResult).Distinct().OrderBy(r => r))
-                                {
-                                    <MudSelectItem T="string" Value="result">@result</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh>
-                            <MudSelect T="string" Value="_sourceDispositionFilter" ValueChanged="@(v => _sourceDispositionFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var disposition in _sources.Select(s => s.Disposition).Distinct().OrderBy(d => d))
-                                {
-                                    <MudSelectItem T="string" Value="disposition">@disposition</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh><MudTextField T="string" @bind-Value="_sourceReasonFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                        <MudTh><MudTextField T="string" @bind-Value="_sourceOwnerFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                        <MudTh>
-                            <SearchableSelect TValue="string" Options="@(_sources.Where(s => s.Country is not null).Select(s => s.Country!).Distinct().OrderBy(c => c).Select(country => new SelectOption<string>(country, country)).ToList())"
-                                              Value="_sourceCountryFilter" ValueChanged="@(v => _sourceCountryFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
-                        </MudTh>
-                    </tr>
-                    }
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.SourceIp</MudTd>
@@ -609,22 +577,17 @@ else
         <MudTabPanel Text="Raw reports">
             <MudTable Items="_reports" Hover="true" T="Report" CustomHeader="true" Filter="ReportMatchesFilters">
                 <ToolBarContent>
-                    <MudSpacer />
-                    <MudButton Variant="@(_showReportFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                               OnClick="@(() => _showReportFilters = !_showReportFilters)">@(_showReportFilters ? "Hide filters" : "Filters")</MudButton>
+                    <ListToolbar Label="Raw report controls" SearchLabel="Search report senders" @bind-Search="_reportFromFilter" @bind-Expanded="_showReportFilters"
+                                 FilterCount="@(string.IsNullOrWhiteSpace(_reportDateRangeFilter) ? 0 : 1)" ClearFilters="@(() => _reportDateRangeFilter = null)">
+                        <SortContent><ListTableSort TItem="Report" @ref="_reportSort" /></SortContent>
+                        <FiltersContent><MudTextField Label="Date range contains" @bind-Value="_reportDateRangeFilter" Immediate="true" /></FiltersContent>
+                    </ListToolbar>
                 </ToolBarContent>
                 <HeaderContent>
                     <tr>
-                        <MudTh><MudTableSortLabel SortBy="new Func<Report, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<Report, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="From" SortBy="new Func<Report, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Date range" SortBy="new Func<Report, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
                     </tr>
-                    @if (_showReportFilters)
-                    {
-                    <tr>
-                        <MudTh><MudTextField T="string" @bind-Value="_reportFromFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                        <MudTh><MudTextField T="string" @bind-Value="_reportDateRangeFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                    </tr>
-                    }
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.ReportingOrg</MudTd>
@@ -636,6 +599,21 @@ else
 }
 
 @code {
+    private ListTableSort<TlsrptReport>? _tlsSort;
+    private ListTableSort<SourceRow>? _sourceSort;
+    private ListTableSort<Report>? _reportSort;
+    private Task RefreshSort(SortDirection _) => Task.WhenAll(_tlsSort?.RefreshAsync() ?? Task.CompletedTask,
+        _sourceSort?.RefreshAsync() ?? Task.CompletedTask, _reportSort?.RefreshAsync() ?? Task.CompletedTask);
+    private int TlsFilterCount => new[] { _tlsrptDateRangeFilter, _tlsrptPolicyFilter, _tlsrptFailureDetailFilter }.Count(value => !string.IsNullOrWhiteSpace(value))
+        + (_tlsrptHasFailuresFilter is null ? 0 : 1);
+    private void ClearTlsFilters() { _tlsrptDateRangeFilter = _tlsrptPolicyFilter = _tlsrptFailureDetailFilter = null; _tlsrptHasFailuresFilter = null; }
+    private int SourceFilterCount => new[] { _sourceSpfFilter, _sourceDkimFilter, _sourceDispositionFilter, _sourceReasonFilter, _sourceOwnerFilter, _sourceCountryFilter }.Count(value => !string.IsNullOrWhiteSpace(value))
+        + (_sourceMinVolumeFilter is null ? 0 : 1) + (_sourceIsNewFilter is null ? 0 : 1);
+    private void ClearSourceFilters()
+    {
+        _sourceSpfFilter = _sourceDkimFilter = _sourceDispositionFilter = _sourceReasonFilter = _sourceOwnerFilter = _sourceCountryFilter = null;
+        _sourceMinVolumeFilter = null; _sourceIsNewFilter = null;
+    }
     [SupplyParameterFromQuery(Name = "setup")] public bool Setup { get; set; }
     private bool _settingUpDns;
 

@@ -11,15 +11,6 @@
     <MudButton Href="@(Inventory ? "/dashboard" : _state.ToUrl("/domains"))" StartIcon="@(Inventory ? Icons.Material.Filled.Dashboard : Icons.Material.Filled.Language)">
         @(Inventory ? "Dashboard" : "Domains")
     </MudButton>
-    @if (Inventory)
-    {
-        <AuthorizeView Policy="DomainsAdd"><MudButton Href="@ImportUrl" StartIcon="@Icons.Material.Filled.UploadFile">Import domains</MudButton></AuthorizeView>
-    }
-    else
-    {
-        <AuthorizeView Policy="DomainsAdd"><MudButton Href="@ImportUrl" StartIcon="@Icons.Material.Filled.UploadFile">Import domains</MudButton></AuthorizeView>
-        <MudButton OnClick="LoadAsync" Disabled="_loading" StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
-    }
 </div>
 @if (_error is not null)
 {
@@ -32,7 +23,16 @@
 else
 {
     <DomainListFilters State="_state" Changed="ChangeFiltersAsync" Groups="_groups" Tags="_tags" Rows="_allRows"
-                       ScopedGroupIds="_scope" Inventory="Inventory" Companies="_companyOptions" />
+                       ScopedGroupIds="_scope" Inventory="Inventory" Companies="_companyOptions">
+        <Actions>
+            <AuthorizeView Policy="DomainsAdd">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _showAddDomain = !_showAddDomain)"
+                           aria-controls="add-domain" aria-expanded="@_showAddDomain.ToString().ToLowerInvariant()">@(_showAddDomain ? "Close add domain" : "Add domain")</MudButton>
+                <MudButton Href="@ImportUrl" StartIcon="@Icons.Material.Filled.UploadFile">Import domains</MudButton>
+            </AuthorizeView>
+            <MudButton OnClick="LoadAsync" Disabled="_loading" StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+        </Actions>
+    </DomainListFilters>
     <div class="domain-list-toolbar mb-3">
         @if (Inventory)
         {
@@ -56,7 +56,7 @@ else
             }
         }
     </div>
-    <AddDomainForm GroupId="_state.GroupId" Added="@(_ => LoadAsync())" Collapsed="true" />
+    <AddDomainForm GroupId="_state.GroupId" Added="@(_ => LoadAsync())" Collapsed="true" HideToggle="true" Open="_showAddDomain" />
     @if (Inventory)
     {
         @if (_canBulkDns)
@@ -89,9 +89,6 @@ else
         @if (_management)
         {
             <div class="domain-list-toolbar mb-3">
-                <MudButton Size="Size.Small" OnClick="@(() => SortAsync("groups"))">Sort by groups @SortMark("groups")</MudButton>
-                <MudButton Size="Size.Small" OnClick="@(() => SortAsync("tags"))">Sort by tags @SortMark("tags")</MudButton>
-                <MudButton Size="Size.Small" OnClick="@(() => SortAsync("reports"))">Sort by reports @SortMark("reports")</MudButton>
                 <MudText Typo="Typo.caption">Expand a domain's Manage control for groups, tags and overrides.</MudText>
             </div>
         }

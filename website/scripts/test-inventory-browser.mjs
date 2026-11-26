@@ -16,8 +16,9 @@ try {
   const testTag = `Inventory browser ${Date.now()}`;
   await page.goto(`${base}/tags`);
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Add tag' && !button.disabled));
-  await page.getByLabel('Tag name', {exact: true}).fill(testTag);
   await page.getByRole('button', {name: 'Add tag', exact: true}).click();
+  await page.getByLabel('Tag name', {exact: true}).fill(testTag);
+  await page.locator('#add-tag').getByRole('button', {name: 'Add tag', exact: true}).click();
   await page.getByText(testTag, {exact: true}).waitFor();
   await enter('/domains');
   const table = page.locator('.domain-inventory .mud-table-container').first();
@@ -67,7 +68,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('section .domain-inventory').length === 0);
   assert.deepEqual((await page.locator('a[data-domain-link]').allTextContents()).sort(), groupedIds);
   await page.getByRole('button', {name: /^Filters \(/}).click();
-  await page.getByRole('button', {name: 'Filters (1)', exact: true}).waitFor();
+  await page.getByRole('button', {name: 'Filters (0)', exact: true}).waitFor();
   assert.deepEqual((await page.locator('a[data-domain-link]').allTextContents()).sort(), groupedIds);
 
   await enter('/domains?filters=1&view=group&open=true');

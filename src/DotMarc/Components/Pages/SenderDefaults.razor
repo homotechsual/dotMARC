@@ -37,6 +37,17 @@
 }
 
 @code {
+    private string? _search, _decisionFilter;
+    private bool _showFilters, _descending;
+    private IEnumerable<DefaultRow> VisibleRows
+    {
+        get
+        {
+            var rows = (_rows ?? []).Where(row => (string.IsNullOrWhiteSpace(_search) || row.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                && (_decisionFilter is null || SenderDecisionPresentation.StatusLabel(row.Status) == _decisionFilter));
+            return _descending ? rows.OrderByDescending(row => row.Name, StringComparer.OrdinalIgnoreCase) : rows.OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase);
+        }
+    }
     [Parameter] public int? GroupId { get; set; }
 
     private RenderFragment SenderContent => @<text>
@@ -56,6 +67,11 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Choose Authorised, Unauthorised or Under review for a service. Unreviewed means no decision has been recorded. Domain counts describe observed 30-day evidence, not the number of domains guaranteed to inherit this decision.</MudText>
     <details>
     <summary>View @(_rows!.Count) services and set decisions</summary>
+    <ListToolbar Label="Sender default controls" SearchLabel="Search services" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@(_decisionFilter is null ? 0 : 1)" ClearFilters="@(() => _decisionFilter = null)">
+        <SortContent><ListNameSort @bind-Descending="_descending" /></SortContent>
+        <FiltersContent><SenderDecisionFilter @bind-Value="_decisionFilter" /></FiltersContent>
+    </ListToolbar>
     <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
         <thead>
             <tr>
@@ -68,7 +84,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in _rows!)
+            @foreach (var row in VisibleRows)
             {
                 <tr>
                     <td>@(row.InCatalogue ? row.Name : $"{row.Name} (no longer recognised)")</td>

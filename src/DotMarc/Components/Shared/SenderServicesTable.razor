@@ -13,6 +13,18 @@ else
         The services your reports point to. Evidence is a score of the signals found for a service, not a certainty.
         Expand Source IPs to inspect evidence and @((CanReview ? "record decisions for individual IPs." : "view inherited or recorded IP decisions. You do not have permission to change decisions."))
     </MudText>
+    <ListToolbar Label="Sender controls" SearchLabel="Search services or source IPs" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@(_decisionFilter is null ? 0 : 1)" ClearFilters="@(() => _decisionFilter = null)">
+        <SortContent>
+            <MudSelect T="string" Label="Sort senders" @bind-Value="_sort" Variant="Variant.Outlined" Margin="Margin.Dense" Class="list-sort">
+                <MudSelectItem Value="@("")">Default order</MudSelectItem>
+                <MudSelectItem Value="@("name")">Name (A to Z)</MudSelectItem>
+                <MudSelectItem Value="@("name-desc")">Name (Z to A)</MudSelectItem>
+                <MudSelectItem Value="@("volume")">Most messages</MudSelectItem>
+            </MudSelect>
+        </SortContent>
+        <FiltersContent><SenderDecisionFilter @bind-Value="_decisionFilter" /></FiltersContent>
+    </ListToolbar>
     <MudSimpleTable Dense="true" Hover="true" Class="mb-6" Style="overflow-x:auto;">
         <thead>
             <tr>
@@ -28,7 +40,7 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in Rows())
+            @foreach (var row in VisibleRows())
             {
                 var resolved = RowDecision(row);
                 <tr>
@@ -105,6 +117,22 @@ else
 }
 
 @code {
+    private string? _search, _decisionFilter;
+    private string _sort = "";
+    private bool _showFilters;
+    private IEnumerable<SenderServiceRow> VisibleRows()
+    {
+        var rows = Rows().Where(row => (string.IsNullOrWhiteSpace(_search) || row.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || row.SourceIps.Any(ip => ip.Contains(_search, StringComparison.OrdinalIgnoreCase)))
+            && (_decisionFilter is null || SenderDecisionPresentation.StatusLabel(RowDecision(row).Status) == _decisionFilter));
+        return _sort switch
+        {
+            "name" => rows.OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase),
+            "name-desc" => rows.OrderByDescending(row => row.Name, StringComparer.OrdinalIgnoreCase),
+            "volume" => rows.OrderByDescending(row => row.Messages),
+            _ => rows
+        };
+    }
     [Parameter] public SenderIdentificationResult? Result { get; set; }
 
     /// <summary>The decision that applies to a service row. Unrecognised rows have no row-level decision.</summary>

@@ -22,7 +22,7 @@ try {
   };
   await ready();
   const controlPositions = await page.locator('[aria-controls="add-group"]').evaluate(add => {
-    const row = add.closest('.group-list-toolbar');
+    const row = add.closest('.list-toolbar');
     return [...row.querySelectorAll('input:not([type="hidden"]),[role="combobox"],[aria-controls="group-filters"],[aria-controls="add-group"]')].map(node => node.getBoundingClientRect().left);
   });
   assert.equal(controlPositions.length, 4);
@@ -30,11 +30,10 @@ try {
   const onboarding = page.locator('.group-company-onboarding');
   assert.equal(await onboarding.getAttribute('open'), null);
   await onboarding.locator('summary').click();
-  await onboarding.getByRole('button', {name: 'Filters', exact: true}).click();
-  await onboarding.getByPlaceholder('Search', {exact: true}).fill('Fabrikam');
+  await onboarding.getByLabel('Search companies', {exact: true}).fill('Fabrikam');
   await page.waitForFunction(() => document.querySelectorAll('.group-company-onboarding tbody tr').length === 1);
   await onboarding.getByText('Fabrikam Inc', {exact: true}).waitFor();
-  await onboarding.getByPlaceholder('Search', {exact: true}).fill('');
+  await onboarding.getByLabel('Search companies', {exact: true}).fill('');
   await onboarding.locator('summary').click();
   const card = page.getByRole('article', {name: 'Group Aurora Retail', exact: true});
   await card.getByText('Monthly', {exact: true}).waitFor();
@@ -45,13 +44,15 @@ try {
   await card.locator('summary').filter({hasText: '(1 linked)'}).waitFor();
   await card.locator('summary').click();
   const filter = page.locator('#group-filters');
-  await page.getByRole('button', {name: 'Filters (1)', exact: true}).click();
+  await page.getByRole('button', {name: 'Filters (0)', exact: true}).click();
   assert.equal(await page.locator('.group-card').count(), 1);
-  await page.getByRole('button', {name: 'Filters (1)', exact: true}).click();
+  await page.getByRole('button', {name: 'Filters (0)', exact: true}).click();
   await filter.getByLabel('Minimum domains', {exact: true}).fill('1000');
   await filter.getByLabel('Minimum domains', {exact: true}).press('Tab');
   await page.getByText('No groups match these filters.', {exact: false}).waitFor();
-  await page.getByRole('button', {name: 'Clear group filters', exact: true}).click();
+  await page.getByRole('button', {name: 'Clear filters', exact: true}).click();
+  assert.equal(await page.getByLabel('Group search', {exact: true}).inputValue(), 'Aurora');
+  await page.getByLabel('Group search', {exact: true}).fill('');
   await page.waitForFunction(() => document.querySelectorAll('.group-card').length === 12);
   await filter.getByLabel('HaloPSA company link', {exact: true}).click();
   await page.getByRole('option', {name: 'Not linked', exact: true}).click();
@@ -63,12 +64,12 @@ try {
   await page.waitForFunction(count => document.querySelectorAll('.group-card').length === 12 - count, unlinked.length);
   const linked = await page.locator('.group-card').evaluateAll(cards => cards.map(card => card.getAttribute('aria-label')));
   assert(!linked.some(name => unlinked.includes(name)));
-  await page.getByRole('button', {name: 'Clear group filters', exact: true}).click();
+  await page.getByRole('button', {name: 'Clear filters', exact: true}).click();
   await filter.getByLabel('Ticket rule overrides', {exact: true}).click();
   await page.getByRole('option', {name: 'Has overrides', exact: true}).click();
   await page.getByRole('button', {name: 'Filters (1)', exact: true}).waitFor();
   assert(await page.locator('.group-card').count() < 12);
-  await page.getByRole('button', {name: 'Clear group filters', exact: true}).click();
+  await page.getByRole('button', {name: 'Clear filters', exact: true}).click();
   await page.getByLabel('Sort groups', {exact: true}).click();
   await page.getByRole('option', {name: 'Most domains', exact: true}).click();
   await page.waitForFunction(() => {
@@ -83,7 +84,7 @@ try {
   });
   await page.getByLabel('Group search', {exact: true}).fill('Aurora');
   await page.waitForFunction(() => document.querySelectorAll('.group-card').length === 1);
-  await page.getByRole('button', {name: 'Filters (1)', exact: true}).click();
+  await page.getByRole('button', {name: 'Filters (0)', exact: true}).click();
 
   const openDialog = async (label, heading, close) => {
     await card.getByRole('button', {name: label, exact: true}).click();
@@ -137,8 +138,8 @@ try {
   assert.equal(await page.locator('#add-group').isVisible(), false);
   await page.getByRole('button', {name: 'Add group', exact: true}).click();
   await page.getByLabel('Group name', {exact: true}).fill(name);
-  await page.getByRole('button', {name: 'Add group', exact: true}).click();
-  await page.getByRole('button', {name: 'Filters (1)', exact: true}).click();
+  await page.locator('#add-group').getByRole('button', {name: 'Add group', exact: true}).click();
+  await page.getByRole('button', {name: 'Filters (0)', exact: true}).click();
   await page.getByLabel('Group search', {exact: true}).fill(name);
   const created = page.getByRole('article', {name: `Group ${name}`, exact: true});
   await created.waitFor();

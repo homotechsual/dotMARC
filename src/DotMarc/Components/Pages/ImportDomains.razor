@@ -40,8 +40,23 @@
         Added @_result.Added, updated @_result.Updated, @_result.Unchanged unchanged, skipped @_result.SkippedExisting already monitored
         and @_result.Invalid invalid. DNS provider detection is attempted immediately; other health checks run within the next polling cycle.
     </MudAlert>
-    <MudTable Items="_result.Rows" Dense="true" Hover="true" RowsPerPage="50">
-        <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>What happened</MudTh></HeaderContent>
+    <MudTable Items="_result.Rows" T="ImportRowOutcome" Dense="true" Hover="true" RowsPerPage="50" Filter="OutcomeMatches">
+        <ToolBarContent>
+            <ListToolbar Label="Import result controls" SearchLabel="Search imported domains" @bind-Search="_resultSearch" @bind-Expanded="_showResultFilters"
+                         FilterCount="@(_outcomeFilter is null ? 0 : 1)" ClearFilters="@(() => _outcomeFilter = null)">
+                <SortContent><ListTableSort TItem="ImportRowOutcome" @ref="_resultSort" /></SortContent>
+                <FiltersContent>
+                    <MudSelect T="string" Label="What happened" @bind-Value="_outcomeFilter" Clearable="true">
+                        @foreach (var outcome in _result.Rows.Select(row => row.Outcome).Distinct().Order()) { <MudSelectItem Value="@outcome">@outcome</MudSelectItem> }
+                    </MudSelect>
+                </FiltersContent>
+            </ListToolbar>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Line" SortBy="new Func<ImportRowOutcome, object>(row => row.LineNumber)">Line</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domain" SortBy="new Func<ImportRowOutcome, object>(row => row.Domain)">Domain</MudTableSortLabel></MudTh>
+            <MudTh>What happened</MudTh>
+        </HeaderContent>
         <RowTemplate><MudTd>@context.LineNumber</MudTd><MudTd>@context.Domain</MudTd><MudTd>@context.Outcome</MudTd></RowTemplate>
         <PagerContent><MudTablePager /></PagerContent>
     </MudTable>
@@ -118,11 +133,13 @@ else
     {
         <MudPaper Class="pa-4 mb-3" Elevation="1">
             <MudText Typo="Typo.subtitle1" Class="mb-2">Names that don't exist yet</MudText>
+            <ListToolbar Label="Import name controls" SearchLabel="Search unresolved names" @bind-Search="_nameSearch" />
             <MudSimpleTable Dense="true" Elevation="0">
                 <thead><tr><th>Name</th><th>Used on lines</th><th>What to do</th></tr></thead>
                 <tbody>
                     @foreach (var unknown in _plan.UnknownNames)
                     {
+                        if (!string.IsNullOrWhiteSpace(_nameSearch) && !unknown.Name.Contains(_nameSearch, StringComparison.OrdinalIgnoreCase)) { continue; }
                         <tr>
                             <td><MudChip T="string" Size="Size.Small">@KindLabel(unknown.Kind)</MudChip> @unknown.Name</td>
                             <td>@string.Join(", ", unknown.LineNumbers)</td>
@@ -159,8 +176,24 @@ else
         </MudPaper>
     }
 
-    <MudTable Items="_plan.Rows" Dense="true" Hover="true" RowsPerPage="50">
-        <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>Status</MudTh><MudTh>What will happen</MudTh></HeaderContent>
+    <MudTable Items="_plan.Rows" T="PlannedRow" Dense="true" Hover="true" RowsPerPage="50" Filter="PlannedMatches">
+        <ToolBarContent>
+            <ListToolbar Label="Import preview controls" SearchLabel="Search preview domains" @bind-Search="_previewSearch" @bind-Expanded="_showPreviewFilters"
+                         FilterCount="@(_statusFilter is null ? 0 : 1)" ClearFilters="@(() => _statusFilter = null)">
+                <SortContent><ListTableSort TItem="PlannedRow" @ref="_previewSort" /></SortContent>
+                <FiltersContent>
+                    <MudSelect T="ImportRowStatus?" Label="Status" @bind-Value="_statusFilter" Clearable="true">
+                        @foreach (var status in Enum.GetValues<ImportRowStatus>()) { <MudSelectItem T="ImportRowStatus?" Value="@status">@StatusLabel(status)</MudSelectItem> }
+                    </MudSelect>
+                </FiltersContent>
+            </ListToolbar>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Search and filters only change the preview. Import still applies the complete plan.</MudText>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Line" SortBy="new Func<PlannedRow, object>(row => row.LineNumber)">Line</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domain" SortBy="new Func<PlannedRow, object>(row => row.Domain ?? row.RawDomain)">Domain</MudTableSortLabel></MudTh>
+            <MudTh>Status</MudTh><MudTh>What will happen</MudTh>
+        </HeaderContent>
         <RowTemplate>
             <MudTd>@context.LineNumber</MudTd>
             <MudTd>@(context.Domain ?? context.RawDomain)</MudTd>
@@ -197,6 +230,17 @@ else
 }
 
 @code {
+    private ListTableSort<ImportRowOutcome>? _resultSort;
+    private ListTableSort<PlannedRow>? _previewSort;
+    private Task RefreshSort(SortDirection _) => Task.WhenAll(_resultSort?.RefreshAsync() ?? Task.CompletedTask, _previewSort?.RefreshAsync() ?? Task.CompletedTask);
+    private string? _previewSearch, _resultSearch, _nameSearch, _outcomeFilter;
+    private ImportRowStatus? _statusFilter;
+    private bool _showPreviewFilters, _showResultFilters;
+    private bool PlannedMatches(PlannedRow row) => (string.IsNullOrWhiteSpace(_previewSearch)
+        || (row.Domain ?? row.RawDomain).Contains(_previewSearch, StringComparison.OrdinalIgnoreCase))
+        && (_statusFilter is null || row.Status == _statusFilter);
+    private bool OutcomeMatches(ImportRowOutcome row) => (string.IsNullOrWhiteSpace(_resultSearch)
+        || row.Domain.Contains(_resultSearch, StringComparison.OrdinalIgnoreCase)) && (_outcomeFilter is null || row.Outcome == _outcomeFilter);
     [SupplyParameterFromQuery(Name = "group")] public int? GroupId { get; set; }
     private static readonly Dictionary<string, object?> DownloadAttribute = new() { ["download"] = "" };
 
@@ -384,6 +428,9 @@ else
 
     private void StartOver()
     {
+        _previewSearch = _resultSearch = _nameSearch = _outcomeFilter = null;
+        _statusFilter = null;
+        _showPreviewFilters = _showResultFilters = false;
         (_result, _plan, _table, _snapshot, _uploadedRows, _uploadedFileName, _pasteText) = (null, null, null, null, null, null, "");
         _mode = ExistingDomainMode.Skip;
         _resolutions.Clear();

@@ -1,0 +1,43 @@
+@typeparam TItem
+
+<MudSelect T="string" Label="Sort" Value="Current" ValueChanged="ChangeAsync" ToStringFunc="Describe" Variant="Variant.Outlined" Margin="Margin.Dense" Class="list-sort">
+    <MudSelectItem Value="@("")">Default order</MudSelectItem>
+    @foreach (var label in Context?.SortLabels.Where(label => label.SortLabel is not null) ?? [])
+    {
+        <MudSelectItem Value="@($"{label.SortLabel}:asc")">@label.SortLabel (ascending)</MudSelectItem>
+        <MudSelectItem Value="@($"{label.SortLabel}:desc")">@label.SortLabel (descending)</MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    [CascadingParameter] public TableContext? TableContext { get; set; }
+    private TableContext<TItem>? Context => TableContext is TableContext<TItem> context ? context : null;
+    private string Current => Context?.CurrentSortLabel?.SortLabel is { } label && Context.SortDirection != SortDirection.None
+        ? $"{label}:{(Context.SortDirection == SortDirection.Ascending ? "asc" : "desc")}" : "";
+    private int _labelCount;
+    private static string Describe(string? value) => string.IsNullOrEmpty(value) ? "Default order"
+        : value.EndsWith(":asc", StringComparison.Ordinal) ? $"{value[..^4]} (ascending)" : $"{value[..^5]} (descending)";
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        var count = Context?.SortLabels.Count ?? 0;
+        if (count != _labelCount) { _labelCount = count; StateHasChanged(); }
+    }
+    public async Task RefreshAsync()
+    {
+        // SortDirectionChanged is raised before MudTable updates its context.
+        await Task.Yield();
+        await InvokeAsync(StateHasChanged);
+    }
+    private async Task ChangeAsync(string value)
+    {
+        if (Context is null) throw new InvalidOperationException("List sorting requires a table context.");
+        var label = value.Length == 0 ? Context.CurrentSortLabel : Context.SortLabels.Single(label => value.StartsWith($"{label.SortLabel}:", StringComparison.Ordinal));
+        if (label is null) return;
+        var direction = value.Length == 0 ? SortDirection.None : value.EndsWith(":asc", StringComparison.Ordinal) ? SortDirection.Ascending : SortDirection.Descending;
+        for (var step = 0; step < 3 && label.SortDirection != direction; step++)
+            await label.ToggleSortDirection();
+        if (label.SortDirection != direction) throw new InvalidOperationException("The table does not support the selected sort direction.");
+        await Context.SetSortFunc(label, overrideDirectionNone: false);
+    }
+}

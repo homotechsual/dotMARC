@@ -4,12 +4,28 @@
 @using DotMarc.Psa
 @using DotMarc.Reporting
 
-<div class="domain-filter-bar mb-3">
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+<div class="domain-filter-bar mb-3 list-toolbar">
+    <MudTextField T="string" Label="Domain search" Value="State.Search" ValueChanged="@(value => Update(State with { Search = value }))" Immediate="true"
+                  Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="list-search" />
+    @if (Inventory)
+    {
+        <MudSelect T="string" Label="Sort domains" Value="@SortValue" ValueChanged="ChangeSort" Variant="Variant.Outlined" Margin="Margin.Dense" Class="list-sort">
+            <MudSelectItem Value="@("")">Default order</MudSelectItem>
+            @foreach (var column in SortColumns)
+            {
+                <MudSelectItem Value="@($"{column.Key}:asc")">@column.Value (ascending)</MudSelectItem>
+                <MudSelectItem Value="@($"{column.Key}:desc")">@column.Value (descending)</MudSelectItem>
+            }
+        </MudSelect>
+    }
+    <MudButton Variant="@(State.ShowFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
                OnClick="@(() => Changed.InvokeAsync(State with { ShowFilters = !State.ShowFilters }))"
                aria-expanded="@State.ShowFilters.ToString().ToLowerInvariant()" aria-controls="domain-filters">
-        Filters (@Active.Count)
+        Filters (@(Active.Count - (string.IsNullOrWhiteSpace(State.Search) ? 0 : 1)))
     </MudButton>
+    @Actions
+</div>
+<div class="domain-filter-bar mb-3">
     <span class="mud-typography mud-typography-caption" aria-live="polite">@Summary</span>
     @if (State.Queue is not null)
     {
@@ -36,9 +52,6 @@
             <MudItem xs="12" sm="6" md="3">
                 <SearchableSelect TValue="int?" Label="Tag" Options="@(Tags.Select(tag => new SelectOption<int?>(tag.Id, tag.Name)).ToList())"
                                   Value="State.TagId" ValueChanged="@(value => Update(State with { TagId = value }))" Clearable="true" />
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudTextField T="string" Label="Domain search" Value="State.Search" ValueChanged="@(value => Update(State with { Search = value }))" Immediate="true" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
                 <SearchableSelect TValue="string" Label="Report status" Options="@(Options(Rows.Select(row => row.Status)))"
@@ -89,7 +102,7 @@
                 }
             }
         </MudGrid>
-        <MudButton Class="mt-3" OnClick="Clear" StartIcon="@Icons.Material.Filled.ClearAll">Clear all filters</MudButton>
+        <MudButton Class="mt-3" OnClick="Clear" StartIcon="@Icons.Material.Filled.ClearAll">Clear filters</MudButton>
     </MudPaper>
 </MudCollapse>
 
@@ -101,6 +114,19 @@
     [Parameter] public IReadOnlyCollection<int> ScopedGroupIds { get; set; } = [];
     [Parameter] public IReadOnlyList<DashboardDomainRow> Rows { get; set; } = [];
     [Parameter] public bool Inventory { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    private string SortValue => State.Sort is null ? "" : $"{State.Sort}:{(State.Descending ? "desc" : "asc")}";
+    private static readonly KeyValuePair<string, string>[] SortColumns =
+    [
+        new("name", "Domain"), new("status", "Report status"), new("pass", "Pass rate (30d)"), new("last", "Last report"),
+        new("monitored", "Monitored"), new("target", "Target"), new("dmarc", "DMARC"), new("mta", "MTA-STS"), new("dkim", "DKIM"),
+        new("groups", "Groups"), new("tags", "Tags"), new("reports", "Reports")
+    ];
+    private Task ChangeSort(string value)
+    {
+        var parts = value.Split(':');
+        return Update(State with { Sort = value.Length == 0 ? null : parts[0], Descending = value.Length != 0 && parts[1] == "desc" });
+    }
     [Parameter] public IReadOnlyDictionary<PsaKind, List<SelectOption<string>>> Companies { get; set; } = new Dictionary<PsaKind, List<SelectOption<string>>>();
 
     private int? GroupValue => DashboardGroupChoice.DropdownValue(State.AllMyGroups, State.GroupId, ScopedGroupIds);
@@ -133,7 +159,7 @@
         var (all, group) = DashboardGroupChoice.FromDropdownValue(value);
         return Update(State with { GroupId = group, AllMyGroups = all });
     }
-    private Task Clear() => Update(new DomainListState { GroupedView = State.GroupedView, ShowFilters = true, Sort = State.Sort, Descending = State.Descending, AllMyGroups = true });
+    private Task Clear() => Update(new DomainListState { Search = State.Search, GroupedView = State.GroupedView, ShowFilters = true, Sort = State.Sort, Descending = State.Descending, AllMyGroups = true });
     private Task ChangeCompany(PsaKind psa, string? value)
     {
         var companies = State.Companies is null ? new Dictionary<PsaKind, string>() : new(State.Companies);

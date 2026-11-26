@@ -41,6 +41,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     private int _loadVersion;
     private bool _loading;
     private bool _focusAddDomain;
+    private bool _showAddDomain;
     private bool _canBulkDns;
     private bool _checkingProviders, _canCheckProviders;
     private int _providersChecked, _providerCheckTotal;
@@ -111,6 +112,7 @@ public partial class DomainWorkspace : IAsyncDisposable
 
     private void ReadQuery()
     {
+        if (new Uri(Navigation.Uri).Fragment == "#add-domain") _showAddDomain = true;
         try
         {
             var linked = DomainListState.FromQuery(new Uri(Navigation.Uri));

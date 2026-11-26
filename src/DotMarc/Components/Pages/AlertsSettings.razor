@@ -66,13 +66,21 @@ else
 <MudPaper Class="pa-4 mt-4">
     <div class="d-flex align-center flex-wrap mb-1" style="gap: 0.5rem;">
         <MudText Typo="Typo.h5">Where alerts go</MudText>
-        <MudSpacer />
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditDestinationAsync(null))">Add a destination</MudButton>
     </div>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         A destination is a Teams channel, a Slack channel or a webhook. Each alert rule sends to all of them, or only to the ones it chooses
         on the <MudLink Href="/alerts/rules">Rules tab</MudLink>. PSA tickets are set up on the <MudLink Href="/alerts/psa">PSA tab</MudLink>.
     </MudText>
+    <ListToolbar Label="Alert destination controls" SearchLabel="Search destinations" @bind-Search="_destinationSearch" @bind-Expanded="_showDestinationFilters"
+                 FilterCount="@(_destinationEnabledFilter is null ? 0 : 1)" ClearFilters="@(() => _destinationEnabledFilter = null)">
+        <SortContent><ListNameSort @bind-Descending="_destinationDescending" /></SortContent>
+        <FiltersContent>
+            <MudSelect T="bool?" Label="Status" @bind-Value="_destinationEnabledFilter" Clearable="true">
+                <MudSelectItem T="bool?" Value="true">Enabled</MudSelectItem><MudSelectItem T="bool?" Value="false">Disabled</MudSelectItem>
+            </MudSelect>
+        </FiltersContent>
+        <Actions><MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditDestinationAsync(null))">Add a destination</MudButton></Actions>
+    </ListToolbar>
     @if (_destinations is null)
     {
         <MudProgressCircular Indeterminate="true" />
@@ -90,7 +98,9 @@ else
                 <tr><th>Name</th><th>Kind</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
-                @foreach (var destination in _destinations)
+                @foreach (var destination in (_destinationDescending ? _destinations.OrderByDescending(destination => destination.Name) : _destinations.OrderBy(destination => destination.Name))
+                    .Where(destination => (string.IsNullOrWhiteSpace(_destinationSearch) || destination.Name.Contains(_destinationSearch, StringComparison.OrdinalIgnoreCase))
+                        && (_destinationEnabledFilter is null || destination.Enabled == _destinationEnabledFilter)))
                 {
                     <tr @key="destination.Id">
                         <td>@destination.Name</td>
@@ -133,6 +143,9 @@ else
 </TabbedPage>
 
 @code {
+    private string? _destinationSearch;
+    private bool _showDestinationFilters, _destinationDescending;
+    private bool? _destinationEnabledFilter;
     private IReadOnlyList<TabbedPageTab> _tabs = [];
     private NotificationSettings? _settings;
     private IReadOnlyList<AlertDestinationSummary>? _destinations;

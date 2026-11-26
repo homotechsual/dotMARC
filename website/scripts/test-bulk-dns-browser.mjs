@@ -33,7 +33,9 @@ try {
   await page.getByRole('button', {name: 'All domains', exact: true}).click();
   await page.getByLabel('Domain search', {exact: true}).fill('shop.aurora');
   await page.getByText('1 selected for DNS review', {exact: true}).waitFor();
-  await page.getByRole('button', {name: 'Clear all filters', exact: true}).click();
+  await page.getByRole('button', {name: 'Clear filters', exact: true}).click();
+  assert.equal(await page.getByLabel('Domain search', {exact: true}).inputValue(), 'shop.aurora');
+  await page.getByLabel('Domain search', {exact: true}).fill('');
   await select('aurora-retail.example');
   await page.getByRole('button', {name: 'Recheck selected providers', exact: true}).click();
   await page.getByText(/Provider checks: 2 succeeded, 0 failed, 0 not attempted/).waitFor();
@@ -76,6 +78,7 @@ try {
   const finishedBatch = page.url();
   await page.getByRole('button', {name: 'Create fresh review for unpushed domains', exact: true}).click();
   await page.waitForURL(url => url.toString() !== finishedBatch);
+  await page.waitForFunction(() => document.querySelectorAll('.dns-batch-domain').length === 1);
   assert.equal(await page.locator('.dns-batch-domain').count(), 1);
   await page.getByRole('button', {name: 'Authorize and push checked domains', exact: true}).waitFor();
   await page.setViewportSize({width: 390, height: 844});

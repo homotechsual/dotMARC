@@ -29,18 +29,21 @@
             tokens are redacted.
         </MudAlert>
 
-        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-3">
+        <ListToolbar Label="Server log controls" SearchLabel="Search server logs" @bind-Search="_search" @bind-Expanded="_showFilters"
+                     FilterCount="@(_minimumLevel == LogLevel.Warning ? 0 : 1)" ClearFilters="@(() => _minimumLevel = LogLevel.Warning)">
+            <FiltersContent>
             <MudSelect T="LogLevel" @bind-Value="_minimumLevel" Label="Minimum level" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:210px">
                 <MudSelectItem T="LogLevel" Value="LogLevel.Error">Error and above</MudSelectItem>
                 <MudSelectItem T="LogLevel" Value="LogLevel.Warning">Warning and above</MudSelectItem>
                 <MudSelectItem T="LogLevel" Value="LogLevel.Information">Information and above</MudSelectItem>
             </MudSelect>
-            <MudTextField T="string" @bind-Value="_search" Label="Search" Variant="Variant.Outlined" Margin="Margin.Dense"
-                          Immediate="true" Clearable="true" Style="min-width:260px" />
+            </FiltersContent>
+            <Actions>
             <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="SetAutoRefresh" Label="Auto-refresh" Color="Color.Primary" />
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Refresh">Refresh</MudButton>
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync">Copy shown entries</MudButton>
-        </MudStack>
+            </Actions>
+        </ListToolbar>
 
         @if (entries.Count == 0)
         {
@@ -85,6 +88,7 @@
 
     private LogLevel _minimumLevel = LogLevel.Warning;
     private string? _search;
+    private bool _showFilters;
     private bool _autoRefresh;
     private System.Threading.Timer? _timer;
 

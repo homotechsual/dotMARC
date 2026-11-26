@@ -33,6 +33,19 @@
 }
 else
 {
+    <ListToolbar Label="Alert rule controls" SearchLabel="Search alert rules" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@((_kindFilter is null ? 0 : 1) + (_enabledFilter is null ? 0 : 1))"
+                 ClearFilters="@(() => { _kindFilter = null; _enabledFilter = null; })">
+        <FiltersContent>
+            <MudSelect T="string" Label="Alert kind" @bind-Value="_kindFilter" Clearable="true">
+                @foreach (var kind in _kinds) { <MudSelectItem Value="@kind.Key">@kind.DisplayName</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="bool?" Label="Status" @bind-Value="_enabledFilter" Clearable="true">
+                <MudSelectItem T="bool?" Value="true">On</MudSelectItem><MudSelectItem T="bool?" Value="false">Off</MudSelectItem>
+            </MudSelect>
+        </FiltersContent>
+    </ListToolbar>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">Filtering only changes what is shown. Rule order, reach and processing are unchanged.</MudText>
     @if (_canManage && _deadCount > 0)
     {
         <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
@@ -45,6 +58,7 @@ else
 
     @foreach (var kind in _kinds)
     {
+        if (_kindFilter is not null && _kindFilter != kind.Key) { continue; }
         var rules = RulesOf(kind);
         var reach = kind.HasDomainScope ? AlertRulePresentation.Reach(rules, _domainFacts).ToDictionary(entry => entry.RuleId) : [];
         var description = AlertTypes.Find(kind.Key)?.Description;
@@ -80,6 +94,7 @@ else
                 <tbody>
                     @foreach (var rule in rules)
                     {
+                        if (!Matches(rule)) { continue; }
                         var ruleReach = reach.GetValueOrDefault(rule.Id);
                         <tr @key="rule.Id">
                             @if (_canManage)
@@ -156,6 +171,11 @@ else
 </TabbedPage>
 
 @code {
+    private string? _search, _kindFilter;
+    private bool _showFilters;
+    private bool? _enabledFilter;
+    private bool Matches(AlertRule rule) => (string.IsNullOrWhiteSpace(_search) || rule.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        && (_enabledFilter is null || rule.Enabled == _enabledFilter);
     private IReadOnlyList<TabbedPageTab> _tabs = [];
     private bool _loaded;
     private bool _canManage;

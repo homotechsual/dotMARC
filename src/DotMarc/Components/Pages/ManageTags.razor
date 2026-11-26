@@ -18,7 +18,27 @@
 <MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Domains</MudButton>
 <MudText Typo="Typo.h4">Tags</MudText>
 <MudText Class="mb-4">Tags help filter domains; they never grant access. Enable management in Domains, then expand a domain to assign tags.</MudText>
+<MudTable Items="@(_tags ?? [])" T="TagRow" Filter="Matches">
+<ToolBarContent>
+<ListToolbar Label="Tag controls" SearchLabel="Search tags" Search="@_search" SearchChanged="@(value => _search = value ?? "")"
+             @bind-Expanded="_showFilters" FilterCount="@((_filterColor is null ? 0 : 1) + (_minDomains is null ? 0 : 1))"
+             ClearFilters="@(() => { _filterColor = null; _minDomains = null; })">
+    <SortContent>
+        <ListTableSort TItem="TagRow" @ref="_tableSort" />
+    </SortContent>
+    <Actions><AuthorizeView Policy="TagsAdd">
+        <MudButton OnClick="@(() => _showAdd = !_showAdd)" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   aria-controls="add-tag" aria-expanded="@_showAdd.ToString().ToLowerInvariant()">@(_showAdd ? "Close add tag" : "Add tag")</MudButton>
+    </AuthorizeView></Actions>
+    <FiltersContent>
+        <MudSelect T="Color?" Label="Color" @bind-Value="_filterColor" Clearable="true">
+            @foreach (var color in TagManagementService.AllowedColors) { <MudSelectItem T="Color?" Value="color">@color</MudSelectItem> }
+        </MudSelect>
+        <MudNumericField T="int?" Label="Minimum domains" @bind-Value="_minDomains" Min="0" />
+    </FiltersContent>
+</ListToolbar>
 <AuthorizeView Policy="TagsAdd">
+    <div id="add-tag" hidden="@(!_showAdd)">
     <div class="domain-list-toolbar mb-4">
         <MudTextField T="string" Label="Tag name" @bind-Value="_name" />
         <MudSelect T="Color" Label="Color" @bind-Value="_color">
@@ -26,25 +46,13 @@
         </MudSelect>
         <MudButton OnClick="AddAsync" Disabled="@(!RendererInfo.IsInteractive)" Variant="Variant.Filled" Color="Color.Primary">Add tag</MudButton>
     </div>
+    </div>
 </AuthorizeView>
-<MudButton OnClick="@(() => _showFilters = !_showFilters)" aria-expanded="@_showFilters.ToString().ToLowerInvariant()">Filters</MudButton>
-<MudCollapse Expanded="_showFilters">
-    <MudGrid Class="mb-3">
-        <MudItem xs="12" sm="4"><MudTextField T="string" Label="Name contains" @bind-Value="_search" Immediate="true" /></MudItem>
-        <MudItem xs="12" sm="4"><MudSelect T="Color?" Label="Color" @bind-Value="_filterColor" Clearable="true">
-            @foreach (var color in TagManagementService.AllowedColors) { <MudSelectItem T="Color?" Value="color">@color</MudSelectItem> }
-        </MudSelect></MudItem>
-        <MudItem xs="12" sm="4"><MudNumericField T="int?" Label="Minimum domains" @bind-Value="_minDomains" Min="0" /></MudItem>
-    </MudGrid>
-</MudCollapse>
-@if (_tags is null) { <MudProgressCircular Indeterminate="true" /> }
-else
-{
-    <MudTable Items="_tags" T="TagRow" Filter="Matches">
+</ToolBarContent>
         <HeaderContent>
-            <MudTh>Preview</MudTh><MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(tag => tag.Name)">Name</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(tag => tag.Color)">Color</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<TagRow, object>(tag => tag.Count)">Domains</MudTableSortLabel></MudTh><MudTh></MudTh>
+            <MudTh>Preview</MudTh><MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Name" SortBy="new Func<TagRow, object>(tag => tag.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Color" SortBy="new Func<TagRow, object>(tag => tag.Color)">Color</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domains" SortBy="new Func<TagRow, object>(tag => tag.Count)">Domains</MudTableSortLabel></MudTh><MudTh></MudTh>
         </HeaderContent>
         <RowTemplate Context="tag">
             <MudTd><MudChip T="string" Color="tag.Color">@tag.Name</MudChip></MudTd>
@@ -63,15 +71,17 @@ else
         </RowTemplate>
         <NoRecordsContent><MudText>No matching tags.</MudText></NoRecordsContent>
     </MudTable>
-}
 
 @code {
+    private ListTableSort<TagRow>? _tableSort;
+    private Task RefreshSort(SortDirection _) => _tableSort?.RefreshAsync() ?? Task.CompletedTask;
     private List<TagRow>? _tags;
     private string _name = "", _search = "";
     private Color _color = Color.Primary;
     private Color? _filterColor;
     private int? _minDomains;
     private bool _showFilters;
+    private bool _showAdd;
     private sealed record TagRow(int Id, string Name, Color Color, int Count);
     protected override async Task OnInitializedAsync() => await LoadAsync();
     private async Task LoadAsync()
