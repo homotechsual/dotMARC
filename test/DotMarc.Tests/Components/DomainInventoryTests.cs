@@ -207,6 +207,7 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.DoesNotContain(">Add domain<", html);
         Assert.DoesNotContain(">Import domains<", html);
         Assert.DoesNotContain("aria-label=\"Monitor ", html);
+        Assert.DoesNotContain("Recheck selected providers", html);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "aria-controls=\"domain-filters\"").Cast<object>());
     }
 
@@ -255,7 +256,9 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.Contains("data-domain-link", await client.GetStringAsync("/domains"));
         Assert.Contains("Show management columns", await client.GetStringAsync("/domains"));
         Assert.Contains("Review selected DNS", await client.GetStringAsync("/domains"));
+        Assert.Contains("Recheck selected providers", await client.GetStringAsync("/domains"));
         Assert.DoesNotContain("Review selected DNS", dashboard);
+        Assert.DoesNotContain("Recheck selected providers", dashboard);
     }
 
     [Theory]

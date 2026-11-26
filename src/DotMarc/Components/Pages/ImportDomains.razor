@@ -18,6 +18,7 @@
 @inject IMxHostsLookup MxHostsLookup
 @inject ISnackbar Snackbar
 @inject ILogger<ImportDomains> Logger
+@inject DotMarc.DnsPush.DnsProviderCheckService ProviderChecks
 
 <AppPageTitle>dotMARC - Import domains</AppPageTitle>
 <MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -37,7 +38,7 @@
 {
     <MudAlert Severity="Severity.Success" Class="mb-3">
         Added @_result.Added, updated @_result.Updated, @_result.Unchanged unchanged, skipped @_result.SkippedExisting already monitored
-        and @_result.Invalid invalid. Health checks run for the new domains within the next polling cycle.
+        and @_result.Invalid invalid. DNS provider detection is attempted immediately; other health checks run within the next polling cycle.
     </MudAlert>
     <MudTable Items="_result.Rows" Dense="true" Hover="true" RowsPerPage="50">
         <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>What happened</MudTh></HeaderContent>
@@ -46,8 +47,9 @@
     </MudTable>
     <div class="d-flex mt-3" style="gap:0.5rem">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/domains">Go to Inventory</MudButton>
-        <MudButton Variant="Variant.Outlined" OnClick="StartOver">Import more</MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="StartOver" Disabled="_busy">Import more</MudButton>
     </div>
+    @if (_busy) { <MudText role="status">Checking DNS providers for newly imported domains...</MudText> }
 }
 else if (_plan is null)
 {
@@ -353,6 +355,31 @@ else
         {
             _busy = false;
         }
+        if (_result is { } imported) await CheckImportedProvidersAsync(imported);
+    }
+
+    private async Task CheckImportedProvidersAsync(ImportResult imported)
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var names = imported.Rows.Where(row => row.Outcome == "Added").Select(row => row.Domain).ToArray();
+            var ids = await db.Domains.Where(domain => names.Contains(domain.Name)).Select(domain => domain.Id).ToListAsync();
+            var failures = 0;
+            foreach (var id in ids)
+            {
+                var scope = DotMarc.Portal.PortalData.ScopedGroupIds((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+                if (!(await ProviderChecks.CheckAsync(id, scope)).Succeeded) failures++;
+            }
+            if (failures > 0) Snackbar.Add($"Import saved, but provider detection failed for {failures} domains. Recheck their providers from Inventory.", Severity.Warning);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Provider detection after import failed");
+            Snackbar.Add("Import saved, but provider detection did not finish. Recheck providers from Inventory.", Severity.Warning);
+        }
+        finally { _busy = false; }
     }
 
     private void StartOver()

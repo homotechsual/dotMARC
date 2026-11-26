@@ -6,7 +6,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 
 <AppPageTitle>dotMARC - @(Inventory ? "Domain Inventory" : "Dashboard")</AppPageTitle>
-<div class="domain-list-toolbar mb-3">
+<div class="domain-list-toolbar domain-dns-toolbar mb-3">
     <MudText Typo="Typo.h4">@(Inventory ? "Domain Inventory" : "Dashboard")</MudText>
     <MudButton Href="@(Inventory ? "/dashboard" : _state.ToUrl("/domains"))" StartIcon="@(Inventory ? Icons.Material.Filled.Dashboard : Icons.Material.Filled.Language)">
         @(Inventory ? "Dashboard" : "Domain Inventory")
@@ -63,11 +63,27 @@ else
         {
             <div class="domain-list-toolbar mb-3">
                 <MudText Typo="Typo.body2" role="status">@_selectedDnsDomains.Count selected for DNS review</MudText>
-                <MudButton OnClick="@(() => _selectedDnsDomains.UnionWith(_rows.Select(row => row.Id)))" Disabled="@(!RendererInfo.IsInteractive || _rows.Count == 0)">Select matching domains</MudButton>
-                <MudButton OnClick="@(() => _selectedDnsDomains.Clear())" Disabled="@(_selectedDnsDomains.Count == 0)">Clear selection</MudButton>
+                <MudButton OnClick="@(() => _selectedDnsDomains.UnionWith(_rows.Select(row => row.Id)))" Disabled="@(_checkingProviders || !RendererInfo.IsInteractive || _rows.Count == 0)">Select matching domains</MudButton>
+                <MudButton OnClick="@(() => _selectedDnsDomains.Clear())" Disabled="@(_checkingProviders || _selectedDnsDomains.Count == 0)">Clear selection</MudButton>
+                @if (_canCheckProviders)
+                {
+                    <MudButton OnClick="RecheckSelectedProvidersAsync" StartIcon="@Icons.Material.Filled.Refresh"
+                               Disabled="@(_checkingProviders || !RendererInfo.IsInteractive || _selectedDnsDomains.Count == 0)">Recheck selected providers</MudButton>
+                }
                 <MudButton OnClick="ReviewSelectedDnsAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
-                           Disabled="@(!RendererInfo.IsInteractive || _selectedDnsDomains.Count == 0)">Review selected DNS</MudButton>
+                           Disabled="@(_checkingProviders || !RendererInfo.IsInteractive || _selectedDnsDomains.Count == 0)">Review selected DNS</MudButton>
+                @if (_checkingProviders) { <MudText role="status">Checking providers: @_providersChecked of @_providerCheckTotal</MudText> }
             </div>
+            @if (!_checkingProviders && _providerCheckTotal > 0)
+            {
+                <MudAlert Severity="@(_providerCheckResults.Any(result => !result.Succeeded) || _providersChecked < _providerCheckTotal ? Severity.Warning : Severity.Success)" Class="mb-3">
+                    Provider checks: @_providerCheckResults.Count(result => result.Succeeded) succeeded, @_providerCheckResults.Count(result => !result.Succeeded) failed, @(_providerCheckTotal - _providersChecked) not attempted. DNS records were not changed.
+                    @foreach (var failure in _providerCheckResults.Where(result => !result.Succeeded))
+                    {
+                        <MudText Typo="Typo.body2">@(failure.DomainName.Length > 0 ? failure.DomainName : $"Domain {failure.DomainId}"): @failure.Error</MudText>
+                    }
+                </MudAlert>
+            }
         }
         <MudSwitch T="bool" @bind-Value="_management" Label="Show management columns" Color="Color.Primary" />
         @if (_management && !CanReorder)

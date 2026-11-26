@@ -168,6 +168,14 @@ html:has(.dev-build-banner) .mud-main-content {
     gap: 0.75rem;
 }
 .domain-percentage { white-space: nowrap; }
+.domain-dns-toolbar {
+    position: sticky;
+    top: calc(var(--mud-appbar-height) + var(--dev-banner-height, 0px));
+    z-index: 1100;
+    padding: 0.75rem;
+    background: var(--mud-palette-surface);
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
 .domain-inventory .mud-input-control { min-width: 10rem; }
 .domain-filter-bar > span { min-width: 0; overflow-wrap: anywhere; }
 .domain-sort {

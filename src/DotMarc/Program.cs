@@ -338,6 +338,7 @@ builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushBatchQueue>();
 builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchCallback>();
 builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchRunner>();
 builder.Services.AddHostedService<DotMarc.DnsPush.DnsPushBatchWorker>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsProviderCheckService>();
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {

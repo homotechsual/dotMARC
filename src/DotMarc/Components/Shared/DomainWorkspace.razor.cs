@@ -31,6 +31,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     [Inject] private ILogger<DomainWorkspace> Logger { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private TimeProvider Clock { get; set; } = null!;
+    [Inject] private DnsProviderCheckService ProviderChecks { get; set; } = null!;
 
     private DomainListState _state = new();
     private string? _userKey, _error;
@@ -41,6 +42,10 @@ public partial class DomainWorkspace : IAsyncDisposable
     private bool _loading;
     private bool _focusAddDomain;
     private bool _canBulkDns;
+    private bool _checkingProviders, _canCheckProviders;
+    private int _providersChecked, _providerCheckTotal;
+    private readonly List<DnsProviderCheckOutcome> _providerCheckResults = [];
+    private readonly CancellationTokenSource _providerChecksStop = new();
     private readonly HashSet<int> _selectedDnsDomains = [];
     private IReadOnlyCollection<int> _scope = [];
     private List<Group> _groups = [];
@@ -185,6 +190,7 @@ public partial class DomainWorkspace : IAsyncDisposable
             _domainsById = domains.ToDictionary(domain => domain.Id); _reportCounts = counts; _settings = settings; _parseFailures = parseFailures;
             _canReorder = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsReorder))).Succeeded;
             _canBulkDns = !ClientPortalGate.IsPortalUser(user) && (canEdit || (await Authorization.AuthorizeAsync(user, nameof(Permission.MtaStsManage))).Succeeded);
+            _canCheckProviders = !ClientPortalGate.IsPortalUser(user) && canEdit;
             if (!_canBulkDns) _selectedDnsDomains.Clear();
             _psaLists = lists;
             _companyOptions = domains.SelectMany(domain => domain.PsaCompanyLinks).Select(link => link.Psa).Concat(lists.Select(list => list.Psa)).Distinct().ToDictionary(
@@ -257,6 +263,42 @@ public partial class DomainWorkspace : IAsyncDisposable
     private Task ReviewSelectedDnsAsync() => Dialogs.ShowAsync<DnsPushSelectionDialog>("Review DNS push",
         new DialogParameters<DnsPushSelectionDialog> { { dialog => dialog.DomainIds, _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).ToArray() } },
         new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+
+    private async Task RecheckSelectedProvidersAsync()
+    {
+        if (_checkingProviders) return;
+        var ids = _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).Distinct().ToArray();
+        _checkingProviders = true;
+        _providersChecked = 0;
+        _providerCheckTotal = ids.Length;
+        _providerCheckResults.Clear();
+        try
+        {
+            foreach (var id in ids)
+            {
+                var user = (await Authentication.GetAuthenticationStateAsync()).User;
+                if (ClientPortalGate.IsPortalUser(user) || !(await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded)
+                {
+                    Snackbar.Add("Provider checks stopped: you no longer have permission to edit domains.", Severity.Warning);
+                    break;
+                }
+                _providerCheckResults.Add(await ProviderChecks.CheckAsync(id, PortalData.ScopedGroupIds(user), _providerChecksStop.Token));
+                _providersChecked++;
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) when (_providerChecksStop.IsCancellationRequested) { }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Bulk DNS provider recheck failed");
+            Snackbar.Add("Provider checks stopped. Completed checks were saved; refresh and retry the remaining domains.", Severity.Error);
+        }
+        finally
+        {
+            _checkingProviders = false;
+            if (!_disposed) await LoadAsync();
+        }
+    }
 
     private Task SortAsync(string key) => ChangeFiltersAsync(_state with
     {
@@ -421,6 +463,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _disposed = true; Navigation.LocationChanged -= LocationChanged;
+        await _providerChecksStop.CancelAsync();
         if (_memory is null) return;
         try { await _memory.InvokeVoidAsync("leave"); await _memory.DisposeAsync(); }
         catch (JSDisconnectedException) { }

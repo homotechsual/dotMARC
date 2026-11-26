@@ -27,6 +27,8 @@ All three providers are independently optional and configured the same way regar
 
 On **Inventory**, select domains using their **Select for DNS** checkboxes, or choose **Select matching domains**. Selection is shared between All domains and By group, including domains listed in several groups. Sorting keeps the selection; filtering or losing access removes hidden IDs with a notification. Dashboard has no bulk selection.
 
+The selection toolbar stays below the app bar while scrolling. **Recheck selected providers** runs read-only provider/zone detection immediately for domain editors, saves each result and refreshes Inventory before DNS review. It reports successes, failures and checks not attempted. No provider sign-in or DNS write is involved. New domains added through the shared form or Import also attempt provider detection immediately after creation, rather than waiting behind the mailbox and other health checks in the scheduled polling cycle.
+
 Choose **Review selected DNS**, select **DMARC**, **TLS reporting** or **MTA-STS hosting**, then choose a provider. Each provider has a separate batch, limited to 50 distinct domains. Domains with no detected provider or no configured push option are listed for manual setup instead; their Overview has individual manual DNS controls.
 
 The review page stores the exact additions, removals and warnings for every domain, so refreshing does not silently substitute a new plan. Already-correct and refused domains are shown but not pushed. A CNAME delegation is unchecked by default and requires an explicit check for that domain because replacing it ends the delegation.
@@ -156,6 +158,10 @@ After you click **Continue** on that step, a **second** step appears listing the
 ]} />
 
 ## Azure DNS
+
+An Azure sign-in authorizes dotMARC to act as that user, not as a subscription administrator. The current provider reuses one ARM access token, enumerates subscriptions visible to that token and searches their DNS zones by name. The user needs sufficient access for zone discovery and record writes, such as DNS Zone Contributor at the appropriate scope. Azure enforces RBAC on the actual record operations; consent to `user_impersonation` does not grant Azure roles.
+
+One batch can cover accessible subscriptions in that token's tenant context. A multitenant app registration permits customers from different tenants to sign in separately; it does not make one login token cover every tenant the account belongs to. Different customer tenants need separate authorizations. The current provider does not perform an explicit per-zone write-permission preflight, and an inaccessible subscription's listing request can fail discovery for that domain. A successful sign-in is not a guarantee that every selected zone can be published.
 
 Register a *third*, separate Entra app registration (do not reuse the mailbox or dashboard app from [your deployment's Entra setup](./getting-started.mdx#choose-how-to-run-it)). Go to **App registrations** → **New registration**, set **Supported account types** to the multitenant option (accounts in any organizational directory) - this flow lets each customer authorize a push into *their own* tenant, which is a different tenant than the one this app registration lives in, so it must not be restricted to a single tenant. Then **Authentication** → add a **Web** redirect URI of `https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API permissions** → add the delegated **Azure Service Management** → `user_impersonation` permission.
 

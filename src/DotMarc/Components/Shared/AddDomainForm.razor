@@ -11,6 +11,7 @@
 @inject ISnackbar Snackbar
 @inject ILogger<AddDomainForm> Logger
 @inject NavigationManager Navigation
+@inject DotMarc.DnsPush.DnsProviderCheckService ProviderChecks
 
 <AuthorizeView Policy="DomainsAdd">
     @if (!_portal)
@@ -80,7 +81,7 @@
             @if (_addedName is not null)
             {
                 <MudAlert Severity="Severity.Success" Class="mt-2" role="status">
-                    Added @_addedName. Health checks run within the next polling cycle.
+                    Added @_addedName. DNS provider detection was attempted immediately; other health checks run within the next polling cycle.
                     <MudLink Href="@($"/domains/{Uri.EscapeDataString(_addedName)}")">View domain</MudLink>
                 </MudAlert>
             }
@@ -219,6 +220,20 @@
         finally { _adding = false; }
         if (added is not null)
         {
+            _adding = true;
+            try
+            {
+                await using var checkDb = await DbFactory.CreateDbContextAsync();
+                var id = await checkDb.Domains.Where(domain => domain.Name == added).Select(domain => domain.Id).SingleAsync();
+                var outcome = await ProviderChecks.CheckAsync(id, PortalData.ScopedGroupIds((await Authentication.GetAuthenticationStateAsync()).User));
+                if (!outcome.Succeeded) Snackbar.Add($"Domain added, but DNS provider detection did not complete: {outcome.Error}", Severity.Warning);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+            {
+                Logger.LogWarning(exception, "Initial DNS provider detection failed for {Domain}", added);
+                Snackbar.Add("Domain added, but its DNS provider could not be checked. Use Inventory's provider recheck to retry.", Severity.Warning);
+            }
+            finally { _adding = false; }
             if (_openDomain) Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(added)}?setup=true");
             else await Added.InvokeAsync(added);
         }

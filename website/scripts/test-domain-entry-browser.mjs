@@ -85,6 +85,7 @@ try {
   await advancedForm.getByLabel('MTA-STS max age (seconds)', {exact: true}).fill('86400');
   await advancedForm.getByRole('button', {name: 'Add domain', exact: true}).click();
   await page.waitForURL(`${base}/domains/${advancedName}?setup=true`);
+  await page.locator('.dotmarc-health-row').filter({has: page.getByText('DNS provider', {exact: true})}).getByText(/^Checked:/).waitFor();
   await page.getByText('Next: set up DNS', {exact: true}).waitFor();
   await page.getByRole('button', {name: 'Review DNS setup', exact: true}).waitFor();
   await page.reload();
@@ -127,10 +128,13 @@ try {
   await page.getByRole('button', {name: 'Preview', exact: true}).click();
   await page.getByRole('button', {name: 'Import: add 1, update 0', exact: true}).click();
   await page.getByText(/Added 1, updated 0/).waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button =>
+    button.textContent.trim() === 'Import more' && !button.disabled));
   assert.equal(await page.locator('#add-domain').count(), 0);
   await page.goto(`${base}/domains/bulk-preview-${stamp}.example`);
   await page.locator('.domain-groups .mud-typography-body2').waitFor();
   assert.equal(await page.locator('.domain-groups .mud-typography-body2').innerText(), 'No groups assigned in your scope.');
+  await page.locator('.dotmarc-health-row').filter({has: page.getByText('DNS provider', {exact: true})}).getByText(/^Checked:/).waitFor();
 
   await page.request.post(`${base}/demo/sign-in/viewer`);
   for (const path of ['/dashboard', '/domains']) {

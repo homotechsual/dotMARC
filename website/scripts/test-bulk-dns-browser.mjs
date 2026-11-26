@@ -35,6 +35,16 @@ try {
   await page.getByText('1 selected for DNS review', {exact: true}).waitFor();
   await page.getByRole('button', {name: 'Clear all filters', exact: true}).click();
   await select('aurora-retail.example');
+  await page.getByRole('button', {name: 'Recheck selected providers', exact: true}).click();
+  await page.getByText(/Provider checks: 2 succeeded, 0 failed, 0 not attempted/).waitFor();
+  await page.locator('.domain-inventory').last().scrollIntoViewIfNeeded();
+  const sticky = await page.locator('.domain-dns-toolbar').evaluate(node => ({
+    top: node.getBoundingClientRect().top,
+    expected: parseFloat(getComputedStyle(node).top),
+    position: getComputedStyle(node).position
+  }));
+  assert.equal(sticky.position, 'sticky');
+  assert(Math.abs(sticky.top - sticky.expected) <= 1);
   await select('brightline-legal.example');
   await page.getByRole('button', {name: 'Review selected DNS', exact: true}).click();
   await page.getByRole('dialog').getByText(/Set up manually:/).waitFor();
@@ -78,6 +88,7 @@ try {
   await ready();
   assert.equal(await page.getByRole('button', {name: 'Review selected DNS', exact: true}).count(), 0);
   assert.equal(await page.getByRole('checkbox', {name: /^Select .* for DNS review$/}).count(), 0);
+  assert.equal(await page.getByRole('button', {name: 'Recheck selected providers', exact: true}).count(), 0);
   await page.goto(firstBatch);
   await page.getByText('That DNS batch is unavailable or belongs to another person.', {exact: false}).waitFor();
   assert.equal(await page.getByRole('button', {name: 'Authorize and push checked domains', exact: true}).count(), 0);
