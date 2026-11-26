@@ -18,6 +18,16 @@ DMARC doesn't do anything on its own - it's a policy layer on top of two older m
 
 A message can fail SPF or DKIM individually and still pass DMARC (it only needs one of the two to align with the visible From: domain) - which is exactly why DMARC aggregate reports are useful: they show you real-world pass/fail combinations you'd otherwise never see.
 
+### Report-observed DKIM selectors
+
+Open a domain's **Overview > DKIM > Configure selectors** to see selectors observed in its retained DMARC report authentication details. Only DKIM signatures whose signing domain exactly matches the monitored domain are included (case and a trailing DNS dot are ignored). A parent, child or third-party signing domain is not counted, even if DMARC relaxed alignment would accept it.
+
+Each suggestion shows the number of messages that used the selector and the latest report period end in UTC, not the time dotMARC received the report. Duplicate signatures using the same selector in one aggregate record count its messages only once. A message signed with different selectors can contribute to each selector's count. Failed signatures are included as evidence of use, not proof that the key is currently valid.
+
+Choose **Add selector** to append it to the editable draft without replacing your existing selectors or stored records. Nothing is saved until **Save**, and **Cancel** discards the additions. Existing selectors are not automatically removed or refreshed from reports; manual configuration stays authoritative. Empty or malformed selectors are not suggested. Old reports without parsed authentication details, or domains without reports, may have no suggestions.
+
+This is not provider-wide key discovery, automatic selector maintenance or a DNS publishing action. Known inbox-provider prefills for an empty selector list remain editable independently of report evidence.
+
 ## The DMARC record
 
 The record that turns monitoring on is a TXT record at `_dmarc.<domain>`:

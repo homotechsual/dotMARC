@@ -1686,11 +1686,28 @@ else
 
     private async Task OpenDkimSelectorsDialogAsync()
     {
+        IReadOnlyList<DkimObservedSelector> observed = [];
+        string? suggestionsError = null;
+        await using (var suggestionsDb = await DbFactory.CreateDbContextAsync())
+        {
+            if (!await MayChangeDomainAsync(suggestionsDb, Permission.DomainsEdit)) return;
+            try
+            {
+                observed = await DkimObservedSelectors.GetAsync(suggestionsDb, _domain!.Id);
+            }
+            catch (Exception exception) when (exception is Npgsql.NpgsqlException or InvalidOperationException)
+            {
+                Logger.LogWarning(exception, "Loading observed DKIM selectors for domain {DomainId} failed", _domain!.Id);
+                suggestionsError = "Could not load report-observed suggestions. Manual selector editing is still available.";
+            }
+        }
         var parameters = new DialogParameters<ConfigureDkimSelectorsDialog>
         {
             { x => x.DomainName, DomainName },
             { x => x.CurrentSelectors, _domain!.DkimSelectors },
             { x => x.CurrentRecords, _domain!.DkimRecords },
+            { x => x.ObservedSelectors, observed },
+            { x => x.SuggestionsError, suggestionsError },
             { x => x.DetectedInboxProvider, _detectedMailServices.FirstOrDefault(s => s.Kind == DetectedMailServiceKind.Inbox)?.ProviderName }
         };
         var dialogRef = await DialogService.ShowAsync<ConfigureDkimSelectorsDialog>("Configure DKIM selectors", parameters);
@@ -1702,6 +1719,7 @@ else
 
         var dialogResult = (ConfigureDkimSelectorsDialog.DkimSelectorsDialogResult)result.Data!;
         await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
         var actor = await AuditActorAccessor.GetAsync();
         await DomainManagementService.SetDkimSelectorsAsync(db, actor, _domain!.Id, dialogResult.Selectors, CancellationToken.None);
         try
