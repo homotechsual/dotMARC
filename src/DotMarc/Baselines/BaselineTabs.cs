@@ -15,8 +15,8 @@ public static class BaselineTabs
 
     public static IReadOnlyList<TabbedPageTab> For(ClaimsPrincipal user, bool canManageBaselines, bool canReviewSenders) =>
     [
-        new TabbedPageTab("Sender", SenderHref, canReviewSenders && SenderDecisionAccess.MayChangeBaseline(user)),
         new TabbedPageTab("Domain", DomainHref, canManageBaselines),
+        new TabbedPageTab("Sender", SenderHref, canReviewSenders && SenderDecisionAccess.MayChangeBaseline(user)),
     ];
 
     /// <summary>The same list, after making the policy checks. Every page that shows the tabs, and the menu, calls this so the checks live in one place.</summary>

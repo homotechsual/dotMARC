@@ -62,11 +62,11 @@ public sealed class BaselinesPagesTests
         Assert.Equal(["/baselines"], Routes(typeof(BaselinesIndex)));
 
     [Fact]
-    public void AnUnlimitedPersonWithBothPermissions_SeesSenderThenDomain()
+    public void AnUnlimitedPersonWithBothPermissions_SeesDomainThenSender()
     {
         var tabs = BaselineTabs.For(User(portal: false), canManageBaselines: true, canReviewSenders: true);
 
-        Assert.Equal([("Sender", "/baselines/sender", true), ("Domain", "/baselines/domain", true)],
+        Assert.Equal([("Domain", "/baselines/domain", true), ("Sender", "/baselines/sender", true)],
             tabs.Select(tab => (tab.Title, tab.Href, tab.Visible)));
     }
 
@@ -95,7 +95,7 @@ public sealed class BaselinesPagesTests
     }
 
     [Theory]
-    [InlineData(new[] { "BaselinesManage", "SenderReview" }, new[] { "Sender", "Domain" })]
+    [InlineData(new[] { "BaselinesManage", "SenderReview" }, new[] { "Domain", "Sender" })]
     [InlineData(new[] { "BaselinesManage" }, new[] { "Domain" })]
     [InlineData(new[] { "SenderReview" }, new[] { "Sender" })]
     [InlineData(new string[0], new string[0])]
@@ -120,10 +120,12 @@ public sealed class BaselinesPagesTests
         var senderHidden = BaselineTabs.For(User(portal: false, 3), canManageBaselines: true, canReviewSenders: true);
         var nothingVisible = BaselineTabs.For(User(portal: true), canManageBaselines: false, canReviewSenders: false);
         var both = BaselineTabs.For(User(portal: false), canManageBaselines: true, canReviewSenders: true);
+        var onlySender = BaselineTabs.For(User(portal: false), canManageBaselines: false, canReviewSenders: true);
 
         Assert.Equal(BaselineTabs.DomainHref, BaselineTabs.FirstVisible(senderHidden)?.Href);
         Assert.Null(BaselineTabs.FirstVisible(nothingVisible));
-        Assert.Equal(BaselineTabs.SenderHref, BaselineTabs.FirstVisible(both)?.Href);
+        Assert.Equal(BaselineTabs.DomainHref, BaselineTabs.FirstVisible(both)?.Href);
+        Assert.Equal(BaselineTabs.SenderHref, BaselineTabs.FirstVisible(onlySender)?.Href);
     }
 
     [Theory]

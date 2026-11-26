@@ -44,6 +44,48 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         return client;
     }
 
+    [Theory]
+    [InlineData("admin", true)]
+    [InlineData("viewer", false)]
+    public async Task OverviewOffersScopedGroupAndSenderControlsOnlyToEditors(string persona, bool editor)
+    {
+        using var client = await SignInAsync(persona);
+        var overview = await client.GetStringAsync("/domains/aurora-retail.example");
+        Assert.Contains("domain-groups", overview);
+        Assert.Equal(editor, overview.Contains(">Change groups<", StringComparison.Ordinal));
+        Assert.Equal(editor, overview.Contains("Review sender decisions for aurora-retail.example", StringComparison.Ordinal));
+        if (!editor)
+        {
+            Assert.Contains("View sender evidence for aurora-retail.example", overview);
+            Assert.Contains("a sender reviewer must record decisions", overview);
+        }
+        var sources = await client.GetStringAsync("/domains/aurora-retail.example/sources");
+        Assert.Contains("Source IPs &amp; evidence", sources);
+        Assert.Contains("Show source IPs and evidence for", sources);
+        Assert.Equal(editor, sources.Contains("Decide on service", StringComparison.Ordinal) || sources.Contains("Change decision for service", StringComparison.Ordinal));
+        if (!editor) Assert.Contains("You do not have permission to change decisions", sources);
+    }
+
+    [Fact]
+    public async Task ScopedOverviewEditorSeesOnlyAccessibleMembershipNames()
+    {
+        using var client = await SignInAsync("viewer");
+        var factory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var person = await db.UserAccesses.Include(user => user.Role).SingleAsync(user => user.Email == DemoDataSeeder.ViewerEmail);
+        person.Role.Permissions.Add(Permission.DomainsEdit);
+        var domain = await db.Domains.Include(candidate => candidate.Groups).SingleAsync(candidate => candidate.Name == "shop.aurora-retail.example");
+        domain.Groups.Add(await db.Groups.SingleAsync(group => group.Name == "Cobalt Freight"));
+        await db.SaveChangesAsync();
+
+        var overview = await client.GetStringAsync("/domains/shop.aurora-retail.example");
+        Assert.Contains(">Change groups<", overview);
+        Assert.Contains(">Aurora Retail</p>", overview);
+        var groups = overview[overview.IndexOf("domain-groups", StringComparison.Ordinal)..overview.IndexOf(">Change groups<", StringComparison.Ordinal)];
+        Assert.DoesNotContain("Cobalt Freight", groups);
+        Assert.Contains("View sender evidence for shop.aurora-retail.example", overview);
+    }
+
     [Fact]
     public async Task NullDomainDkimLabelsRemainVisibleAndDoNotOfferSendingKeyPush()
     {

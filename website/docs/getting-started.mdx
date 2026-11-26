@@ -125,6 +125,10 @@ Sources that match no known service are listed last as **Not matched to a known 
 
 ### Decide which senders are authorised
 
+Overview shows an outlined **Review** action when sender decisions are outstanding, linking directly to Sources. The count uses the same unresolved-decision resolver as Dashboard: recognised services without a service-level decision plus unrecognised IPs without an IP decision. Under review is already a decision. Sources may refine cached Dashboard attribution with live lookups.
+
+On Sources, expand a service's **Source IPs (count)** button to inspect its evidence and individual IP decisions. Each **Decide** or **Change** control names its service or IP for assistive technology. People without `SenderReview` see **View evidence** on Overview and read-only decisions on Sources, not instructions to make changes.
+
 The **Decision** column is where your team records what it has decided about a sender on this domain:
 
 * **Authorised**: it should send as this domain.
@@ -140,6 +144,12 @@ Select **Decide** (or **Change**, once there is a decision) beside the status, p
 * Client reports summarise the decisions, and the [API](./api.mdx) returns each sender's decision.
 
 The row shows who decided and when, and every change is recorded in the [audit log](./audit-log.mdx).
+
+### Change a domain's groups
+
+Overview's **Groups** section shows memberships in your authorised scope. With `DomainsEdit`, use **Change groups**, choose memberships and select **Save groups**. The domain's effective DMARC target and inherited sender decisions update immediately; group changes are recorded in the audit log.
+
+Group-limited editors can select only their own groups, must keep at least one, and cannot remove memberships outside their scope. Access and available groups are checked again on save. The same rules apply to Inventory assignment; scoped API keys also cannot remove a domain from their last accessible group. People without edit permission can view memberships but have no change control.
 
 The **Fix** column changes with the decision:
 

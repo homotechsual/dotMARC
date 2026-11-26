@@ -21,6 +21,8 @@ try {
     await page.getByLabel('Policy (p)', {exact: true}).click();
     await page.getByRole('option', {name: label, exact: true}).click();
   };
+  await page.evaluate(() => Blazor.navigateTo('/baselines'));
+  await page.waitForURL(`${base}/baselines/domain`);
   await enter('/baselines/domain');
   const steps = page.locator('.baseline-step');
   assert((await steps.nth(0).innerText()).includes('Set the default'));

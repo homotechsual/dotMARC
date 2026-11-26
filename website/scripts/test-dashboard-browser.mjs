@@ -103,6 +103,7 @@ try {
   await viewer.request.post(`${base}/demo/sign-in/viewer`);
   await viewer.goto(`${base}/dashboard?group=all`);
   await viewer.locator('.dashboard-metric').first().waitFor();
+  await viewer.locator('a[data-domain-link]').first().waitFor();
   const names = await viewer.locator('a[data-domain-link]').allTextContents();
   assert(names.length > 0 && names.every(name => !name.includes('cobalt-freight')));
   assert.equal(await viewer.locator('.dashboard-operations').count(), 0);

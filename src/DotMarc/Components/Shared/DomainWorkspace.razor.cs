@@ -318,14 +318,11 @@ public partial class DomainWorkspace : IAsyncDisposable
     private Task SetGroupsAsync(int id, IEnumerable<int> ids) => MutateAsync(id, Permission.DomainsEdit, async db =>
     {
         var scope = PortalData.ScopedGroupIds((await Authentication.GetAuthenticationStateAsync()).User);
-        var requested = ids.Distinct().ToList();
-        if (scope.Count > 0 && (requested.Count == 0 || requested.Any(group => !scope.Contains(group))))
-        {
-            Snackbar.Add("Keep at least one of your groups. You can only assign your own groups.", Severity.Warning);
-            return;
-        }
-        var hidden = await db.Domains.Where(domain => domain.Id == id).SelectMany(domain => domain.Groups).Where(group => scope.Count > 0 && !scope.Contains(group.Id)).Select(group => group.Id).ToListAsync();
-        await GroupManagementService.SetDomainGroupsAsync(db, await Actor.GetAsync(), id, requested.Concat(hidden).Distinct().ToList());
+        var result = await GroupManagementService.SetScopedDomainGroupsAsync(db, await Actor.GetAsync(), id, scope, ids.ToArray());
+        if (result != GroupManagementService.SetScopedDomainGroupsResult.Updated)
+            Snackbar.Add(result == GroupManagementService.SetScopedDomainGroupsResult.LastAccessibleGroup
+                ? "Keep at least one of your groups."
+                : "The domain or groups are no longer available to you. Reload and try again.", Severity.Warning);
     });
 
     private async Task AddAsync()

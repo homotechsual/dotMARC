@@ -16,6 +16,7 @@
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
+@using DotMarc.Portal
 @inject AuditActorAccessor AuditActorAccessor
 @inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
@@ -64,11 +65,27 @@ else
             </MudGrid>
             @if (UnreviewedSenderCount is > 0 and var unreviewedSenders)
             {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="my-2">
-                    @unreviewedSenders @(unreviewedSenders == 1 ? "sender needs" : "senders need") a decision.
-                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => NavigateToTabAsync("sources"))">Review</MudButton>
-                </MudAlert>
+                <MudPaper Outlined="true" Class="pa-3 my-2 domain-sender-review">
+                    <div class="d-flex align-center" style="gap:12px; flex-wrap:wrap;">
+                        <MudIcon Icon="@Icons.Material.Filled.RateReview" Color="Color.Info" />
+                        <div style="flex:1; min-width:180px;">
+                            <MudText Typo="Typo.subtitle2">@unreviewedSenders @(unreviewedSenders == 1 ? "sender needs" : "senders need") a decision</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@(_canReviewSenders ? "Inspect service and source-IP evidence before deciding." : "You can view the evidence; a sender reviewer must record decisions.")</MudText>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RateReview"
+                                   Href="@($"/domains/{DomainName}/sources")" aria-label="@(_canReviewSenders ? $"Review sender decisions for {DomainName}" : $"View sender evidence for {DomainName}")">@(_canReviewSenders ? "Review" : "View evidence")</MudButton>
+                    </div>
+                </MudPaper>
             }
+            <MudPaper Outlined="true" Class="pa-3 my-3 domain-groups">
+                <MudText Typo="Typo.subtitle1">Groups</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@(_visibleGroupNames.Count == 0 ? "No groups assigned in your scope." : string.Join(", ", _visibleGroupNames))</MudText>
+                @if (_canEditGroups)
+                {
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Workspaces"
+                               Disabled="@(!RendererInfo.IsInteractive || _savingGroups)" OnClick="ChangeGroupsAsync">Change groups</MudButton>
+                }
+            </MudPaper>
             @if (_hasTrend)
             {
                 <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
@@ -448,6 +465,8 @@ else
         <MudTabPanel Text="Sources">
             <SenderServicesTable Result="_senderResult" DecisionFor="DecisionFor" IpDecisionFor="IpDecisionFor" Policy="@(_domain?.DmarcPolicy ?? DmarcPolicyLevel.None)"
                                  GroupNames="_groupNames" CanReview="_canReviewSenders" OnDecide="DecideAsync" />
+            <MudText Typo="Typo.subtitle1">Source IP evidence</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">Per-IP decisions are available by expanding a service's Source IPs above.</MudText>
             <MudTable Items="_sources" Hover="true" T="SourceRow" CustomHeader="true" Filter="SourceMatchesFilters">
                 <ToolBarContent>
                     <MudSpacer />
@@ -628,6 +647,9 @@ else
     private List<SenderDecision> _decisions = [];
     private Dictionary<int, string> _groupNames = [];
     private bool _canReviewSenders;
+    private bool _canEditGroups;
+    private bool _savingGroups;
+    private List<string> _visibleGroupNames = [];
     private EffectiveDmarcTarget? _effectiveTarget;
     private DmarcTargetOutcome _targetOutcome;
     private bool _canChangeTarget;
@@ -649,6 +671,64 @@ else
     private IReadOnlyList<string> _targetReasons = [];
     private List<DmarcRecordProblem> _recordProblems = [];
     private DmarcRecordRepairResult? _suggestedRecord;
+
+    private async Task ChangeGroupsAsync()
+    {
+        if (_domain is null || _savingGroups) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
+        var scope = PortalData.ScopedGroupIds((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        var groups = await db.Groups.AsNoTracking().Where(group => scope.Count == 0 || scope.Contains(group.Id)).OrderBy(group => group.Name).ToListAsync();
+        var current = await db.Domains.Where(domain => domain.Id == _domain.Id).SelectMany(domain => domain.Groups.Select(group => group.Id)).ToListAsync();
+        var dialog = await DialogService.ShowAsync<DomainGroupsDialog>($"Groups for {DomainName}", new DialogParameters<DomainGroupsDialog>
+        {
+            { choice => choice.DomainName, DomainName },
+            { choice => choice.Options, groups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList() },
+            { choice => choice.Selected, current.Where(id => scope.Count == 0 || scope.Contains(id)).ToArray() },
+            { choice => choice.IsScoped, scope.Count > 0 }
+        }, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (await dialog.Result is not { Canceled: false, Data: int[] selected }) return;
+        _savingGroups = true;
+        try
+        {
+            await using var save = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(save, Permission.DomainsEdit)) return;
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var result = await GroupManagementService.SetScopedDomainGroupsAsync(save, await AuditActorAccessor.GetAsync(), _domain.Id, PortalData.ScopedGroupIds(user), selected);
+            if (result != GroupManagementService.SetScopedDomainGroupsResult.Updated)
+            {
+                Snackbar.Add(result == GroupManagementService.SetScopedDomainGroupsResult.LastAccessibleGroup
+                    ? "Keep at least one of your groups."
+                    : "The domain or selected groups are no longer available to you. Reopen Change groups and try again.", Severity.Warning);
+                return;
+            }
+            _domain.Groups = await save.Domains.AsNoTracking().Where(domain => domain.Id == _domain.Id).SelectMany(domain => domain.Groups).ToListAsync();
+            _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
+            var newScope = PortalData.ScopedGroupIds(user);
+            _visibleGroupNames = _domain.Groups.Where(group => newScope.Count == 0 || newScope.Contains(group.Id)).OrderBy(group => group.Name).Select(group => group.Name).ToList();
+            _decisions = await SenderDecisionService.LoadForDomainAsync(save, _domain.Id);
+            _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(user, AuthorizationService, _groupNames.Keys.ToList());
+            await ResolveTargetAsync(save);
+            Snackbar.Add("Domain groups saved.", Severity.Success);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Saving groups for {DomainName} failed.", DomainName);
+            Snackbar.Add("Could not save domain groups. Reload and try again.", Severity.Error);
+        }
+        finally { _savingGroups = false; }
+    }
+
+    private async Task<bool> MayChangeDomainAsync(DotMarcDbContext db, Permission permission)
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var scope = PortalData.ScopedGroupIds(user);
+        var allowed = !ClientPortalGate.IsPortalUser(user)
+            && (await AuthorizationService.AuthorizeAsync(user, permission.ToString())).Succeeded
+            && await db.Domains.AnyAsync(domain => domain.Id == _domain!.Id && (scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id))));
+        if (!allowed) Snackbar.Add("You no longer have permission to change this domain.", Severity.Warning);
+        return allowed;
+    }
 
     private async Task CopySuggestedRecordAsync()
     {
@@ -791,6 +871,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(db, Permission.SenderReview)) return;
             var actor = await AuditActorAccessor.GetAsync();
             if (choice.Reset)
             {
@@ -1007,7 +1088,10 @@ else
         }
 
         _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.SenderReview))).Succeeded;
+        _canEditGroups = !ClientPortalGate.IsPortalUser(authState.User) && (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.DomainsEdit))).Succeeded;
         _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
+        var visibleScope = PortalData.ScopedGroupIds(authState.User);
+        _visibleGroupNames = _domain.Groups.Where(group => visibleScope.Count == 0 || visibleScope.Contains(group.Id)).OrderBy(group => group.Name).Select(group => group.Name).ToList();
         _decisions = await SenderDecisionService.LoadForDomainAsync(db, _domain.Id);
         _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(authState.User, AuthorizationService, _groupNames.Keys.ToList());
         await ResolveTargetAsync(db);

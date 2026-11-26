@@ -11,23 +11,25 @@
                   @onclick="Toggle" />
     <MudPopover Open="_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" RelativeWidth="DropdownWidth.Adaptive"
                 Paper="true" Elevation="8" MaxHeight="360">
-        @* The popover renders outside the wrapper above, so Escape in the search box needs its own handler. *@
-        <div class="px-4 pt-2 pb-1" @onkeydown="OnKeyDown">
-            <MudTextField T="string" @bind-Value="_search" Placeholder="Search" Immediate="true" Margin="Margin.Dense" AutoFocus="true"
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" autocomplete="off" />
-        </div>
-        @{ var matchingOptions = SelectSearch.Filter(Options, _search).ToList(); }
-        @if (matchingOptions.Count == 0)
-        {
-            <MudText Typo="Typo.body2" Class="px-4 py-2 mud-text-secondary">No matches</MudText>
-        }
-        @foreach (var option in matchingOptions)
-        {
-            <div class="px-2">
-                <MudCheckBox T="bool" Value="@IsSelected(option.Value)" ValueChanged="@(isChecked => SetSelected(option.Value, isChecked))"
-                             Label="@option.Text" Dense="true" Color="Color.Primary" />
+        @* The popover renders outside the wrapper above, so Escape needs a handler for both the search and checklist. *@
+        <div @onkeydown="OnKeyDown">
+            <div class="px-4 pt-2 pb-1">
+                <MudTextField T="string" @bind-Value="_search" Placeholder="Search" Immediate="true" Margin="Margin.Dense" AutoFocus="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" autocomplete="off" />
             </div>
-        }
+            @{ var matchingOptions = SelectSearch.Filter(Options, _search).ToList(); }
+            @if (matchingOptions.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="px-4 py-2 mud-text-secondary">No matches</MudText>
+            }
+            @foreach (var option in matchingOptions)
+            {
+                <div class="px-2">
+                    <MudCheckBox T="bool" Value="@IsSelected(option.Value)" ValueChanged="@(isChecked => SetSelected(option.Value, isChecked))"
+                                 Label="@option.Text" Dense="true" Color="Color.Primary" />
+                </div>
+            }
+        </div>
     </MudPopover>
     <MudOverlay Visible="_open" OnClick="CloseAsync" LockScroll="false" />
 </div>

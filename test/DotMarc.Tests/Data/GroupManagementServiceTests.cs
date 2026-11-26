@@ -35,6 +35,58 @@ public sealed class GroupManagementServiceTests : IAsyncLifetime
     private DotMarcDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
 
+    [Theory]
+    [InlineData("move", GroupManagementService.SetScopedDomainGroupsResult.Updated)]
+    [InlineData("empty", GroupManagementService.SetScopedDomainGroupsResult.LastAccessibleGroup)]
+    [InlineData("hidden", GroupManagementService.SetScopedDomainGroupsResult.InvalidGroups)]
+    [InlineData("missing", GroupManagementService.SetScopedDomainGroupsResult.InvalidGroups)]
+    [InlineData("lost-access", GroupManagementService.SetScopedDomainGroupsResult.DomainNotAccessible)]
+    public async Task ScopedUiAssignmentPreservesHiddenGroupsAndAuditsOnlySuccessfulChanges(string operation, GroupManagementService.SetScopedDomainGroupsResult expected)
+    {
+        await using var db = CreateContext();
+        var first = new Group { Name = "Visible first" };
+        var second = new Group { Name = "Visible second" };
+        var hidden = new Group { Name = "Hidden" };
+        var domain = new Domain { Name = "scoped-ui.example", Groups = [first, hidden] };
+        db.Groups.Add(second);
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        int[] requested = operation switch
+        {
+            "empty" => [],
+            "hidden" => [hidden.Id],
+            "missing" => [int.MaxValue],
+            _ => [second.Id]
+        };
+        int[] scope = operation == "lost-access" ? [second.Id] : [first.Id, second.Id];
+        var result = await GroupManagementService.SetScopedDomainGroupsAsync(db, TestActors.Admin, domain.Id, scope, requested);
+        Assert.Equal(expected, result);
+        await using var verify = CreateContext();
+        var actual = await verify.Domains.Where(candidate => candidate.Id == domain.Id).SelectMany(candidate => candidate.Groups.Select(group => group.Id)).ToListAsync();
+        Assert.Equal((expected == GroupManagementService.SetScopedDomainGroupsResult.Updated ? new[] { second.Id, hidden.Id } : [first.Id, hidden.Id]).Order(), actual.Order());
+        var audit = await verify.AuditEntries.Where(entry => entry.Action == AuditActions.DomainGroupsChanged).ToListAsync();
+        if (expected == GroupManagementService.SetScopedDomainGroupsResult.Updated)
+            Assert.Contains(Assert.Single(audit).Changes, change => change.Field == "Groups");
+        else
+            Assert.Empty(audit);
+    }
+
+    [Fact]
+    public async Task UnlimitedUiAssignmentCanClearAllGroupsAndRejectsStaleGroupIds()
+    {
+        await using var db = CreateContext();
+        var domain = new Domain { Name = "unlimited-ui.example", Groups = [new Group { Name = "First" }] };
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        Assert.Equal(GroupManagementService.SetScopedDomainGroupsResult.InvalidGroups,
+            await GroupManagementService.SetScopedDomainGroupsAsync(db, TestActors.Admin, domain.Id, [], [int.MaxValue]));
+        Assert.Equal(GroupManagementService.SetScopedDomainGroupsResult.Updated,
+            await GroupManagementService.SetScopedDomainGroupsAsync(db, TestActors.Admin, domain.Id, [], []));
+        await using var verify = CreateContext();
+        Assert.Empty((await verify.Domains.Include(candidate => candidate.Groups).SingleAsync()).Groups);
+        Assert.Single(await verify.AuditEntries.Where(entry => entry.Action == AuditActions.DomainGroupsChanged).ToListAsync());
+    }
+
     [Fact]
     public async Task AddGroupAsync_AddsATrimmedGroup()
     {
