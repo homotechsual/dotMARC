@@ -1206,6 +1206,9 @@ namespace DotMarc.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ReviewJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)

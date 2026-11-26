@@ -2,6 +2,7 @@ using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Reporting;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace DotMarc.DnsPush;
 
@@ -16,6 +17,16 @@ public sealed class DnsPushBatchService(
     public static readonly IReadOnlyList<string> BulkTargets = ["dmarc", "tlsrpt", "mta-sts"];
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
+    public static async Task<DnsPushBatch> GetAsync(DotMarcDbContext context, AuditActor actor, Guid batchId, CancellationToken cancellationToken = default)
+    {
+        var owner = DashboardPreferencesStore.UserKeyOf(actor);
+        return owner is not null
+            ? await context.DnsPushBatches.AsNoTracking().Include(batch => batch.Domains)
+                .SingleOrDefaultAsync(batch => batch.Id == batchId && batch.StartedBy == owner, cancellationToken).ConfigureAwait(false)
+                ?? throw new DnsPushBatchException("That DNS batch is unavailable or belongs to another person.")
+            : throw new DnsPushBatchException("That DNS batch is unavailable or belongs to another person.");
+    }
 
     public async Task<DnsPushBatch> CreateAsync(
         DotMarcDbContext context, AuditActor actor, string provider, string target, IReadOnlyList<int> domainIds, CancellationToken cancellationToken = default)
@@ -89,7 +100,9 @@ public sealed class DnsPushBatchService(
         {
             row.Status = DnsPushBatchDomainStatus.Planned;
             row.PlanFingerprint = DnsPlanFingerprint.Of(planning.Plan!.Changes);
-            row.Included = true;
+            var review = DnsPushReview.From(planning.Plan);
+            row.ReviewJson = JsonSerializer.Serialize(review);
+            row.Included = review.LostDelegations.Count == 0;
         }
 
         return row;
@@ -100,7 +113,12 @@ public sealed class DnsPushBatchService(
     public async Task SetIncludedAsync(
         DotMarcDbContext context, AuditActor actor, Guid batchId, IReadOnlyList<int> includedDomainIds, CancellationToken cancellationToken = default)
     {
-        var batch = await context.DnsPushBatches.Include(candidate => candidate.Domains).SingleOrDefaultAsync(candidate => candidate.Id == batchId, cancellationToken).ConfigureAwait(false)
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        // Serialize selection changes with the callback's claim, including edits from another tab.
+        var owner = DashboardPreferencesStore.UserKeyOf(actor);
+        await context.DnsPushBatches.Where(candidate => candidate.Id == batchId && candidate.StartedBy == owner)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Status, candidate => candidate.Status), cancellationToken).ConfigureAwait(false);
+        var batch = await context.DnsPushBatches.AsNoTracking().Include(candidate => candidate.Domains).SingleOrDefaultAsync(candidate => candidate.Id == batchId, cancellationToken).ConfigureAwait(false)
             ?? throw new DnsPushBatchException("That batch doesn't exist any more.");
 
         if (DashboardPreferencesStore.UserKeyOf(actor) != batch.StartedBy)
@@ -127,11 +145,9 @@ public sealed class DnsPushBatchService(
             }
         }
 
-        foreach (var row in batch.Domains)
-        {
-            row.Included = row.Status == DnsPushBatchDomainStatus.Planned && chosen.Contains(row.DomainId);
-        }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.DnsPushBatchDomains.Where(row => row.BatchId == batchId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Included,
+                row => row.Status == DnsPushBatchDomainStatus.Planned && chosen.Contains(row.DomainId)), cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 }

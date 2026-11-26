@@ -488,6 +488,28 @@ builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSectio
 
 builder.Services.AddCascadingAuthenticationState();
 
+if (demoOptions.Enabled)
+{
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IDnsPushProvider>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IDnsProviderDetector>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IDmarcTxtLookup>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<ITlsrptTxtLookup>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<DotMarc.MtaSts.IMtaStsCnameLookup>(builder.Services);
+    builder.Services.AddSingleton<DotMarc.Demo.DemoDnsRecords>();
+    foreach (var key in new[] { "cloudflare", "azure-dns", "google-cloud-dns" })
+        builder.Services.AddSingleton<IDnsPushProvider>(services => new DotMarc.Demo.DemoDnsPushProvider(key, services.GetRequiredService<DotMarc.Demo.DemoDnsRecords>()));
+    builder.Services.AddSingleton<IDnsProviderDetector, DotMarc.Demo.DemoDnsProviderDetector>();
+    builder.Services.AddSingleton<IDmarcTxtLookup, DotMarc.Demo.DemoDmarcTxtLookup>();
+    builder.Services.AddSingleton<ITlsrptTxtLookup, DotMarc.Demo.DemoTlsrptTxtLookup>();
+    builder.Services.AddSingleton<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.Demo.DemoMtaStsCnameLookup>();
+    builder.Services.Configure<GraphOptions>(options =>
+    {
+        options.MailboxAddress = "dmarc@demo.example";
+        options.TlsrptMailboxAddress = "tlsrpt@demo.example";
+    });
+    builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(options => { options.HostingHostname = "mta-sts.demo.example"; options.Provisioner = "Caddy"; });
+}
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -768,6 +790,8 @@ app.MapGet("/dns-push/{provider}/start-batch", async (
     {
         return Results.Forbid();
     }
+    if (!await DnsPushBatchAccess.InScopeAsync(context, httpContext.User, batch.Domains.Where(row => row.Included).Select(row => row.DomainId), httpContext.RequestAborted))
+        return Results.Forbid();
 
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
     if (pushProvider is null)

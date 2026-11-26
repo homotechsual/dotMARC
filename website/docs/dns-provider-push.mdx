@@ -23,6 +23,31 @@ All three providers are independently optional and configured the same way regar
   }}
 />
 
+## Bulk DNS from Inventory
+
+On **Inventory**, select domains using their **Select for DNS** checkboxes, or choose **Select matching domains**. Selection is shared between All domains and By group, including domains listed in several groups. Sorting keeps the selection; filtering or losing access removes hidden IDs with a notification. Dashboard has no bulk selection.
+
+Choose **Review selected DNS**, select **DMARC**, **TLS reporting** or **MTA-STS hosting**, then choose a provider. Each provider has a separate batch, limited to 50 distinct domains. Domains with no detected provider or no configured push option are listed for manual setup instead; their Overview has individual manual DNS controls.
+
+The review page stores the exact additions, removals and warnings for every domain, so refreshing does not silently substitute a new plan. Already-correct and refused domains are shown but not pushed. A CNAME delegation is unchecked by default and requires an explicit check for that domain because replacing it ends the delegation.
+
+**Authorize and push checked domains** saves the checked subset and opens one provider sign-in for the batch. The review expires after 30 minutes. Only its owner can view or authorize it, and current record-target permission and domain scope are rechecked. Before each write, dotMARC detects the provider again and compares the current plan with the reviewed fingerprint; changed plans are skipped rather than published.
+
+Results refresh automatically and survive a page reload. Each domain shows whether it was pushed, already correct, excluded, skipped after changes, refused, failed or not attempted. Provider acceptance is not verified DNS propagation. A failed replacement can leave missing or duplicate records: check the provider before retrying. **Create fresh review for unpushed domains** never reuses a sign-in or silently retries writes. Batches interrupted by an application restart are marked interrupted and require a fresh review/sign-in.
+
+DMARC/TLS reporting need `DomainsEdit`; MTA-STS hosting needs `MtaStsManage`. SPF, DKIM keys and external DMARC authorization are not bulk targets in 0.14.
+
+### Try the demo
+
+Demo pushes are simulated in memory and never contact or change a real DNS provider. Use the existing sample domains:
+
+* **aurora-retail.example** is already correct for DMARC/TLS reporting.
+* **shop.aurora-retail.example** can be pushed successfully through the demo Cloudflare provider.
+* **cobalt-freight.example** fails with an explicit demo rejection, while **fleet.cobalt-freight.example** succeeds in the same Azure DNS batch, demonstrating partial results.
+* **brightline-legal.example** is listed for manual setup because its provider has no push option.
+
+The demo authorization redirects straight back to dotMARC. Simulated records last until the process restarts or the daily dataset reset; they are not real DNS health observations.
+
 ## New-domain setup
 
 After adding a domain, **Review DNS setup** on Overview combines DMARC, TLS reporting (when this instance has a TLS-report mailbox) and enabled MTA-STS hosting records in one review and provider authorization. Combined setup requires both `DomainsEdit` and `MtaStsManage`; users without both can use the individual controls they are allowed to access.

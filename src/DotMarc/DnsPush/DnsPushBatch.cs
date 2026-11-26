@@ -51,6 +51,7 @@ public sealed class DnsPushBatchDomain
     /// <summary>The fingerprint of the plan that was reviewed (<see cref="DnsPlanFingerprint"/>), for a Planned domain. Compared with the plan
     /// worked out again at push time, so nothing that wasn't reviewed is pushed.</summary>
     public string? PlanFingerprint { get; set; }
+    public string? ReviewJson { get; set; }
 
     /// <summary>The refusal flag, or a short description of what went wrong. Never a secret.</summary>
     public string? Detail { get; set; }

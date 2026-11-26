@@ -3,6 +3,7 @@ using DotMarc.Audit;
 using DotMarc.Data;
 using DotMarc.Reporting;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 
 namespace DotMarc.DnsPush;
 
@@ -31,11 +32,18 @@ public sealed class DnsPushBatchCallback(
         }
 
         var now = _timeProvider.GetUtcNow();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var owner = DashboardPreferencesStore.UserKeyOf(actor);
+        if (await context.DnsPushBatches.Where(batch => batch.Id == batchId && batch.StartedBy == owner && batch.Status == DnsPushBatchStatus.Planned)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(batch => batch.Status, batch => batch.Status), cancellationToken).ConfigureAwait(false) == 0)
+            return "invalid";
         var check = await DnsPushBatchGate.CheckAsync(context, batchId, DashboardPreferencesStore.UserKeyOf(actor), pushProvider.ProviderKey, now, cancellationToken).ConfigureAwait(false);
         if (check.Batch is null || !string.Equals(check.Batch.Target, state.PushTarget, StringComparison.Ordinal))
         {
             return "invalid";
         }
+        if (!await DnsPushBatchAccess.InScopeAsync(context, user, check.Batch.Domains.Where(row => row.Included).Select(row => row.DomainId), cancellationToken).ConfigureAwait(false))
+            return "invalid";
 
         // Backing out at the provider claims nothing, so the review can be signed in to again while it is still open.
         if (error is not null || string.IsNullOrEmpty(code))
@@ -54,6 +62,7 @@ public sealed class DnsPushBatchCallback(
         AuditLog.Record(context, actor, AuditActions.DnsPushBatchStarted, null,
             $"Started a DNS push of {included} {(included == 1 ? "domain" : "domains")} to {check.Batch.Provider} ({check.Batch.Target})");
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         var exchange = await pushProvider.ExchangeAsync(code, state.CodeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
         if (exchange.Session is not { } session)

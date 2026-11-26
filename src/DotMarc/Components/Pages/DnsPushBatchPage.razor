@@ -1,0 +1,224 @@
+@page "/dns-push/batches/{BatchId:guid}"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using System.Text.Json
+@using DotMarc.Audit
+@using DotMarc.Data
+@using DotMarc.DnsPush
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.JSInterop
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject AuditActorAccessor Actor
+@inject IEnumerable<IDnsChangeBuilder> Builders
+@inject DnsPushBatchService Batches
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject ILogger<DnsPushBatchPage> Logger
+@inject TimeProvider Clock
+
+<AppPageTitle>dotMARC - DNS batch review</AppPageTitle>
+<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Inventory</MudButton>
+<MudText Typo="Typo.h4" Class="my-3">DNS batch review and results</MudText>
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error <MudButton OnClick="LoadAsync">Refresh</MudButton></MudAlert> }
+@if (_batch is { } batch)
+{
+    <MudPaper Outlined="true" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6">@batch.Provider · @batch.Target · @batch.Status</MudText>
+        <MudText Typo="Typo.body2" Class="my-2">Review each domain below. Only checked domains will be pushed. Replacing a CNAME ends its existing delegation and requires an explicit check for that domain.</MudText>
+        <MudText Typo="Typo.body2" role="status">@batch.Domains.Count(row => row.Status == DnsPushBatchDomainStatus.Pushed) pushed · @batch.Domains.Count(row => row.Status is DnsPushBatchDomainStatus.Failed or DnsPushBatchDomainStatus.FailedAfterChange) failed · @batch.Domains.Count(row => !row.Included || row.Status is DnsPushBatchDomainStatus.ChangedSinceReview or DnsPushBatchDomainStatus.ZoneNotFound) skipped</MudText>
+        @if (batch.Status == DnsPushBatchStatus.Planned)
+        {
+            <MudText Typo="Typo.caption" Class="d-block my-2">Review expires @batch.ExpiresUtc.ToLocalTime().ToString("g"). Signing in authorizes the checked records, not automatic future changes. DNS is rechecked before each push.</MudText>
+            @if (Expired) { <MudAlert Severity="Severity.Warning">This review has expired. Create a fresh review before signing in.</MudAlert> }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || _included.Count == 0 || Expired || !RendererInfo.IsInteractive)" OnClick="StartAsync">Authorize and push checked domains</MudButton>
+            @if (_waiting) { <MudButton OnClick="@(() => JS.InvokeVoidAsync("dotMarcCancelDnsPush").AsTask())">Cancel waiting for sign-in</MudButton> }
+        }
+        @if (batch.Status is DnsPushBatchStatus.Completed or DnsPushBatchStatus.Interrupted or DnsPushBatchStatus.Expired || Expired)
+        {
+            <MudText Typo="Typo.body2" Class="my-2">Check DNS before retrying any failed replacement. A retry creates a fresh review and requires a new provider sign-in.</MudText>
+            <MudButton Variant="Variant.Outlined" OnClick="RetryAsync" Disabled="@(_busy || !RendererInfo.IsInteractive)">Create fresh review for unpushed domains</MudButton>
+        }
+        <MudButton OnClick="LoadAsync" Disabled="_busy" Class="ml-2">Refresh results</MudButton>
+    </MudPaper>
+    @foreach (var row in batch.Domains.OrderBy(row => row.Position))
+    {
+        <MudPaper Outlined="true" Class="pa-4 mb-3 dns-batch-domain">
+            <MudText Typo="Typo.h6">@row.DomainName</MudText>
+            <MudText Typo="Typo.subtitle2">@DnsPushBatchPresentation.Label(row)</MudText>
+            <MudText Typo="Typo.body2">@DnsPushBatchPresentation.Explain(row)</MudText>
+            @if (_reviews.TryGetValue(row.DomainId, out var review))
+            {
+                @if (batch.Status == DnsPushBatchStatus.Planned && row.Status == DnsPushBatchDomainStatus.Planned)
+                {
+                    <MudCheckBox T="bool" Value="@_included.Contains(row.DomainId)" ValueChanged="@(value => Include(row.DomainId, value))"
+                                 Disabled="@(_busy || Expired || !RendererInfo.IsInteractive)" Label="@($"Include {row.DomainName}")" />
+                }
+                @if (review.LostDelegations.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Warning">This replaces a CNAME delegation. It is not selected by default. Check this domain explicitly only if you intend to end the delegation.</MudAlert>
+                }
+                <details class="mt-2">
+                    <summary>Reviewed DNS changes for @row.DomainName</summary>
+                    @foreach (var note in review.Notes) { <MudText Typo="Typo.body2" Class="my-2">@note</MudText> }
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Add or update</MudText>
+                    <DnsRecordsTable Records="review.Additions" ZoneName="review.ZoneName" />
+                    @if (review.Removals.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mt-3">Remove or replace</MudText>
+                        <DnsRecordsTable Records="review.Removals" ZoneName="review.ZoneName" ShowCopyAll="false" />
+                    }
+                </details>
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    [Parameter] public Guid BatchId { get; set; }
+    private DnsPushBatch? _batch;
+    private readonly Dictionary<int, DnsPushReview> _reviews = [];
+    private HashSet<int> _included = [];
+    private string? _error;
+    private bool _busy, _waiting, _disposed;
+    private DotNetObjectReference<DnsPushBatchPage>? _reference;
+    private readonly CancellationTokenSource _stop = new();
+    private Task? _poll;
+    private bool Expired => _batch is { Status: DnsPushBatchStatus.Planned } batch && batch.ExpiresUtc <= Clock.GetUtcNow();
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) _poll = PollAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task<DnsPushBatch> ReadAuthorizedAsync(DotMarc.Data.DotMarcDbContext db)
+    {
+        var batch = await DnsPushBatchService.GetAsync(db, await Actor.GetAsync(), BatchId);
+        var user = (await Authentication.GetAuthenticationStateAsync()).User;
+        if (Builders.Find(batch.Target) is not { } builder || !(await Authorization.AuthorizeAsync(user, builder.RequiredPolicy)).Succeeded
+            || !await DnsPushBatchAccess.InScopeAsync(db, user, batch.Domains.Select(row => row.DomainId)))
+            throw new DnsPushBatchException("This DNS batch is unavailable or you no longer have permission for its domains.");
+        return batch;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var batch = await ReadAuthorizedAsync(db);
+            var reviews = new Dictionary<int, DnsPushReview>();
+            if (batch.Status == DnsPushBatchStatus.Planned && batch.Domains.Any(row => row.Status == DnsPushBatchDomainStatus.Planned && row.ReviewJson is null))
+                throw new DnsPushBatchException("This older batch has no stored review. Create a fresh review from Inventory before publishing.");
+            foreach (var row in batch.Domains.Where(row => row.ReviewJson is not null))
+                reviews[row.DomainId] = JsonSerializer.Deserialize<DnsPushReview>(row.ReviewJson!)
+                    ?? throw new JsonException("Missing DNS review.");
+            if (_batch?.Id != batch.Id || _batch.Status != batch.Status)
+                _included = batch.Domains.Where(row => row.Included).Select(row => row.DomainId).ToHashSet();
+            _reviews.Clear();
+            foreach (var review in reviews) _reviews.Add(review.Key, review.Value);
+            _batch = batch;
+            _error = null;
+        }
+        catch (DnsPushBatchException exception) { _batch = null; _error = exception.Message; }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Reading DNS batch {BatchId} failed", BatchId);
+            _batch = null;
+            _error = "Could not read this DNS review. Refresh or create a fresh review from Inventory.";
+        }
+    }
+
+    private void Include(int id, bool value)
+    {
+        if (value) _included.Add(id);
+        else _included.Remove(id);
+    }
+
+    private async Task StartAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var batch = await ReadAuthorizedAsync(db);
+            await Batches.SetIncludedAsync(db, await Actor.GetAsync(), BatchId, _included.ToArray());
+            _reference ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dotMarcOpenDnsPush", $"/dns-push/{batch.Provider}/start-batch?batchId={BatchId}", _reference, BatchId.ToString());
+        }
+        catch (DnsPushBatchException exception) { Snackbar.Add(exception.Message, Severity.Warning); }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException or JSException)
+        {
+            Logger.LogWarning(exception, "Starting DNS batch {BatchId} failed", BatchId);
+            Snackbar.Add("Could not start this batch. Refresh its status before trying again.", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RetryAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var batch = await ReadAuthorizedAsync(db);
+            var ids = batch.Domains.Where(row => row.Status != DnsPushBatchDomainStatus.Pushed && row.Status != DnsPushBatchDomainStatus.NothingToChange).Select(row => row.DomainId).ToArray();
+            var retry = await Batches.CreateAsync(db, await Actor.GetAsync(), batch.Provider, batch.Target, ids);
+            Navigation.NavigateTo($"/dns-push/batches/{retry.Id}");
+        }
+        catch (DnsPushBatchException exception) { Snackbar.Add(exception.Message, Severity.Warning); }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException or HttpRequestException)
+        {
+            Logger.LogWarning(exception, "Retrying DNS batch {BatchId} failed", BatchId);
+            Snackbar.Add("Could not prepare a fresh review. Try again.", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_stop.Token))
+                await InvokeAsync(async () => { if (!_busy) await LoadAsync(); StateHasChanged(); });
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+    }
+
+    [JSInvokable] public Task OnDnsPushResult(string outcome) => _disposed ? Task.CompletedTask : InvokeAsync(async () =>
+    {
+        _waiting = false;
+        if (outcome != "batch-started") Snackbar.Add(outcome == "cancelled" ? "Provider sign-in cancelled. Nothing was started." : "The batch did not start. Refresh its status and check the review before signing in again.", Severity.Warning);
+        await LoadAsync();
+        StateHasChanged();
+    });
+    [JSInvokable] public void OnDnsPushPopupBlocked()
+    {
+        if (!_disposed) Snackbar.Add("Your browser blocked the pop-up. Allow pop-ups for this site and try again.", Severity.Warning);
+    }
+    [JSInvokable] public Task OnDnsPushWaiting() => _disposed ? Task.CompletedTask : InvokeAsync(() => { _waiting = true; StateHasChanged(); });
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        await _stop.CancelAsync();
+        if (_poll is not null) await _poll;
+        if (_reference is not null)
+        {
+            try { await JS.InvokeVoidAsync("dotMarcReleaseDnsPush", BatchId.ToString()); }
+            catch (JSDisconnectedException) { }
+        }
+        _reference?.Dispose();
+        _stop.Dispose();
+    }
+}

@@ -45,6 +45,7 @@ public sealed class DemoDataResetService : BackgroundService
                 var nowUtc = DateTimeOffset.UtcNow;
                 var dataset = DemoDataGenerator.Generate(new Random(SeedFor(nowUtc)), nowUtc);
                 await DemoDataSeeder.ResetAsync(context, dataset, stoppingToken).ConfigureAwait(false);
+                scope.ServiceProvider.GetService<DemoDnsRecords>()?.Clear();
                 _logger.LogInformation("Demo dataset reset completed at {NowUtc}.", nowUtc);
             }
             catch (Exception ex)

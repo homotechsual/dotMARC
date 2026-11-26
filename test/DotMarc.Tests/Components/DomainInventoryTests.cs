@@ -254,6 +254,63 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.Contains("Quarantines and rejects to investigate", dashboard);
         Assert.Contains("data-domain-link", await client.GetStringAsync("/domains"));
         Assert.Contains("Show management columns", await client.GetStringAsync("/domains"));
+        Assert.Contains("Review selected DNS", await client.GetStringAsync("/domains"));
+        Assert.DoesNotContain("Review selected DNS", dashboard);
+    }
+
+    [Theory]
+    [InlineData("admin", true)]
+    [InlineData("viewer", false)]
+    public async Task BatchReviewOnlyShowsStoredRecordsToItsAuthorizedOwner(string persona, bool allowed)
+    {
+        using var client = await SignInAsync(persona);
+        var dbFactory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var domain = await db.Domains.SingleAsync(domain => domain.Name == "shop.aurora-retail.example");
+        var batch = new DnsPushBatch
+        {
+            Id = Guid.NewGuid(), StartedBy = DashboardPreferencesStore.UserKeyOf(DotMarc.Audit.AuditActor.ForUser(null, DemoDataSeeder.AdminEmail, "Admin"))!,
+            Provider = "cloudflare", Target = "dmarc", CreatedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30),
+            Domains = [new DnsPushBatchDomain
+            {
+                DomainId = domain.Id, DomainName = domain.Name, Included = true, Status = DnsPushBatchDomainStatus.Planned,
+                ReviewJson = System.Text.Json.JsonSerializer.Serialize(new DnsPushReview(domain.Name, [new("TXT", $"_dmarc.{domain.Name}", "v=DMARC1; p=reject; rua=mailto:review@example.com")], [], []))
+            }]
+        };
+        db.DnsPushBatches.Add(batch);
+        await db.SaveChangesAsync();
+        var html = await client.GetStringAsync($"/dns-push/batches/{batch.Id}");
+        Assert.Equal(allowed, html.Contains("review@example.com", StringComparison.Ordinal));
+        Assert.Equal(allowed, html.Contains("Authorize and push checked domains", StringComparison.Ordinal));
+        if (!allowed) Assert.Contains("unavailable or belongs to another person", html);
+    }
+
+    [Fact]
+    public async Task BatchStartAndCallbackRejectDomainsOutsideTheCurrentScope()
+    {
+        using var client = await SignInAsync("viewer");
+        client.DefaultRequestHeaders.Add("Sec-Fetch-Site", "same-origin");
+        var dbFactory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var viewer = await db.UserAccesses.Include(user => user.Role).SingleAsync(user => user.Email == DemoDataSeeder.ViewerEmail);
+        viewer.Role.Permissions.Add(Permission.DomainsEdit);
+        var outside = await db.Domains.SingleAsync(domain => domain.Name == "cobalt-freight.example");
+        var batch = new DnsPushBatch
+        {
+            Id = Guid.NewGuid(), StartedBy = DashboardPreferencesStore.UserKeyOf(DotMarc.Audit.AuditActor.ForUser(null, DemoDataSeeder.ViewerEmail, "Viewer"))!,
+            Provider = "cloudflare", Target = "dmarc", CreatedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30),
+            Domains = [new() { DomainId = outside.Id, DomainName = outside.Name, Included = true, Status = DnsPushBatchDomainStatus.Planned }]
+        };
+        db.DnsPushBatches.Add(batch);
+        await db.SaveChangesAsync();
+        var denied = await client.GetAsync($"/dns-push/cloudflare/start-batch?batchId={batch.Id}");
+        Assert.Equal(HttpStatusCode.Redirect, denied.StatusCode);
+        Assert.Equal("/AccessDenied", denied.Headers.Location!.AbsolutePath);
+        var protector = _factory.Services.GetRequiredService<DnsPushStateProtector>();
+        var state = protector.Protect(0, "dmarc", "verifier", DateTimeOffset.UtcNow, batchId: batch.Id);
+        Assert.Contains("Push not started", await client.GetStringAsync($"/dns-push/cloudflare/callback?code=test-code&state={Uri.EscapeDataString(state)}"));
+        Assert.Equal(0, _dnsPush.ExchangeCalls);
+        Assert.Empty(_dnsPush.Pushes);
     }
 
     [Fact]

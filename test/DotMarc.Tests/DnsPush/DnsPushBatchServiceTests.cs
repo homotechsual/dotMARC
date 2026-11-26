@@ -5,6 +5,9 @@ using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
+using System.Security.Claims;
+using System.Text.Json;
+using DotMarc.Security;
 
 namespace DotMarc.Tests.DnsPush;
 
@@ -68,6 +71,58 @@ public sealed class DnsPushBatchServiceTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         return await context.DnsPushBatches.AsNoTracking().Include(batch => batch.Domains).SingleAsync(batch => batch.Id == batchId);
+    }
+
+    [Fact]
+    public async Task StoredReviewContainsExactValuesAndIsOnlyReadableByItsOwner()
+    {
+        var ids = await AddDomainsAsync("changes.example");
+        var batch = await CreateBatchAsync(ids);
+        await using var db = CreateContext();
+        var read = await DnsPushBatchService.GetAsync(db, Person, batch.Id);
+        var review = JsonSerializer.Deserialize<DnsPushReview>(Assert.Single(read.Domains).ReviewJson!)!;
+        Assert.Equal("_dmarc.changes.example", Assert.Single(review.Additions).Name);
+        var denied = await Assert.ThrowsAsync<DnsPushBatchException>(() => DnsPushBatchService.GetAsync(db, AnotherPerson, batch.Id));
+        var missing = await Assert.ThrowsAsync<DnsPushBatchException>(() => DnsPushBatchService.GetAsync(db, Person, Guid.NewGuid()));
+        Assert.Equal(missing.Message, denied.Message);
+    }
+
+    private sealed class DelegatedBuilder : IDnsChangeBuilder
+    {
+        public string Target => "dmarc";
+        public string RequiredPolicy => "DomainsEdit";
+        public bool WritesToDomainZone => true;
+        public Task<DnsChangePlan> BuildAsync(DnsPushRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(DnsChangePlan.Of(new DnsRecordChange(DnsRecordChangeKind.Replace, "TXT", $"_dmarc.{request.Domain.Name}",
+                "v=DMARC1; p=reject", "delegated.example", request.DomainZone!, ExistingRecordType: "CNAME")));
+    }
+
+    [Fact]
+    public async Task DelegatedDomainsRequireExplicitIndividualInclusion()
+    {
+        var ids = await AddDomainsAsync("delegated.example");
+        var service = new DnsPushBatchService(new DnsPushPlanner(_detector), [new DelegatedBuilder()], [new FakeDnsPushProvider("cloudflare")], _clock);
+        await using var db = CreateContext();
+        var batch = await service.CreateAsync(db, Person, "cloudflare", "dmarc", ids);
+        var row = Assert.Single(batch.Domains);
+        Assert.False(row.Included);
+        Assert.Single(JsonSerializer.Deserialize<DnsPushReview>(row.ReviewJson!)!.LostDelegations);
+        await service.SetIncludedAsync(db, Person, batch.Id, ids);
+        Assert.True(Assert.Single((await ReloadAsync(batch.Id)).Domains).Included);
+    }
+
+    [Fact]
+    public async Task ScopeChecksRequireEverySelectedDomainToRemainAccessible()
+    {
+        var ids = await AddDomainsAsync("one.example", "two.example");
+        await using var db = CreateContext();
+        var group = new Group { Name = "Allowed" };
+        (await db.Domains.SingleAsync(domain => domain.Id == ids[0])).Groups.Add(group);
+        await db.SaveChangesAsync();
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(UserAccessClaimsTransformation.ScopedGroupClaimType, group.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))], "Test"));
+        Assert.True(await DnsPushBatchAccess.InScopeAsync(db, user, [ids[0]]));
+        Assert.False(await DnsPushBatchAccess.InScopeAsync(db, user, ids));
+        Assert.False(await DnsPushBatchAccess.InScopeAsync(db, user, [int.MaxValue]));
     }
 
     // ---- Creating a batch ----
@@ -251,14 +306,15 @@ public sealed class DnsPushBatchServiceTests : IAsyncLifetime
     {
         var ids = await AddDomainsAsync("one.example");
         var batch = await CreateBatchAsync(ids);
+        await using var changeContext = CreateContext();
+        await changeContext.DnsPushBatches.Include(candidate => candidate.Domains).SingleAsync(candidate => candidate.Id == batch.Id);
         await using (var context = CreateContext())
         {
             await context.DnsPushBatches.Where(candidate => candidate.Id == batch.Id).ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Status, DnsPushBatchStatus.Running));
         }
 
-        await using var changeContext = CreateContext();
-
         await Assert.ThrowsAsync<DnsPushBatchException>(() => CreateService().SetIncludedAsync(changeContext, Person, batch.Id, [], CancellationToken.None));
+        Assert.True(Assert.Single((await ReloadAsync(batch.Id)).Domains).Included);
     }
 
     [Fact]

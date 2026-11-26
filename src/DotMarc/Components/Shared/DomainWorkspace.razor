@@ -59,6 +59,16 @@ else
     <AddDomainForm GroupId="_state.GroupId" Added="@(_ => LoadAsync())" />
     @if (Inventory)
     {
+        @if (_canBulkDns)
+        {
+            <div class="domain-list-toolbar mb-3">
+                <MudText Typo="Typo.body2" role="status">@_selectedDnsDomains.Count selected for DNS review</MudText>
+                <MudButton OnClick="@(() => _selectedDnsDomains.UnionWith(_rows.Select(row => row.Id)))" Disabled="@(!RendererInfo.IsInteractive || _rows.Count == 0)">Select matching domains</MudButton>
+                <MudButton OnClick="@(() => _selectedDnsDomains.Clear())" Disabled="@(_selectedDnsDomains.Count == 0)">Clear selection</MudButton>
+                <MudButton OnClick="ReviewSelectedDnsAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync"
+                           Disabled="@(!RendererInfo.IsInteractive || _selectedDnsDomains.Count == 0)">Review selected DNS</MudButton>
+            </div>
+        }
         <MudSwitch T="bool" @bind-Value="_management" Label="Show management columns" Color="Color.Primary" />
         @if (_management && !CanReorder)
         {
@@ -96,6 +106,7 @@ else
 @code {
     private RenderFragment DomainTable(IReadOnlyList<DashboardDomainRow> rows) => @<MudTable Items="rows" T="DashboardDomainRow" Hover="true" Class="domain-inventory">
         <HeaderContent>
+            @if (_canBulkDns) { <MudTh>Select for DNS</MudTh> }
             @if (_management) { <MudTh>Order</MudTh> }
             @foreach (var column in Columns)
             {
@@ -117,6 +128,11 @@ else
             }
         </HeaderContent>
         <RowTemplate Context="row">
+            @if (_canBulkDns)
+            {
+                <MudTd DataLabel="Select for DNS"><MudCheckBox T="bool" Value="@_selectedDnsDomains.Contains(row.Id)" ValueChanged="@(selected => SelectDnsDomain(row.Id, selected))"
+                    Disabled="@(!RendererInfo.IsInteractive)" aria-label="@($"Select {row.Name} for DNS review")" /></MudTd>
+            }
             @if (_management)
             {
                 <MudTd>

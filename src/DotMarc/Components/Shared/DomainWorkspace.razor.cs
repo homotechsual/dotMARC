@@ -1,6 +1,7 @@
 using DotMarc.Components.Dialogs;
 using DotMarc.Data;
 using DotMarc.Dns;
+using DotMarc.DnsPush;
 using DotMarc.IpEnrichment;
 using DotMarc.Notifications;
 using DotMarc.Portal;
@@ -39,6 +40,8 @@ public partial class DomainWorkspace : IAsyncDisposable
     private int _loadVersion;
     private bool _loading;
     private bool _focusAddDomain;
+    private bool _canBulkDns;
+    private readonly HashSet<int> _selectedDnsDomains = [];
     private IReadOnlyCollection<int> _scope = [];
     private List<Group> _groups = [];
     private List<Tag> _tags = [];
@@ -181,6 +184,8 @@ public partial class DomainWorkspace : IAsyncDisposable
             _senderReviews = senderReviews; _snapshotUtc = snapshotUtc;
             _domainsById = domains.ToDictionary(domain => domain.Id); _reportCounts = counts; _settings = settings; _parseFailures = parseFailures;
             _canReorder = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsReorder))).Succeeded;
+            _canBulkDns = !ClientPortalGate.IsPortalUser(user) && (canEdit || (await Authorization.AuthorizeAsync(user, nameof(Permission.MtaStsManage))).Succeeded);
+            if (!_canBulkDns) _selectedDnsDomains.Clear();
             _psaLists = lists;
             _companyOptions = domains.SelectMany(domain => domain.PsaCompanyLinks).Select(link => link.Psa).Concat(lists.Select(list => list.Psa)).Distinct().ToDictionary(
                 psa => psa, psa => domains.SelectMany(domain => domain.PsaCompanyLinks).Where(link => link.Psa == psa).Select(link => new PsaCompany(link.CompanyId, link.CompanyName))
@@ -234,11 +239,24 @@ public partial class DomainWorkspace : IAsyncDisposable
         };
         _rows = _state.Order(matched, row => CountOf(row)).ToList();
         var ids = _rows.Select(row => row.Id).ToHashSet();
+        var removed = _selectedDnsDomains.RemoveWhere(id => !ids.Contains(id));
+        if (removed > 0) Snackbar.Add($"{removed} selected domains were removed because they are hidden or no longer accessible.", Severity.Info);
         if (!Inventory)
             _actionCentre = DashboardActionCentre.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _senderReviews, _settings, _snapshotUtc);
         _grouped = DashboardGrouping.Group(_rows, _domains.ToDictionary(domain => domain.Id, domain => (IReadOnlyList<int>)VisibleGroups(domain)),
             _groups.Where(group => _state.GroupId is null || group.Id == _state.GroupId).Select(group => (group.Id, group.Name)).ToList());
     }
+
+    private void SelectDnsDomain(int id, bool selected)
+    {
+        if (!_canBulkDns || !_rows.Any(row => row.Id == id)) return;
+        if (selected) _selectedDnsDomains.Add(id);
+        else _selectedDnsDomains.Remove(id);
+    }
+
+    private Task ReviewSelectedDnsAsync() => Dialogs.ShowAsync<DnsPushSelectionDialog>("Review DNS push",
+        new DialogParameters<DnsPushSelectionDialog> { { dialog => dialog.DomainIds, _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).ToArray() } },
+        new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
 
     private Task SortAsync(string key) => ChangeFiltersAsync(_state with
     {
