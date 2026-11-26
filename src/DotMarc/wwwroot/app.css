@@ -10,6 +10,23 @@ html {
     background-color: var(--mud-palette-background);
 }
 
+.dotmarc-brand { flex: 0 1 180px; min-width: 0; }
+.dotmarc-brand a { display: flex; min-width: 0; }
+.dotmarc-brand img { max-width: 100%; object-fit: contain; }
+.dotmarc-desktop-navigation { display: flex; align-items: center; flex-shrink: 0; }
+.dotmarc-mobile-navigation { display: none; }
+.dotmarc-appbar .mud-icon-button { flex-shrink: 0; }
+.dotmarc-navigation-menu { max-width: calc(100vw - 2rem); max-height: calc(100dvh - var(--mud-appbar-height) - var(--dev-banner-height, 0px) - 2rem) !important; overflow-y: auto; }
+.dotmarc-navigation-menu .mud-menu-item { min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 1099.98px) {
+    .dotmarc-desktop-navigation { display: none; }
+    .dotmarc-mobile-navigation { display: flex; }
+    .dotmarc-appbar .mud-toolbar { padding-inline: 12px; }
+    .dotmarc-brand { flex-basis: 160px; }
+    .dotmarc-brand img { height: 40px; }
+    .dotmarc-appbar .mud-icon-button { min-width: 44px; min-height: 44px; }
+}
+
 /* Contextual "?" docs link (see DocsLink.razor): muted until hovered/focused, so it reads as a
    secondary affordance next to a heading rather than competing with the heading itself. */
 .docs-link {
@@ -197,6 +214,10 @@ html:has(.dev-build-banner) .mud-main-content {
 }
 .domain-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .dashboard-metric { height: 100%; }
+.dashboard-section-header { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; min-width: 0; }
+.dashboard-section-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; max-width: 100%; }
+.dashboard-section-actions .mud-button-root { max-width: 100%; text-align: left; }
+.dashboard-section-actions .mud-button-label { white-space: normal; overflow-wrap: anywhere; }
 .dashboard-metric-content, .dashboard-metric-action { padding: 1.25rem; width: 100%; height: 100%; text-align: left; }
 .dashboard-metric-action { display: block; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; border-radius: inherit; text-decoration: none; }
 .dashboard-metric-action:hover { background: var(--mud-palette-action-default-hover); }

@@ -18,6 +18,20 @@ try {
     await page.locator('.dashboard-metric').first().waitFor();
   };
   await enter('/dashboard');
+  const checkSectionActions = async () => {
+    const headers = await page.locator('.dashboard-section-header').evaluateAll(nodes => nodes.map(node => {
+      const heading = node.querySelector('h6').getBoundingClientRect();
+      const action = node.querySelector('.dashboard-section-actions a').getBoundingClientRect();
+      const panel = node.parentElement.getBoundingClientRect();
+      return {headingBottom: heading.bottom, headingLeft: heading.left, actionTop: action.top,
+        actionLeft: action.left, actionRight: action.right, panelRight: panel.right};
+    }));
+    assert.equal(headers.length, 2);
+    assert(headers.every(header => header.actionTop >= header.headingBottom
+      && Math.abs(header.actionLeft - header.headingLeft) <= 1 && header.actionRight <= header.panelRight),
+    'Both section actions must sit below and align with their title, without overflowing');
+  };
+  await checkSectionActions();
   assert.equal(await page.locator('.dashboard-metric').count(), 8);
   assert.deepEqual(await page.locator('.dashboard-metric .mud-typography-body2').allTextContents(), [
     'Domains needing action', 'Sender decisions outstanding', 'Domains needing checks', 'Domains in scope',
@@ -109,8 +123,13 @@ try {
   assert(await page.locator('.dashboard-attention .dashboard-domain-name').count() > 0);
   assert(await page.locator('.dashboard-attention .dashboard-issue-kind').count() > 0);
 
+  for (const width of [1366, 1024, 768, 390, 320]) {
+    await page.setViewportSize({width, height: 844});
+    await checkSectionActions();
+  }
   await page.setViewportSize({width: 390, height: 844});
   await enter('/dashboard');
+  await checkSectionActions();
   assert(await page.locator('.dashboard-metric .domain-percentage').evaluateAll(nodes =>
     nodes.every(node => getComputedStyle(node).whiteSpace === 'nowrap' && node.scrollWidth <= node.clientWidth + 1)));
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
@@ -118,11 +137,12 @@ try {
     nodes.filter(node => node.checkVisibility()).every(node => node.getBoundingClientRect().width > 250)));
   if (process.env.DASHBOARD_MOBILE_SCREENSHOT) await page.screenshot({path: process.env.DASHBOARD_MOBILE_SCREENSHOT, fullPage: true});
 
-  await enter('/dashboard?search=not-a-domain');
+  const missingDomain = `not-a-domain-${Date.now()}`;
+  await enter(`/dashboard?search=${missingDomain}`);
   await page.getByText('No domains in the current scope.', {exact: false}).waitFor();
   assert(await page.getByText('No message data is available', {exact: false}).isVisible());
   assert.equal(new URL(page.url()).pathname, '/dashboard');
-  assert.equal(new URL(page.url()).searchParams.get('search'), 'not-a-domain');
+  assert.equal(new URL(page.url()).searchParams.get('search'), missingDomain);
   const domainInput = page.getByLabel('Domain name', {exact: true});
   assert.equal(await domainInput.isVisible(), false);
   await page.getByRole('button', {name: 'Add domain', exact: true}).click();
@@ -130,7 +150,7 @@ try {
   await domainInput.fill('not a valid domain');
   await page.getByRole('button', {name: 'Add domain', exact: true}).click();
   await page.getByText('Enter a valid domain name.', {exact: true}).waitFor();
-  const addedDomain = `not-a-domain-${Date.now()}.example`;
+  const addedDomain = `${missingDomain}.example`;
   await domainInput.fill(addedDomain);
   await page.getByRole('button', {name: 'Add domain', exact: true}).click();
   await page.locator('#add-domain').getByRole('link', {name: 'View domain', exact: true}).waitFor();

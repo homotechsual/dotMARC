@@ -46,6 +46,8 @@ Not sure? [**Deploy with Docker**](./deploy-with-docker.mdx) is the faster path 
 
 Once your first DMARC report arrives, **Dashboard** shows the action centre: message volume and pass rates, domains needing attention, outstanding sender decisions, and quarantines/rejects to investigate. **Domains** in the main navigation is the full domain list, with per-domain report and DNS status. The screenshot below shows the earlier combined layout; in 0.14 the list has its own page.
 
+On narrower screens, use the **Open navigation** menu beside the logo to reach Dashboard, Domains, Alerts and the management pages your permissions allow. The menu scrolls on short screens, and dark mode and sign-out remain directly available in the app bar.
+
 <ThemedImage
   alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
   sources={{
@@ -67,6 +69,8 @@ Opening a domain and using its **Back** button or browser Back restores the list
 ### Dashboard action centre
 
 The summary cards and both domain queues share the single **Filters** panel and your authorised group scope. Large numbers, labels and reporting windows are shown consistently; a missing pass rate reads **No data**, not 0% or an all-clear.
+
+Both queue sections place their **Open ... in Domains** action directly below the title, left-aligned consistently on desktop and mobile. Action labels wrap rather than pushing beyond a narrow card.
 
 The first row puts action, sender decisions and checks before the domain count. The second shows pass rate, quarantined, rejected and reported messages. Reported messages is observed aggregate volume over 30 days, not a deduplicated count of unique mail across receivers.
 

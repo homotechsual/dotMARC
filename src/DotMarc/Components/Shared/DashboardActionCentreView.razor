@@ -24,13 +24,15 @@
 <MudGrid Spacing="3" Class="mb-4">
 <MudItem xs="12" lg="7">
 <MudPaper id="dashboard-attention" Outlined="true" Class="pa-4 dashboard-attention">
-    <div class="domain-list-toolbar mb-2">
+    <div class="dashboard-section-header mb-2">
         <MudText Typo="Typo.h6">Domains needing attention</MudText>
+        <div class="dashboard-section-actions">
         <MudButton Size="Size.Small" Href="@((State with { Queue = "attention" }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open attention in Domains</MudButton>
         @if (AttentionMode != "all")
         {
             <MudButton Size="Size.Small" OnClick="@(() => ShowAttention(null))">Show all attention</MudButton>
         }
+        </div>
     </div>
     <div class="domain-list-toolbar mb-2" role="group" aria-label="Issue categories">
         <MudButton Size="Size.Small" Variant="@(State.AttentionView is null ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
@@ -94,8 +96,12 @@
 
 <MudItem xs="12" lg="5">
 <MudPaper Outlined="true" Class="pa-4 dashboard-investigations">
-    <MudText Typo="Typo.h6">Quarantines and rejects to investigate</MudText>
-    <MudButton Size="Size.Small" Href="@((State with { Queue = "investigate", AttentionView = null }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open investigations in Domains</MudButton>
+    <div class="dashboard-section-header mb-2">
+        <MudText Typo="Typo.h6">Quarantines and rejects to investigate</MudText>
+        <div class="dashboard-section-actions">
+            <MudButton Size="Size.Small" Href="@((State with { Queue = "investigate", AttentionView = null }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open investigations in Domains</MudButton>
+        </div>
+    </div>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         @Data.Days[0].Date.ToString("dd MMM") to @Data.Days[^1].Date.ToString("dd MMM yyyy") UTC, through @Data.SnapshotUtc.ToString("HH:mm") UTC.
         Bucketed by report receipt, not message send time. Blocking does not by itself mean configuration is wrong.
