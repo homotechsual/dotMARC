@@ -29,6 +29,11 @@ try {
     await ready();
     const form = page.locator('#add-domain');
     assert.equal(await form.count(), 1);
+    if (path !== '/domains/import') {
+      assert.equal(await form.isVisible(), false);
+      await page.getByRole('button', {name: 'Add domain', exact: true}).click();
+      await form.waitFor({state: 'visible'});
+    }
     assert.equal(await form.locator('details').getAttribute('open'), null);
     await form.getByRole('checkbox', {name: 'Open domain and set up DNS', exact: true}).uncheck();
     assert.equal(await form.getByLabel('Add to group', {exact: true}).inputValue(), 'Aurora Retail');

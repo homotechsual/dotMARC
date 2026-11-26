@@ -28,10 +28,12 @@ The Domain tab sets a **target DMARC policy**: the policy a domain should publis
 The page follows **Set the defaults → Add exceptions only where needed → Review and resolve gaps**:
 
 1. Set or edit the system-wide default. Saving sets dotMARC's expectation; it does not publish DNS.
-2. Leave groups inheriting the system default unless they need an override. The table distinguishes inheritance from a group override, with **Set override** or **Edit override** actions. Other group targets and individual overrides can still take precedence. Choose a domain in Inventory to view or change its individual target on Overview.
+2. Leave groups inheriting the system default unless they need an override. The table distinguishes inheritance from a group override, with **Set override** or **Edit override** actions. Other group targets and individual overrides can still take precedence. Choose a domain in Domains to view or change its individual target on Overview.
 3. Open the below-target or needs-checking list, choose a domain, compare its observed record with its effective target, then review DNS changes or update DNS manually. Counts are monitored domains in your authorised scope. Unchecked evidence is not a confirmed failure.
 
 Group targets are collapsed initially because exceptions are optional. Expand **View group targets and edit overrides** when needed; inheritance details are available separately.
+
+On **Groups**, each Baselines section displays its effective group policy, such as **Inherited (Reject)** or **Quarantine**, with a separate subdomain policy when it differs. Search, sort, filters and **Add group** stay together above the cards; the creation inputs appear only after choosing Add group. This group summary is not a claim that every member domain inherits it: individual domain overrides and stricter memberships can still take precedence.
 
 The target dialog explains the scope and distinguishes removing the system default from restoring group/domain inheritance. Target saves may affect below-target alerts but never change mail handling themselves.
 
@@ -87,7 +89,7 @@ A policy stricter than the target counts as meeting it. There are four outcomes:
 * **Needs checking**: the domain has not been checked yet. It is not counted as below target until it has.
 * **No target**: no level applies.
 
-The Domain tab shows how many domains are below target and how many need checking, each linking to Inventory with the **DMARC target** filter applied (`/domains?target=below` and `/domains?target=checking`). These links cover all authorised groups and do not inherit unrelated saved filters. The old Dashboard target links still forward to Inventory. The filter covers monitored domains only. The [API](./api.mdx) returns the same outcome as `dmarcTarget` on each domain and takes a `dmarcTarget` filter (`meets`, `below` or `checking`) on the domain list.
+The Domain tab shows how many domains are below target and how many need checking, each linking to Domains with the **DMARC target** filter applied (`/domains?target=below` and `/domains?target=checking`). These links cover all authorised groups and do not inherit unrelated saved filters. The old Dashboard target links still forward to Domains. The filter covers monitored domains only. The [API](./api.mdx) returns the same outcome as `dmarcTarget` on each domain and takes a `dmarcTarget` filter (`meets`, `below` or `checking`) on the domain list.
 
 ### The alert
 

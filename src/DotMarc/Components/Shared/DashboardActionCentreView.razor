@@ -11,14 +11,14 @@
     </div>
 </div>
 <MudGrid Spacing="3" Class="mb-5 dashboard-metrics">
-    <MudItem xs="6" md="3"><DashboardMetric Label="Domains in scope" Value="@Data.DomainCount.ToString("N0")" Detail="@($"{Data.MonitoredCount:N0} monitored · open filtered Inventory")" Href="@State.ToUrl("/domains")" /></MudItem>
-    <MudItem xs="6" md="3"><DashboardMetric Label="Reported messages" Value="@Data.Messages.ToString("N0")" Detail="@($"30 days · {Data.Reports:N0} reports · {Data.ReportingSources:N0} report sources")" /></MudItem>
-    <MudItem xs="6" md="3"><DashboardMetric Label="DMARC pass rate" Value="@(Data.PassRate?.ToString("P1") ?? "No data")" Detail="30 days · volume-weighted aligned SPF or DKIM" /></MudItem>
     <MudItem xs="6" md="3"><DashboardMetric Label="Domains needing action" Value="@Data.ProblemDomains.ToString("N0")" Detail="Configuration, overdue reports or sender decisions" Color="@(Data.ProblemDomains > 0 ? Color.Warning : Color.Default)" Clicked="@(() => ShowAttention("action"))" /></MudItem>
-    <MudItem xs="6" md="3"><DashboardMetric Label="Domains needing checks" Value="@Data.UncheckedDomains.ToString("N0")" Detail="Required or opted-in evidence not yet confirmed" Color="Color.Info" Clicked="@(() => ShowAttention("checking"))" /></MudItem>
     <MudItem xs="6" md="3"><DashboardMetric Label="Sender decisions outstanding" Value="@Data.SenderReviews.ToString("N0")" Detail="30 days · counted per sender per domain · cached attribution" Color="@(Data.SenderReviews > 0 ? Color.Warning : Color.Default)" Clicked="@(() => ShowAttention("senders"))" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Domains needing checks" Value="@Data.UncheckedDomains.ToString("N0")" Detail="Required or opted-in evidence not yet confirmed" Color="Color.Info" Clicked="@(() => ShowAttention("checking"))" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Domains in scope" Value="@Data.DomainCount.ToString("N0")" Detail="@($"{Data.MonitoredCount:N0} monitored · open filtered Domains")" Href="@State.ToUrl("/domains")" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="DMARC pass rate" Value="@(Data.PassRate?.ToString("P1") ?? "No data")" Detail="30 days · volume-weighted aligned SPF or DKIM" /></MudItem>
     <MudItem xs="6" md="3"><DashboardMetric Label="Quarantined messages" Value="@Data.Quarantined.ToString("N0")" Detail="7 UTC dates · investigate below, not necessarily a fault" /></MudItem>
     <MudItem xs="6" md="3"><DashboardMetric Label="Rejected messages" Value="@Data.Rejected.ToString("N0")" Detail="7 UTC dates · may be successful spoofing protection" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Reported messages" Value="@Data.Messages.ToString("N0")" Detail="@($"30 days · {Data.Reports:N0} reports · {Data.ReportingSources:N0} report sources · reported volume, not unique messages")" /></MudItem>
 </MudGrid>
 
 <MudGrid Spacing="3" Class="mb-4">
@@ -26,6 +26,7 @@
 <MudPaper id="dashboard-attention" Outlined="true" Class="pa-4 dashboard-attention">
     <div class="domain-list-toolbar mb-2">
         <MudText Typo="Typo.h6">Domains needing attention</MudText>
+        <MudButton Size="Size.Small" Href="@((State with { Queue = "attention" }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open attention in Domains</MudButton>
         @if (AttentionMode != "all")
         {
             <MudButton Size="Size.Small" OnClick="@(() => ShowAttention(null))">Show all attention</MudButton>
@@ -55,7 +56,7 @@
     else
     {
         <MudTable T="DashboardAttention" Items="AttentionRows" Dense="true" Hover="true" RowsPerPage="5" Class="dashboard-queue">
-            <HeaderContent><MudTh>Domain / reporting</MudTh><MudTh>Why it needs attention / next action</MudTh><MudTh>Report context (30d)</MudTh></HeaderContent>
+            <HeaderContent><MudTh>Domain / reporting</MudTh><MudTh>Why it needs attention / next action</MudTh></HeaderContent>
             <RowTemplate Context="row">
                 <MudTd DataLabel="Domain / reporting">
                     <a class="dashboard-domain-name" href="@DashboardActionCentre.DomainUrl(row.Domain)" data-domain-link>@row.Domain.Name</a>
@@ -84,12 +85,6 @@
                         </div>
                     }
                 </MudTd>
-                <MudTd DataLabel="Report context (30d)">
-                    <MudText Typo="Typo.body2" Class="domain-percentage dashboard-pass-rate">@(row.PassRate?.ToString("P1") ?? "No message data")</MudText>
-                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">DMARC pass rate · 30 days</MudText>
-                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary mt-2">Last report</MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(row.Domain.LastReportReceivedUtc?.ToString("g") ?? "never")</MudText>
-                </MudTd>
             </RowTemplate>
             <PagerContent><MudTablePager PageSizeOptions="@([5, 10, 25])" /></PagerContent>
         </MudTable>
@@ -100,6 +95,7 @@
 <MudItem xs="12" lg="5">
 <MudPaper Outlined="true" Class="pa-4 dashboard-investigations">
     <MudText Typo="Typo.h6">Quarantines and rejects to investigate</MudText>
+    <MudButton Size="Size.Small" Href="@((State with { Queue = "investigate", AttentionView = null }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open investigations in Domains</MudButton>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         @Data.Days[0].Date.ToString("dd MMM") to @Data.Days[^1].Date.ToString("dd MMM yyyy") UTC, through @Data.SnapshotUtc.ToString("HH:mm") UTC.
         Bucketed by report receipt, not message send time. Blocking does not by itself mean configuration is wrong.

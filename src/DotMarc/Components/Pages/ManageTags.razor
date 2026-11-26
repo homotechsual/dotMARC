@@ -15,9 +15,9 @@
 @inject ILogger<ManageTags> Logger
 
 <AppPageTitle>dotMARC - Tags</AppPageTitle>
-<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Inventory</MudButton>
+<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Domains</MudButton>
 <MudText Typo="Typo.h4">Tags</MudText>
-<MudText Class="mb-4">Tags help filter domains; they never grant access. Assign tags using Inventory's management columns.</MudText>
+<MudText Class="mb-4">Tags help filter domains; they never grant access. Enable management in Domains, then expand a domain to assign tags.</MudText>
 <AuthorizeView Policy="TagsAdd">
     <div class="domain-list-toolbar mb-4">
         <MudTextField T="string" Label="Tag name" @bind-Value="_name" />

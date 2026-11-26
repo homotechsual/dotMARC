@@ -38,7 +38,9 @@ try {
   await page.getByRole('button', {name: 'Recheck selected providers', exact: true}).click();
   await page.getByText(/Provider checks: 2 succeeded, 0 failed, 0 not attempted/).waitFor();
   await page.locator('.domain-inventory').last().scrollIntoViewIfNeeded();
-  const sticky = await page.locator('.domain-dns-toolbar').evaluate(node => ({
+  const selectedToolbar = page.locator('.domain-dns-toolbar').filter({has: page.getByRole('button', {name: 'Review selected DNS', exact: true})});
+  assert.equal(await selectedToolbar.count(), 1);
+  const sticky = await selectedToolbar.evaluate(node => ({
     top: node.getBoundingClientRect().top,
     expected: parseFloat(getComputedStyle(node).top),
     position: getComputedStyle(node).position

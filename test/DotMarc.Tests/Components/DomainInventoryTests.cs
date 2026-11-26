@@ -242,6 +242,80 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     }
 
     [Fact]
+    public async Task OperationalStatusCollapsesOnlyWithKnownSuccessfulPolling()
+    {
+        await using var statusFactory = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services => services.RemoveAll<IPsaProvider>()));
+        using var client = statusFactory.CreateClient();
+        await client.PostAsync("/demo/sign-in/admin", null);
+        var factory = statusFactory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        await db.ParseFailures.ExecuteDeleteAsync();
+        await db.PollCycles.ExecuteDeleteAsync();
+        Assert.True(await ExpandedAsync());
+        var poll = new PollCycle { PolledUtc = DateTimeOffset.UtcNow, Succeeded = true };
+        db.PollCycles.Add(poll);
+        await db.SaveChangesAsync();
+        Assert.False(await ExpandedAsync());
+        poll.Succeeded = false;
+        await db.SaveChangesAsync();
+        Assert.True(await ExpandedAsync());
+
+        async Task<bool> ExpandedAsync()
+        {
+            var html = await client.GetStringAsync("/dashboard");
+            var start = html.IndexOf("dashboard-operations", StringComparison.Ordinal);
+            Assert.True(start >= 0);
+            return System.Text.RegularExpressions.Regex.IsMatch(html[start..], @"<details\s+open(?:=|\s|>)");
+        }
+    }
+
+    [Fact]
+    public async Task ExpandedQueuesUseTheSameScopedDomainSetsAsDashboard()
+    {
+        using var client = await SignInAsync("viewer");
+        foreach (var (queue, categories, css) in new[]
+        {
+            ("attention", "", "dashboard-attention"),
+            ("attention", "&attention=senders", "dashboard-attention"),
+            ("attention", "&attention=dns,missing", "dashboard-attention"),
+            ("investigate", "", "dashboard-investigations")
+        })
+        {
+            var dashboard = await client.GetStringAsync($"/dashboard?group=all{categories}");
+            var start = dashboard.IndexOf(css, StringComparison.Ordinal);
+            var tableEnd = dashboard.IndexOf("</table>", start, StringComparison.Ordinal);
+            Assert.True(start >= 0 && tableEnd > start);
+            var expected = DomainLinks(dashboard[start..tableEnd]);
+            var expanded = await client.GetStringAsync($"/domains?group=all&queue={queue}{categories}");
+            Assert.Equal(expected, DomainLinks(expanded));
+            Assert.Contains("Clear dashboard queue", expanded);
+            Assert.DoesNotContain(">cobalt-freight.example</a>", expanded);
+        }
+
+        static string[] DomainLinks(string html) => System.Text.RegularExpressions.Regex.Matches(html, "<a[^>]*data-domain-link[^>]*>([^<]+)</a>")
+            .Select(match => WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Match(match.Value, "href=\"/domains/([^\"/]+)").Groups[1].Value))
+            .Distinct().Order().ToArray();
+    }
+
+    [Fact]
+    public async Task GroupsDisplayInheritedAndExplicitPolicyTargets()
+    {
+        using var client = await SignInAsync("admin");
+        var factory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var settings = await DotMarc.Notifications.DnsRecordSettingsService.GetAsync(db);
+        settings.TargetDmarcPolicy = DmarcPolicyLevel.Reject;
+        var group = await db.Groups.SingleAsync(group => group.Name == "Aurora Retail");
+        group.TargetDmarcPolicy = null;
+        await db.SaveChangesAsync();
+        Assert.Contains("DMARC policy target: Inherited (Reject)", await client.GetStringAsync("/groups"));
+        group.TargetDmarcPolicy = DmarcPolicyLevel.Quarantine;
+        group.TargetDmarcSubdomainPolicy = DmarcPolicyLevel.Reject;
+        await db.SaveChangesAsync();
+        Assert.Contains("DMARC policy target: Quarantine; subdomains: Reject", await client.GetStringAsync("/groups"));
+    }
+
+    [Fact]
     public async Task DashboardHasNoInventoryTable_AndInventoryRetainsManagementProjection()
     {
         using var client = await SignInAsync("admin");
@@ -331,7 +405,7 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.Contains("DMARC policy target", defaults);
         Assert.DoesNotContain("<details", defaults);
         Assert.Contains("Set override", domain);
-        Assert.Contains("Choose a domain in Inventory", domain);
+        Assert.Contains("Choose a domain in Domains", domain);
         Assert.True(domain.IndexOf("Set the default", StringComparison.Ordinal) < domain.IndexOf("Add exceptions only where needed", StringComparison.Ordinal));
         Assert.True(domain.IndexOf("Add exceptions only where needed", StringComparison.Ordinal) < domain.IndexOf("Review and resolve gaps", StringComparison.Ordinal));
         Assert.Contains("href=\"/domains?target=below\"", domain);

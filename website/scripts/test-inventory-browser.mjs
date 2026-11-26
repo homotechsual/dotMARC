@@ -5,7 +5,7 @@ const base = process.env.INVENTORY_TEST_URL ?? 'http://127.0.0.1:5187';
 const browser = await chromium.launch({channel: 'msedge', headless: true});
 const errors = [];
 try {
-  const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+  const page = await browser.newPage({viewport: {width: 1366, height: 768}});
   page.on('pageerror', error => errors.push(error.message));
   await page.request.post(`${base}/demo/sign-in/admin`);
   const enter = async path => {
@@ -20,12 +20,31 @@ try {
   await page.getByRole('button', {name: 'Add tag', exact: true}).click();
   await page.getByText(testTag, {exact: true}).waitFor();
   await enter('/domains');
+  const table = page.locator('.domain-inventory .mud-table-container').first();
+  assert(await table.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'Normal Domains table must fit a 1366px laptop');
+  assert(await page.getByRole('img', {name: /^DMARC:/}).count() > 0);
   await page.getByRole('switch', {name: 'Show management columns', exact: true}).check();
+  await page.getByRole('button', {name: 'Manage aurora-retail.example', exact: true}).click();
+  await page.getByLabel('Tags for aurora-retail.example', {exact: true}).waitFor();
+  assert(await table.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'Expanded management must not widen the laptop table');
+  await table.scrollIntoViewIfNeeded();
+  await table.locator('table').evaluate(node => node.style.minWidth = '1600px');
+  const scrollBar = page.getByRole('region', {name: 'Scroll Domains table horizontally', exact: true});
+  await scrollBar.waitFor({state: 'visible'});
+  assert(await scrollBar.evaluate(node => Math.abs(node.getBoundingClientRect().bottom - innerHeight) <= 1));
+  await scrollBar.evaluate(node => node.scrollLeft = 120);
+  await page.waitForFunction(() => document.querySelector('.domain-inventory .mud-table-container').scrollLeft === 120);
+  await table.evaluate(node => node.scrollLeft = 240);
+  await page.waitForFunction(() => document.querySelector('.domain-table-scroll').scrollLeft === 240);
+  await table.locator('table').evaluate(node => node.style.minWidth = '');
+  await scrollBar.waitFor({state: 'hidden'});
   const tagsForDomain = page.getByLabel('Tags for aurora-retail.example', {exact: true});
   await tagsForDomain.click();
-  await page.getByRole('checkbox', {name: testTag, exact: true}).check();
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(name => [...document.querySelectorAll('input')].some(input => input.value === name), testTag);
+  const tagCheckbox = page.getByRole('checkbox', {name: testTag, exact: true});
+  await tagCheckbox.check();
+  await page.waitForFunction(name => [...document.querySelectorAll('input')].some(input => input.value.includes(name)), testTag);
+  await tagCheckbox.press('Escape');
+  await page.waitForFunction(name => [...document.querySelectorAll('input')].some(input => input.value.includes(name)), testTag);
   await enter('/domains');
   await page.getByRole('button', {name: 'By group', exact: true}).click();
   await page.waitForFunction(() => document.querySelectorAll('section .domain-inventory').length >= 3);
@@ -98,7 +117,7 @@ try {
   await page.goBack();
   await page.waitForFunction(expected => Math.abs(window.scrollY - expected) < 10, before);
   assert((await page.locator('section .domain-inventory').count()) >= 3);
-  await page.getByRole('link', {name: 'Inventory', exact: true}).click();
+  await page.getByRole('link', {name: 'Domains', exact: true}).click();
   await page.waitForURL(url => url.pathname === '/domains' && url.search === '');
   await page.waitForFunction(() => window.scrollY < 10 && document.querySelectorAll('section .domain-inventory').length === 0);
 
@@ -124,7 +143,8 @@ try {
   await viewer.request.post(`${base}/demo/sign-in/viewer`);
   await viewer.goto(`${base}/domains?group=all&view=group`);
   await viewer.waitForFunction(() => !!JSON.parse(history.state?.userState ?? '{}').domainListEntry);
-  assert((await viewer.locator('a[data-domain-link]').allTextContents()).every(name => name.includes('aurora')));
+  const viewerNames = await viewer.locator('a[data-domain-link]').allTextContents();
+  assert(viewerNames.length > 0 && viewerNames.every(name => !['cobalt-freight.example', 'fleet.cobalt-freight.example', 'brightline-legal.example'].includes(name)));
   assert.equal(await viewer.getByRole('button', {name: 'Add domain', exact: true}).count(), 0);
   assert.equal(await viewer.getByRole('switch').count(), 1); // management column visibility, not domain mutation
   await viewer.close();

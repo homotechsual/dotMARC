@@ -15,8 +15,13 @@
 @if (_canViewLogs || _canManagePsa || _canViewParseFailures)
 {
     <MudPaper Outlined="true" Class="pa-4 mb-4 dashboard-operations">
+        <details open="@HasProblems">
+        <summary class="dashboard-operation-summary">
+            <MudIcon Icon="@(HasProblems ? Icons.Material.Filled.WarningAmber : Icons.Material.Filled.CheckCircleOutline)" Color="@(HasProblems ? Color.Warning : Color.Success)" />
+            <span>Integration and ingestion status</span>
+            <span class="mud-typography-caption">@(HasProblems ? "Needs review" : "No current problems in available status")</span>
+        </summary>
         <div class="domain-list-toolbar">
-            <MudText Typo="Typo.h6">Integration and ingestion status</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">All domains · independent of domain filters</MudText>
         </div>
         @if (_error is not null)
@@ -91,6 +96,7 @@
                 <MudLink Href="/logs/server">Open server logs</MudLink>
             }
         }
+        </details>
     </MudPaper>
 }
 
@@ -100,6 +106,8 @@
     private string? _error;
     private PollCycle? _poll;
     private List<(PsaKind Kind, PsaReadiness Readiness)> _readiness = [];
+    private bool HasProblems => _error is not null || _canViewLogs && (_poll is null || !_poll.Succeeded || _poll.ParseFailures > 0)
+        || _canViewParseFailures && ParseFailures > 0 || _readiness.Any(provider => provider.Readiness.Missing.Count > 0) || _canViewLogs && Recent.Count > 0;
     private IReadOnlyList<LogEntry> Recent => Logs.Query(LogLevel.Warning, null, Logs.Capacity)
         .Where(entry => entry.TimestampUtc >= Clock.GetUtcNow().AddDays(-1)
             && (entry.Category.StartsWith("DotMarc.Psa.", StringComparison.Ordinal)

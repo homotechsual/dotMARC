@@ -28,6 +28,7 @@ public sealed record DomainListState
     public string? Sort { get; init; }
     public bool Descending { get; init; }
     public string? AttentionView { get; init; }
+    public string? Queue { get; init; }
 
     public static readonly string[] SortKeys = ["name", "status", "pass", "last", "monitored", "target", "dmarc", "mta", "dkim", "reports", "groups", "tags"];
 
@@ -36,6 +37,7 @@ public sealed record DomainListState
         get
         {
             var labels = new List<string>();
+            if (Queue is not null) labels.Add(Queue == "attention" ? $"Needs attention{(AttentionView is null ? "" : $": {AttentionView}")}" : "Quarantine/reject investigations (7d)");
             if (GroupId is not null) labels.Add("Group");
             if (TagId is not null) labels.Add("Tag");
             if (!string.IsNullOrWhiteSpace(Search)) labels.Add($"Domain: {Search}");
@@ -88,11 +90,13 @@ public sealed record DomainListState
         return (Descending ? rows.OrderByDescending(key) : rows.OrderBy(key)).ThenBy(row => row.Id);
     }
 
-    public DomainListState AsDefault() => this with { Search = null, LastReport = null, AttentionView = null };
+    public DomainListState AsDefault() => this with { Search = null, LastReport = null, AttentionView = null, Queue = null };
 
     public void Validate()
     {
         if (GroupId is <= 0 || TagId is <= 0 || MinPassRatePercent is < 0 or > 100
+            || Queue is not null and not ("attention" or "investigate")
+            || Queue == "investigate" && AttentionView is not null
             || MinPassRatePercent is { } percent && !double.IsFinite(percent)
             || MinReportCount is < 0 || Sort is not null && !SortKeys.Contains(Sort)
             || Status is not null and not ("OK" or "Warning" or "Missing")
@@ -116,7 +120,8 @@ public sealed record DomainListState
         if (GroupedView) Set("view", "group");
         if (ShowFilters) Set("open", "true");
         Set("sort", Sort);
-        if (route == "/dashboard") Set("attention", AttentionView);
+        if (route == "/domains") Set("queue", Queue);
+        if (route == "/dashboard" || route == "/domains" && Queue == "attention") Set("attention", AttentionView);
         if (Descending) Set("desc", "true");
         if (Companies is not null)
             foreach (var (psa, company) in Companies) Set($"company.{psa}", company);
@@ -132,7 +137,7 @@ public sealed record DomainListState
     {
         var query = QueryHelpers.ParseQuery(uri.Query);
         if (query.Count == 0 || query.Keys.All(key => key == "dnsPush")) return null;
-        var allowed = new[] { "filters", "group", "tag", "search", "status", "minPass", "last", "monitored", "target", "dmarc", "mta", "dkim", "minReports", "view", "open", "sort", "desc", "attention" };
+        var allowed = new[] { "filters", "group", "tag", "search", "status", "minPass", "last", "monitored", "target", "dmarc", "mta", "dkim", "minReports", "view", "open", "sort", "desc", "attention", "queue" };
         if (query.Any(pair => pair.Value.Count != 1 || !allowed.Contains(pair.Key) && !pair.Key.StartsWith("company.", StringComparison.Ordinal)))
             throw new FormatException("Unrecognised domain filter.");
         string? Read(string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
@@ -146,7 +151,9 @@ public sealed record DomainListState
         }
         var target = Read("target") switch { null => (DmarcTargetOutcome?)null, "below" => DmarcTargetOutcome.Below, "checking" => DmarcTargetOutcome.NeedsChecking, "meets" => DmarcTargetOutcome.Meets, _ => throw new FormatException("Invalid target filter.") };
         if (Read("view") is not null and not "group") throw new FormatException("Invalid view.");
-        if (Read("attention") is not null && uri.AbsolutePath != "/dashboard") throw new FormatException("Attention categories belong to Dashboard.");
+        if (Read("queue") is not null && uri.AbsolutePath != "/domains") throw new FormatException("Dashboard queues belong to Domains.");
+        if (Read("attention") is not null && uri.AbsolutePath != "/dashboard" && !(uri.AbsolutePath == "/domains" && Read("queue") == "attention"))
+            throw new FormatException("Attention categories require an attention queue.");
         var result = new DomainListState
         {
             GroupId = Read("group") == "all" ? null : Number("group"), AllMyGroups = Read("group") == "all" || target is not null && !query.ContainsKey("group"),
@@ -156,6 +163,7 @@ public sealed record DomainListState
             MinReportCount = Number("minReports"), GroupedView = Read("view") == "group", ShowFilters = Flag("open") == true,
             Sort = Read("sort"), Descending = Flag("desc") == true, Companies = companies.Count == 0 ? null : companies,
             AttentionView = Read("attention"),
+            Queue = Read("queue"),
         };
         result.Validate();
         return result;

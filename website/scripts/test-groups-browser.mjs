@@ -21,6 +21,12 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('.group-card').length === 1);
   };
   await ready();
+  const controlPositions = await page.locator('[aria-controls="add-group"]').evaluate(add => {
+    const row = add.closest('.group-list-toolbar');
+    return [...row.querySelectorAll('input:not([type="hidden"]),[role="combobox"],[aria-controls="group-filters"],[aria-controls="add-group"]')].map(node => node.getBoundingClientRect().left);
+  });
+  assert.equal(controlPositions.length, 4);
+  assert(controlPositions.every((left, index) => !index || left > controlPositions[index - 1]), 'Controls must be search, sort, filters, add');
   const onboarding = page.locator('.group-company-onboarding');
   assert.equal(await onboarding.getAttribute('open'), null);
   await onboarding.locator('summary').click();
@@ -75,7 +81,7 @@ try {
     const names = [...document.querySelectorAll('.group-card')].map(card => card.getAttribute('aria-label'));
     return names.length === 12 && names.every((name, index) => !index || names[index - 1].localeCompare(name) >= 0);
   });
-  await filter.getByLabel('Group search', {exact: true}).fill('Aurora');
+  await page.getByLabel('Group search', {exact: true}).fill('Aurora');
   await page.waitForFunction(() => document.querySelectorAll('.group-card').length === 1);
   await page.getByRole('button', {name: 'Filters (1)', exact: true}).click();
 
@@ -128,6 +134,8 @@ try {
 
   await ready();
   const name = `Groups browser ${Date.now()}`;
+  assert.equal(await page.locator('#add-group').isVisible(), false);
+  await page.getByRole('button', {name: 'Add group', exact: true}).click();
   await page.getByLabel('Group name', {exact: true}).fill(name);
   await page.getByRole('button', {name: 'Add group', exact: true}).click();
   await page.getByRole('button', {name: 'Filters (1)', exact: true}).click();

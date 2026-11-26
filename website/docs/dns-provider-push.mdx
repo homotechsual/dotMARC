@@ -23,11 +23,11 @@ All three providers are independently optional and configured the same way regar
   }}
 />
 
-## Bulk DNS from Inventory
+## Bulk DNS from Domains {/* #bulk-dns-from-inventory */}
 
-On **Inventory**, select domains using their **Select for DNS** checkboxes, or choose **Select matching domains**. Selection is shared between All domains and By group, including domains listed in several groups. Sorting keeps the selection; filtering or losing access removes hidden IDs with a notification. Dashboard has no bulk selection.
+On **Domains**, select domains using their **Select for DNS** checkboxes, or choose **Select matching domains**. Selection is shared between All domains and By group, including domains listed in several groups. Sorting keeps the selection; filtering or losing access removes hidden IDs with a notification. Dashboard has no bulk selection.
 
-The selection toolbar stays below the app bar while scrolling. **Recheck selected providers** runs read-only provider/zone detection immediately for domain editors, saves each result and refreshes Inventory before DNS review. It reports successes, failures and checks not attempted. No provider sign-in or DNS write is involved. New domains added through the shared form or Import also attempt provider detection immediately after creation, rather than waiting behind the mailbox and other health checks in the scheduled polling cycle.
+The selection toolbar stays below the app bar while scrolling. **Recheck selected providers** runs read-only provider/zone detection immediately for domain editors, saves each result and refreshes Domains before DNS review. It reports successes, failures and checks not attempted. No provider sign-in or DNS write is involved. New domains added through the shared form or Import also attempt provider detection immediately after creation, rather than waiting behind the mailbox and other health checks in the scheduled polling cycle.
 
 Choose **Review selected DNS**, select **DMARC**, **TLS reporting** or **MTA-STS hosting**, then choose a provider. Each provider has a separate batch, limited to 50 distinct domains. Domains with no detected provider or no configured push option are listed for manual setup instead; their Overview has individual manual DNS controls.
 
@@ -242,6 +242,10 @@ https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/create-azure-
 ]} />
 
 ## Google Cloud DNS
+
+One interactive authorization can cover multiple managed zones across projects that the signed-in Google account can discover and edit. dotMARC lists visible projects, searches their managed zones and reuses the same access token for each domain. Google IAM, enabled APIs and organization policies still govern access; OAuth consent does not grant project or DNS roles. Projects whose zones cannot be listed are skipped during discovery. There is no explicit per-zone write-permission preflight, so a successful sign-in does not guarantee every selected domain can be published.
+
+The supported workflow remains fresh interactive authorization: Azure across accessible subscriptions in one tenant context, and Google across accessible projects. Stored app-only credentials and unattended multi-customer publishing are separate future work. Live multi-subscription Azure and multi-project Google validation have not yet been completed.
 
 In a Google Cloud project, enable the **Cloud DNS API** and **Cloud Resource Manager API**, then create an OAuth client at **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID** (application type **Web application**), with an authorized redirect URI of `https://<your-deployment-host>/dns-push/google-cloud-dns/callback`. On the **OAuth consent screen**, add both scopes dotMARC requests: `.../auth/ndev.clouddns.readwrite` (read/write access to Cloud DNS) and `.../auth/cloudplatformprojects.readonly` (lets dotMARC list the customer's projects to find which one holds the target zone - it never needs a project ID entered manually).
 

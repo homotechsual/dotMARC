@@ -5,11 +5,11 @@
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Components.Authorization
 
-<AppPageTitle>dotMARC - @(Inventory ? "Domain Inventory" : "Dashboard")</AppPageTitle>
-<div class="domain-list-toolbar domain-dns-toolbar mb-3">
-    <MudText Typo="Typo.h4">@(Inventory ? "Domain Inventory" : "Dashboard")</MudText>
+<AppPageTitle>dotMARC - @(Inventory ? "Domains" : "Dashboard")</AppPageTitle>
+<div class="domain-list-toolbar mb-3">
+    <MudText Typo="Typo.h4">@(Inventory ? "Domains" : "Dashboard")</MudText>
     <MudButton Href="@(Inventory ? "/dashboard" : _state.ToUrl("/domains"))" StartIcon="@(Inventory ? Icons.Material.Filled.Dashboard : Icons.Material.Filled.Language)">
-        @(Inventory ? "Dashboard" : "Domain Inventory")
+        @(Inventory ? "Dashboard" : "Domains")
     </MudButton>
     @if (Inventory)
     {
@@ -56,12 +56,12 @@ else
             }
         }
     </div>
-    <AddDomainForm GroupId="_state.GroupId" Added="@(_ => LoadAsync())" />
+    <AddDomainForm GroupId="_state.GroupId" Added="@(_ => LoadAsync())" Collapsed="true" />
     @if (Inventory)
     {
         @if (_canBulkDns)
         {
-            <div class="domain-list-toolbar mb-3">
+            <div class="domain-list-toolbar domain-dns-toolbar mb-3">
                 <MudText Typo="Typo.body2" role="status">@_selectedDnsDomains.Count selected for DNS review</MudText>
                 <MudButton OnClick="@(() => _selectedDnsDomains.UnionWith(_rows.Select(row => row.Id)))" Disabled="@(_checkingProviders || !RendererInfo.IsInteractive || _rows.Count == 0)">Select matching domains</MudButton>
                 <MudButton OnClick="@(() => _selectedDnsDomains.Clear())" Disabled="@(_checkingProviders || _selectedDnsDomains.Count == 0)">Clear selection</MudButton>
@@ -86,6 +86,15 @@ else
             }
         }
         <MudSwitch T="bool" @bind-Value="_management" Label="Show management columns" Color="Color.Primary" />
+        @if (_management)
+        {
+            <div class="domain-list-toolbar mb-3">
+                <MudButton Size="Size.Small" OnClick="@(() => SortAsync("groups"))">Sort by groups @SortMark("groups")</MudButton>
+                <MudButton Size="Size.Small" OnClick="@(() => SortAsync("tags"))">Sort by tags @SortMark("tags")</MudButton>
+                <MudButton Size="Size.Small" OnClick="@(() => SortAsync("reports"))">Sort by reports @SortMark("reports")</MudButton>
+                <MudText Typo="Typo.caption">Expand a domain's Manage control for groups, tags and overrides.</MudText>
+            </div>
+        }
         @if (_management && !CanReorder)
         {
             <MudText Typo="Typo.caption">Manual reorder requires All domains, no filters or column sort, and unrestricted reorder access.</MudText>
@@ -120,10 +129,10 @@ else
 }
 
 @code {
-    private RenderFragment DomainTable(IReadOnlyList<DashboardDomainRow> rows) => @<MudTable Items="rows" T="DashboardDomainRow" Hover="true" Class="domain-inventory">
+    private RenderFragment DomainTable(IReadOnlyList<DashboardDomainRow> rows) => @<MudTable Items="rows" T="DashboardDomainRow" Hover="true" Class="domain-inventory" aria-busy="@_loading.ToString().ToLowerInvariant()">
         <HeaderContent>
             @if (_canBulkDns) { <MudTh>Select for DNS</MudTh> }
-            @if (_management) { <MudTh>Order</MudTh> }
+            @if (_management) { <MudTh>Manage</MudTh> }
             @foreach (var column in Columns)
             {
                 <MudTh aria-sort="@(_state.Sort == column.Key ? (_state.Descending ? "descending" : "ascending") : "none")"><button type="button" class="domain-sort" @onclick="@(() => SortAsync(column.Key))" aria-label="@($"Sort by {column.Value}")">
@@ -133,14 +142,6 @@ else
                         <MudIcon Icon="@(_state.Descending ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)" Size="Size.Small" />
                     }
                 </button></MudTh>
-            }
-            @if (_management)
-            {
-                <MudTh><button type="button" class="domain-sort" @onclick="@(() => SortAsync("groups"))">Groups @SortMark("groups")</button></MudTh>
-                <MudTh><button type="button" class="domain-sort" @onclick="@(() => SortAsync("tags"))">Tags @SortMark("tags")</button></MudTh>
-                <MudTh><button type="button" class="domain-sort" @onclick="@(() => SortAsync("reports"))">Reports @SortMark("reports")</button></MudTh>
-                @foreach (var psa in _companyOptions.Keys.Order()) { <MudTh>@psa.CompanyLabel() override</MudTh> }
-                <MudTh>Actions</MudTh>
             }
         </HeaderContent>
         <RowTemplate Context="row">
@@ -152,6 +153,8 @@ else
             @if (_management)
             {
                 <MudTd>
+                    <MudIconButton Icon="@(_expandedManagement.Contains(row.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                   OnClick="@(() => ToggleManagement(row.Id))" aria-label="@($"Manage {row.Name}")" aria-expanded="@_expandedManagement.Contains(row.Id).ToString().ToLowerInvariant()" />
                     @if (CanReorder)
                     {
                         <div draggable="true" @ondragstart="@(() => _draggedId = row.Id)" @ondragover:preventDefault="true" @ondrop="@(() => DropAsync(row.Id))" title="Drag to reorder">
@@ -164,48 +167,54 @@ else
                 <a href="@($"/domains/{Uri.EscapeDataString(row.Name)}")" data-domain-link>@row.Name</a>
                 @if (row.SpfCheckStatus == SpfCheckStatus.NullSpf) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Null-routed</MudChip> }
             </MudTd>
-            <MudTd DataLabel="Report status"><MudChip T="string" Size="Size.Small" Color="row.StatusColor">@row.Status</MudChip></MudTd>
+            <MudTd DataLabel="Report status"><DomainStatusIcon Label="@($"Report status: {row.Status}")" Color="row.StatusColor" /></MudTd>
             <MudTd DataLabel="Pass rate (30d)" Class="domain-percentage">@(row.PassRate?.ToString("P1") ?? "—")</MudTd>
-            <MudTd DataLabel="Last report">@(row.LastReportReceivedUtc?.ToString("g") ?? "never")</MudTd>
+            <MudTd DataLabel="Last report"><MudTooltip Text="@(row.LastReportReceivedUtc?.ToString("g") ?? "never")">@(row.LastReportReceivedUtc?.ToString("d") ?? "never")</MudTooltip></MudTd>
             <MudTd DataLabel="Monitored">
                 <AuthorizeView Policy="DomainsEdit" Context="edit">
                     <Authorized><MudSwitch T="bool" Value="row.IsMonitored" ValueChanged="@(value => SetMonitoredAsync(row.Id, value))" aria-label="@($"Monitor {row.Name}")" /></Authorized>
                     <NotAuthorized>@(row.IsMonitored ? "Yes" : "No")</NotAuthorized>
                 </AuthorizeView>
             </MudTd>
-            <MudTd DataLabel="Target">@TargetLabel(row.TargetOutcome)</MudTd>
-            <MudTd DataLabel="DMARC"><MudChip T="string" Size="Size.Small" Color="@DmarcStatusPresentation.GetColor(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)">@DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)</MudChip></MudTd>
-            <MudTd DataLabel="MTA-STS"><MudChip T="string" Size="Size.Small" Color="@MtaStsStatusPresentation.GetColor(row.MtaStsStatus)">@MtaStsStatusPresentation.GetLabel(row.MtaStsStatus)</MudChip></MudTd>
-            <MudTd DataLabel="DKIM"><MudChip T="string" Size="Size.Small" Color="@DkimStatusPresentation.GetColor(row.DkimCheckStatus)">@DkimStatusPresentation.GetLabel(row.DkimCheckStatus)</MudChip></MudTd>
-            @if (_management)
+            <MudTd DataLabel="Target"><DomainStatusIcon Label="@($"DMARC target: {TargetLabel(row.TargetOutcome)}")" Color="@(row.TargetOutcome == Baselines.DmarcTargetOutcome.Meets ? Color.Success : row.TargetOutcome == Baselines.DmarcTargetOutcome.Below ? Color.Warning : Color.Default)" /></MudTd>
+            <MudTd DataLabel="DMARC"><DomainStatusIcon Color="@DmarcStatusPresentation.GetColor(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)" Label="@($"DMARC: {DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)}")" /></MudTd>
+            <MudTd DataLabel="MTA-STS"><DomainStatusIcon Color="@MtaStsStatusPresentation.GetColor(row.MtaStsStatus)" Label="@($"MTA-STS: {MtaStsStatusPresentation.GetLabel(row.MtaStsStatus)}")" /></MudTd>
+            <MudTd DataLabel="DKIM"><DomainStatusIcon Color="@DkimStatusPresentation.GetColor(row.DkimCheckStatus)" Label="@($"DKIM: {DkimStatusPresentation.GetLabel(row.DkimCheckStatus)}")" /></MudTd>
+        </RowTemplate>
+        <ChildRowContent Context="row">
+            @if (_management && _expandedManagement.Contains(row.Id))
             {
                 var domain = _domainsById[row.Id];
-                <MudTd DataLabel="Groups">
+                <MudTr><MudTd colspan="@(Columns.Length + 1 + (_canBulkDns ? 1 : 0))">
+                <div class="domain-management-details" aria-label="@($"Management for {row.Name}")">
+                <div>
                     <AuthorizeView Policy="DomainsEdit" Context="groupEdit">
                         <Authorized><SearchableMultiSelect TValue="int" Label="@($"Groups for {row.Name}")" Options="@(_groups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList())" SelectedValues="@(VisibleGroups(domain))" SelectedValuesChanged="@(ids => SetGroupsAsync(row.Id, ids))" /></Authorized>
                         <NotAuthorized>@string.Join(", ", _groups.Where(group => domain.Groups.Any(member => member.Id == group.Id)).Select(group => group.Name))</NotAuthorized>
                     </AuthorizeView>
-                </MudTd>
-                <MudTd DataLabel="Tags">
+                </div>
+                <div>
                     <AuthorizeView Policy="DomainsEdit" Context="tagEdit">
                         <Authorized><SearchableMultiSelect TValue="int" Label="@($"Tags for {row.Name}")" Options="@(_tags.Select(tag => new SelectOption<int>(tag.Id, tag.Name)).ToList())" SelectedValues="@(domain.Tags.Select(tag => tag.Id).ToList())" SelectedValuesChanged="@(ids => SetTagsAsync(row.Id, ids))" /></Authorized>
                         <NotAuthorized>@string.Join(", ", domain.Tags.Select(tag => tag.Name))</NotAuthorized>
                     </AuthorizeView>
-                </MudTd>
-                <MudTd DataLabel="Reports">@_reportCounts.GetValueOrDefault(row.Id)</MudTd>
+                </div>
+                <MudText Typo="Typo.body2">Reports: @_reportCounts.GetValueOrDefault(row.Id)</MudText>
                 @foreach (var psa in _companyOptions.Keys.Order())
                 {
                     var list = _psaLists.FirstOrDefault(list => list.Psa == psa);
                     var link = domain.PsaCompanyLinks.FirstOrDefault(link => link.Psa == psa);
-                    <MudTd DataLabel="@(psa.CompanyLabel())">
+                    <div>
                         <AuthorizeView Policy="DomainsEdit" Context="psaEdit">
                             <Authorized><PsaCompanyPicker Psa="psa" Companies="list?.Companies" Current="link" Placeholder="Use Group's" CompanyChanged="@(company => SetCompanyAsync(row.Id, psa, company))" /></Authorized>
                             <NotAuthorized>@(link?.CompanyName ?? "Use Group's")</NotAuthorized>
                         </AuthorizeView>
-                    </MudTd>
+                    </div>
                 }
-                <MudTd><AuthorizeView Policy="DomainsDelete" Context="delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteAsync(row.Id))" aria-label="@($"Remove {row.Name}")" /></AuthorizeView></MudTd>
+                <AuthorizeView Policy="DomainsDelete" Context="delete"><MudButton StartIcon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteAsync(row.Id))" aria-label="@($"Remove {row.Name}")">Remove domain</MudButton></AuthorizeView>
+                </div>
+                </MudTd></MudTr>
             }
-        </RowTemplate>
+        </ChildRowContent>
     </MudTable>;
 }

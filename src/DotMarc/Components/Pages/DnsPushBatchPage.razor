@@ -22,7 +22,7 @@
 @inject TimeProvider Clock
 
 <AppPageTitle>dotMARC - DNS batch review</AppPageTitle>
-<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Inventory</MudButton>
+<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Domains</MudButton>
 <MudText Typo="Typo.h4" Class="my-3">DNS batch review and results</MudText>
 @if (_error is not null) { <MudAlert Severity="Severity.Error">@_error <MudButton OnClick="LoadAsync">Refresh</MudButton></MudAlert> }
 @if (_batch is { } batch)
@@ -115,7 +115,7 @@
             var batch = await ReadAuthorizedAsync(db);
             var reviews = new Dictionary<int, DnsPushReview>();
             if (batch.Status == DnsPushBatchStatus.Planned && batch.Domains.Any(row => row.Status == DnsPushBatchDomainStatus.Planned && row.ReviewJson is null))
-                throw new DnsPushBatchException("This older batch has no stored review. Create a fresh review from Inventory before publishing.");
+                throw new DnsPushBatchException("This older batch has no stored review. Create a fresh review from Domains before publishing.");
             foreach (var row in batch.Domains.Where(row => row.ReviewJson is not null))
                 reviews[row.DomainId] = JsonSerializer.Deserialize<DnsPushReview>(row.ReviewJson!)
                     ?? throw new JsonException("Missing DNS review.");
@@ -131,7 +131,7 @@
         {
             Logger.LogWarning(exception, "Reading DNS batch {BatchId} failed", BatchId);
             _batch = null;
-            _error = "Could not read this DNS review. Refresh or create a fresh review from Inventory.";
+            _error = "Could not read this DNS review. Refresh or create a fresh review from Domains.";
         }
     }
 

@@ -3,6 +3,55 @@ const lifetime = 30 * 60 * 1000;
 let current = null;
 let snapshot = null;
 let restoredScroll = 0;
+let releaseTableScroll = null;
+
+export function syncTableScroll() {
+    releaseTableScroll?.();
+    const tables = [...document.querySelectorAll(".domain-inventory .mud-table-container")];
+    if (!tables.length) return;
+    const bar = document.createElement("div");
+    bar.className = "domain-table-scroll";
+    bar.tabIndex = 0;
+    bar.setAttribute("role", "region");
+    bar.setAttribute("aria-label", "Scroll Domains table horizontally");
+    const track = document.createElement("div");
+    bar.append(track);
+    document.body.append(bar);
+    let active = null;
+    function refresh() {
+        active = tables.find(table => {
+            const rect = table.getBoundingClientRect();
+            return rect.top < innerHeight && rect.bottom > 0 && table.scrollWidth > table.clientWidth + 1;
+        }) ?? null;
+        bar.hidden = !active;
+        if (!active) return;
+        const rect = active.getBoundingClientRect();
+        bar.style.left = `${rect.left}px`;
+        bar.style.width = `${rect.width}px`;
+        track.style.width = `${active.scrollWidth}px`;
+        if (bar.scrollLeft !== active.scrollLeft) bar.scrollLeft = active.scrollLeft;
+    }
+    const fromBar = () => { if (active && active.scrollLeft !== bar.scrollLeft) active.scrollLeft = bar.scrollLeft; };
+    bar.addEventListener("scroll", fromBar);
+    window.addEventListener("scroll", refresh, {passive: true});
+    window.addEventListener("resize", refresh);
+    const observer = new ResizeObserver(refresh);
+    for (const table of tables) {
+        table.addEventListener("scroll", refresh, {passive: true});
+        observer.observe(table);
+        const content = table.querySelector("table");
+        if (content) observer.observe(content);
+    }
+    refresh();
+    releaseTableScroll = () => {
+        observer.disconnect();
+        window.removeEventListener("scroll", refresh);
+        window.removeEventListener("resize", refresh);
+        for (const table of tables) table.removeEventListener("scroll", refresh);
+        bar.remove();
+        releaseTableScroll = null;
+    };
+}
 
 function storage() {
     return window.sessionStorage;
@@ -99,6 +148,7 @@ export function focusAddDomain() {
 }
 
 export function leave() {
+    releaseTableScroll?.();
     if (current && location.pathname === current.route) save();
     document.removeEventListener("click", openDomain, true);
     window.removeEventListener("pagehide", save);

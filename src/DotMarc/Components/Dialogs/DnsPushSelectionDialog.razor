@@ -73,21 +73,21 @@
             _target = _canEdit ? "dmarc" : _canMta ? "mta-sts" : "";
             await using var db = await DbFactory.CreateDbContextAsync();
             if (_target.Length == 0 || !await DnsPushBatchAccess.InScopeAsync(db, user, DomainIds))
-                throw new DnsPushBatchException("You no longer have permission for this selection. Close the review and refresh Inventory.");
+                throw new DnsPushBatchException("You no longer have permission for this selection. Close the review and refresh Domains.");
             var configured = new List<string>();
             foreach (var provider in Providers)
                 if (await provider.IsConfiguredAsync()) configured.Add(provider.ProviderKey);
             var domains = await db.Domains.Where(domain => DomainIds.Contains(domain.Id))
                 .Select(domain => new SelectedDnsDomain(domain.Id, domain.Name, domain.DnsProvider)).ToListAsync();
             if (domains.Count != DomainIds.Distinct().Count())
-                throw new DnsPushBatchException("Some selected domains no longer exist. Close the review and refresh Inventory.");
+                throw new DnsPushBatchException("Some selected domains no longer exist. Close the review and refresh Domains.");
             _selection = DnsPushSelection.Group(domains, configured);
         }
         catch (DnsPushBatchException exception) { _error = exception.Message; }
         catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
         {
             Logger.LogWarning(exception, "Loading DNS push selection failed");
-            _error = "Could not load the selection. Close this dialog and refresh Inventory.";
+            _error = "Could not load the selection. Close this dialog and refresh Domains.";
         }
     }
 
@@ -105,7 +105,7 @@
                 || !await DnsPushBatchAccess.InScopeAsync(db, user, ids))
                 throw new DnsPushBatchException("You no longer have permission to review these domains.");
             if (await Providers.FindConfiguredAsync(provider.Provider) is null)
-                throw new DnsPushBatchException("This DNS provider is no longer configured. Close the dialog and refresh Inventory.");
+                throw new DnsPushBatchException("This DNS provider is no longer configured. Close the dialog and refresh Domains.");
             var batch = await Batches.CreateAsync(db, await Actor.GetAsync(), provider.Provider, _target, ids);
             Dialog.Close();
             Navigation.NavigateTo($"/dns-push/batches/{batch.Id}");

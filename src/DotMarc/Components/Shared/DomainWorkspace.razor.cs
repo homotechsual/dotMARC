@@ -47,6 +47,11 @@ public partial class DomainWorkspace : IAsyncDisposable
     private readonly List<DnsProviderCheckOutcome> _providerCheckResults = [];
     private readonly CancellationTokenSource _providerChecksStop = new();
     private readonly HashSet<int> _selectedDnsDomains = [];
+    private readonly HashSet<int> _expandedManagement = [];
+    private void ToggleManagement(int id)
+    {
+        if (!_expandedManagement.Add(id)) _expandedManagement.Remove(id);
+    }
     private IReadOnlyCollection<int> _scope = [];
     private List<Group> _groups = [];
     private List<Tag> _tags = [];
@@ -166,7 +171,7 @@ public partial class DomainWorkspace : IAsyncDisposable
             var parseFailures = (await Authorization.AuthorizeAsync(user, "DomainsWrite")).Succeeded ? await db.ParseFailures.CountAsync() : 0;
             var canEdit = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded;
             var senderReviews = new Dictionary<int, int>();
-            if (!Inventory)
+            if (!Inventory || _state.Queue == "attention")
             {
                 var groupIds = domains.SelectMany(domain => domain.Groups).Select(group => group.Id).Distinct().ToList();
                 var decisions = await db.SenderDecisions.AsNoTracking().Where(decision =>
@@ -245,10 +250,18 @@ public partial class DomainWorkspace : IAsyncDisposable
         };
         _rows = _state.Order(matched, row => CountOf(row)).ToList();
         var ids = _rows.Select(row => row.Id).ToHashSet();
+        if (!Inventory || _state.Queue is not null)
+            _actionCentre = DashboardActionCentre.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _senderReviews, _settings, _snapshotUtc);
+        if (Inventory && _state.Queue is not null && _actionCentre is { } centre)
+        {
+            var queueIds = (_state.Queue == "attention"
+                ? centre.Attention.Where(row => row.MatchesCategories(_state.AttentionView)).Select(row => row.Domain.Id)
+                : centre.Investigations.Select(row => row.Domain.Id)).ToHashSet();
+            _rows = _rows.Where(row => queueIds.Contains(row.Id)).ToList();
+            ids = _rows.Select(row => row.Id).ToHashSet();
+        }
         var removed = _selectedDnsDomains.RemoveWhere(id => !ids.Contains(id));
         if (removed > 0) Snackbar.Add($"{removed} selected domains were removed because they are hidden or no longer accessible.", Severity.Info);
-        if (!Inventory)
-            _actionCentre = DashboardActionCentre.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _senderReviews, _settings, _snapshotUtc);
         _grouped = DashboardGrouping.Group(_rows, _domains.ToDictionary(domain => domain.Id, domain => (IReadOnlyList<int>)VisibleGroups(domain)),
             _groups.Where(group => _state.GroupId is null || group.Id == _state.GroupId).Select(group => (group.Id, group.Name)).ToList());
     }
@@ -307,19 +320,21 @@ public partial class DomainWorkspace : IAsyncDisposable
     });
     private string SortMark(string key) => _state.Sort == key ? (_state.Descending ? "(descending)" : "(ascending)") : "";
 
-    private Task ChangeFiltersAsync(DomainListState value)
+    private async Task ChangeFiltersAsync(DomainListState value)
     {
         try { value.Validate(); }
         catch (FormatException)
         {
             Snackbar.Add("Enter valid domain filters (pass rate 0 to 100 and non-negative report counts).", Severity.Warning);
-            return Task.CompletedTask;
+            return;
         }
-        _state = value; NormaliseScope(); Rebuild();
+        var queueChanged = value.Queue != _state.Queue;
+        _state = value; NormaliseScope();
+        if (queueChanged && Inventory) await LoadAsync();
+        else Rebuild();
         var uri = _state.ToUrl(Route);
         _lastUri = Navigation.ToAbsoluteUri(uri).ToString();
         Navigation.NavigateTo(uri, new NavigationOptions { ReplaceHistoryEntry = true, HistoryEntryState = Navigation.HistoryEntryState });
-        return Task.CompletedTask;
     }
 
     private async Task SaveDefaultAsync() => await WriteDefaultAsync(_state);
@@ -424,7 +439,7 @@ public partial class DomainWorkspace : IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!RendererInfo.IsInteractive || !_loaded || _memoryFailed) return;
+        if (!RendererInfo.IsInteractive || !_loaded || _loading || _memoryFailed) return;
         try
         {
             if (!_memoryAttempted)
@@ -436,6 +451,7 @@ public partial class DomainWorkspace : IAsyncDisposable
             }
             if (_memory is null) return;
             await _memory.InvokeVoidAsync("update", _state);
+            if (Inventory) await _memory.InvokeVoidAsync("syncTableScroll");
             if (_restoreScroll) { _restoreScroll = false; await _memory.InvokeVoidAsync("restore"); }
             if (_scrollTop) { _scrollTop = false; await _memory.InvokeVoidAsync("top"); }
             if (_focusAddDomain)

@@ -12,10 +12,11 @@
 @inject ILogger<DashboardPolling> Logger
 
 <MudExpansionPanels Class="mt-4">
-    <MudExpansionPanel>
+    <MudExpansionPanel @bind-Expanded="_expanded">
         <TitleContent>
+            <MudIcon Icon="@(_last is { Succeeded: true, ParseFailures: 0 } ? Icons.Material.Filled.CheckCircleOutline : Icons.Material.Filled.WarningAmber)" Color="@(_last is { Succeeded: true, ParseFailures: 0 } ? Color.Success : Color.Warning)" Class="mr-2" />
             <MudText Color="@(_last?.Succeeded == false ? Color.Error : Color.Default)">
-                Polling status (all domains): @(_last is null ? "Not polled yet" : _last.Succeeded ? "OK" : "Failed")
+                Polling status (all domains): @(_last is null ? "Not polled yet" : !_last.Succeeded ? "Failed" : _last.ParseFailures > 0 ? "Parse failures" : "OK")
             </MudText>
         </TitleContent>
         <ChildContent>
@@ -55,12 +56,14 @@
     </span>;
     private PollCycle? _last;
     private bool _busy;
+    private bool _expanded;
     private IReadOnlyList<MailboxCheckResult> _checks = [];
     protected override async Task OnInitializedAsync() => await LoadAsync();
     private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _last = await db.PollCycles.AsNoTracking().OrderByDescending(poll => poll.PolledUtc).FirstOrDefaultAsync();
+        _expanded = _last is not { Succeeded: true, ParseFailures: 0 };
     }
     private async Task RunAsync(Func<Task> action)
     {

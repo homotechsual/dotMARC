@@ -11,6 +11,10 @@
 .group-list-toolbar {
     justify-content: space-between;
 }
+.group-list-toolbar ::deep .mud-input-control {
+    flex: 1 1 220px;
+    min-width: 0;
+}
 
 .group-list-controls {
     flex: 0 1 360px;

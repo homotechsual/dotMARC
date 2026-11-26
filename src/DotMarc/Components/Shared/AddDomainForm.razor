@@ -16,6 +16,14 @@
 <AuthorizeView Policy="DomainsAdd">
     @if (!_portal)
     {
+        @if (Collapsed)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => _expanded = !_expanded)" aria-expanded="@_expanded.ToString().ToLowerInvariant()" aria-controls="add-domain" Class="mb-3">
+                @(_expanded ? "Close add domain" : "Add domain")
+            </MudButton>
+        }
+        <div hidden="@(Collapsed && !_expanded)">
         <MudPaper id="add-domain" Class="pa-3 mb-3" Outlined="true">
             <MudText Typo="Typo.subtitle1">Add a domain</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Start monitoring one domain. DNS is not changed, and no baseline setup is required.</MudText>
@@ -86,17 +94,21 @@
                 </MudAlert>
             }
         </MudPaper>
+        </div>
     }
 </AuthorizeView>
 
 @code {
     [Parameter] public int? GroupId { get; set; }
+    [Parameter] public bool Collapsed { get; set; }
     [Parameter] public EventCallback<string> Added { get; set; }
     private List<SelectOption<int?>> _groups = [];
     private int? _selectedGroup, _previousGroup;
     private string _name = "";
     private string? _error, _addedName;
     private bool _ready, _adding, _scoped, _canEdit, _portal;
+    private bool _expanded;
+
     private bool _canBaseline, _canMta, _monitored = true, _mtaEnabled, _openDomain = true;
     private DmarcPolicyLevel? _policy, _subdomainPolicy;
     private string _selectors = "", _mxHosts = "";
@@ -131,6 +143,7 @@
 
     protected override void OnParametersSet()
     {
+        if (new Uri(Navigation.Uri).Fragment == "#add-domain") _expanded = true;
         if (_previousGroup != GroupId)
         {
             _selectedGroup = GroupId;
@@ -231,7 +244,7 @@
             catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
             {
                 Logger.LogWarning(exception, "Initial DNS provider detection failed for {Domain}", added);
-                Snackbar.Add("Domain added, but its DNS provider could not be checked. Use Inventory's provider recheck to retry.", Severity.Warning);
+                Snackbar.Add("Domain added, but its DNS provider could not be checked. Use Domains' provider recheck to retry.", Severity.Warning);
             }
             finally { _adding = false; }
             if (_openDomain) Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(added)}?setup=true");

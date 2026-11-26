@@ -10,11 +10,48 @@ try {
   await page.request.post(`${base}/demo/sign-in/admin`);
   const enter = async path => {
     await page.goto(`${base}${path}`);
-    await page.waitForFunction(() => !!JSON.parse(history.state?.userState ?? '{}').domainListEntry);
+    await page.waitForFunction(() => {
+      const token = JSON.parse(history.state?.userState ?? '{}').domainListEntry;
+      const saved = JSON.parse(sessionStorage.getItem(`dotmarc-list:${token}`) ?? 'null');
+      return saved?.route === location.pathname && saved.url === location.pathname + location.search;
+    });
     await page.locator('.dashboard-metric').first().waitFor();
   };
   await enter('/dashboard');
   assert.equal(await page.locator('.dashboard-metric').count(), 8);
+  assert.deepEqual(await page.locator('.dashboard-metric .mud-typography-body2').allTextContents(), [
+    'Domains needing action', 'Sender decisions outstanding', 'Domains needing checks', 'Domains in scope',
+    'DMARC pass rate', 'Quarantined messages', 'Rejected messages', 'Reported messages'
+  ]);
+  assert.equal(await page.locator('.dashboard-attention').getByRole('columnheader', {name: 'Report context (30d)', exact: true}).count(), 0);
+  const expandQueue = async (section, label, queue) => {
+    const url = page.url();
+    const domains = locator => locator.evaluateAll(links => [...new Set(links.map(link => decodeURIComponent(new URL(link.href).pathname.split('/')[2])))].sort());
+    const expectedSet = new Set();
+    const queuePanel = page.locator(section);
+    const next = queuePanel.getByRole('button', {name: 'Next page', exact: true});
+    for (;;) {
+      for (const name of await domains(queuePanel.locator('a[data-domain-link]'))) expectedSet.add(name);
+      if (!await next.count() || await next.isDisabled()) break;
+      const previous = await queuePanel.locator('.mud-table-page-number-information').innerText();
+      await next.click();
+      await page.waitForFunction(({section, previous}) => document.querySelector(`${section} .mud-table-page-number-information`).textContent !== previous, {section, previous});
+    }
+    const expected = [...expectedSet].sort();
+    await page.getByRole('link', {name: label, exact: true}).click();
+    await page.waitForURL(target => target.pathname === '/domains' && target.searchParams.get('queue') === queue);
+    await page.waitForFunction(queue => {
+      const token = JSON.parse(history.state?.userState ?? '{}').domainListEntry;
+      const saved = JSON.parse(sessionStorage.getItem(`dotmarc-list:${token}`) ?? 'null');
+      return saved?.route === '/domains' && saved.state.queue === queue && saved.url === location.pathname + location.search;
+    }, queue);
+    assert.deepEqual(await domains(page.locator('a[data-domain-link]')), expected);
+    await page.getByRole('button', {name: 'Clear dashboard queue', exact: true}).click();
+    await page.waitForURL(target => !target.searchParams.has('queue'));
+    await enter(new URL(url).pathname + new URL(url).search);
+  };
+  await expandQueue('.dashboard-attention', 'Open attention in Domains', 'attention');
+  await expandQueue('.dashboard-investigations', 'Open investigations in Domains', 'investigate');
   assert.equal(await page.locator('.domain-inventory').count(), 0);
   assert.equal(await page.getByRole('button', {name: /^Filters \(/}).count(), 1);
   const dimensions = await page.locator('.dashboard-metric').evaluateAll(cards => cards.map(card => ({
@@ -26,6 +63,7 @@ try {
   await page.getByRole('button', {name: /^Sender decisions outstanding:/}).click();
   await page.getByText(/Outstanding sender decisions from the last 30 days · \d+ domains/).waitFor();
   assert.equal(new URL(page.url()).searchParams.get('attention'), 'senders');
+  await expandQueue('.dashboard-attention', 'Open attention in Domains', 'attention');
   await page.getByRole('button', {name: 'Show all attention', exact: true}).click();
   const categories = page.getByRole('group', {name: 'Issue categories'});
   await categories.getByRole('button', {name: /^DNS\/configuration/}).click();
@@ -86,14 +124,16 @@ try {
   assert.equal(new URL(page.url()).pathname, '/dashboard');
   assert.equal(new URL(page.url()).searchParams.get('search'), 'not-a-domain');
   const domainInput = page.getByLabel('Domain name', {exact: true});
+  assert.equal(await domainInput.isVisible(), false);
+  await page.getByRole('button', {name: 'Add domain', exact: true}).click();
+  await page.locator('#add-domain').getByRole('checkbox', {name: 'Open domain and set up DNS', exact: true}).uncheck();
   await domainInput.fill('not a valid domain');
   await page.getByRole('button', {name: 'Add domain', exact: true}).click();
   await page.getByText('Enter a valid domain name.', {exact: true}).waitFor();
   const addedDomain = `not-a-domain-${Date.now()}.example`;
   await domainInput.fill(addedDomain);
   await page.getByRole('button', {name: 'Add domain', exact: true}).click();
-  await page.getByText('Domain added. Active filters may hide it.', {exact: true}).waitFor();
-  await page.locator('a[data-domain-link]').filter({hasText: addedDomain}).waitFor();
+  await page.locator('#add-domain').getByRole('link', {name: 'View domain', exact: true}).waitFor();
   await domainInput.fill(addedDomain);
   await page.getByRole('button', {name: 'Add domain', exact: true}).click();
   await page.getByText('That domain already exists.', {exact: true}).waitFor();

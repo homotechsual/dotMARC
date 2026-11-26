@@ -21,6 +21,22 @@ public sealed class DomainListStateTests
     }
 
     [Fact]
+    public void ExpandedDashboardQueuesRoundTripScopeAndCategories_WithoutBecomingDefaults()
+    {
+        var state = new DomainListState { Queue = "attention", AttentionView = "dns,senders", GroupId = 4, TagId = 2, Search = "alpha" };
+        Assert.Equal(state, DomainListState.FromQuery(new Uri("https://dotmarc.example" + state.ToUrl("/domains"))));
+        Assert.Contains("Needs attention: dns,senders", state.ActiveFilters);
+        Assert.Null(state.AsDefault().Queue);
+        Assert.Null(state.AsDefault().AttentionView);
+        Assert.Equal(4, state.AsDefault().GroupId);
+        var investigations = state with { Queue = "investigate", AttentionView = null };
+        Assert.Equal(investigations, DomainListState.FromQuery(new Uri("https://dotmarc.example" + investigations.ToUrl("/domains"))));
+        Assert.Throws<FormatException>(() => DomainListState.FromQuery(new Uri("https://dotmarc.example/domains?queue=unknown")));
+        Assert.Throws<FormatException>(() => DomainListState.FromQuery(new Uri("https://dotmarc.example/dashboard?queue=attention")));
+        Assert.Throws<FormatException>(() => DomainListState.FromQuery(new Uri("https://dotmarc.example/domains?queue=investigate&attention=senders")));
+    }
+
+    [Fact]
     public void MultipleAttentionCategoriesRoundTrip_AndRejectInvalidCombinations()
     {
         var state = new DomainListState { AttentionView = "dns,senders,missing" };

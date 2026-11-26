@@ -107,7 +107,25 @@
 
 <MudPaper Class="pa-4 mb-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>
+    <div class="group-list-toolbar mb-3">
+        <MudTextField T="string" @bind-Value="_groupNameFilter" Label="Group search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" Variant="Variant.Outlined" />
+        <MudSelect T="string" Label="Sort groups" @bind-Value="_groupSort" Margin="Margin.Dense" Variant="Variant.Outlined">
+            <MudSelectItem Value="@("name")">Name (A to Z)</MudSelectItem>
+            <MudSelectItem Value="@("name-desc")">Name (Z to A)</MudSelectItem>
+            <MudSelectItem Value="@("domains-desc")">Most domains</MudSelectItem>
+            <MudSelectItem Value="@("domains")">Fewest domains</MudSelectItem>
+        </MudSelect>
+        <MudButton Variant="@(_showGroupFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+                   Disabled="@(!RendererInfo.IsInteractive)" aria-controls="group-filters" aria-expanded="@_showGroupFilters.ToString().ToLowerInvariant()"
+                   OnClick="@(() => _showGroupFilters = !_showGroupFilters)">Filters (@ActiveGroupFilterCount)</MudButton>
+        <AuthorizeView Policy="GroupsAdd">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _showAddGroup = !_showAddGroup)" aria-controls="add-group" aria-expanded="@_showAddGroup.ToString().ToLowerInvariant()">
+                @(_showAddGroup ? "Close add group" : "Add group")
+            </MudButton>
+        </AuthorizeView>
+    </div>
     <AuthorizeView Policy="GroupsAdd">
+        <div id="add-group" hidden="@(!_showAddGroup)">
         <MudGrid>
             <MudItem xs="12" sm="9">
                 <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A" Variant="Variant.Outlined"
@@ -118,28 +136,16 @@
                            OnClick="AddGroupAsync">Add group</MudButton>
             </MudItem>
         </MudGrid>
+        </div>
     </AuthorizeView>
 
     @if (_groups is { Count: > 0 })
     {
         <div class="group-list-toolbar mt-4 mb-3">
             <MudText Typo="Typo.body2" aria-live="polite">@FilteredGroups.Count of @_groups.Count groups</MudText>
-            <div class="group-list-controls">
-                <MudSelect T="string" Label="Sort groups" @bind-Value="_groupSort" Margin="Margin.Dense" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@("name")">Name (A to Z)</MudSelectItem>
-                    <MudSelectItem Value="@("name-desc")">Name (Z to A)</MudSelectItem>
-                    <MudSelectItem Value="@("domains-desc")">Most domains</MudSelectItem>
-                    <MudSelectItem Value="@("domains")">Fewest domains</MudSelectItem>
-                </MudSelect>
-                <MudButton Variant="@(_showGroupFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                           Disabled="@(!RendererInfo.IsInteractive)"
-                           aria-controls="group-filters" aria-expanded="@(_showGroupFilters ? "true" : "false")"
-                           OnClick="@(() => _showGroupFilters = !_showGroupFilters)">Filters (@ActiveGroupFilterCount)</MudButton>
-            </div>
         </div>
         <MudCollapse Expanded="_showGroupFilters">
             <div id="group-filters" class="group-filter-grid mb-4">
-                <MudTextField T="string" @bind-Value="_groupNameFilter" Label="Group search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" />
                 <MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Label="Minimum domains" Margin="Margin.Dense" Min="0" />
                 @foreach (var list in _psaLists)
                 {
@@ -170,7 +176,7 @@
                     <header class="group-card-header">
                         <div class="group-identity">
                             <MudText Typo="Typo.h6">@group.Name</MudText>
-                            <MudLink Href="@($"/domains?group={group.Id}")" aria-label="@($"View domains in {group.Name}")">@group.DomainCount @(group.DomainCount == 1 ? "domain" : "domains") · Open Inventory</MudLink>
+                            <MudLink Href="@($"/domains?group={group.Id}")" aria-label="@($"View domains in {group.Name}")">@group.DomainCount @(group.DomainCount == 1 ? "domain" : "domains") · Open Domains</MudLink>
                         </div>
                         <AuthorizeView Policy="GroupsRename" Context="renameState">
                             <div class="group-rename">
@@ -207,6 +213,7 @@
                         {
                         <section class="group-card-section">
                             <MudText Typo="Typo.subtitle2">Baselines</MudText>
+                            <MudText Typo="Typo.caption" Class="d-block mb-2">DMARC policy target: @GroupPolicyLabel(group)</MudText>
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Group DMARC target and inherited sender decisions.</MudText>
                             <div class="group-card-actions">
                                 <AuthorizeView Policy="@nameof(Permission.BaselinesManage)" Context="baselineState">
@@ -317,6 +324,15 @@
     private bool _showGroupFilters;
     private string _groupSort = "name";
     private bool _showBaselines;
+    private bool _showAddGroup;
+    private DmarcTarget? _systemTarget;
+
+    private string GroupPolicyLabel(GroupRow group) => group.Target is { } target
+        ? PolicyLabel(target)
+        : _systemTarget is { } inherited ? $"Inherited ({PolicyLabel(inherited)})" : "Inherited (no target set)";
+
+    private static string PolicyLabel(DmarcTarget target) => target.EffectiveSubdomainPolicy == target.Policy
+        ? target.Policy.ToString() : $"{target.Policy}; subdomains: {target.EffectiveSubdomainPolicy}";
 
     private int ActiveGroupFilterCount => (string.IsNullOrWhiteSpace(_groupNameFilter) ? 0 : 1)
         + (_groupMinDomainsFilter is null ? 0 : 1) + _hasCompanyFilters.Count(filter => filter.Value is not null)
@@ -383,8 +399,9 @@
         _groups = await db.Groups
             .AsNoTracking()
             .OrderBy(g => g.Name)
-            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.PsaCompanyLinks.ToList()))
+            .Select(g => new GroupRow(g.Id, g.Name, g.Domains.Count, g.PsaCompanyLinks.ToList(), g.DmarcTarget))
             .ToListAsync();
+        _systemTarget = (await DnsRecordSettingsService.GetAsync(db)).DmarcTarget;
         _ticketRuleOverrideCounts = await AlertTicketRuleService.CountOverridesByGroupAsync(db);
         _brandedGroupIds = (await db.GroupBrandings.Select(branding => branding.GroupId).ToListAsync()).ToHashSet();
         await LoadReportChipsAsync(db);
@@ -774,5 +791,5 @@
         }
     }
 
-    private sealed record GroupRow(int Id, string Name, int DomainCount, List<PsaCompanyLink> Links);
+    private sealed record GroupRow(int Id, string Name, int DomainCount, List<PsaCompanyLink> Links, DmarcTarget? Target);
 }

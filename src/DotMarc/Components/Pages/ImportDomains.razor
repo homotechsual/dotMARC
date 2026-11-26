@@ -46,7 +46,7 @@
         <PagerContent><MudTablePager /></PagerContent>
     </MudTable>
     <div class="d-flex mt-3" style="gap:0.5rem">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/domains">Go to Inventory</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/domains">Go to Domains</MudButton>
         <MudButton Variant="Variant.Outlined" OnClick="StartOver" Disabled="_busy">Import more</MudButton>
     </div>
     @if (_busy) { <MudText role="status">Checking DNS providers for newly imported domains...</MudText> }
@@ -372,12 +372,12 @@ else
                 var scope = DotMarc.Portal.PortalData.ScopedGroupIds((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
                 if (!(await ProviderChecks.CheckAsync(id, scope)).Succeeded) failures++;
             }
-            if (failures > 0) Snackbar.Add($"Import saved, but provider detection failed for {failures} domains. Recheck their providers from Inventory.", Severity.Warning);
+            if (failures > 0) Snackbar.Add($"Import saved, but provider detection failed for {failures} domains. Recheck their providers from Domains.", Severity.Warning);
         }
         catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
         {
             Logger.LogWarning(exception, "Provider detection after import failed");
-            Snackbar.Add("Import saved, but provider detection did not finish. Recheck providers from Inventory.", Severity.Warning);
+            Snackbar.Add("Import saved, but provider detection did not finish. Recheck providers from Domains.", Severity.Warning);
         }
         finally { _busy = false; }
     }

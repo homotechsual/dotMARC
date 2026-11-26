@@ -176,7 +176,16 @@ html:has(.dev-build-banner) .mud-main-content {
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
 }
-.domain-inventory .mud-input-control { min-width: 10rem; }
+.domain-inventory .mud-table-cell { padding: 8px; }
+.domain-inventory .mud-input-control { min-width: 0; }
+.domain-inventory .mud-switch { margin: 0; }
+.domain-status-icon { display: inline-flex; align-items: center; }
+.domain-management-details { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 1rem 0.75rem; }
+.domain-management-details > div { flex: 1 1 15rem; min-width: 0; }
+.dashboard-operation-summary { cursor: pointer; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.dashboard-operation-summary + .domain-list-toolbar { margin-top: 1rem; }
+.domain-table-scroll { position: fixed; bottom: 0; z-index: 1099; overflow-x: auto; background: var(--mud-palette-surface); border-top: 1px solid var(--mud-palette-divider); }
+.domain-table-scroll > div { height: 1px; }
 .domain-filter-bar > span { min-width: 0; overflow-wrap: anywhere; }
 .domain-sort {
     font: inherit;

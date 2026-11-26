@@ -4,13 +4,13 @@ description: Add and update many domains at once from a pasted list, a CSV file 
 
 # Import domains
 
-**Inventory > Import domains** adds many domains at once, and can update the groups, tags and settings of domains you already monitor. Paste a list, or choose a CSV or Excel (`.xlsx`) file. Nothing is saved until you check the preview and confirm, and the whole import is saved at once or not at all.
+**Domains > Import domains** adds many domains at once, and can update the groups, tags and settings of domains you already monitor. Paste a list, or choose a CSV or Excel (`.xlsx`) file. Nothing is saved until you check the preview and confirm, and the whole import is saved at once or not at all.
 
 The page has a sample CSV and a sample Excel file to start from.
 
 ## Add just one domain
 
-Use **Add a domain** at the top of the initial Import page to save one domain immediately without preparing an import. It uses the same validation, duplicate handling and permissions as Dashboard and Inventory. **Add to group** starts with the group filter from the page you came from; change or clear it as appropriate. Scoped editors must keep a group in their scope, and assigning one requires domain-edit permission. No baseline is required and DNS is not changed.
+Use **Add a domain** at the top of the initial Import page to save one domain immediately without preparing an import. It uses the same validation, duplicate handling and permissions as Dashboard and Domains, where **Add domain** reveals the inputs on demand. **Add to group** starts with the group filter from the page you came from; change or clear it as appropriate. Scoped editors must keep a group in their scope, and assigning one requires domain-edit permission. No baseline is required and DNS is not changed.
 
 **Advanced** is collapsed initially. It lets authorised users set a DMARC policy override (`p`/`sp`), monitoring, DKIM selectors and MTA-STS hosting settings before saving. Policy overrides need `BaselinesManage`, monitoring/DKIM need `DomainsEdit`, and MTA-STS needs `MtaStsManage`. All chosen settings and the group assignment are saved together, or none are.
 
