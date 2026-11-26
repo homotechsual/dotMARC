@@ -264,6 +264,10 @@ builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.TlsrptChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.SpfChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DkimChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.DmarcChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.TlsrptChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.MtaStsChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DomainSetupChangeBuilder>();
 
 builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.DnsPush.DnsProviderDetector>(client =>
 {
@@ -450,6 +454,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("DomainsWrite", policy => policy.RequireClaim(
         DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
         nameof(Permission.DomainsAdd), nameof(Permission.DomainsEdit), nameof(Permission.DomainsReorder), nameof(Permission.DomainsDelete)));
+    options.AddPolicy("DomainDnsSetup", policy => policy
+        .RequireClaim(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.DomainsEdit))
+        .RequireClaim(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.MtaStsManage)));
 
     options.AddPolicy("GroupsOrTagsWrite", policy => policy.RequireClaim(
         DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
@@ -687,11 +694,12 @@ app.MapGet("/audit/export", async (HttpContext httpContext, IDbContextFactory<Do
 app.MapGet("/dns-push/{provider}/start", async (
     string provider, int domainId, string target, string? payload, string? pushId, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
-    IAuthorizationService authorizationService) =>
+    IAuthorizationService authorizationService, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
 {
     // An edited SPF record is a few hundred characters; a payload far longer than that isn't one.
     var changeBuilder = changeBuilders.Find(target);
-    if (changeBuilder is null || payload?.Length > 4000)
+    if (changeBuilder is null || payload?.Length > 4000
+        || target == "domain-setup" && (payload?.Length != 64 || !payload.All(char.IsAsciiHexDigit)))
     {
         return Results.BadRequest();
     }
@@ -706,6 +714,14 @@ app.MapGet("/dns-push/{provider}/start", async (
     if (!authResult.Succeeded)
     {
         return Results.Forbid();
+    }
+    if (target == "domain-setup")
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(httpContext.RequestAborted);
+        var scope = DotMarc.Portal.PortalData.ScopedGroupIds(httpContext.User);
+        if (!await context.Domains.AnyAsync(domain => domain.Id == domainId
+            && (scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id))), httpContext.RequestAborted))
+            return Results.NotFound();
     }
 
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -798,6 +814,10 @@ app.MapGet("/dns-push/{provider}/callback", async (
     {
         return DnsPushPopupResult.Close("invalid", appTitle, decodedState?.PushId);
     }
+    if (decodedState.PushTarget == "domain-setup" && decodedState.Payload is null)
+    {
+        return DnsPushPopupResult.Close("invalid", appTitle, decodedState.PushId);
+    }
     var authResult = await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy);
     if (!authResult.Succeeded)
     {
@@ -809,6 +829,13 @@ app.MapGet("/dns-push/{provider}/callback", async (
     if (domain is null)
     {
         return DnsPushPopupResult.Close("invalid", appTitle, decodedState?.PushId);
+    }
+    if (decodedState.PushTarget == "domain-setup")
+    {
+        var scope = DotMarc.Portal.PortalData.ScopedGroupIds(httpContext.User);
+        if (scope.Count > 0 && !await context.Domains.AnyAsync(candidate => candidate.Id == domain.Id
+            && candidate.Groups.Any(group => scope.Contains(group.Id))))
+            return DnsPushPopupResult.Close("invalid", appTitle, decodedState.PushId);
     }
 
     if (error is not null || code is null)
@@ -837,6 +864,8 @@ app.MapGet("/dns-push/{provider}/callback", async (
     }
 
     var resultFlag = DnsPushPopupResult.FlagFor(result.Outcome);
+    if (decodedState.PushTarget == "domain-setup" && result.Outcome != DnsPushOutcome.Pushed)
+        resultFlag = "setup-failed";
 
     // The popup's postMessage carries only this coarse flag - DetailMessage never reaches the
     // browser - so this is the only place the specific reason (status codes, provider error text)

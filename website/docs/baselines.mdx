@@ -25,7 +25,7 @@ Decisions change dotMARC's labels and alerts, not DNS or receiver enforcement. T
 
 The Domain tab sets a **target DMARC policy**: the policy a domain should publish. dotMARC then shows which domains fall short, raises an alert for them, and can raise their records for you with the [DNS provider push](./dns-provider-push.mdx#dmarc-policy-and-your-target). Nothing changes until a target is set: with no target at any level there are no new alerts, no below-target counts, and pushes behave exactly as before.
 
-The page follows **Set the default → Add exceptions only where needed → Review and resolve gaps**:
+The page follows **Set the defaults → Add exceptions only where needed → Review and resolve gaps**:
 
 1. Set or edit the system-wide default. Saving sets dotMARC's expectation; it does not publish DNS.
 2. Leave groups inheriting the system default unless they need an override. The table distinguishes inheritance from a group override, with **Set override** or **Edit override** actions. Other group targets and individual overrides can still take precedence. Choose a domain in Inventory to view or change its individual target on Overview.
@@ -35,9 +35,19 @@ Group targets are collapsed initially because exceptions are optional. Expand **
 
 The target dialog explains the scope and distinguishes removing the system default from restoring group/domain inheritance. Target saves may affect below-target alerts but never change mail handling themselves.
 
+### Report destinations
+
+The **Set the defaults** card shows the **DMARC policy target** in an outlined field with a set/edit action, alongside both report addresses, without expanding a section. The primary mailbox comes from `Graph:MailboxAddress` and is shown as a disabled input; it cannot be replaced in the UI. Group and domain exceptions keep their expandable **Report destinations** sections.
+
+Set an optional secondary address at system level, override it for a group, or use the domain's Overview target card for an individual override. Enable **Override secondary report address** and leave the address blank to require the primary mailbox only. Turn the override off to restore inheritance.
+
+Domain overrides win. Otherwise, overriding groups must agree (case-insensitively); a primary-only group override conflicts with an address override. Conflicts block DMARC and combined DNS setup until a domain override resolves them. With no group override, the system secondary applies.
+
+Saving records the change in the audit log but does not publish DNS. Group/domain overrides replace unrelated existing `rua` destinations, even when **Keep other rua addresses** is enabled. System inheritance still respects that DNS push setting. External destinations may need report authorization in their own DNS zone.
+
 ### What a target is
 
-A target is a `p` value (`none`, `quarantine` or `reject`) and an optional `sp` for subdomains. When `sp` is not set it follows `p`, as it does in a DMARC record. There is no setting for `pct`: a target is only met at `pct=100`, because a partial rollout is not yet the policy.
+A target is a `p` value (`none`, `quarantine` or `reject`) and an optional `sp` for subdomains. When `sp` is not set it follows `p`, as it does in a DMARC record. The editor shows **Follows p (currently Quarantine)**, for example, to make the effective policy clear. Choosing the same value for `sp` and `p` saves it as **Follows p**, without changing the effective subdomain policy. There is no setting for `pct`: a target is only met at `pct=100`, because a partial rollout is not yet the policy.
 
 ### Three levels
 

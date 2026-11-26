@@ -87,6 +87,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.DmarcSubdomainPolicy).HasConversion<string>();
             entity.Property(d => d.DmarcNonExistentSubdomainPolicy).HasConversion<string>();
             entity.Property(d => d.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(d => d.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
             entity.Property(d => d.TargetDmarcSubdomainPolicy).HasConversion<string>();
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
@@ -251,6 +252,7 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.HasIndex(g => g.Name).IsUnique();
             entity.Property(g => g.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(g => g.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
             entity.Property(g => g.TargetDmarcSubdomainPolicy).HasConversion<string>();
         });
 

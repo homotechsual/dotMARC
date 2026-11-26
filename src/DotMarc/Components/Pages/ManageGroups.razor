@@ -36,7 +36,7 @@
 @foreach (var failed in _psaLists.Where(list => list.FailureReason is not null))
 {
     <MudAlert Severity="Severity.Warning" Class="mb-4">
-        @failed.FailureReason Its column shows the saved companies but can't be changed until it loads. Check the
+        @failed.FailureReason Its connection shows the saved companies but can't be changed until it loads. Check the
         @failed.Psa.DisplayName() settings on the PSA tab of Alerts &amp; PSA, or Manage > Logs, then reload.
     </MudAlert>
 }
@@ -45,8 +45,9 @@
 {
     <AuthorizeView Policy="GroupsAdd" Context="addAuthState">
         <MudPaper Class="pa-4 mb-4" Elevation="1">
-            <div class="d-flex align-center mb-1" style="gap: 1rem;">
-                <MudText Typo="Typo.h6">Companies without a group</MudText>
+            <details class="group-company-onboarding">
+            <summary>Companies without a group (@_companiesWithoutGroup.Count in @withoutGroupPsa.DisplayName())</summary>
+            <div class="d-flex align-center flex-wrap mb-1" style="gap: 1rem;">
                 @if (_loadedLists.Count > 1)
                 {
                     <MudSelect T="PsaKind" Value="withoutGroupPsa" ValueChanged="@(psa => { _withoutGroupPsa = psa; RefreshCompaniesWithoutGroup(); })"
@@ -99,6 +100,7 @@
                 </RowTemplate>
             </MudTable>
             }
+            </details>
         </MudPaper>
     </AuthorizeView>
 }
@@ -107,11 +109,11 @@
     <MudText Typo="Typo.h6" Class="mb-2">Groups</MudText>
     <AuthorizeView Policy="GroupsAdd">
         <MudGrid>
-            <MudItem xs="9">
+            <MudItem xs="12" sm="9">
                 <MudTextField @bind-Value="_newGroupName" Label="Group name" Placeholder="Client A" Variant="Variant.Outlined"
                               Error="@(_addGroupError is not null)" ErrorText="@_addGroupError" Immediate="true" />
             </MudItem>
-            <MudItem xs="3" Class="d-flex align-start">
+            <MudItem xs="12" sm="3" Class="d-flex align-start">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="button-beside-input" StartIcon="@Icons.Material.Filled.Add"
                            OnClick="AddGroupAsync">Add group</MudButton>
             </MudItem>
@@ -120,175 +122,166 @@
 
     @if (_groups is { Count: > 0 })
     {
-        <MudTable Items="_groups" Hover="true" T="GroupRow" Class="mt-4" CustomHeader="true" Filter="GroupMatchesFilters">
-            <ToolBarContent>
-                <MudSpacer />
+        <div class="group-list-toolbar mt-4 mb-3">
+            <MudText Typo="Typo.body2" aria-live="polite">@FilteredGroups.Count of @_groups.Count groups</MudText>
+            <div class="group-list-controls">
+                <MudSelect T="string" Label="Sort groups" @bind-Value="_groupSort" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("name")">Name (A to Z)</MudSelectItem>
+                    <MudSelectItem Value="@("name-desc")">Name (Z to A)</MudSelectItem>
+                    <MudSelectItem Value="@("domains-desc")">Most domains</MudSelectItem>
+                    <MudSelectItem Value="@("domains")">Fewest domains</MudSelectItem>
+                </MudSelect>
                 <MudButton Variant="@(_showGroupFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                           OnClick="@(() => _showGroupFilters = !_showGroupFilters)">@(_showGroupFilters ? "Hide filters" : "Filters")</MudButton>
-            </ToolBarContent>
-            <HeaderContent>
-                <tr>
-                    <MudTh><MudTableSortLabel SortBy="new Func<GroupRow, object>(g => g.Name)">Name</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<GroupRow, object>(g => g.DomainCount)">Domains</MudTableSortLabel></MudTh>
-                    @foreach (var list in _psaLists)
-                    {
-                        <MudTh>@list.Psa.CompanyLabel()</MudTh>
-                    }
-                    @if (_psaLists.Count > 0)
-                    {
-                        <MudTh>Ticket rules</MudTh>
-                    }
-                    <MudTh>Portal branding</MudTh>
-                    <AuthorizeView Policy="ReportsManage" Context="authState">
-                        <MudTh>Client reports</MudTh>
-                    </AuthorizeView>
-                    <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderReviewState">
-                        <MudTh>Sender defaults</MudTh>
-                    </AuthorizeView>
-                    <AuthorizeView Policy="@nameof(Permission.BaselinesManage)" Context="baselinesHeaderState">
-                        <MudTh>Domain baseline</MudTh>
-                    </AuthorizeView>
-                    <MudTh></MudTh>
-                </tr>
-                @if (_showGroupFilters)
-                {
-                <tr>
-                    <MudTh><MudTextField T="string" @bind-Value="_groupNameFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                    <MudTh><MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
-                    @foreach (var list in _psaLists)
-                    {
-                        <MudTh>
-                            <MudSelect T="bool?" Value="@_hasCompanyFilters.GetValueOrDefault(list.Psa)" ValueChanged="@(linked => _hasCompanyFilters[list.Psa] = linked)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                <MudSelectItem T="bool?" Value="true">Linked</MudSelectItem>
-                                <MudSelectItem T="bool?" Value="false">Not linked</MudSelectItem>
-                            </MudSelect>
-                        </MudTh>
-                    }
-                    @if (_psaLists.Count > 0)
-                    {
-                        <MudTh>
-                            <MudSelect T="bool?" Value="_groupHasTicketOverridesFilter" ValueChanged="@(v => _groupHasTicketOverridesFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                <MudSelectItem T="bool?" Value="true">Has overrides</MudSelectItem>
-                                <MudSelectItem T="bool?" Value="false">No overrides</MudSelectItem>
-                            </MudSelect>
-                        </MudTh>
-                    }
-                    <MudTh></MudTh>
-                    <AuthorizeView Policy="ReportsManage" Context="authState">
-                        <MudTh></MudTh>
-                    </AuthorizeView>
-                    <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderReviewState">
-                        <MudTh></MudTh>
-                    </AuthorizeView>
-                    <MudTh></MudTh>
-                </tr>
-                }
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>
-                    <AuthorizeView Policy="GroupsRename" Context="authState">
-                        <Authorized>
-                            <MudTextField T="string" Value="context.Name" ValueChanged="@(v => RenameGroupAsync(context, v))" />
-                        </Authorized>
-                        <NotAuthorized>
-                            @context.Name
-                        </NotAuthorized>
-                    </AuthorizeView>
-                </MudTd>
-                <MudTd>@context.DomainCount</MudTd>
+                           Disabled="@(!RendererInfo.IsInteractive)"
+                           aria-controls="group-filters" aria-expanded="@(_showGroupFilters ? "true" : "false")"
+                           OnClick="@(() => _showGroupFilters = !_showGroupFilters)">Filters (@ActiveGroupFilterCount)</MudButton>
+            </div>
+        </div>
+        <MudCollapse Expanded="_showGroupFilters">
+            <div id="group-filters" class="group-filter-grid mb-4">
+                <MudTextField T="string" @bind-Value="_groupNameFilter" Label="Group search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" />
+                <MudNumericField T="int?" @bind-Value="_groupMinDomainsFilter" Label="Minimum domains" Margin="Margin.Dense" Min="0" />
                 @foreach (var list in _psaLists)
                 {
-                    var current = context.Links.FirstOrDefault(link => link.Psa == list.Psa);
-                    <MudTd>
-                        <PsaCompanyPicker Psa="list.Psa" Companies="list.Companies" Current="current" CompanyChanged="@(company => SetPsaCompanyAsync(context, list.Psa, company))" />
-                        @if (current is null && list.Companies is not null)
-                        {
-                            @foreach (var suggestion in PsaCompanySuggestions.SuggestCompaniesForGroup(list.Psa, context.Name, list.Companies).Take(3))
-                            {
-                                <MudText Typo="Typo.caption">
-                                    Suggested match: @suggestion.Name.
-                                    <MudLink OnClick="@(() => SetPsaCompanyAsync(context, list.Psa, suggestion))">Use it</MudLink>
-                                </MudText>
-                            }
-                        }
-                    </MudTd>
+                    <MudSelect T="bool?" Label="@($"{list.Psa.DisplayName()} company link")" Value="@_hasCompanyFilters.GetValueOrDefault(list.Psa)"
+                               ValueChanged="@(linked => _hasCompanyFilters[list.Psa] = linked)" Clearable="true" Margin="Margin.Dense">
+                        <MudSelectItem T="bool?" Value="true">Linked</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">Not linked</MudSelectItem>
+                    </MudSelect>
                 }
                 @if (_psaLists.Count > 0)
                 {
-                    <MudTd>
-                        @if (context.Links.Count > 0)
+                    <MudSelect T="bool?" Label="Ticket rule overrides" Value="_groupHasTicketOverridesFilter" ValueChanged="@(value => _groupHasTicketOverridesFilter = value)" Clearable="true" Margin="Margin.Dense">
+                        <MudSelectItem T="bool?" Value="true">Has overrides</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">No overrides</MudSelectItem>
+                    </MudSelect>
+                }
+                <MudButton OnClick="ClearGroupFilters" Size="Size.Small">Clear group filters</MudButton>
+            </div>
+        </MudCollapse>
+        @if (FilteredGroups.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No groups match these filters. Change or clear the group filters.</MudAlert>
+        }
+        <div class="group-cards">
+            @foreach (var group in FilteredGroups)
+            {
+                <article class="group-card" @key="group.Id" aria-label="@($"Group {group.Name}")">
+                    <header class="group-card-header">
+                        <div class="group-identity">
+                            <MudText Typo="Typo.h6">@group.Name</MudText>
+                            <MudLink Href="@($"/domains?group={group.Id}")" aria-label="@($"View domains in {group.Name}")">@group.DomainCount @(group.DomainCount == 1 ? "domain" : "domains") · Open Inventory</MudLink>
+                        </div>
+                        <AuthorizeView Policy="GroupsRename" Context="renameState">
+                            <div class="group-rename">
+                                <MudTextField T="string" Label="Rename group" aria-label="@($"Rename {group.Name}")" Value="group.Name" ValueChanged="@(value => RenameGroupAsync(group, value))" Margin="Margin.Dense" />
+                            </div>
+                        </AuthorizeView>
+                        <AuthorizeView Policy="GroupsDelete" Context="deleteState">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" aria-label="@($"Remove group {group.Name}")" OnClick="@(() => DeleteGroupAsync(group))" />
+                        </AuthorizeView>
+                    </header>
+                    <div class="group-card-sections">
+                        <AuthorizeView Policy="ReportsManage" Context="reportsState">
+                            <section class="group-card-section">
+                                <MudText Typo="Typo.subtitle2">Client reports</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Delivery schedules, recipients and report history.</MudText>
+                                <div class="group-card-actions">
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Assessment" aria-label="@($"Reports for {group.Name}")" OnClick="@(() => OpenReportsAsync(group))">Reports</MudButton>
+                                    @if (_failedReportGroupIds.Contains(group.Id))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Report failed</MudChip>
+                                    }
+                                    else if (_reportFrequencies.TryGetValue(group.Id, out var frequency))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@frequency</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Not scheduled</MudText>
+                                    }
+                                </div>
+                            </section>
+                        </AuthorizeView>
+                        @if (_showBaselines)
                         {
-                            <div class="d-flex align-center" style="gap: 0.5rem;">
-                                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenTicketRulesAsync(context))">
-                                    Ticket rules
-                                </MudButton>
-                                @if (_ticketRuleOverrideCounts.TryGetValue(context.Id, out var overrideCount))
+                        <section class="group-card-section">
+                            <MudText Typo="Typo.subtitle2">Baselines</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Group DMARC target and inherited sender decisions.</MudText>
+                            <div class="group-card-actions">
+                                <AuthorizeView Policy="@nameof(Permission.BaselinesManage)" Context="baselineState">
+                                    @if (BaselineAccess.MayChangeGroup(baselineState.User, group.Id))
+                                    {
+                                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Flag" aria-label="@($"Domain baseline for {group.Name}")" OnClick="@(() => OpenDomainBaselineAsync(group))">Domain baseline</MudButton>
+                                    }
+                                </AuthorizeView>
+                                <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderState">
+                                    @if (SenderDecisionAccess.MayChangeGroup(senderState.User, group.Id))
+                                    {
+                                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Rule" aria-label="@($"Sender defaults for {group.Name}")" OnClick="@(() => OpenSenderDefaults(group))">Sender defaults</MudButton>
+                                    }
+                                </AuthorizeView>
+                            </div>
+                        </section>
+                        }
+                        <section class="group-card-section">
+                            <MudText Typo="Typo.subtitle2">Client portal</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Appearance for people with portal access.</MudText>
+                            <div class="group-card-actions">
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Palette" aria-label="@($"Portal branding for {group.Name}")" OnClick="@(() => OpenBrandingAsync(group))">Branding</MudButton>
+                                @if (_brandedGroupIds.Contains(group.Id))
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@overrideCount @(overrideCount == 1 ? "override" : "overrides")</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Branded</MudChip>
                                 }
                             </div>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Link a PSA company first</MudText>
-                        }
-                    </MudTd>
-                }
-                <MudTd>
-                    <div class="d-flex align-center" style="gap: 0.5rem;">
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Palette" OnClick="@(() => OpenBrandingAsync(context))">
-                            Branding
-                        </MudButton>
-                        @if (_brandedGroupIds.Contains(context.Id))
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info">Branded</MudChip>
-                        }
+                        </section>
                     </div>
-                </MudTd>
-                <AuthorizeView Policy="ReportsManage" Context="authState">
-                    <MudTd>
-                        <div class="d-flex align-center" style="gap: 0.5rem;">
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Assessment" OnClick="@(() => OpenReportsAsync(context))">
-                                Reports
-                            </MudButton>
-                            @if (_failedReportGroupIds.Contains(context.Id))
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Error">Report failed</MudChip>
-                            }
-                            else if (_reportFrequencies.TryGetValue(context.Id, out var frequency))
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@frequency</MudChip>
-                            }
-                        </div>
-                    </MudTd>
-                </AuthorizeView>
-                <AuthorizeView Policy="@nameof(Permission.SenderReview)" Context="senderReviewState">
-                    <MudTd>
-                        @if (SenderDecisionAccess.MayChangeGroup(senderReviewState.User, context.Id))
-                        {
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Rule" OnClick="@(() => OpenSenderDefaults(context))">
-                                Sender defaults
-                            </MudButton>
-                        }
-                    </MudTd>
-                </AuthorizeView>
-                <AuthorizeView Policy="@nameof(Permission.BaselinesManage)" Context="baselinesState">
-                    <MudTd>
-                        @if (BaselineAccess.MayChangeGroup(baselinesState.User, context.Id))
-                        {
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Flag" OnClick="@(() => OpenDomainBaselineAsync(context))">
-                                Domain baseline
-                            </MudButton>
-                        }
-                    </MudTd>
-                </AuthorizeView>
-                <MudTd>
-                    <AuthorizeView Policy="GroupsDelete" Context="authState">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteGroupAsync(context))" />
-                    </AuthorizeView>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
+                    @if (_psaLists.Count > 0)
+                    {
+                        <details class="group-connections">
+                            <summary>PSA connections and ticket rules (@group.Links.Count linked)</summary>
+                            <div class="group-connection-grid">
+                                @foreach (var list in _psaLists)
+                                {
+                                    var current = group.Links.FirstOrDefault(link => link.Psa == list.Psa);
+                                    <section class="group-card-section">
+                                        <MudText Typo="Typo.subtitle2">@list.Psa.CompanyLabel()</MudText>
+                                        <PsaCompanyPicker Psa="list.Psa" Companies="list.Companies" Current="current" CompanyChanged="@(company => SetPsaCompanyAsync(group, list.Psa, company))" />
+                                        @if (current is null && list.Companies is not null)
+                                        {
+                                            @foreach (var suggestion in PsaCompanySuggestions.SuggestCompaniesForGroup(list.Psa, group.Name, list.Companies).Take(3))
+                                            {
+                                                <MudText Typo="Typo.caption">
+                                                    Suggested match: @suggestion.Name.
+                                                    <MudLink OnClick="@(() => SetPsaCompanyAsync(group, list.Psa, suggestion))">Use it</MudLink>
+                                                </MudText>
+                                            }
+                                        }
+                                    </section>
+                                }
+                                <section class="group-card-section">
+                                    <MudText Typo="Typo.subtitle2">Ticket rules</MudText>
+                                    @if (group.Links.Count > 0)
+                                    {
+                                        <div class="group-card-actions">
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Tune" aria-label="@($"Ticket rules for {group.Name}")" OnClick="@(() => OpenTicketRulesAsync(group))">Ticket rules</MudButton>
+                                            @if (_ticketRuleOverrideCounts.TryGetValue(group.Id, out var overrideCount))
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@overrideCount @(overrideCount == 1 ? "override" : "overrides")</MudChip>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Link a PSA company first</MudText>
+                                    }
+                                </section>
+                            </div>
+                        </details>
+                    }
+                </article>
+            }
+        </div>
     }
     else if (_groups is not null)
     {
@@ -322,7 +315,35 @@
     private readonly Dictionary<PsaKind, bool?> _hasCompanyFilters = [];
     private bool? _groupHasTicketOverridesFilter;
     private bool _showGroupFilters;
+    private string _groupSort = "name";
+    private bool _showBaselines;
 
+    private int ActiveGroupFilterCount => (string.IsNullOrWhiteSpace(_groupNameFilter) ? 0 : 1)
+        + (_groupMinDomainsFilter is null ? 0 : 1) + _hasCompanyFilters.Count(filter => filter.Value is not null)
+        + (_groupHasTicketOverridesFilter is null ? 0 : 1);
+
+    private IReadOnlyList<GroupRow> FilteredGroups
+    {
+        get
+        {
+            var groups = (_groups ?? []).Where(GroupMatchesFilters);
+            return (_groupSort switch
+            {
+                "name-desc" => groups.OrderByDescending(group => group.Name, StringComparer.OrdinalIgnoreCase),
+                "domains" => groups.OrderBy(group => group.DomainCount).ThenBy(group => group.Name, StringComparer.OrdinalIgnoreCase),
+                "domains-desc" => groups.OrderByDescending(group => group.DomainCount).ThenBy(group => group.Name, StringComparer.OrdinalIgnoreCase),
+                _ => groups.OrderBy(group => group.Name, StringComparer.OrdinalIgnoreCase)
+            }).ThenBy(group => group.Id).ToList();
+        }
+    }
+
+    private void ClearGroupFilters()
+    {
+        _groupNameFilter = null;
+        _groupMinDomainsFilter = null;
+        _hasCompanyFilters.Clear();
+        _groupHasTicketOverridesFilter = null;
+    }
 
     private bool CompanyWithoutGroupMatchesFilters(PsaCompany company) =>
         string.IsNullOrWhiteSpace(_clientNameFilter) || company.Name.Contains(_clientNameFilter, StringComparison.OrdinalIgnoreCase);
@@ -355,6 +376,9 @@
 
     private async Task LoadAsync()
     {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _showBaselines = (await AuthorizationService.AuthorizeAsync(user, nameof(Permission.BaselinesManage))).Succeeded
+            || (await AuthorizationService.AuthorizeAsync(user, nameof(Permission.SenderReview))).Succeeded;
         await using var db = await DbFactory.CreateDbContextAsync();
         _groups = await db.Groups
             .AsNoTracking()

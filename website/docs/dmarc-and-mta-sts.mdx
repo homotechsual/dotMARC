@@ -81,13 +81,13 @@ Every address needs its `mailto:` prefix, because `rua=` is a list of URIs. `rua
 
 **Push via your DNS provider** stays available for the information, too-many and misconfigured statuses. It shows you the change to confirm first, keeps every other tag, and writes `rua=` as dotMARC's mailbox first, then:
 
-1. the **additional rua address**, if an admin has set one,
+1. the effective **secondary DMARC report address**, if one is set in [Domain Baselines](./baselines.mdx#report-destinations),
 2. then any other addresses already in the record, in their original order, adding a missing `mailto:`,
 
-up to the limit of two addresses in total. Two settings in the **DNS records** section of the DNS push settings page control this:
+up to the limit of two addresses in total. These settings control this:
 
-* **Keep other rua addresses when pushing** (on by default). Turn it off and a push writes dotMARC's mailbox, plus the additional address if there is one, and nothing else. Use that when you finish a trial and want the other address gone.
-* **Additional rua address**. A second destination added to every DMARC record dotMARC pushes, for example to keep sending reports to another tool. If its domain differs from the domain being monitored, that domain must publish an authorization record (see below) or receivers won't send reports to it.
+* **Keep other rua addresses when pushing**, under **DNS push settings → DNS records** (on by default). With system-inherited destinations, turn it off to remove old destinations. A group or domain report-address override always replaces unrelated existing addresses, regardless of this setting.
+* **Secondary DMARC report address**, under **Baselines → Domain → Report destinations**. Set a system default, then optional group/domain overrides. An enabled blank override means primary-only delivery; conflicting group overrides require a domain override before DNS setup. If the destination's domain differs from the monitored domain, it must authorize reports (see below) or receivers won't send reports to it. The configured primary ingestion mailbox is shown read-only.
 
 ## The DMARC authorization record
 

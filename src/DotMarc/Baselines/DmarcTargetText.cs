@@ -6,6 +6,9 @@ namespace DotMarc.Baselines;
 /// <summary>Plain-language descriptions of an effective DMARC target.</summary>
 public static class DmarcTargetText
 {
+    public static string FollowsPolicy(DmarcPolicyLevel? policy) =>
+        policy is { } level ? $"Follows p (currently {level})" : "Follows p";
+
     public static string Source(EffectiveDmarcTarget target) => target.Source switch
     {
         DmarcTargetSource.Domain => "set on this domain",

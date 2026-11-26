@@ -18,6 +18,90 @@ public sealed class DnsChangeBuilderTests
         ClientId = "client", TenantId = "tenant", ClientSecret = "secret", MailboxAddress = "rua@dotmarc.example", TlsrptMailboxAddress = tlsrptMailbox,
     });
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("domain@example.com")]
+    public async Task Dmarc_ScopedDestinationsReplaceLegacyAddressesWithoutMutatingSettings(string? secondary)
+    {
+        var reader = new FakeDnsRecordSettingsReader
+        {
+            Settings = new() { AdditionalRuaAddress = "system@example.com", KeepOtherRuaAddresses = true },
+            Destination = new(secondary, "Domain override")
+        };
+        foreach (var existing in new[] { null, "v=DMARC1; p=reject; rua=mailto:old@example.com" })
+        {
+            var lookup = new FakeDmarcTxtLookup { Result = new(existing, null) };
+            var plan = await new DmarcChangeBuilder(lookup, Graph(), reader, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
+            var value = Assert.Single(plan.Changes).DesiredValue;
+            Assert.DoesNotContain("old@example.com", value);
+            Assert.DoesNotContain("system@example.com", value);
+            Assert.Contains("rua=mailto:rua@dotmarc.example" + (secondary is null ? "" : $",mailto:{secondary}"), value);
+        }
+        Assert.True(reader.Settings.KeepOtherRuaAddresses);
+        Assert.Equal("system@example.com", reader.Settings.AdditionalRuaAddress);
+    }
+
+    [Fact]
+    public async Task Dmarc_ConflictingDestinationsRefuseAllChanges()
+    {
+        var reader = new FakeDnsRecordSettingsReader { Destination = new(null, "Conflict", true) };
+        var plan = await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), reader, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
+        Assert.Equal("report-address-conflict", plan.Refusal);
+        Assert.Empty(plan.Changes);
+    }
+
+    [Theory]
+    [InlineData(false, true, 2)]
+    [InlineData(true, true, 3)]
+    [InlineData(false, false, 1)]
+    public async Task DomainSetup_CombinesAvailableRecordsInOneReview(bool mtaEnabled, bool tlsEnabled, int count)
+    {
+        var graph = Graph(tlsEnabled ? "tlsrpt@dotmarc.example" : null);
+        var builder = new DomainSetupChangeBuilder(
+            new(new FakeDmarcTxtLookup(), graph, new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()),
+            new(new FakeTlsrptTxtLookup(), graph),
+            new(Options.Create(new MtaStsOptions { HostingHostname = "mta-sts.dotmarc.example" }), new FakeMtaStsCnameLookup(), new FakeMtaStsHostProvisioner()), graph);
+        var request = new DnsPushRequest(new Domain { Id = 1, Name = "contoso.com", MtaStsEnabled = mtaEnabled }, "cloudflare", "contoso.com", null);
+        var plan = await builder.BuildAsync(request, CancellationToken.None);
+        Assert.Null(plan.Refusal);
+        Assert.Equal(count, plan.Changes.Count);
+        Assert.Equal("DomainDnsSetup", builder.RequiredPolicy);
+        Assert.Contains(plan.Notes, note => note.Contains("not transactional", StringComparison.Ordinal));
+        if (!tlsEnabled) Assert.Contains(plan.Notes, note => note.Contains("no configured TLS report mailbox", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DomainSetup_ConflictingAddressesBlockEveryRecord()
+    {
+        var graph = Graph();
+        var builder = new DomainSetupChangeBuilder(
+            new(new FakeDmarcTxtLookup(), graph, new FakeDnsRecordSettingsReader { Destination = new(null, "Conflict", true) }, new FakeDmarcTargetReader()),
+            new(new FakeTlsrptTxtLookup(), graph),
+            new(Options.Create(new MtaStsOptions()), new FakeMtaStsCnameLookup(), new FakeMtaStsHostProvisioner()), graph);
+        var plan = await builder.BuildAsync(Request(), CancellationToken.None);
+        Assert.Equal("report-address-conflict", plan.Refusal);
+        Assert.Empty(plan.Changes);
+    }
+
+    [Fact]
+    public async Task DomainSetup_RequiresTheReviewedPlanToStillMatch()
+    {
+        var graph = Graph();
+        var lookup = new FakeDmarcTxtLookup();
+        var builder = new DomainSetupChangeBuilder(
+            new(lookup, graph, new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()),
+            new(new FakeTlsrptTxtLookup(), graph),
+            new(Options.Create(new MtaStsOptions()), new FakeMtaStsCnameLookup(), new FakeMtaStsHostProvisioner()), graph);
+        var request = Request();
+        var reviewed = await builder.BuildAsync(request, CancellationToken.None);
+        var authorized = request with { Payload = DnsPlanFingerprint.Of(reviewed.Changes) };
+        Assert.Null((await builder.BuildAsync(authorized, CancellationToken.None)).Refusal);
+        lookup.Result = new("v=DMARC1; p=reject; rua=mailto:changed@example.com", null);
+        var changed = await builder.BuildAsync(authorized, CancellationToken.None);
+        Assert.Equal("setup-changed", changed.Refusal);
+        Assert.Empty(changed.Changes);
+    }
+
     private static DnsPushRequest Request(string provider = "cloudflare") => new(Contoso, provider, "contoso.com", null);
 
     [Fact]

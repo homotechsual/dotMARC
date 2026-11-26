@@ -3,6 +3,7 @@ using System.Reflection;
 using DotMarc.Components.Pages;
 using DotMarc.Data;
 using DotMarc.Demo;
+using DotMarc.DnsPush;
 using DotMarc.Reporting;
 using DotMarc.Psa;
 using DotMarc.ServerLogs;
@@ -22,6 +23,7 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
 {
     private IAsyncDisposable? _cleanup;
     private WebApplicationFactory<Program> _factory = null!;
+    private readonly FakeDnsPushProvider _dnsPush = new("cloudflare");
     public async Task InitializeAsync()
     {
         var (connection, cleanup) = await fixture.CreateDatabaseAsync();
@@ -30,6 +32,11 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         {
             builder.UseSetting("ConnectionStrings:DotMarc", connection);
             builder.UseSetting("Demo:Enabled", "true");
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IDnsPushProvider>();
+                services.AddSingleton<IDnsPushProvider>(_dnsPush);
+            });
         });
     }
     public async Task DisposeAsync()
@@ -42,6 +49,48 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         await client.PostAsync($"/demo/sign-in/{persona}", null);
         return client;
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public async Task CombinedDnsSetupRequiresBothWritePermissions(bool edit, bool mta, bool allowed)
+    {
+        using var client = await SignInAsync("admin");
+        var claims = new List<System.Security.Claims.Claim>();
+        if (edit) claims.Add(new(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.DomainsEdit)));
+        if (mta) claims.Add(new(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.MtaStsManage)));
+        var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(claims, "Test"));
+        var authorization = _factory.Services.GetRequiredService<IAuthorizationService>();
+        Assert.Equal(allowed, (await authorization.AuthorizeAsync(user, "DomainDnsSetup")).Succeeded);
+    }
+
+    [Fact]
+    public async Task CombinedSetupRechecksDomainScopeAtStartAndCallback()
+    {
+        using var client = await SignInAsync("viewer");
+        client.DefaultRequestHeaders.Add("Sec-Fetch-Site", "same-origin");
+        var dbFactory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var viewer = await db.UserAccesses.Include(user => user.Role).SingleAsync(user => user.Email == DemoDataSeeder.ViewerEmail);
+        viewer.Role.Permissions.AddRange([Permission.DomainsEdit, Permission.MtaStsManage]);
+        var allowed = await db.Domains.Include(domain => domain.Groups).SingleAsync(domain => domain.Name == "shop.aurora-retail.example");
+        var other = await db.Domains.SingleAsync(domain => domain.Name == "cobalt-freight.example");
+        await db.SaveChangesAsync();
+        var payload = new string('a', 64);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/dns-push/cloudflare/start?domainId={allowed.Id}&target=domain-setup")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/dns-push/cloudflare/start?domainId={other.Id}&target=domain-setup&payload={payload}")).StatusCode);
+        var start = await client.GetAsync($"/dns-push/cloudflare/start?domainId={allowed.Id}&target=domain-setup&payload={payload}");
+        Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
+        var state = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(start.Headers.Location!.Query)["state"].ToString();
+        allowed.Groups.Clear();
+        await db.SaveChangesAsync();
+        var callback = await client.GetStringAsync($"/dns-push/cloudflare/callback?code=test-code&state={Uri.EscapeDataString(state)}");
+        Assert.Contains("Push not started", callback);
+        Assert.Equal(0, _dnsPush.ExchangeCalls);
+        Assert.Empty(_dnsPush.Pushes);
     }
 
     [Theory]
@@ -58,6 +107,9 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "id=\"add-domain\"").Cast<object>());
         Assert.Contains("Domain name", html);
         Assert.Contains("Add to group", html);
+        Assert.Contains(">Advanced</summary>", html);
+        Assert.Contains("Open domain and set up DNS", html);
+        Assert.Contains("DKIM selectors", html);
         Assert.Contains("value=\"Aurora Retail\"", html);
         Assert.Contains("no baseline setup is required", html);
         if (route != "/domains/import")
@@ -212,6 +264,12 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         Assert.Contains("Saving a target changes", domain);
         Assert.Contains("Inherits system default", domain);
         Assert.Contains("Edit default target", domain);
+        Assert.Contains("Set the defaults", domain);
+        var defaults = domain[domain.IndexOf("System-wide defaults", StringComparison.Ordinal)..domain.IndexOf("Add exceptions only where needed", StringComparison.Ordinal)];
+        Assert.Contains("Primary report address (configuration)", defaults);
+        Assert.Contains("Secondary DMARC report address", defaults);
+        Assert.Contains("DMARC policy target", defaults);
+        Assert.DoesNotContain("<details", defaults);
         Assert.Contains("Set override", domain);
         Assert.Contains("Choose a domain in Inventory", domain);
         Assert.True(domain.IndexOf("Set the default", StringComparison.Ordinal) < domain.IndexOf("Add exceptions only where needed", StringComparison.Ordinal));

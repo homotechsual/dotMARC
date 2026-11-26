@@ -1,4 +1,5 @@
 @using DotMarc.Data
+@using DotMarc.Baselines
 @using DotMarc.Portal
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -9,6 +10,7 @@
 @inject AuditActorAccessor Actor
 @inject ISnackbar Snackbar
 @inject ILogger<AddDomainForm> Logger
+@inject NavigationManager Navigation
 
 <AuthorizeView Policy="DomainsAdd">
     @if (!_portal)
@@ -16,14 +18,65 @@
         <MudPaper id="add-domain" Class="pa-3 mb-3" Outlined="true">
             <MudText Typo="Typo.subtitle1">Add a domain</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Start monitoring one domain. DNS is not changed, and no baseline setup is required.</MudText>
-            <div class="d-flex align-center" style="gap:12px; flex-wrap:wrap;">
+            <div class="domain-entry-fields">
+                <div>
                 <MudTextField T="string" Label="Domain name" @bind-Value="_name" Immediate="true" Disabled="@Disabled"
-                              Error="@(_error is not null)" ErrorText="@_error" Style="flex:1; min-width:200px;" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Error="@(_error is not null)" ErrorText="@_error" />
+                </div>
+                <div>
                 <SearchableSelect TValue="int?" Label="Add to group" Options="_groups" @bind-Value="_selectedGroup"
-                                  Clearable="@(!_scoped)" Disabled="@Disabled" Class="flex-grow-1"
+                                  Clearable="@(!_scoped)" Disabled="@Disabled" Variant="Variant.Outlined" Margin="Margin.Dense"
                                   HelperText="@(!_canEdit ? "Assigning a group requires DomainsEdit." : _scoped ? "Choose one of your groups." : "Optional; defaults to the current group filter.")" />
+                </div>
+                <div class="domain-entry-submit">
                 <MudButton OnClick="AddAsync" Disabled="@Disabled" Variant="Variant.Filled" Color="Color.Primary">Add domain</MudButton>
+                </div>
             </div>
+            <details class="domain-entry-advanced mt-3">
+                <summary>Advanced</summary>
+                <MudText Typo="Typo.body2" Class="my-2 mud-text-secondary">These are dotMARC settings, not live DNS changes. Leave the policy unset to inherit group or system baselines.</MudText>
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="DmarcPolicyLevel?" Label="Policy (p)" @bind-Value="_policy" Disabled="@(!_canBaseline || Disabled)" Variant="Variant.Outlined">
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)null)">Inherit baseline</MudSelectItem>
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.None)">None</MudSelectItem>
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Quarantine)">Quarantine</MudSelectItem>
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Reject)">Reject</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="DmarcPolicyLevel?" Label="Subdomain policy (sp)" @bind-Value="_subdomainPolicy" Disabled="@(!_canBaseline || Disabled || _policy is null)" Variant="Variant.Outlined"
+                                   HelperText="When sp matches p, it is saved as Follows p; the effective subdomain policy is unchanged.">
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)null)">@DmarcTargetText.FollowsPolicy(_policy)</MudSelectItem>
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.None)">None</MudSelectItem>
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Quarantine)">Quarantine</MudSelectItem>
+                            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Reject)">Reject</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch T="bool" Label="Monitor this domain" @bind-Value="_monitored" Disabled="@(!_canEdit || Disabled)" Color="Color.Primary" />
+                        <MudTextField T="string" Label="DKIM selectors" @bind-Value="_selectors" Lines="3" Disabled="@(!_canEdit || Disabled)" Variant="Variant.Outlined" HelperText="One selector per line; this configures checks, not DKIM signing keys." />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch T="bool" Label="Enable MTA-STS hosting" @bind-Value="_mtaEnabled" Disabled="@(!_canMta || Disabled)" Color="Color.Primary" />
+                        @if (_mtaEnabled)
+                        {
+                            <MudSelect T="MtaStsMode" Label="MTA-STS mode" @bind-Value="_mtaMode" Disabled="Disabled" Variant="Variant.Outlined">
+                                <MudSelectItem Value="MtaStsMode.None">None</MudSelectItem>
+                                <MudSelectItem Value="MtaStsMode.Testing">Testing</MudSelectItem>
+                                <MudSelectItem Value="MtaStsMode.Enforce">Enforce</MudSelectItem>
+                            </MudSelect>
+                            <MudTextField T="string" Label="MTA-STS MX hosts" @bind-Value="_mxHosts" Lines="3" Disabled="Disabled" Variant="Variant.Outlined" HelperText="One hostname per line; a leading *. wildcard is allowed." />
+                            <MudNumericField T="int" Label="MTA-STS max age (seconds)" @bind-Value="_maxAge" Min="1" Max="31557600" Disabled="Disabled" Variant="Variant.Outlined" />
+                        }
+                    </MudItem>
+                </MudGrid>
+                @if (!_canBaseline || !_canMta || !_canEdit)
+                {
+                    <MudText Typo="Typo.caption">Policy overrides require BaselinesManage; monitoring and DKIM require DomainsEdit; MTA-STS requires MtaStsManage.</MudText>
+                }
+            </details>
+            <MudCheckBox T="bool" Label="Open domain and set up DNS" @bind-Value="_openDomain" Disabled="Disabled" />
             @if (_addedName is not null)
             {
                 <MudAlert Severity="Severity.Success" Class="mt-2" role="status">
@@ -43,6 +96,11 @@
     private string _name = "";
     private string? _error, _addedName;
     private bool _ready, _adding, _scoped, _canEdit, _portal;
+    private bool _canBaseline, _canMta, _monitored = true, _mtaEnabled, _openDomain = true;
+    private DmarcPolicyLevel? _policy, _subdomainPolicy;
+    private string _selectors = "", _mxHosts = "";
+    private MtaStsMode _mtaMode = MtaStsMode.Testing;
+    private int _maxAge = 604800;
     private bool Disabled => !RendererInfo.IsInteractive || !_ready || _adding;
 
     protected override async Task OnInitializedAsync()
@@ -53,6 +111,8 @@
             _portal = ClientPortalGate.IsPortalUser(user);
             if (_portal || !(await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsAdd))).Succeeded) return;
             _canEdit = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded;
+            _canBaseline = (await Authorization.AuthorizeAsync(user, nameof(Permission.BaselinesManage))).Succeeded;
+            _canMta = (await Authorization.AuthorizeAsync(user, nameof(Permission.MtaStsManage))).Succeeded;
             var scope = PortalData.ScopedGroupIds(user);
             _scoped = scope.Count > 0;
             await using var db = await DbFactory.CreateDbContextAsync();
@@ -104,6 +164,22 @@
                 return;
             }
             await using var db = await DbFactory.CreateDbContextAsync();
+            if ((_policy is not null && !(await Authorization.AuthorizeAsync(user, nameof(Permission.BaselinesManage))).Succeeded)
+                || ((!_monitored || !string.IsNullOrWhiteSpace(_selectors)) && !(await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded)
+                || (_mtaEnabled && !(await Authorization.AuthorizeAsync(user, nameof(Permission.MtaStsManage))).Succeeded))
+            {
+                _error = "You no longer have permission for the chosen advanced settings.";
+                return;
+            }
+            var selectors = _selectors.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var hosts = _mxHosts.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (selectors.Any(selector => !DomainNameValidator.TryNormalize($"{selector}.example.com", out _))
+                || _mtaEnabled && (hosts.Count == 0 || _maxAge is < 1 or > 31557600
+                    || hosts.Any(host => !DomainNameValidator.TryNormalize(host.StartsWith("*.") ? host[2..] : host, out _))))
+            {
+                _error = "Check DKIM selectors and MTA-STS settings. Enabled MTA-STS needs valid MX hosts and a max age from 1 to 31557600.";
+                return;
+            }
             await using var transaction = await db.Database.BeginTransactionAsync();
             if (_selectedGroup is { } groupId && !await db.Groups.AnyAsync(group => group.Id == groupId))
             {
@@ -120,11 +196,16 @@
             };
             if (result != DomainManagementService.AddDomainResult.Added) return;
             DomainNameValidator.TryNormalize(_name, out var normalized);
+            var id = await db.Domains.Where(domain => domain.Name == normalized).Select(domain => domain.Id).SingleAsync();
             if (_selectedGroup is { } selected)
             {
-                var id = await db.Domains.Where(domain => domain.Name == normalized).Select(domain => domain.Id).SingleAsync();
                 await GroupManagementService.SetDomainGroupsAsync(db, actor, id, [selected]);
             }
+            if (_policy is { } policy)
+                await DmarcTargetService.SetDomainAsync(db, actor, id, new DmarcTarget(policy, _subdomainPolicy));
+            if (!_monitored) await DomainManagementService.SetMonitoredAsync(db, actor, id, false);
+            if (selectors.Count > 0) await DomainManagementService.SetDkimSelectorsAsync(db, actor, id, selectors);
+            if (_mtaEnabled) await DomainManagementService.SetMtaStsConfigAsync(db, actor, id, true, _mtaMode, hosts, _maxAge);
             await transaction.CommitAsync();
             _addedName = added = normalized;
             _name = "";
@@ -136,6 +217,10 @@
             _error = "Could not add the domain. Try again.";
         }
         finally { _adding = false; }
-        if (added is not null) await Added.InvokeAsync(added);
+        if (added is not null)
+        {
+            if (_openDomain) Navigation.NavigateTo($"/domains/{Uri.EscapeDataString(added)}?setup=true");
+            else await Added.InvokeAsync(added);
+        }
     }
 }

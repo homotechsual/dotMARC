@@ -25,6 +25,9 @@ public sealed class DnsPushPopupResultTests
     [InlineData("error", "push failed")]
     [InlineData("nothing-to-push", "already matches")]
     [InlineData("batch-started", "Batch started")]
+    [InlineData("report-address-conflict", "Set a domain override")]
+    [InlineData("setup-changed", "changed after review")]
+    [InlineData("setup-failed", "missing or duplicated")]
     public void EachOutcome_IsSaidInWords(string outcome, string words)
     {
         var html = System.Net.WebUtility.HtmlDecode(DnsPushPopupResult.Html(outcome, PushId, Title));

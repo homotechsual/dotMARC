@@ -232,6 +232,10 @@ namespace DotMarc.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AdditionalRuaAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
                     b.Property<string>("DkimCheckDetail")
                         .HasColumnType("text");
 
@@ -349,6 +353,9 @@ namespace DotMarc.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("OverrideAdditionalRuaAddress")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
@@ -469,9 +476,16 @@ namespace DotMarc.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AdditionalRuaAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("OverrideAdditionalRuaAddress")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("TargetDmarcPolicy")
                         .HasColumnType("text");

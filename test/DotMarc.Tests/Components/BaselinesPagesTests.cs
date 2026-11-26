@@ -17,6 +17,14 @@ namespace DotMarc.Tests.Components;
 /// <summary>The Baselines pages share one tab list, and the old Sender baseline address keeps working.</summary>
 public sealed class BaselinesPagesTests
 {
+    [Theory]
+    [InlineData(null, "Follows p")]
+    [InlineData(DmarcPolicyLevel.None, "Follows p (currently None)")]
+    [InlineData(DmarcPolicyLevel.Quarantine, "Follows p (currently Quarantine)")]
+    [InlineData(DmarcPolicyLevel.Reject, "Follows p (currently Reject)")]
+    public void FollowingPolicyNamesTheEffectiveSubdomainPolicy(DmarcPolicyLevel? policy, string expected) =>
+        Assert.Equal(expected, DmarcTargetText.FollowsPolicy(policy));
+
     private static ClaimsPrincipal User(bool portal, params int[] scopedGroupIds)
     {
         var claims = scopedGroupIds.Select(groupId => new Claim(UserAccessClaimsTransformation.ScopedGroupClaimType, groupId.ToString(CultureInfo.InvariantCulture))).ToList();

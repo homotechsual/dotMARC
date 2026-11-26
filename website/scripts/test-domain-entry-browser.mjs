@@ -29,6 +29,8 @@ try {
     await ready();
     const form = page.locator('#add-domain');
     assert.equal(await form.count(), 1);
+    assert.equal(await form.locator('details').getAttribute('open'), null);
+    await form.getByRole('checkbox', {name: 'Open domain and set up DNS', exact: true}).uncheck();
     assert.equal(await form.getByLabel('Add to group', {exact: true}).inputValue(), 'Aurora Retail');
     const expectedGroup = index === 1 ? 'Cobalt Freight' : 'Aurora Retail';
     if (index === 1) {
@@ -56,6 +58,43 @@ try {
     assert.equal(await page.locator('.domain-groups .mud-typography-body2').innerText(), expectedGroup);
   }
 
+  await page.goto(`${base}/domains/import?group=${group}`);
+  await ready();
+  const advancedForm = page.locator('#add-domain');
+  assert.equal(await advancedForm.getByRole('checkbox', {name: 'Open domain and set up DNS', exact: true}).isChecked(), true);
+  const fieldBounds = await advancedForm.locator('.domain-entry-fields').evaluate(node => {
+    const inputs = [...node.querySelectorAll('input')].map(input => input.getBoundingClientRect());
+    const button = node.querySelector('button.mud-button-root').getBoundingClientRect();
+    return {delta: Math.abs(inputs[0].top - inputs[1].top), buttonTop: button.top, inputTop: inputs[0].top};
+  });
+  assert(fieldBounds.delta <= 2, `Domain/group input misalignment: ${fieldBounds.delta}px`);
+  assert(Math.abs(fieldBounds.buttonTop - fieldBounds.inputTop) <= 16, 'Add button must align with the inputs');
+  await advancedForm.locator('summary').click();
+  await advancedForm.getByLabel('Policy (p)', {exact: true}).click();
+  await page.getByRole('option', {name: 'Reject', exact: true}).click();
+  await advancedForm.getByLabel('Subdomain policy (sp)', {exact: true}).click();
+  await page.getByRole('option', {name: 'Quarantine', exact: true}).click();
+  await advancedForm.getByRole('switch', {name: 'Monitor this domain', exact: true}).uncheck();
+  await advancedForm.getByLabel('DKIM selectors', {exact: true}).fill('selector1\nselector2');
+  await advancedForm.getByRole('switch', {name: 'Enable MTA-STS hosting', exact: true}).check();
+  const advancedName = `advanced-entry-${stamp}.example`;
+  await advancedForm.getByLabel('Domain name', {exact: true}).fill(advancedName);
+  await advancedForm.getByRole('button', {name: 'Add domain', exact: true}).click();
+  await advancedForm.getByText('Check DKIM selectors and MTA-STS settings. Enabled MTA-STS needs valid MX hosts and a max age from 1 to 31557600.', {exact: true}).waitFor();
+  await advancedForm.getByLabel('MTA-STS MX hosts', {exact: true}).fill('*.mail.example.com');
+  await advancedForm.getByLabel('MTA-STS max age (seconds)', {exact: true}).fill('86400');
+  await advancedForm.getByRole('button', {name: 'Add domain', exact: true}).click();
+  await page.waitForURL(`${base}/domains/${advancedName}?setup=true`);
+  await page.getByText('Next: set up DNS', {exact: true}).waitFor();
+  await page.getByRole('button', {name: 'Review DNS setup', exact: true}).waitFor();
+  await page.reload();
+  await page.getByText('Next: set up DNS', {exact: true}).waitFor();
+  assert.match(await page.locator('body').innerText(), /p=reject; sp=quarantine/);
+  await page.getByRole('button', {name: 'Configure selectors', exact: true}).click();
+  await page.getByRole('dialog').getByLabel('Selectors', {exact: true}).waitFor();
+  assert.equal(await page.getByRole('dialog').getByLabel('Selectors', {exact: true}).inputValue(), 'selector1\nselector2');
+  await page.getByRole('dialog').getByRole('button', {name: 'Cancel', exact: true}).click();
+
   await page.goto(`${base}/domains/import?group=2147483647`);
   await ready();
   await page.getByLabel('Domain name', {exact: true}).fill(`invalid-group-${stamp}.example`);
@@ -79,7 +118,7 @@ try {
   await page.setViewportSize({width: 390, height: 844});
   const geometry = await page.locator('#add-domain').evaluate(node => {
     const bounds = node.getBoundingClientRect();
-    const controls = [...node.querySelectorAll('input,button')].map(element => element.getBoundingClientRect());
+    const controls = [...node.querySelectorAll('input,button')].filter(element => element.getClientRects().length).map(element => element.getBoundingClientRect());
     return {left: bounds.left, right: bounds.right, viewport: innerWidth,
       contained: controls.every(control => control.left >= bounds.left && control.right <= bounds.right)};
   });
@@ -103,7 +142,7 @@ try {
   await page.goto(`${base}/domains/import`);
   assert.equal(await page.locator('#add-domain').count(), 0);
   assert.deepEqual(errors, []);
-  console.log('Domain-entry browser checks passed: inline creation on all three pages, validation, normalization, duplicates, group persistence, bulk preview/save isolation, mobile controls and read-only access.');
+  console.log('Domain-entry browser checks passed: all three entry pages, aligned fields, collapsed Advanced, policy/DKIM/MTA-STS settings, default DNS-setup navigation, optional stay-on-page, validation, group persistence, bulk isolation, mobile controls and read-only access.');
 } finally {
   await browser.close();
 }

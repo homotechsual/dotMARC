@@ -10,7 +10,11 @@ The page has a sample CSV and a sample Excel file to start from.
 
 ## Add just one domain
 
-Use **Add a domain** at the top of the initial Import page to save one domain immediately without preparing an import. It uses the same validation, duplicate handling and permissions as Dashboard and Inventory, with a link to the new domain after saving. **Add to group** starts with the group filter from the page you came from; change or clear it as appropriate. Scoped editors must keep a group in their scope, and assigning one requires domain-edit permission. No baseline is required and DNS is not changed.
+Use **Add a domain** at the top of the initial Import page to save one domain immediately without preparing an import. It uses the same validation, duplicate handling and permissions as Dashboard and Inventory. **Add to group** starts with the group filter from the page you came from; change or clear it as appropriate. Scoped editors must keep a group in their scope, and assigning one requires domain-edit permission. No baseline is required and DNS is not changed.
+
+**Advanced** is collapsed initially. It lets authorised users set a DMARC policy override (`p`/`sp`), monitoring, DKIM selectors and MTA-STS hosting settings before saving. Policy overrides need `BaselinesManage`, monitoring/DKIM need `DomainsEdit`, and MTA-STS needs `MtaStsManage`. All chosen settings and the group assignment are saved together, or none are.
+
+**Open domain and set up DNS** is selected by default: after saving, Overview opens with a DNS-review prompt. Clear it to stay on the page and use the confirmation link instead. [Combined DNS setup](./dns-provider-push.mdx#new-domain-setup) reviews supported records without publishing until you approve and authorize your provider.
 
 This single-domain group choice does not apply to bulk imports: use the **groups** column for those. The single-domain form is hidden while reviewing or viewing the results of a bulk import so that its snapshot stays unchanged.
 

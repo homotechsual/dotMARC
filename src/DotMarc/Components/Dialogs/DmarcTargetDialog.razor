@@ -17,8 +17,9 @@
             <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Quarantine)">Quarantine</MudSelectItem>
             <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Reject)">Reject</MudSelectItem>
         </MudSelect>
-        <MudSelect T="DmarcPolicyLevel?" @bind-Value="_subdomainPolicy" Label="Subdomain policy (sp)" Variant="Variant.Outlined" Disabled="@(_policy is null)">
-            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)null)">Follows p</MudSelectItem>
+        <MudSelect T="DmarcPolicyLevel?" @bind-Value="_subdomainPolicy" Label="Subdomain policy (sp)" Variant="Variant.Outlined" Disabled="@(_policy is null)"
+                   HelperText="When sp matches p, it is saved as Follows p; the effective subdomain policy is unchanged.">
+            <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)null)">@DmarcTargetText.FollowsPolicy(_policy)</MudSelectItem>
             <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.None)">None</MudSelectItem>
             <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Quarantine)">Quarantine</MudSelectItem>
             <MudSelectItem T="DmarcPolicyLevel?" Value="@((DmarcPolicyLevel?)DmarcPolicyLevel.Reject)">Reject</MudSelectItem>

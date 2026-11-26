@@ -17,7 +17,14 @@ public sealed class DmarcChangeBuilder(IDmarcTxtLookup dmarcTxtLookup, IOptions<
         var domainName = request.Domain.Name;
         var existing = await dmarcTxtLookup.LookupAsync(domainName, cancellationToken).ConfigureAwait(false);
         var mailbox = graphOptions.Value.MailboxAddress;
-        var settings = await settingsReader.GetAsync(cancellationToken).ConfigureAwait(false);
+        var storedSettings = await settingsReader.GetAsync(cancellationToken).ConfigureAwait(false);
+        var destination = await settingsReader.GetReportAddressAsync(request.Domain.Id, cancellationToken).ConfigureAwait(false);
+        if (destination.Conflict) return DnsChangePlan.Refuse("report-address-conflict");
+        var settings = new DnsRecordSettings
+        {
+            AdditionalRuaAddress = destination.Address,
+            KeepOtherRuaAddresses = destination.Source == "System default" && storedSettings.KeepOtherRuaAddresses
+        };
         var ruaTag = DmarcRuaMerge.RuaTag(mailbox, settings.AdditionalRuaAddress);
         var target = await targetReader.GetAsync(request.Domain.Id, cancellationToken).ConfigureAwait(false);
         var newPolicy = target is null ? "p=none" : DmarcTargetText.Policy(target);

@@ -14,6 +14,8 @@ public sealed class Group
 
     /// <summary>The target subdomain policy. Null follows <see cref="TargetDmarcPolicy"/>.</summary>
     public DmarcPolicyLevel? TargetDmarcSubdomainPolicy { get; set; }
+    public bool OverrideAdditionalRuaAddress { get; set; }
+    public string? AdditionalRuaAddress { get; set; }
 
     /// <summary>The target this row holds, or null when none is set. An unset subdomain policy follows the policy.</summary>
     public DotMarc.Baselines.DmarcTarget? DmarcTarget =>

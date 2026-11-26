@@ -56,6 +56,21 @@
 }
 else
 {
+    @if (Setup)
+    {
+        <MudPaper Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6">Next: set up DNS</MudText>
+            <MudText Typo="Typo.body2">The domain is saved. Review DMARC and TLS reporting records together, plus MTA-STS hosting records if enabled. Nothing is published until you review the plan and authorize your DNS provider.</MudText>
+            <MudText Typo="Typo.caption" Class="d-block mb-2">SPF and DKIM keys need your mail platform's details and are configured separately. External report destinations may need authorization in their own DNS zones.</MudText>
+            <AuthorizeView Policy="DomainDnsSetup">
+                <Authorized>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SetupDnsAsync" Disabled="@(_settingUpDns || !RendererInfo.IsInteractive)">Review DNS setup</MudButton>
+                </Authorized>
+                <NotAuthorized><MudText Typo="Typo.body2">Combined setup requires DomainsEdit and MtaStsManage. Use the individual DNS controls below where your permissions allow.</MudText></NotAuthorized>
+            </AuthorizeView>
+            <MudButton OnClick="@(() => Setup = false)">Later</MudButton>
+        </MudPaper>
+    }
     <MudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync">
         <MudTabPanel Text="Overview">
             <MudGrid Class="my-2">
@@ -133,6 +148,7 @@ else
                 }
                 @if (_canChangeTarget)
                 {
+                    <details class="mt-3"><summary>Report destinations</summary><DmarcReportAddresses DomainId="_domain.Id" /></details>
                     <div class="mt-2 d-flex" style="gap:8px;">
                         <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeTargetAsync">@(_domain.DmarcTarget is null ? "Set target" : "Change target")</MudButton>
                         @if (_domain.DmarcTarget is not null)
@@ -222,7 +238,7 @@ else
                                     <li><MudText Typo="Typo.body2">@change</MudText></li>
                                 }
                             </ul>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">dotMARC's DNS push writes this record, with dotMARC's report address first in rua, then the additional rua address from the DNS push settings if one is set, then other existing rua addresses only while there is room (two at most) and only if Keep other rua addresses is on.</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">DNS setup uses the configured primary mailbox first, then the secondary destination inherited from Domain Baselines or overridden for this domain. With a group or domain override, unrelated existing rua addresses are removed; otherwise Keep other rua addresses applies, up to two destinations in total.</MudText>
                         }
                     </div>
                 }
@@ -620,6 +636,43 @@ else
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "setup")] public bool Setup { get; set; }
+    private bool _settingUpDns;
+
+    private async Task SetupDnsAsync()
+    {
+        if (_settingUpDns || _domain is null) return;
+        _settingUpDns = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            if (!(await AuthorizationService.AuthorizeAsync(user, "DomainDnsSetup")).Succeeded)
+            {
+                Snackbar.Add("You no longer have permission for combined DNS setup.", Severity.Warning);
+                return;
+            }
+            var detection = await DnsProviderDetector.DetectAsync(DomainName, CancellationToken.None);
+            _domain.DnsProvider = detection.Provider;
+            _domain.DnsZone = detection.ZoneName;
+            var provider = await DnsPushProviders.FindConfiguredAsync(detection.Provider.ToProviderKey());
+            if (provider is null)
+            {
+                await ShowManualRecordsAsync("domain-setup", null, NoPushOptionReason, "Could not build DNS setup. Check DNS and enabled MTA-STS hosting configuration.");
+                return;
+            }
+            var plan = await BuildPlanAsync("domain-setup", provider.ProviderKey, "Could not build DNS setup. Check DNS and enabled MTA-STS hosting configuration.");
+            if (plan is not null && await DialogService.ConfirmDnsPushAsync(plan))
+                await OpenDnsPushPopupAsync(provider.ProviderKey, _domain.Id, "domain-setup", DnsPlanFingerprint.Of(plan.Changes));
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Preparing DNS setup for {DomainName} failed", DomainName);
+            Snackbar.Add("Could not prepare DNS setup. Check the domain's DNS and try again.", Severity.Error);
+        }
+        finally { _settingUpDns = false; }
+    }
     private async Task BackToListAsync()
     {
         try
@@ -1392,6 +1445,7 @@ else
             Snackbar.Add(plan.Refusal switch
             {
                 "unmergeable" => "Couldn't safely compute a fix for this record - it needs a manual look.",
+                "report-address-conflict" => "Groups specify conflicting secondary report addresses. Set a domain report-destination override before reviewing DMARC DNS.",
                 "nothing-to-push" => "DNS already matches what dotMARC would write, so there's nothing to push.",
                 "zone-not-found" => "That DNS provider doesn't host this zone, so dotMARC can't push the record there.",
                 _ => lookupFailedMessage,
@@ -1760,6 +1814,13 @@ else
             case "pushed":
                 Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
                 break;
+            case "setup-changed":
+                Snackbar.Add("DNS or setup settings changed after review. Review DNS setup again before publishing.", Severity.Warning);
+                break;
+            case "setup-failed":
+                Snackbar.Add("DNS setup did not complete. Some changes may already be published, and a failed replacement can leave records missing or duplicated. Check every reviewed record in your DNS provider before retrying.",
+                    Severity.Error, config => config.RequireInteraction = true);
+                break;
             case "cancelled":
                 break; // user backed out of the provider's consent screen - no need to say anything
             case "zone-not-found":
@@ -1767,6 +1828,9 @@ else
                 break;
             case "unmergeable":
                 Snackbar.Add("Couldn't safely compute a fix for that record - it needs a manual look.", Severity.Warning);
+                break;
+            case "report-address-conflict":
+                Snackbar.Add("Groups specify conflicting report addresses. Set a domain report-destination override before retrying.", Severity.Warning);
                 break;
             case "replace-failed":
                 // Distinct from the generic "error" case on purpose: this specific outcome means
@@ -1779,7 +1843,7 @@ else
                     Severity.Error, config => config.RequireInteraction = true);
                 break;
             case "error":
-                Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
+                Snackbar.Add("The DNS push failed. Some records may already have changed; check current DNS before retrying or making manual changes.", Severity.Error);
                 break;
             case "spf-changed":
                 Snackbar.Add("SPF changed since you opened the editor. Reopen it to start from the current record.", Severity.Warning);

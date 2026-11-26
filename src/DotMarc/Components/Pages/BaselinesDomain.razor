@@ -26,16 +26,21 @@
         </MudText>
 
         <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
-        <MudText Typo="Typo.overline" Class="mud-text-secondary">1 · Set the default</MudText>
-        <MudText Typo="Typo.h6" Class="mb-1">System-wide DMARC target</MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Used when a domain has neither its own target nor a group target. It is a default, not a minimum enforced over exceptions.</MudText>
-        <div class="d-flex align-center mb-4" style="gap:12px;">
-            <MudText Typo="Typo.h6">@(_summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System))</MudText>
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">1 · Set the defaults</MudText>
+        <MudText Typo="Typo.h6" Class="mb-1">System-wide defaults</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Set the DMARC policy target and report destinations used unless groups or individual domains override them. The primary ingestion mailbox is configuration-owned and cannot be changed here.</MudText>
+        <div class="d-flex align-start flex-wrap mb-4" style="gap:12px;">
+            <div style="flex:1; min-width:200px;">
+                <MudTextField T="string" Label="DMARC policy target" Value="@(_summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System))"
+                              ReadOnly="true" Disabled="@(!_mayChangeSystem)" Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true"
+                              HelperText="Choose the policy domains should publish. Editing this target does not change DNS." />
+            </div>
             @if (_mayChangeSystem)
             {
-                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeSystemAsync">@(_summary.System is null ? "Set default target" : "Edit default target")</MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" Class="mt-2" OnClick="ChangeSystemAsync">@(_summary.System is null ? "Set default target" : "Edit default target")</MudButton>
             }
         </div>
+        <DmarcReportAddresses ShowHeading="false" />
         </MudPaper>
         <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
         <MudText Typo="Typo.overline" Class="mud-text-secondary">2 · Add exceptions only where needed</MudText>
@@ -74,6 +79,7 @@
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@(group.Target is null ? _summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System) : "Group override") · domain and other group targets may take precedence</MudText>
                             </td>
                             <td>
+                                <details class="mb-2"><summary>Report destinations</summary><DmarcReportAddresses GroupId="group.Id" /></details>
                                 @if (BaselineAccess.MayChangeGroup(_user, group.Id))
                                 {
                                     <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeGroupAsync(group))" aria-label="@($"{(group.Target is null ? "Set override" : "Edit override")} for {group.Name}")">@(group.Target is null ? "Set override" : "Edit override")</MudButton>

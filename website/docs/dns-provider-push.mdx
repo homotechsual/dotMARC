@@ -23,6 +23,14 @@ All three providers are independently optional and configured the same way regar
   }}
 />
 
+## New-domain setup
+
+After adding a domain, **Review DNS setup** on Overview combines DMARC, TLS reporting (when this instance has a TLS-report mailbox) and enabled MTA-STS hosting records in one review and provider authorization. Combined setup requires both `DomainsEdit` and `MtaStsManage`; users without both can use the individual controls they are allowed to access.
+
+With no configured push option, the same plan is shown as manual records to copy. No record is published automatically. Changes to DNS or setup settings after review stop the combined push and require another review. Provider writes are not transactional: a failure can leave earlier records published, so check current DNS before retrying.
+
+SPF and DKIM keys still require mail-platform details and separate review. External report destinations may need authorization in another zone. MTA-STS hosting must finish HTTPS provisioning before its policy ID can be published from the MTA-STS controls.
+
 ## Editing SPF
 
 **Edit SPF** on a domain's SPF check opens the SPF editor. It starts from the live record. If the domain has more than one SPF record (an error, since receivers allow only one), it starts from them merged into one. With no record, it starts with an include for each mail service dotMARC detected.
@@ -57,7 +65,7 @@ With no target set at any level, the push behaves as it always has: a new record
 
 ## Repairing a DMARC record
 
-When the DMARC record has a [problem](./dmarc-and-mta-sts.mdx#record-problems) or sits below its target, the DMARC push rebuilds the record the way the domain page shows its **Suggested record**: `v=DMARC1` first, the tags joined with "; ", and a repeated `p`, `sp` or `np` keeping its strictest value. A repeated `rua` or `ruf` is joined into one tag. The push then writes `rua` as it does for any DMARC push: dotMARC's report address goes first, and the additional `rua` address from the DNS push settings, if you have set one, goes second. Other existing `rua` addresses are kept only while there is room, because a record lists at most two addresses in total, and only when **Keep other rua addresses when pushing** is on, so the written record can differ from the suggestion in its `rua`. The additional address is one system-wide setting: it applies to every domain and is not affected by groups, baselines or DMARC targets. The review screen lists each change in plain words, for example "Removed the repeated p=none", and carries the label "Repairs a malformed DMARC record" only when the record has a breaking problem. Text that was not a valid tag is reported as discarded.
+When the DMARC record has a [problem](./dmarc-and-mta-sts.mdx#record-problems) or sits below its target, the DMARC push rebuilds the record the way the domain page shows its **Suggested record**: `v=DMARC1` first, the tags joined with "; ", and a repeated `p`, `sp` or `np` keeping its strictest value. A repeated `rua` or `ruf` is joined into one tag. The push writes the configured primary report mailbox first, followed by the effective secondary address from [Domain Baselines](./baselines.mdx#report-destinations). A group/domain override replaces unrelated existing addresses, and can explicitly require primary-only delivery. Without a scoped override, other existing `rua` addresses are kept only when **Keep other rua addresses when pushing** is on and there is room within two total destinations. Conflicting group addresses require a domain override before DNS setup. The review screen lists each change in plain words, for example "Removed the repeated p=none", and carries the label "Repairs a malformed DMARC record" only when the record has a breaking problem. Text that was not a valid tag is reported as discarded.
 
 If `_dmarc` is a CNAME to another service, the push replaces the CNAME with a fresh record of your own rather than the suggestion, and the review screen flags the lost delegation. A TXT value that looks like a DMARC record but is malformed is removed when a proper record sits beside it. Other values, including SPF records, are left alone.
 

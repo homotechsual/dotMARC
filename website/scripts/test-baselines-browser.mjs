@@ -13,7 +13,7 @@ try {
   const enter = async path => {
     await page.evaluate(path => Blazor.navigateTo(path), path);
     await page.waitForURL(`${base}${path}`);
-    await page.getByText(path === '/baselines/domain' ? 'System-wide DMARC target' : 'Estate-wide sender decisions', {exact: true}).waitFor();
+    await page.getByText(path === '/baselines/domain' ? 'System-wide defaults' : 'Estate-wide sender decisions', {exact: true}).waitFor();
     await page.locator('.baseline-step').first().waitFor();
     assert.equal(await page.locator('.baseline-step').count(), 3);
   };
@@ -30,7 +30,7 @@ try {
   assert((await steps.nth(2).innerText()).includes('Review and resolve gaps'));
   assert(!/\belse\s*\{/.test(await page.locator('.mud-main-content').innerText()));
   const system = steps.nth(0);
-  const original = await system.locator('h6').last().innerText();
+  const original = await system.getByLabel('DMARC policy target', {exact: true}).inputValue();
   await system.getByRole('button', {name: /default target/}).click();
   let dialog = page.getByRole('dialog');
   await dialog.waitFor();
@@ -39,13 +39,13 @@ try {
   await choosePolicy(changedPolicy);
   await dialog.getByRole('button', {name: 'Save target', exact: true}).click();
   await dialog.waitFor({state: 'hidden'});
-  await page.waitForFunction(policy => document.querySelector('.baseline-step').innerText.includes(`p=${policy}`), changedPolicy.toLowerCase());
+  await page.waitForFunction(policy => [...document.querySelectorAll('.baseline-step input')].some(input => input.value === `p=${policy}`), changedPolicy.toLowerCase());
   await system.getByRole('button', {name: 'Edit default target', exact: true}).click();
   await choosePolicy(original.includes('p=reject') ? 'Reject' : original.includes('p=quarantine') ? 'Quarantine' : original.includes('p=none') ? 'None' : 'No default target');
   await dialog.getByRole('button', {name: 'Save target', exact: true}).click();
   await dialog.waitFor({state: 'hidden'});
-  await page.waitForFunction(target => [...document.querySelectorAll('.baseline-step h6')].some(node => node.innerText === target), original);
-  assert.equal(await system.locator('h6').last().innerText(), original);
+  await page.waitForFunction(target => [...document.querySelectorAll('.baseline-step input')].some(input => input.value === target), original);
+  assert.equal(await system.getByLabel('DMARC policy target', {exact: true}).inputValue(), original);
   await steps.nth(1).locator('summary').filter({hasText: /group targets and edit overrides/}).click();
   const groupOverride = steps.nth(1).getByRole('button', {name: /^Set override for /}).first();
   const groupName = (await groupOverride.getAttribute('aria-label')).replace('Set override for ', '');
@@ -89,7 +89,7 @@ try {
   const reviewHref = await page.getByRole('link', {name: 'Review outstanding sender decisions', exact: true}).getAttribute('href');
   assert.equal(reviewHref, '/dashboard?group=all&attention=senders');
   await page.evaluate(() => Blazor.navigateTo('/groups'));
-  await page.getByRole('button', {name: 'Sender defaults', exact: true}).first().click();
+  await page.getByRole('button', {name: /^Sender defaults for /}).first().click();
   await page.waitForURL(target => /^\/groups\/\d+\/senders$/.test(target.pathname));
   await page.getByText('Sender decisions for this group', {exact: true}).waitFor();
   const groupId = new URL(page.url()).pathname.split('/')[2];
