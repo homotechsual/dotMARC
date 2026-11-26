@@ -26,6 +26,13 @@
     <DocsLink Href="https://dotmarc.app/docs/import-domains" Text="Columns, modes and examples" Class="ml-2" />
 </div>
 
+@if (_plan is null && _result is null)
+{
+    <AddDomainForm GroupId="GroupId" />
+    <MudText Typo="Typo.h6" Class="mb-2">Import multiple domains</MudText>
+    <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">The single-domain group choice above does not apply to imports. Use the groups column to assign imported domains.</MudText>
+}
+
 @if (_result is not null)
 {
     <MudAlert Severity="Severity.Success" Class="mb-3">
@@ -188,6 +195,7 @@ else
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "group")] public int? GroupId { get; set; }
     private static readonly Dictionary<string, object?> DownloadAttribute = new() { ["download"] = "" };
 
     private string _pasteText = "";

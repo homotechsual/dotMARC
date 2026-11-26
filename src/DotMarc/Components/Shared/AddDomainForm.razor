@@ -1,0 +1,141 @@
+@using DotMarc.Data
+@using DotMarc.Portal
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject AuditActorAccessor Actor
+@inject ISnackbar Snackbar
+@inject ILogger<AddDomainForm> Logger
+
+<AuthorizeView Policy="DomainsAdd">
+    @if (!_portal)
+    {
+        <MudPaper id="add-domain" Class="pa-3 mb-3" Outlined="true">
+            <MudText Typo="Typo.subtitle1">Add a domain</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Start monitoring one domain. DNS is not changed, and no baseline setup is required.</MudText>
+            <div class="d-flex align-center" style="gap:12px; flex-wrap:wrap;">
+                <MudTextField T="string" Label="Domain name" @bind-Value="_name" Immediate="true" Disabled="@Disabled"
+                              Error="@(_error is not null)" ErrorText="@_error" Style="flex:1; min-width:200px;" />
+                <SearchableSelect TValue="int?" Label="Add to group" Options="_groups" @bind-Value="_selectedGroup"
+                                  Clearable="@(!_scoped)" Disabled="@Disabled" Class="flex-grow-1"
+                                  HelperText="@(!_canEdit ? "Assigning a group requires DomainsEdit." : _scoped ? "Choose one of your groups." : "Optional; defaults to the current group filter.")" />
+                <MudButton OnClick="AddAsync" Disabled="@Disabled" Variant="Variant.Filled" Color="Color.Primary">Add domain</MudButton>
+            </div>
+            @if (_addedName is not null)
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-2" role="status">
+                    Added @_addedName. Health checks run within the next polling cycle.
+                    <MudLink Href="@($"/domains/{Uri.EscapeDataString(_addedName)}")">View domain</MudLink>
+                </MudAlert>
+            }
+        </MudPaper>
+    }
+</AuthorizeView>
+
+@code {
+    [Parameter] public int? GroupId { get; set; }
+    [Parameter] public EventCallback<string> Added { get; set; }
+    private List<SelectOption<int?>> _groups = [];
+    private int? _selectedGroup, _previousGroup;
+    private string _name = "";
+    private string? _error, _addedName;
+    private bool _ready, _adding, _scoped, _canEdit, _portal;
+    private bool Disabled => !RendererInfo.IsInteractive || !_ready || _adding;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = (await Authentication.GetAuthenticationStateAsync()).User;
+            _portal = ClientPortalGate.IsPortalUser(user);
+            if (_portal || !(await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsAdd))).Succeeded) return;
+            _canEdit = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded;
+            var scope = PortalData.ScopedGroupIds(user);
+            _scoped = scope.Count > 0;
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _groups = await db.Groups.AsNoTracking().Where(group => scope.Count == 0 || scope.Contains(group.Id))
+                .OrderBy(group => group.Name).Select(group => new SelectOption<int?>(group.Id, group.Name)).ToListAsync();
+            _ready = true;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Loading domain creation groups failed");
+            _error = "Could not load groups. Reload the page before adding a domain.";
+        }
+        _selectedGroup = GroupId;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_previousGroup != GroupId)
+        {
+            _selectedGroup = GroupId;
+            _previousGroup = GroupId;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (Disabled) return;
+        _adding = true;
+        _error = null;
+        _addedName = null;
+        string? added = null;
+        try
+        {
+            var user = (await Authentication.GetAuthenticationStateAsync()).User;
+            if (ClientPortalGate.IsPortalUser(user) || !(await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsAdd))).Succeeded)
+            {
+                _error = "You no longer have permission to add domains.";
+                return;
+            }
+            var scope = PortalData.ScopedGroupIds(user);
+            if (scope.Count > 0 && (_selectedGroup is not { } group || !scope.Contains(group)))
+            {
+                _error = "Choose one of your groups before adding a domain.";
+                return;
+            }
+            if (_selectedGroup is not null && !(await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded)
+            {
+                _error = "Assigning a group also requires DomainsEdit. Clear the group or ask an administrator.";
+                return;
+            }
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            if (_selectedGroup is { } groupId && !await db.Groups.AnyAsync(group => group.Id == groupId))
+            {
+                _error = "The selected group no longer exists. Reload the page and choose a group.";
+                return;
+            }
+            var actor = await Actor.GetAsync();
+            var result = await DomainManagementService.AddDomainAsync(db, actor, _name);
+            _error = result switch
+            {
+                DomainManagementService.AddDomainResult.InvalidName => "Enter a valid domain name.",
+                DomainManagementService.AddDomainResult.AlreadyMonitored => "That domain already exists.",
+                _ => null
+            };
+            if (result != DomainManagementService.AddDomainResult.Added) return;
+            DomainNameValidator.TryNormalize(_name, out var normalized);
+            if (_selectedGroup is { } selected)
+            {
+                var id = await db.Domains.Where(domain => domain.Name == normalized).Select(domain => domain.Id).SingleAsync();
+                await GroupManagementService.SetDomainGroupsAsync(db, actor, id, [selected]);
+            }
+            await transaction.CommitAsync();
+            _addedName = added = normalized;
+            _name = "";
+            Snackbar.Add("Domain added. Active filters may hide it.", Severity.Success);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Adding a domain failed");
+            _error = "Could not add the domain. Try again.";
+        }
+        finally { _adding = false; }
+        if (added is not null) await Added.InvokeAsync(added);
+    }
+}

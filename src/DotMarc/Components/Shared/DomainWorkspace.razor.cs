@@ -32,13 +32,13 @@ public partial class DomainWorkspace : IAsyncDisposable
     [Inject] private TimeProvider Clock { get; set; } = null!;
 
     private DomainListState _state = new();
-    private string? _userKey, _error, _addError;
-    private string _newDomain = "", _lastUri = "";
+    private string? _userKey, _error;
+    private string _lastUri = "";
     private bool _loaded, _hasDefault, _management, _canReorder, _disposed, _restoreScroll, _memoryAttempted, _memoryFailed, _scrollTop;
     private int? _draggedId;
     private int _loadVersion;
     private bool _loading;
-    private bool _focusAddDomain, _adding;
+    private bool _focusAddDomain;
     private IReadOnlyCollection<int> _scope = [];
     private List<Group> _groups = [];
     private List<Tag> _tags = [];
@@ -57,6 +57,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     private IJSObjectReference? _memory;
     private bool CanReorder => _canReorder && _scope.Count == 0 && !_state.GroupedView && _state.Sort is null && _state.ActiveFilters.Count == 0;
     private string Route => Inventory ? "/domains" : "/dashboard";
+    private string ImportUrl => _state.GroupId is { } groupId ? $"/domains/import?group={groupId}" : "/domains/import";
     private static readonly KeyValuePair<string, string>[] Columns =
     [
         new("name", "Domain"), new("status", "Report status"), new("pass", "Pass rate (30d)"), new("last", "Last report"),
@@ -324,47 +325,6 @@ public partial class DomainWorkspace : IAsyncDisposable
                 ? "Keep at least one of your groups."
                 : "The domain or groups are no longer available to you. Reload and try again.", Severity.Warning);
     });
-
-    private async Task AddAsync()
-    {
-        if (_adding) return;
-        _adding = true;
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            if (!await MayWriteAsync(db, Permission.DomainsAdd)) return;
-            var scope = PortalData.ScopedGroupIds((await Authentication.GetAuthenticationStateAsync()).User);
-            if (scope.Count > 0 && (_state.GroupId is not { } group || !scope.Contains(group)))
-            {
-                _addError = "Choose one of your Groups in Filters before adding a domain.";
-                return;
-            }
-            if (_state.GroupId is not null && !(await Authorization.AuthorizeAsync((await Authentication.GetAuthenticationStateAsync()).User, nameof(Permission.DomainsEdit))).Succeeded)
-            {
-                _addError = "Assigning a Group while adding a domain also requires DomainsEdit. Clear the Group filter or ask an administrator.";
-                return;
-            }
-            await using var transaction = await db.Database.BeginTransactionAsync();
-            var result = await DomainManagementService.AddDomainAsync(db, await Actor.GetAsync(), _newDomain);
-            _addError = result switch { DomainManagementService.AddDomainResult.InvalidName => "Enter a valid domain name.", DomainManagementService.AddDomainResult.AlreadyMonitored => "That domain already exists.", _ => null };
-            if (result != DomainManagementService.AddDomainResult.Added) return;
-            if (_state.GroupId is { } groupId)
-            {
-                DomainNameValidator.TryNormalize(_newDomain, out var name);
-                var id = await db.Domains.Where(domain => domain.Name == name).Select(domain => domain.Id).SingleAsync();
-                await GroupManagementService.SetDomainGroupsAsync(db, await Actor.GetAsync(), id, [groupId]);
-            }
-            await transaction.CommitAsync();
-            _newDomain = ""; await LoadAsync();
-            Snackbar.Add("Domain added. Active filters may hide it.", Severity.Success);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
-        {
-            Logger.LogWarning(exception, "Adding a domain failed");
-            _addError = "Could not add the domain. Try again.";
-        }
-        finally { _adding = false; }
-    }
 
     private async Task DeleteAsync(int id)
     {

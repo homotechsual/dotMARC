@@ -8,6 +8,12 @@ description: Add and update many domains at once from a pasted list, a CSV file 
 
 The page has a sample CSV and a sample Excel file to start from.
 
+## Add just one domain
+
+Use **Add a domain** at the top of the initial Import page to save one domain immediately without preparing an import. It uses the same validation, duplicate handling and permissions as Dashboard and Inventory, with a link to the new domain after saving. **Add to group** starts with the group filter from the page you came from; change or clear it as appropriate. Scoped editors must keep a group in their scope, and assigning one requires domain-edit permission. No baseline is required and DNS is not changed.
+
+This single-domain group choice does not apply to bulk imports: use the **groups** column for those. The single-domain form is hidden while reviewing or viewing the results of a bulk import so that its snapshot stays unchanged.
+
 ## Columns
 
 Only the domain is required, so a list of domains, one per line, is a complete import.

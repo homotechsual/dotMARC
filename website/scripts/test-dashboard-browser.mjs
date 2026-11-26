@@ -83,9 +83,7 @@ try {
   await enter('/dashboard?search=not-a-domain');
   await page.getByText('No domains in the current scope.', {exact: false}).waitFor();
   assert(await page.getByText('No message data is available', {exact: false}).isVisible());
-  await page.getByRole('link', {name: 'Add domain', exact: true}).click();
-  await page.waitForURL(target => target.pathname === '/domains' && target.hash === '#add-domain');
-  await page.waitForFunction(() => document.activeElement === document.querySelector('#add-domain input'));
+  assert.equal(new URL(page.url()).pathname, '/dashboard');
   assert.equal(new URL(page.url()).searchParams.get('search'), 'not-a-domain');
   const domainInput = page.getByLabel('Domain name', {exact: true});
   await domainInput.fill('not a valid domain');
@@ -102,6 +100,7 @@ try {
   const viewer = await browser.newPage();
   await viewer.request.post(`${base}/demo/sign-in/viewer`);
   await viewer.goto(`${base}/dashboard?group=all`);
+  await viewer.waitForFunction(() => !!JSON.parse(history.state?.userState ?? '{}').domainListEntry);
   await viewer.locator('.dashboard-metric').first().waitFor();
   await viewer.locator('a[data-domain-link]').first().waitFor();
   const names = await viewer.locator('a[data-domain-link]').allTextContents();
@@ -109,7 +108,7 @@ try {
   assert.equal(await viewer.locator('.dashboard-operations').count(), 0);
   await viewer.close();
   assert.deepEqual(errors, []);
-  console.log('Dashboard browser checks passed: cards, multi-category queue, hierarchy, evidence, Back, mobile, Add domain focus/validation/creation and scoped Viewer.');
+  console.log('Dashboard browser checks passed: cards, multi-category queue, hierarchy, evidence, Back, mobile, inline domain validation/creation and scoped Viewer.');
 } finally {
   await browser.close();
 }

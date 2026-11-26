@@ -45,6 +45,38 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     }
 
     [Theory]
+    [InlineData("/dashboard")]
+    [InlineData("/domains")]
+    [InlineData("/domains/import")]
+    public async Task DomainEntryUsesTheSharedFormAndCarriesGroupContext(string route)
+    {
+        using var client = await SignInAsync("admin");
+        var factory = _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var group = await db.Groups.SingleAsync(candidate => candidate.Name == "Aurora Retail");
+        var html = await client.GetStringAsync($"{route}?group={group.Id}");
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "id=\"add-domain\"").Cast<object>());
+        Assert.Contains("Domain name", html);
+        Assert.Contains("Add to group", html);
+        Assert.Contains("value=\"Aurora Retail\"", html);
+        Assert.Contains("no baseline setup is required", html);
+        if (route != "/domains/import")
+            Assert.Contains($"/domains/import?group={group.Id}", html);
+    }
+
+    [Theory]
+    [InlineData("/dashboard")]
+    [InlineData("/domains")]
+    public async Task DomainEntryIsHiddenForReadOnlyUsers(string route)
+    {
+        using var client = await SignInAsync("viewer");
+        var html = await client.GetStringAsync(route);
+        Assert.DoesNotContain("id=\"add-domain\"", html);
+        Assert.DoesNotContain("Add to group", html);
+        Assert.DoesNotContain(">Import domains<", html);
+    }
+
+    [Theory]
     [InlineData("admin", true)]
     [InlineData("viewer", false)]
     public async Task OverviewOffersScopedGroupAndSenderControlsOnlyToEditors(string persona, bool editor)

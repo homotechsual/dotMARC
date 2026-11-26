@@ -46,7 +46,7 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" aria-live="polite">@AttentionDescription · @AttentionRows.Count domains. Confirmed problems first, then sender decisions, then unchecked evidence.</MudText>
     @if (Data.DomainCount == 0)
     {
-        <MudAlert Severity="Severity.Info">No domains in the current scope. Change Filters or open Inventory to add a domain.</MudAlert>
+        <MudAlert Severity="Severity.Info">No domains in the current scope. Change Filters; authorised users can add a domain above.</MudAlert>
     }
     else if (AttentionRows.Count == 0)
     {
