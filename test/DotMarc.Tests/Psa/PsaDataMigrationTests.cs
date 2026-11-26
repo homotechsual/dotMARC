@@ -38,6 +38,10 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"TargetDmarcSubdomainPolicy\" text");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"TargetDmarcPolicy\" text");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"TargetDmarcSubdomainPolicy\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"AdditionalRuaAddress\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"OverrideAdditionalRuaAddress\" boolean NOT NULL DEFAULT false");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"AdditionalRuaAddress\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"OverrideAdditionalRuaAddress\" boolean NOT NULL DEFAULT false");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"AlertRuleId\" integer");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"NotifiedUtc\" timestamp with time zone");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"EscalatedUtc\" timestamp with time zone");
@@ -64,6 +68,10 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"TargetDmarcSubdomainPolicy\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"TargetDmarcPolicy\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"TargetDmarcSubdomainPolicy\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"AdditionalRuaAddress\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"OverrideAdditionalRuaAddress\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"AdditionalRuaAddress\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"OverrideAdditionalRuaAddress\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"AlertRuleId\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"NotifiedUtc\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"EscalatedUtc\"");
