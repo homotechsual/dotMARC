@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using MudBlazor;
 using Xunit;
 
 namespace DotMarc.Tests.Components;
@@ -49,6 +50,23 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         await client.PostAsync($"/demo/sign-in/{persona}", null);
         return client;
+    }
+
+    [Fact]
+    public async Task WarningAndErrorStatuses_UseSolidIcons_AndKeepTheirAccessibleLabels()
+    {
+        using var client = await SignInAsync("admin");
+        var html = await client.GetStringAsync("/domains");
+        var statuses = System.Text.RegularExpressions.Regex.Matches(html,
+            "<span\\b[^>]*class=\"domain-status-icon\"[^>]*>.*?</span>",
+            System.Text.RegularExpressions.RegexOptions.Singleline).Select(match => match.Value).ToList();
+        var errors = statuses.Where(status => status.Contains("mud-error-text", StringComparison.Ordinal)).ToList();
+        var warnings = statuses.Where(status => status.Contains("mud-warning-text", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(errors);
+        Assert.NotEmpty(warnings);
+        Assert.All(errors, status => Assert.Contains(Icons.Material.Filled.Error, status));
+        Assert.All(warnings, status => Assert.Contains(Icons.Material.Filled.Warning, status));
+        Assert.All(statuses, status => Assert.Matches("role=\"img\" aria-label=\"[^\"]+\"", status));
     }
 
     [Theory]

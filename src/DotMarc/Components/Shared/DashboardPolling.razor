@@ -14,7 +14,7 @@
 <MudExpansionPanels Class="mt-4">
     <MudExpansionPanel @bind-Expanded="_expanded">
         <TitleContent>
-            <MudIcon Icon="@(_last is { Succeeded: true, ParseFailures: 0 } ? Icons.Material.Filled.CheckCircleOutline : Icons.Material.Filled.WarningAmber)" Color="@(_last is { Succeeded: true, ParseFailures: 0 } ? Color.Success : Color.Warning)" Class="mr-2" />
+            <MudIcon Icon="@(_last is { Succeeded: true, ParseFailures: 0 } ? Icons.Material.Filled.CheckCircleOutline : Icons.Material.Filled.Warning)" Color="@(_last is { Succeeded: true, ParseFailures: 0 } ? Color.Success : Color.Warning)" Class="mr-2" />
             <MudText Color="@(_last?.Succeeded == false ? Color.Error : Color.Default)">
                 Polling status (all domains): @(_last is null ? "Not polled yet" : !_last.Succeeded ? "Failed" : _last.ParseFailures > 0 ? "Parse failures" : "OK")
             </MudText>

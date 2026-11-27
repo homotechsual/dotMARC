@@ -17,7 +17,7 @@
     <MudPaper Outlined="true" Class="pa-4 mb-4 dashboard-operations">
         <details open="@HasProblems">
         <summary class="dashboard-operation-summary">
-            <MudIcon Icon="@(HasProblems ? Icons.Material.Filled.WarningAmber : Icons.Material.Filled.CheckCircleOutline)" Color="@(HasProblems ? Color.Warning : Color.Success)" />
+            <MudIcon Icon="@(HasProblems ? Icons.Material.Filled.Warning : Icons.Material.Filled.CheckCircleOutline)" Color="@(HasProblems ? Color.Warning : Color.Success)" />
             <span>Integration and ingestion status</span>
             <span class="mud-typography-caption">@(HasProblems ? "Needs review" : "No current problems in available status")</span>
         </summary>

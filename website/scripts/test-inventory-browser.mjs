@@ -15,8 +15,9 @@ try {
   };
   const testTag = `Inventory browser ${Date.now()}`;
   await page.goto(`${base}/tags`);
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Add tag' && !button.disabled));
+  await page.waitForFunction(() => document.querySelector('[aria-label="Tag controls"]')?.dataset.interactive === 'true');
   await page.getByRole('button', {name: 'Add tag', exact: true}).click();
+  await page.locator('#add-tag').waitFor({state: 'visible'});
   await page.getByLabel('Tag name', {exact: true}).fill(testTag);
   await page.locator('#add-tag').getByRole('button', {name: 'Add tag', exact: true}).click();
   await page.getByText(testTag, {exact: true}).waitFor();

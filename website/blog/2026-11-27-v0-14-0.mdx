@@ -1,0 +1,73 @@
+---
+slug: v0-14-0
+date: 2026-11-27T12:53:07.942Z
+title: "dotMARC v0.14.0: bulk DNS publishing and a clearer action centre"
+description: Review and publish DNS changes across domains, work from actionable Dashboard queues, and set the DMARC policy each domain should reach.
+authors: [mikey]
+tags: [release]
+---
+
+This release brings bulk DNS publishing, a Dashboard focused on what needs attention, and DMARC policy targets. The full domain list now lives under **Domains**, with consistent search and filter controls across staff pages.
+
+{/* truncate */}
+
+## Review once, publish across domains
+
+Select domains on the Domains page, review their individual DMARC, TLSRPT or MTA-STS plans, then authorize the provider to publish them. The review shows changes and exclusions before anything is written; replacing a CNAME delegation needs an explicit selection.
+
+Progress and results stay per domain, including skips, failures and successful writes. A retry requires fresh provider authorization. Existing permissions and per-domain audit records still apply, and the demo simulates publishing without real DNS credentials or writes.
+
+Provider discovery starts promptly when a domain is added or imported, and selected domains can have their provider checked again in bulk.
+
+### What was verified live
+
+* **Cloudflare:** real bulk publishing passed on two domains.
+* **Azure DNS:** the production provider's confidential authorization-code exchange with PKCE and publishing code passed API tests against three zones across two subscriptions using one delegated session. A fourth zone passed after a separate authorization in another tenant. Temporary TXT records were read back, deleted and confirmed absent.
+* **Google Cloud DNS:** not live-validated for this release, including publishing across projects. Automated tests and provider documentation are not a substitute for a real-account result.
+
+The Azure API checks used inactive zones through an isolated harness: they do not prove public DNS propagation, the normal public-provider detection flow or every record-conversion path. Azure now checks effective zone permissions before writes, distinguishes incomplete discovery from a missing zone, continues past subscriptions that deny zone listing, and refuses ambiguous same-name zones. A sign-in only grants the signed-in user's existing access; different tenant contexts need separate authorizations.
+
+See [DNS provider push](/docs/dns-provider-push) for setup, permissions and limitations.
+
+## A Dashboard for the next action
+
+The Dashboard separates domains needing attention from domains whose quarantine or rejection traffic needs investigation. The seven-day chart and investigation queue use the same message counts and time window; rejected spoofing is not automatically a DNS configuration problem.
+
+Summary cards put action, sender decisions and unchecked domains first. Queue links open the matching full Domains view when more space is needed. Healthy ingestion and integration details are collapsed, while problems remain visible to users with permission to see them. Add domain is a button that opens the entry form rather than a permanently expanded box.
+
+## Domains, groups and consistent controls
+
+* The full inventory is under **Domains**, with compact status icons, expandable management detail and an accessible horizontal scrollbar for wider tables. Warning and error icons use solid shapes with cut-out symbols to stand out from quieter statuses.
+* Staff list pages share visible search, sort where available, one **Filters** disclosure, then Add/actions. Clearing advanced filters retains search and sort.
+* Group and tag filters work in flat and grouped views. Saved defaults, authorized scope and same-tab return navigation are preserved.
+* Groups show their effective DMARC target, including inherited policies. Tags have their own management page.
+* Navigation adapts to mobile screens, and section action links follow a consistent position below headings.
+* Adding domains is also available from Import. Source-IP review and sender-decision links go directly to the relevant work, and pass-rate percentages stay on one line.
+
+## Set the DMARC policy a domain should reach
+
+The **Baselines** page now has Sender and Domain tabs. A DMARC target can be set system-wide, on a group or on an individual domain. A domain uses its own target, otherwise the strictest target among its groups, otherwise the system target. A group target can deliberately replace a stronger system target.
+
+The subdomain target follows the main target unless explicitly set. Meeting a target requires full enforcement, not a reduced `pct` or testing mode. DNS publishing raises a record to its effective target without lowering a stricter policy, and a new **DMARC policy below target** alert identifies domains that fall short. Group and domain report-destination overrides are available alongside the system default.
+
+Targets are unset on upgrade: nothing starts enforcing a new target until one is selected. Managing targets needs **Manage baselines**, granted to the built-in Admin role; custom roles need it assigned explicitly.
+
+## DMARC and non-sending-domain correctness
+
+DMARC record analysis follows RFC 9989 and explains individual record problems and below-target reasons. Suggested records and DNS publishing share the same normalization, preserve unrelated TXT values and retain stricter policies.
+
+Broken records can now raise **DMARC record broken**, including repeated tags, multiple DMARC records and an invalid or misplaced version or policy. Obsolete tags are explained without automatically making every record an alert.
+
+Non-sending domains no longer get misleading weakening or missing-key warnings solely because their expected DKIM keys are absent or revoked. Genuine policy weakening, usable unexpected sending keys and uncertain DNS lookups remain distinguishable.
+
+Selectors observed in DMARC reports are suggested for review instead of requiring administrators to guess them.
+
+## Settings and upgrading
+
+* **Alerts & PSA** combines rules, alert settings and PSA configuration into tabs. **Logs** combines Server and Audit logs. Old settings/log URLs redirect and retain their query strings.
+* Back up PostgreSQL before upgrading. Startup applies the new migrations; bulk-publishing history, target policy, record analysis and report-destination overrides add database fields and tables.
+* Existing provider credentials are retained. Azure users need discovery access plus effective zone-level permissions for planned operations; record-only roles are not enough for the permission preflight. Existing OAuth callback URLs do not change.
+* New DMARC record analysis may surface previously unreported broken records. New target-based alerts require a configured target.
+* Full baseline profiles, Active/Parked/Alias presets, drift scoring, domain-age rule conditions and per-rule dashboard ticker configuration remain future work.
+
+Direct packages are current within the supported .NET 10 LTS line. Framework-coupled 11.x packages, including the PostgreSQL EF provider, are held because they require .NET 11.
