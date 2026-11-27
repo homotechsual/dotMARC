@@ -1,0 +1,169 @@
+@using DotMarc.Baselines
+@using DotMarc.Data
+@using DotMarc.Notifications
+@using DotMarc.Psa
+@using DotMarc.Reporting
+
+<div class="domain-filter-bar mb-3 list-toolbar">
+    <MudTextField T="string" Label="Domain search" Value="State.Search" ValueChanged="@(value => Update(State with { Search = value }))" Immediate="true"
+                  Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="list-search" />
+    @if (Inventory)
+    {
+        <MudSelect T="string" Label="Sort domains" Value="@SortValue" ValueChanged="ChangeSort" Variant="Variant.Outlined" Margin="Margin.Dense" Class="list-sort">
+            <MudSelectItem Value="@("")">Default order</MudSelectItem>
+            @foreach (var column in SortColumns)
+            {
+                <MudSelectItem Value="@($"{column.Key}:asc")">@column.Value (ascending)</MudSelectItem>
+                <MudSelectItem Value="@($"{column.Key}:desc")">@column.Value (descending)</MudSelectItem>
+            }
+        </MudSelect>
+    }
+    <MudButton Variant="@(State.ShowFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="@(() => Changed.InvokeAsync(State with { ShowFilters = !State.ShowFilters }))"
+               aria-expanded="@State.ShowFilters.ToString().ToLowerInvariant()" aria-controls="domain-filters">
+        Filters (@(Active.Count - (string.IsNullOrWhiteSpace(State.Search) ? 0 : 1)))
+    </MudButton>
+    @Actions
+</div>
+<div class="domain-filter-bar mb-3">
+    <span class="mud-typography mud-typography-caption" aria-live="polite">@Summary</span>
+    @if (State.Queue is not null)
+    {
+        <MudButton Size="Size.Small" OnClick="@(() => Update(State with { Queue = null, AttentionView = null }))">Clear dashboard queue</MudButton>
+    }
+</div>
+<MudCollapse Expanded="State.ShowFilters">
+    <MudPaper id="domain-filters" Class="pa-4 mb-4" Outlined="true">
+        <MudGrid Spacing="2">
+            @if (Inventory)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Label="Dashboard queue" Value="State.Queue" ValueChanged="@(value => Update(State with { Queue = value, AttentionView = null }))" Clearable="true">
+                        <MudSelectItem Value="@("attention")">Needs attention</MudSelectItem>
+                        <MudSelectItem Value="@("investigate")">Quarantine/reject investigations (7d)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            }
+            <MudItem xs="12" sm="6" md="3">
+                <SearchableSelect TValue="int?" Label="Group" Options="GroupOptions" Value="GroupValue"
+                                  ValueChanged="ChangeGroup" Clearable="@(ScopedGroupIds.Count == 0)" Disabled="@(ScopedGroupIds.Count == 1)" />
+                @if (ScopedGroupIds.Count > 0) { <MudText Typo="Typo.caption">Limited to your authorised groups</MudText> }
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <SearchableSelect TValue="int?" Label="Tag" Options="@(Tags.Select(tag => new SelectOption<int?>(tag.Id, tag.Name)).ToList())"
+                                  Value="State.TagId" ValueChanged="@(value => Update(State with { TagId = value }))" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <SearchableSelect TValue="string" Label="Report status" Options="@(Options(Rows.Select(row => row.Status)))"
+                                  Value="State.Status" ValueChanged="@(value => Update(State with { Status = value }))" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double?" Label="Minimum pass rate (%)" Value="State.MinPassRatePercent" ValueChanged="@(value => Update(State with { MinPassRatePercent = value }))" Min="0" Max="100" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField T="string" Label="Last report contains" Value="State.LastReport" ValueChanged="@(value => Update(State with { LastReport = value }))" Immediate="true" HelperText="Date text, or never" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="bool?" Label="Monitored" Value="State.Monitored" ValueChanged="@(value => Update(State with { Monitored = value }))" Clearable="true">
+                    <MudSelectItem T="bool?" Value="@((bool?)true)">Yes</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="@((bool?)false)">No</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="DmarcTargetOutcome?" Label="DMARC target" Value="State.Target" ValueChanged="@(value => Update(State with { Target = value }))" Clearable="true">
+                    <MudSelectItem T="DmarcTargetOutcome?" Value="DmarcTargetOutcome.Below">Below target</MudSelectItem>
+                    <MudSelectItem T="DmarcTargetOutcome?" Value="DmarcTargetOutcome.NeedsChecking">Needs checking</MudSelectItem>
+                    <MudSelectItem T="DmarcTargetOutcome?" Value="DmarcTargetOutcome.Meets">Meets target</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <SearchableSelect TValue="string" Label="DMARC" Options="@(Options(Rows.Select(row => DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus))))"
+                                  Value="State.Dmarc" ValueChanged="@(value => Update(State with { Dmarc = value }))" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <SearchableSelect TValue="string" Label="MTA-STS" Options="@(Options(Rows.Select(row => MtaStsStatusPresentation.GetLabel(row.MtaStsStatus))))"
+                                  Value="State.MtaSts" ValueChanged="@(value => Update(State with { MtaSts = value }))" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <SearchableSelect TValue="string" Label="DKIM" Options="@(Options(Rows.Select(row => DkimStatusPresentation.GetLabel(row.DkimCheckStatus))))"
+                                  Value="State.Dkim" ValueChanged="@(value => Update(State with { Dkim = value }))" Clearable="true" />
+            </MudItem>
+            @if (Inventory)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="int?" Label="Minimum report count" Value="State.MinReportCount" ValueChanged="@(value => Update(State with { MinReportCount = value }))" Min="0" />
+                </MudItem>
+                @foreach (var psa in Companies.Keys.Order())
+                {
+                    <MudItem xs="12" sm="6" md="3">
+                        <SearchableSelect TValue="string" Label="@($"{psa.CompanyLabel()} override")" Options="Companies[psa]"
+                                          Value="@(State.Companies?.GetValueOrDefault(psa))" ValueChanged="@(value => ChangeCompany(psa, value))" Clearable="true" />
+                    </MudItem>
+                }
+            }
+        </MudGrid>
+        <MudButton Class="mt-3" OnClick="Clear" StartIcon="@Icons.Material.Filled.ClearAll">Clear filters</MudButton>
+    </MudPaper>
+</MudCollapse>
+
+@code {
+    [Parameter, EditorRequired] public DomainListState State { get; set; } = new();
+    [Parameter] public EventCallback<DomainListState> Changed { get; set; }
+    [Parameter] public IReadOnlyList<Group> Groups { get; set; } = [];
+    [Parameter] public IReadOnlyList<Tag> Tags { get; set; } = [];
+    [Parameter] public IReadOnlyCollection<int> ScopedGroupIds { get; set; } = [];
+    [Parameter] public IReadOnlyList<DashboardDomainRow> Rows { get; set; } = [];
+    [Parameter] public bool Inventory { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    private string SortValue => State.Sort is null ? "" : $"{State.Sort}:{(State.Descending ? "desc" : "asc")}";
+    private static readonly KeyValuePair<string, string>[] SortColumns =
+    [
+        new("name", "Domain"), new("status", "Report status"), new("pass", "Pass rate (30d)"), new("last", "Last report"),
+        new("monitored", "Monitored"), new("target", "Target"), new("dmarc", "DMARC"), new("mta", "MTA-STS"), new("dkim", "DKIM"),
+        new("groups", "Groups"), new("tags", "Tags"), new("reports", "Reports")
+    ];
+    private Task ChangeSort(string value)
+    {
+        var parts = value.Split(':');
+        return Update(State with { Sort = value.Length == 0 ? null : parts[0], Descending = value.Length != 0 && parts[1] == "desc" });
+    }
+    [Parameter] public IReadOnlyDictionary<PsaKind, List<SelectOption<string>>> Companies { get; set; } = new Dictionary<PsaKind, List<SelectOption<string>>>();
+
+    private int? GroupValue => DashboardGroupChoice.DropdownValue(State.AllMyGroups, State.GroupId, ScopedGroupIds);
+    private List<SelectOption<int?>> GroupOptions
+    {
+        get
+        {
+            var options = Groups.Select(group => new SelectOption<int?>(group.Id, group.Name)).ToList();
+            if (ScopedGroupIds.Count > 1) options.Insert(0, new(DashboardGroupChoice.AllMyGroupsId, DashboardGroupChoice.AllMyGroupsText));
+            return options;
+        }
+    }
+    private IReadOnlyList<string> Active => (ScopedGroupIds.Count == 1 ? State with { GroupId = null } : State).ActiveFilters;
+    private string Summary => string.Join(" · ", Active.Select(Describe));
+    private string Describe(string label)
+    {
+        if (label == "Group") return $"Group: {Groups.FirstOrDefault(group => group.Id == State.GroupId)?.Name}";
+        if (label == "Tag") return $"Tag: {Tags.FirstOrDefault(tag => tag.Id == State.TagId)?.Name}";
+        foreach (var (psa, company) in State.Companies ?? [])
+        {
+            if (label == $"{psa.DisplayName()} company: {company}")
+                return $"{psa.CompanyLabel()}: {Companies.GetValueOrDefault(psa)?.FirstOrDefault(option => option.Value == company)?.Text ?? $"{company} (unavailable)"}";
+        }
+        return label;
+    }
+    private static List<SelectOption<string>> Options(IEnumerable<string> values) => values.Distinct().Order().Select(value => new SelectOption<string>(value, value)).ToList();
+    private Task Update(DomainListState value) => Changed.InvokeAsync(value);
+    private Task ChangeGroup(int? value)
+    {
+        var (all, group) = DashboardGroupChoice.FromDropdownValue(value);
+        return Update(State with { GroupId = group, AllMyGroups = all });
+    }
+    private Task Clear() => Update(new DomainListState { Search = State.Search, GroupedView = State.GroupedView, ShowFilters = true, Sort = State.Sort, Descending = State.Descending, AllMyGroups = true });
+    private Task ChangeCompany(PsaKind psa, string? value)
+    {
+        var companies = State.Companies is null ? new Dictionary<PsaKind, string>() : new(State.Companies);
+        if (value is null) companies.Remove(psa); else companies[psa] = value;
+        return Update(State with { Companies = companies.Count == 0 ? null : companies });
+    }
+}

@@ -1,0 +1,26 @@
+.domain-entry-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.domain-entry-submit {
+    margin-top: 8px;
+}
+
+.domain-entry-fields > div,
+.domain-entry-advanced {
+    min-width: 0;
+}
+
+@media (max-width: 599px) {
+    .domain-entry-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .domain-entry-submit {
+        margin-top: 0;
+    }
+}

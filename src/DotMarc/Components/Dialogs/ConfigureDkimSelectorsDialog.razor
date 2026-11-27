@@ -11,6 +11,32 @@
         </MudText>
         <MudTextField T="string" Value="_selectorsText" ValueChanged="OnSelectorsChangedAsync" Label="Selectors" Lines="4" Immediate="true" DebounceInterval="300" />
 
+        <MudText Typo="Typo.subtitle2" Class="mt-4">Observed in retained DMARC reports</MudText>
+        <MudText Typo="Typo.caption" Class="d-block mb-2">
+            Only signatures whose signing domain is exactly @DomainName are included, whether they passed or failed.
+            Counts are messages per selector, not signatures; a message may use several selectors. Last seen is the report period end (UTC).
+            This is historical evidence, not proof a key is valid now. Additions stay in this draft until you save; your selector list remains authoritative.
+        </MudText>
+        @if (SuggestionsError is not null)
+        {
+            <MudAlert Severity="Severity.Warning">@SuggestionsError</MudAlert>
+        }
+        else if (ObservedSelectors.Count == 0)
+        {
+            <MudText Typo="Typo.body2">No usable selectors observed signing as this domain. You can still enter selectors manually.</MudText>
+        }
+        @foreach (var suggestion in ObservedSelectors)
+        {
+            <MudPaper Outlined="true" Class="pa-3 mb-2 d-flex flex-wrap align-center justify-space-between" Style="gap:0.5rem">
+                <div style="min-width:0;overflow-wrap:anywhere">
+                    <MudText Typo="Typo.subtitle2">@suggestion.Selector</MudText>
+                    <MudText Typo="Typo.caption">@suggestion.MessageCount.ToString("N0") messages · Last seen @suggestion.LastSeenUtc.ToString("yyyy-MM-dd HH:mm") UTC</MudText>
+                </div>
+                <MudButton Variant="Variant.Outlined" Disabled="@Selectors().Contains(suggestion.Selector, StringComparer.OrdinalIgnoreCase)"
+                           OnClick="@(() => AddObservedAsync(suggestion.Selector))" aria-label="@($"Add observed selector {suggestion.Selector}")">Add selector</MudButton>
+            </MudPaper>
+        }
+
         <MudText Typo="Typo.subtitle2" Class="mt-4">Records (optional)</MudText>
         <MudText Typo="Typo.caption" Class="d-block mb-2 mud-text-secondary">
             Paste the record your mail platform gives you for each selector, and dotMARC can push it and check DNS matches it.
@@ -61,6 +87,8 @@
     [Parameter] public List<string> CurrentSelectors { get; set; } = [];
     [Parameter] public List<DomainDkimRecord> CurrentRecords { get; set; } = [];
     [Parameter] public string? DetectedInboxProvider { get; set; }
+    [Parameter] public IReadOnlyList<DkimObservedSelector> ObservedSelectors { get; set; } = [];
+    [Parameter] public string? SuggestionsError { get; set; }
 
     private string _selectorsText = "";
     private List<RecordRow> _rows = [];
@@ -91,6 +119,10 @@
         RebuildRows();
         await FillFromPublishedAsync();
     }
+
+    private Task AddObservedAsync(string selector) => Selectors().Contains(selector, StringComparer.OrdinalIgnoreCase)
+        ? Task.CompletedTask
+        : OnSelectorsChangedAsync(string.IsNullOrWhiteSpace(_selectorsText) ? selector : $"{_selectorsText.TrimEnd()}\n{selector}");
 
     private List<string> Selectors() =>
         _selectorsText.Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

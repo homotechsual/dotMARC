@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using DotMarc.Data;
 using DotMarc.DnsPush;
 
@@ -11,17 +9,19 @@ namespace DotMarc.Dns;
 /// provider-specific strings with no DNS-discoverable convention), so this never guesses.</summary>
 public sealed class DkimDnsChecker : IDkimDnsChecker
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly HttpClient _http;
+    private readonly TxtRecordLookup _lookup;
 
-    public DkimDnsChecker(HttpClient http) => _http = http;
+    public DkimDnsChecker(HttpClient http) => _lookup = new TxtRecordLookup(http);
 
-    public async Task<DkimCheckResult> CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken cancellationToken, IReadOnlyList<DkimExpectedRecord>? expectedRecords = null)
+    public async Task<DkimCheckResult> CheckAsync(string domainName, IReadOnlyList<string> selectors, CancellationToken cancellationToken, IReadOnlyList<DkimExpectedRecord>? expectedRecords = null, bool expectsNoSenders = false)
     {
+        if (selectors.Count == 0)
+            return new DkimCheckResult(DkimCheckStatus.NotConfigured, null);
         var missing = new List<string>();
         var keyNotPublished = new List<string>();
         var noKey = new List<string>();
         var mismatches = new List<string>();
+        var unexpectedKeys = new List<string>();
 
         foreach (var selector in selectors)
         {
@@ -29,12 +29,22 @@ public sealed class DkimDnsChecker : IDkimDnsChecker
             var expected = expectedRecords?.FirstOrDefault(record => string.Equals(record.Selector, selector, StringComparison.OrdinalIgnoreCase));
             var cname = live.DelegatedToCname?.TrimEnd('.');
 
+            if (expectsNoSenders)
+            {
+                var values = live.TxtValues.Count > 0 ? live.TxtValues : live.DirectValue is { } value ? [value] : [];
+                if (values.Any(value => !string.IsNullOrEmpty(DkimRecordValue.PublicKey(value))))
+                    unexpectedKeys.Add(selector);
+                else if (values.Count > 0 && (values.Count != 1 || !DkimRecordValue.IsRevoked(values[0])))
+                    noKey.Add(selector);
+                continue;
+            }
+
             switch (expected?.Type)
             {
                 case null when live.DirectValue is null:
                     missing.Add(selector);
                     break;
-                case null when !live.DirectValue!.Contains("p=", StringComparison.OrdinalIgnoreCase):
+                case null when string.IsNullOrEmpty(DkimRecordValue.PublicKey(live.DirectValue!)):
                     noKey.Add(selector);
                     break;
                 case DkimRecordType.Cname when cname is null && live.DirectValue is null:
@@ -58,6 +68,10 @@ public sealed class DkimDnsChecker : IDkimDnsChecker
             }
         }
 
+        if (unexpectedKeys.Count > 0)
+            return new DkimCheckResult(DkimCheckStatus.UnexpectedSendingKey,
+                $"Null SPF declares no senders, but selector(s) {string.Join(", ", unexpectedKeys)} still publish a DKIM public key. Remove or revoke unused keys; do not publish replacement sending keys.");
+
         if (missing.Count > 0 || keyNotPublished.Count > 0)
         {
             var parts = new List<string>();
@@ -79,29 +93,22 @@ public sealed class DkimDnsChecker : IDkimDnsChecker
             var parts = new List<string>(mismatches);
             if (noKey.Count > 0)
             {
-                parts.Insert(0, $"Selector(s) missing a p= public-key tag: {string.Join(", ", noKey)}");
+                parts.Insert(0, expectsNoSenders
+                    ? $"Selector(s) do not contain an unambiguous revoked key (empty p=): {string.Join(", ", noKey)}"
+                    : $"Selector(s) missing a usable p= public key (absent or revoked): {string.Join(", ", noKey)}");
             }
 
             return new DkimCheckResult(DkimCheckStatus.Misconfigured, string.Join("; ", parts));
         }
 
-        return new DkimCheckResult(DkimCheckStatus.Ok, null);
+        return expectsNoSenders
+            ? new DkimCheckResult(DkimCheckStatus.NoSendingKeys, "Configured selectors have no published key or an explicitly revoked key (empty p=). Other selectors have not been enumerated.")
+            : new DkimCheckResult(DkimCheckStatus.Ok, null);
     }
 
     public Task<DnsRecordLookupResult> LookupSelectorAsync(string domainName, string selector, CancellationToken cancellationToken) =>
         LookupAsync($"{selector}._domainkey.{domainName}", cancellationToken);
 
-    private async Task<DnsRecordLookupResult> LookupAsync(string name, CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type=TXT");
-        request.Headers.Accept.ParseAdd("application/dns-json");
-        var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions)!;
-        return DnsRecordLookupParsing.ParseTxtWithCnameDetection(parsed.Answer?.Select(answer => (answer.Type, answer.Data)));
-    }
-
-    private sealed record DnsOverHttpsResponse([property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
-    private sealed record DnsAnswer([property: JsonPropertyName("type")] int Type, [property: JsonPropertyName("data")] string Data);
+    private Task<DnsRecordLookupResult> LookupAsync(string name, CancellationToken cancellationToken) =>
+        _lookup.LookupWithCnameAsync(name, cancellationToken);
 }

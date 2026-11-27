@@ -77,4 +77,14 @@ public sealed class DnsPushAuditTests
         Assert.Equal(AuditActions.DnsPushFailed, entry!.Action);
         Assert.Contains("more than one SPF record", entry.Summary);
     }
+
+    [Fact]
+    public void CreateEntry_RecordsADmarcPushThatLeftADuplicate_AsFailed_InDmarcWords()
+    {
+        var entry = DnsPushAudit.CreateEntry(TestActors.Admin, Contoso, "cloudflare", OneChange, DnsPushOutcome.LeftDuplicateDmarcRecord);
+
+        Assert.Equal(AuditActions.DnsPushFailed, entry!.Action);
+        Assert.Contains("more than one DMARC record", entry.Summary);
+        Assert.DoesNotContain("SPF", entry.Summary);
+    }
 }

@@ -45,8 +45,8 @@ public static class DemoDataGenerator
         var groups = new List<DemoGroupSeed>
         {
             new("Aurora Retail"),
-            new("Brightline Legal"),
-            new("Cobalt Freight"),
+            new("Brightline Legal", DmarcPolicyLevel.Quarantine),
+            new("Cobalt Freight", DmarcPolicyLevel.Reject),
             new("Driftwood Media"),
             new("Emberwood Finance"),
             new("Solstice Health"),
@@ -273,6 +273,22 @@ public static class DemoDataGenerator
         var cobaltIndex = domains.FindIndex(domain => domain.Name == "cobalt-freight.example");
         domains[cobaltIndex] = domains[cobaltIndex] with { DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100 };
 
+        // The DMARC target story: the system target is quarantine, Cobalt Freight sets reject and Brightline Legal sets quarantine. Aurora Retail meets the system target,
+        // Brightline Legal is stricter than it, Emberwood Finance is on quarantine but only at 50 percent so is below, and Cobalt Freight
+        // (and the domains with no record) are below. Each uses the check status the domain already has, so nothing else changes.
+        SetObservedPolicy(domains, "brightline-legal.example", DmarcPolicyLevel.Reject, 100);
+        SetObservedPolicy(domains, "emberwood-finance.example", DmarcPolicyLevel.Quarantine, 50);
+
+        // Two records the RFC 9989 rules count against a target although p is quarantine. Northstar Nonprofit is in testing mode (t=y), and
+        // Thistledown Consulting repeats its p tag, which is a malformed record that receivers may ignore whole.
+        SetPublishedRecord(domains, "northstar-nonprofit.example", "v=DMARC1; p=quarantine; t=y; rua=mailto:dmarc@northstar-nonprofit.example");
+        SetPublishedRecord(domains, "thistledown-consulting.example", "v=DMARC1; p=quarantine; p=reject; rua=mailto:dmarc@thistledown-consulting.example");
+
+        // Two group targets, and a domain in both: Brightline Legal sets quarantine and Cobalt Freight reject, so brightline-legal.example, which is in
+        // both groups, is held to the strictest (reject) and its page says so. It publishes reject, so it still meets.
+        var brightlineIndex = domains.FindIndex(domain => domain.Name == "brightline-legal.example");
+        domains[brightlineIndex] = domains[brightlineIndex] with { AdditionalGroupNames = ["Cobalt Freight"] };
+
         var alertEvents = BuildAlertEvents(nowUtc, domains);
         alertEvents.AddRange(BuildSenderAlertEvents(nowUtc, domains));
 
@@ -284,7 +300,36 @@ public static class DemoDataGenerator
             BuildParseFailures(nowUtc),
             alertEvents,
             BuildAlertStates(),
-            BuildSenderDecisions(nowUtc));
+            BuildSenderDecisions(nowUtc),
+            SystemTargetPolicy: DmarcPolicyLevel.Quarantine);
+    }
+
+    /// <summary>Stores what the DMARC check would store for a domain publishing <paramref name="record"/>, by running the analyser on it. A record with a
+    /// breaking problem makes the domain misconfigured, with the first problem as the detail.</summary>
+    private static void SetPublishedRecord(List<DemoDomainSeed> domains, string domainName, string record)
+    {
+        var analysis = DmarcRecordAnalysis.Analyse([record]);
+        var policy = analysis.Policy ?? DmarcPolicyLevel.None;
+        var breaking = analysis.Problems.FirstOrDefault(problem => problem.Kind.IsBreaking());
+        var index = domains.FindIndex(domain => domain.Name == domainName);
+        domains[index] = domains[index] with
+        {
+            DmarcCheckStatus = breaking is null ? DmarcCheckStatus.Ok : DmarcCheckStatus.Misconfigured,
+            DmarcCheckDetail = breaking?.Description,
+            DmarcPolicy = policy,
+            DmarcSubdomainPolicy = analysis.EffectiveSubdomainPolicy ?? policy,
+            DmarcNonExistentSubdomainPolicy = analysis.NonExistentPolicy,
+            DmarcPercent = analysis.Percent ?? 100,
+            DmarcTesting = analysis.Testing,
+            DmarcRecords = [.. analysis.Records],
+            DmarcProblems = [.. analysis.Problems.Select(problem => problem.Stored)]
+        };
+    }
+
+    private static void SetObservedPolicy(List<DemoDomainSeed> domains, string domainName, DmarcPolicyLevel policy, int percent)
+    {
+        var index = domains.FindIndex(domain => domain.Name == domainName);
+        domains[index] = domains[index] with { DmarcPolicy = policy, DmarcSubdomainPolicy = policy, DmarcPercent = percent };
     }
 
     /// <summary>Adds one extra sending source to a domain's reports: to every report from the last <paramref name="onlyLastDays"/> days, or to

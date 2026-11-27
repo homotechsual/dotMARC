@@ -1,0 +1,140 @@
+@using DotMarc.Baselines
+@using DotMarc.Data
+@using DotMarc.Graph
+@using DotMarc.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@inject IOptions<GraphOptions> Graph
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject AuditActorAccessor Actor
+@inject ISnackbar Snackbar
+@inject ILogger<DmarcReportAddresses> Logger
+
+@if (_loaded)
+{
+    <div class="dmarc-report-addresses d-flex flex-column align-start" style="gap:8px;">
+        @if (ShowHeading)
+        {
+            <MudText Typo="Typo.subtitle2">DMARC report destinations</MudText>
+        }
+        <MudTextField T="string" Label="Primary report address (configuration)" Value="@Graph.Value.MailboxAddress" Disabled="true" FullWidth="true"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Read-only. This is the ingestion mailbox configured for this instance." />
+        @if (DomainId is not null || GroupId is not null)
+        {
+            <MudSwitch T="bool" @bind-Value="_override" Disabled="@(!_maySave || _busy || !RendererInfo.IsInteractive)" Label="Override secondary report address" Color="Color.Primary" />
+        }
+        <MudTextField T="string" Label="Secondary DMARC report address" @bind-Value="_address" Disabled="@(!_maySave || _busy || !RendererInfo.IsInteractive || !IsSystem && !_override)"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true" MaxLength="DnsRecordSettings.MaxAdditionalRuaAddressLength"
+                      HelperText="@(IsSystem ? "One plain email address. Leave blank for no secondary destination by default." : "One plain email address. An enabled override with an empty address uses only the primary mailbox.")" />
+        <MudText Typo="Typo.body2" Class="my-2" role="status">@_effective</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Saving does not publish DNS. An external destination may require authorization in its own DNS zone.</MudText>
+        @if (_maySave)
+        {
+            <MudButton OnClick="SaveAsync" Disabled="@(_busy || !RendererInfo.IsInteractive)" Variant="Variant.Outlined" Size="Size.Small" Class="mt-2">Save report destinations</MudButton>
+        }
+    </div>
+}
+@if (_loadError && !_loaded)
+{
+    <MudAlert Severity="Severity.Error">Could not load report destinations. Reload the page to try again.</MudAlert>
+}
+
+@code {
+    [Parameter] public int? DomainId { get; set; }
+    [Parameter] public int? GroupId { get; set; }
+    [Parameter] public bool ShowHeading { get; set; } = true;
+    private bool IsSystem => DomainId is null && GroupId is null;
+    private bool _loaded, _maySave, _override, _busy, _loadError;
+    private (int? Domain, int? Group)? _loadedScope;
+    private string? _address;
+    private string _effective = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedScope == (DomainId, GroupId)) return;
+        _loadedScope = (DomainId, GroupId);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loaded = false;
+        _loadError = false;
+        try
+        {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _maySave = await MaySaveAsync(db);
+        if (!_maySave) return;
+        var settings = await DnsRecordSettingsService.GetAsync(db);
+        if (DomainId is { } id)
+        {
+            var domain = await db.Domains.Include(domain => domain.Groups).SingleAsync(domain => domain.Id == id);
+            _override = domain.OverrideAdditionalRuaAddress;
+            _address = domain.AdditionalRuaAddress;
+            var resolved = DmarcReportAddress.Resolve(domain, settings);
+            _effective = resolved.Conflict ? resolved.Source : $"{resolved.Source}: {resolved.Address ?? "Primary mailbox only"}";
+        }
+        else if (GroupId is { } groupId)
+        {
+            var group = await db.Groups.SingleAsync(group => group.Id == groupId);
+            _override = group.OverrideAdditionalRuaAddress;
+            _address = group.AdditionalRuaAddress;
+            _effective = _override ? $"Group override: {_address ?? "Primary mailbox only"}" : $"Inherits system: {settings.AdditionalRuaAddress ?? "Primary mailbox only"}";
+        }
+        else
+        {
+            _override = true;
+            _address = settings.AdditionalRuaAddress;
+            _effective = "System default. Group and domain overrides take precedence.";
+        }
+        _loaded = true;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Loading DMARC report destinations failed for domain {DomainId} group {GroupId}", DomainId, GroupId);
+            _loadError = true;
+        }
+    }
+
+    private async Task<bool> MaySaveAsync(DotMarcDbContext db)
+    {
+        var user = (await Authentication.GetAuthenticationStateAsync()).User;
+        if (DomainId is { } id)
+        {
+            var groups = await db.Domains.Where(domain => domain.Id == id).SelectMany(domain => domain.Groups.Select(group => group.Id)).ToListAsync();
+            return await db.Domains.AnyAsync(domain => domain.Id == id) && await BaselineAccess.MayChangeDomainAsync(user, Authorization, groups);
+        }
+        return GroupId is { } groupId
+            ? await BaselineAccess.MayChangeGroupAsync(user, Authorization, groupId)
+            : await BaselineAccess.MayChangeSystemAsync(user, Authorization);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MaySaveAsync(db))
+            {
+                Snackbar.Add("You no longer have permission to change these report destinations.", Severity.Warning);
+                return;
+            }
+            await DmarcReportAddress.SaveAsync(db, await Actor.GetAsync(), DomainId, GroupId, _override, _address);
+            Snackbar.Add("Report destinations saved. Review DNS changes separately.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (ArgumentException exception) { Snackbar.Add(exception.Message, Severity.Error); }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Saving DMARC report destinations failed");
+            Snackbar.Add("Could not save report destinations. Reload and try again.", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+}

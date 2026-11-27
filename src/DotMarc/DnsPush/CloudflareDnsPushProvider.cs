@@ -62,25 +62,34 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
         return AuthorizationEndpoint + "?" + string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
-    public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    /// <summary>Holds the access token between pushes. In memory only; never stored, logged or put in a message.</summary>
+    private sealed record CloudflareSession(string AccessToken) : IDnsPushSession;
+
+    public async Task<DnsPushSessionResult> ExchangeAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(CloudflareDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare push is not configured for this deployment.");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare push is not configured for this deployment."));
         }
 
         var accessToken = await ExchangeCodeForTokenAsync(settings.ClientId, clientSecret, code, codeVerifier, redirectUri, cancellationToken).ConfigureAwait(false);
-        if (accessToken is null)
+        return accessToken is null
+            ? new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare rejected the authorization code exchange."))
+            : new DnsPushSessionResult(new CloudflareSession(accessToken), null);
+    }
+
+    public async Task<DnsPushResult> PushAsync(IDnsPushSession session, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        if (session is not CloudflareSession cloudflareSession)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Cloudflare rejected the authorization code exchange.");
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "That sign-in is not a Cloudflare sign-in.");
         }
 
         foreach (var change in changes)
         {
-            var result = await PushOneChangeAsync(change, accessToken, cancellationToken).ConfigureAwait(false);
+            var result = await PushOneChangeAsync(change, cloudflareSession.AccessToken, cancellationToken).ConfigureAwait(false);
             if (result.Outcome != DnsPushOutcome.Pushed)
             {
                 return result;
@@ -274,8 +283,9 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
     }
 
     /// <summary>Replaces only the given values among the TXT records at change.Name. The new record is created before
-    /// the old ones are deleted, so the name is never left without SPF; if a delete then fails, the name has two SPF
-    /// records, reported as LeftDuplicateRecord so the person is told to remove the old one.</summary>
+    /// the old ones are deleted, so the name is never left without its record; if a delete then fails, the name has two
+    /// records, reported as LeftDuplicateRecord (SPF) or LeftDuplicateDmarcRecord (a _dmarc. name) so the person is told
+    /// to remove the old one.</summary>
     private async Task<DnsPushResult> ReplaceTxtValuesAsync(string zoneId, string accessToken, DnsRecordChange change, CancellationToken cancellationToken)
     {
         List<RecordWithContent> existing;
@@ -328,19 +338,29 @@ public sealed class CloudflareDnsPushProvider : IDnsPushProvider
                 var deleteResponse = await _http.SendAsync(deleteRequest, cancellationToken).ConfigureAwait(false);
                 if (!deleteResponse.IsSuccessStatusCode)
                 {
-                    return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
-                        $"The new record was added at {change.Name}, but removing the old \"{oldValue}\" failed ({(int)deleteResponse.StatusCode}), so the name now has more than one SPF record. Remove the old one by hand.");
+                    return new DnsPushResult(DuplicateRecordOutcome(change.Name),
+                        $"The new record was added at {change.Name}, but removing the old \"{oldValue}\" failed ({(int)deleteResponse.StatusCode}), so {DuplicateRecordEffect(change.Name)}");
                 }
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
-                return new DnsPushResult(DnsPushOutcome.LeftDuplicateRecord,
-                    $"The new record was added at {change.Name}, but Cloudflare couldn't be reached to remove the old \"{oldValue}\" ({exception.Message}), so the name now has more than one SPF record. Remove the old one by hand.");
+                return new DnsPushResult(DuplicateRecordOutcome(change.Name),
+                    $"The new record was added at {change.Name}, but Cloudflare couldn't be reached to remove the old \"{oldValue}\" ({exception.Message}), so {DuplicateRecordEffect(change.Name)}");
             }
         }
 
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
     }
+
+    /// <summary>The outcome for a leftover old value: DMARC names start with _dmarc., everything else is SPF.</summary>
+    private static DnsPushOutcome DuplicateRecordOutcome(string name) => DmarcRecordName.IsDmarcName(name)
+        ? DnsPushOutcome.LeftDuplicateDmarcRecord
+        : DnsPushOutcome.LeftDuplicateRecord;
+
+    /// <summary>What a leftover old value means at this name, in the words for its record type (DMARC names start with _dmarc.).</summary>
+    private static string DuplicateRecordEffect(string name) => DmarcRecordName.IsDmarcName(name)
+        ? "the name now has more than one DMARC record, which receivers treat as none; delete the old one by hand."
+        : "the name now has more than one SPF record. Remove the old one by hand.";
 
     /// <summary>Cloudflare's own API treats an unquoted TXT content value as non-conformant - it
     /// accepts it and normalizes on their side (functionally identical either way), but flags the

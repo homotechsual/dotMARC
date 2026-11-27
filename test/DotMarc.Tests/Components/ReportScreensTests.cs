@@ -1,5 +1,6 @@
 using System.Net;
 using DotMarc.Data;
+using DotMarc.Demo;
 using DotMarc.Reporting.ClientReports;
 using DotMarc.Tests.Internal;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -58,6 +59,43 @@ public sealed class ReportScreensTests : IAsyncLifetime
 
         Assert.Contains("Email &amp; reports", html);
         Assert.Contains("The demo doesn", html); // "doesn't", apostrophe encoded
+    }
+
+    [Fact]
+    public async Task ManageGroups_ShowsNamedCardsAndDirectManagementActions()
+    {
+        using var client = await SignInAsync("admin");
+        var html = await client.GetStringAsync("/groups");
+        Assert.Equal(12, System.Text.RegularExpressions.Regex.Matches(html, "<article class=\"group-card\"").Count);
+        Assert.Contains("aria-label=\"Group Aurora Retail\"", html);
+        Assert.Contains("aria-label=\"Reports for Aurora Retail\"", html);
+        Assert.Contains("aria-label=\"Domain baseline for Aurora Retail\"", html);
+        Assert.Contains("aria-label=\"Sender defaults for Aurora Retail\"", html);
+        Assert.Contains("aria-label=\"Portal branding for Aurora Retail\"", html);
+        Assert.Contains("aria-label=\"Remove group Aurora Retail\"", html);
+        Assert.Contains("aria-label=\"View domains in Aurora Retail\"", html);
+        Assert.Contains("Sort groups", html);
+        Assert.Contains("id=\"group-filters\"", html);
+        Assert.Contains("PSA connections and ticket rules", html);
+    }
+
+    [Fact]
+    public async Task ManageGroups_PreservesPermissionGatesWithinCards()
+    {
+        using var client = await SignInAsync("viewer");
+        await using (var context = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options))
+        {
+            var user = await context.UserAccesses.Include(user => user.Role).SingleAsync(user => user.Email == DemoDataSeeder.ViewerEmail);
+            user.Role.Permissions.Add(Permission.GroupsRename);
+            await context.SaveChangesAsync();
+        }
+        var html = await client.GetStringAsync("/groups");
+        Assert.Contains("aria-label=\"Rename Aurora Retail\"", html);
+        Assert.DoesNotContain("aria-label=\"Reports for", html);
+        Assert.DoesNotContain("aria-label=\"Domain baseline for", html);
+        Assert.DoesNotContain("aria-label=\"Sender defaults for", html);
+        Assert.DoesNotContain("aria-label=\"Remove group", html);
+        Assert.DoesNotContain(">Add group<", html);
     }
 
     [Fact]

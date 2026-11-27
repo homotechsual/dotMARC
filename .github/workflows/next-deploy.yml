@@ -6,6 +6,24 @@ name: Deploy next
 on:
   push:
     branches: [develop]
+    # Only what ends up in the image, or in how next is deployed, rebuilds and redeploys it. The Docker build publishes src/DotMarc
+    # and nothing outside src/ (apart from the MSBuild files at the root), so the website, the docs, the release scripts and the
+    # other workflows never change the image. test/ is listed because this workflow is what runs the tests on a push to develop.
+    # A push is judged on all its commits together, so one that mixes docs with code still deploys. Run it by hand to force one.
+    paths:
+      - "src/**"
+      - "test/**"
+      - "Directory.Build.props"
+      - "Directory.Build.targets"
+      - "Directory.Packages.props"
+      - "global.json"
+      - "nuget.config"
+      - "dotMARC.sln"
+      - ".dockerignore"
+      - "docker-compose.next.yml"
+      - "scripts/deployment-url.sh"
+      - "scripts/verify-deployment.sh"
+      - ".github/workflows/next-deploy.yml"
   workflow_dispatch:
 
 env:

@@ -40,6 +40,46 @@ public sealed class DkimCheckCycleTests : IAsyncLifetime
         new(new FakeGraphMailboxClient(), context, NullLogger<PollingService>.Instance);
 
     [Fact]
+    public async Task NullSpfUsesNoSenderExpectationAndPersistsConfirmedAbsence()
+    {
+        await using var context = CreateContext();
+        var domain = new Domain { Name = "parked.example", SpfCheckStatus = SpfCheckStatus.NullSpf, DkimSelectors = ["old"] };
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+        var checker = new FakeDkimDnsChecker { Result = new(DkimCheckStatus.NoSendingKeys, "Confirmed absence") };
+        await CreateService(context).RunDkimCheckCycleAsync(context, checker, CancellationToken.None);
+        Assert.True(checker.ExpectsNoSenders);
+        await using var verify = CreateContext();
+        Assert.Equal(DkimCheckStatus.NoSendingKeys, (await verify.Domains.SingleAsync()).DkimCheckStatus);
+    }
+
+    [Theory]
+    [InlineData(SpfCheckStatus.Ok, SpfCheckStatus.NullSpf)]
+    [InlineData(SpfCheckStatus.NullSpf, SpfCheckStatus.Ok)]
+    public async Task ChangingNoSenderIntentMakesDkimDueForRecheck(SpfCheckStatus previous, SpfCheckStatus current)
+    {
+        var domain = new Domain { Name = "changing.example", SpfCheckStatus = previous, DkimCheckedUtc = DateTimeOffset.UtcNow };
+        await PollingService.RunSingleSpfCheckAsync(domain, new FakeSpfDnsChecker { Result = new(current, null) }, CancellationToken.None);
+        Assert.Null(domain.DkimCheckedUtc);
+    }
+
+    [Fact]
+    public async Task FailedNullDomainLookupKeepsPreviousResultAndTimestamp()
+    {
+        await using var context = CreateContext();
+        var lastCheck = DateTimeOffset.UtcNow.AddDays(-2);
+        context.Domains.Add(new Domain { Name = "parked.example", SpfCheckStatus = SpfCheckStatus.NullSpf, DkimSelectors = ["old"], DkimCheckStatus = DkimCheckStatus.UnexpectedSendingKey, DkimCheckedUtc = lastCheck });
+        await context.SaveChangesAsync();
+        var handler = new FakeHttpMessageHandler { ResponseBody = """{"Status":2}""" };
+        var checker = new DkimDnsChecker(new HttpClient(handler) { BaseAddress = new Uri("https://cloudflare-dns.com/") });
+        await CreateService(context).RunDkimCheckCycleAsync(context, checker, CancellationToken.None);
+        await using var verify = CreateContext();
+        var domain = await verify.Domains.SingleAsync();
+        Assert.Equal(DkimCheckStatus.UnexpectedSendingKey, domain.DkimCheckStatus);
+        Assert.Equal(lastCheck.ToUnixTimeMilliseconds(), domain.DkimCheckedUtc!.Value.ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
     public async Task RunDkimCheckCycleAsync_ChecksADomainNeverCheckedBefore()
     {
         using var context = CreateContext();

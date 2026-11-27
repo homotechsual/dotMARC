@@ -48,7 +48,7 @@ public sealed class HaloWebhookActivity(ILogger<HaloWebhookActivity> logger)
 
         if (delivery == HaloWebhookDelivery.WrongSecret)
         {
-            logger.LogWarning("A request reached the HaloPSA webhook with the wrong secret. If HaloPSA sent it, re-copy the webhook URL from Alert settings after saving.");
+            logger.LogWarning("A request reached the HaloPSA webhook with the wrong secret. If HaloPSA sent it, re-copy the webhook URL from the PSA tab after saving.");
         }
         else
         {

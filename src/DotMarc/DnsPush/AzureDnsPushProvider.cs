@@ -1,5 +1,6 @@
 using Azure;
 using Azure.Core;
+using Azure.Core.Pipeline;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Dns;
 using Azure.ResourceManager.Dns.Models;
@@ -7,6 +8,8 @@ using DotMarc.Data;
 using DotMarc.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace DotMarc.DnsPush;
 
@@ -64,14 +67,17 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
             string.Join('&', query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
     }
 
-    public async Task<DnsPushResult> ExchangeAndPushAsync(
-        string code, string codeVerifier, string redirectUri, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    /// <summary>Holds the Azure Resource Manager client built from the signed-in user's token between pushes. In memory only; never stored,
+    /// logged or put in a message.</summary>
+    private sealed record AzureSession(ArmClient ArmClient, HttpPipeline PermissionsPipeline) : IDnsPushSession;
+
+    public async Task<DnsPushSessionResult> ExchangeAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken)
     {
         var settings = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         var clientSecret = await _secretStore.GetSecretAsync(AzureDnsSettings.SecretStoreKey, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(settings.ClientId) || string.IsNullOrEmpty(clientSecret))
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, "Azure DNS push is not configured for this deployment.");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, "Azure DNS push is not configured for this deployment."));
         }
 
         // Must match BuildAuthorizationUrlAsync's authority exactly (MSAL requires the same
@@ -95,14 +101,45 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         }
         catch (MsalException ex)
         {
-            return new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the authorization code exchange: {ex.Message}");
+            return new DnsPushSessionResult(null, new DnsPushResult(DnsPushOutcome.ProviderError, $"Azure rejected the authorization code exchange: {ex.Message}"));
         }
 
-        var armClient = new ArmClient(new FixedTokenCredential(authResult.AccessToken, authResult.ExpiresOn));
+        var credential = new FixedTokenCredential(authResult.AccessToken, authResult.ExpiresOn);
+        var pipeline = HttpPipelineBuilder.Build(new ArmClientOptions(),
+            new BearerTokenAuthenticationPolicy(credential, "https://management.azure.com/.default"));
+        return new DnsPushSessionResult(new AzureSession(new ArmClient(credential), pipeline), null);
+    }
+
+    public async Task<DnsPushResult> PushAsync(IDnsPushSession session, IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        if (session is not AzureSession azureSession)
+        {
+            return new DnsPushResult(DnsPushOutcome.ProviderError, "That sign-in is not an Azure sign-in.");
+        }
+
+        return await PushChangesAsync(azureSession.ArmClient, azureSession.PermissionsPipeline, changes, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task<DnsPushResult> PushChangesAsync(ArmClient armClient, HttpPipeline permissionsPipeline,
+        IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var zones = new Dictionary<string, DnsZoneResource>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in changes.GroupBy(change => change.ZoneName, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lookup = await FindZoneAsync(armClient, group.Key, cancellationToken).ConfigureAwait(false);
+            if (lookup.Failure is { } failure) return failure;
+            if (lookup.Zone is not { } zone) throw new InvalidOperationException("Successful Azure zone discovery returned no zone.");
+            var preflight = await CheckPermissionsAsync(permissionsPipeline, zone, group.ToList(), cancellationToken).ConfigureAwait(false);
+            if (preflight is not null) return preflight;
+            zones.Add(group.Key, zone);
+        }
 
         foreach (var change in changes)
         {
-            var result = await PushOneChangeAsync(armClient, change, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await PushRecordAsync(zones[change.ZoneName], change.ZoneName, change, cancellationToken).ConfigureAwait(false);
             if (result.Outcome != DnsPushOutcome.Pushed)
             {
                 return result;
@@ -112,39 +149,145 @@ public sealed class AzureDnsPushProvider : IDnsPushProvider
         return new DnsPushResult(DnsPushOutcome.Pushed, null);
     }
 
-    private static async Task<DnsPushResult> PushOneChangeAsync(ArmClient armClient, DnsRecordChange change, CancellationToken cancellationToken)
-    {
-        var zoneName = change.ZoneName;
-        var zone = await FindZoneAsync(armClient, zoneName, cancellationToken).ConfigureAwait(false);
-        if (zone is null)
-        {
-            return new DnsPushResult(DnsPushOutcome.ZoneNotFound,
-                $"Couldn't find {zoneName} in any subscription you authorized - check you have DNS Zone Contributor rights on it.");
-        }
-
-        return await PushRecordAsync(zone, zoneName, change, cancellationToken).ConfigureAwait(false);
-    }
-
     private async Task<AzureDnsSettings> GetSettingsAsync(CancellationToken cancellationToken)
     {
         await using var context = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         return await AzureDnsSettingsService.GetAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<DnsZoneResource?> FindZoneAsync(ArmClient armClient, string zoneName, CancellationToken cancellationToken)
+    private static async Task<(DnsZoneResource? Zone, DnsPushResult? Failure)> FindZoneAsync(ArmClient armClient, string zoneName, CancellationToken cancellationToken)
     {
-        await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync(cancellationToken).ConfigureAwait(false))
+        DnsZoneResource? match = null;
+        var inaccessible = new List<string>();
+        var subscriptions = 0;
+        try
         {
-            await foreach (var candidate in subscription.GetDnsZonesAsync(cancellationToken: cancellationToken).ConfigureAwait(false))
+            await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (string.Equals(candidate.Data.Name, zoneName, StringComparison.OrdinalIgnoreCase))
+                subscriptions++;
+                try
                 {
-                    return candidate;
+                    await foreach (var candidate in subscription.GetDnsZonesAsync(cancellationToken: cancellationToken).ConfigureAwait(false))
+                    {
+                        if (!string.Equals(candidate.Data.Name, zoneName, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (match is not null && match.Id != candidate.Id)
+                            return (null, new(DnsPushOutcome.ProviderError,
+                                $"More than one accessible Azure DNS zone is named {zoneName}. dotMARC cannot safely choose between them. Nothing was changed; use the Azure portal for this zone."));
+                        match = candidate;
+                    }
+                }
+                catch (RequestFailedException ex) when (ex.Status == 403)
+                {
+                    inaccessible.Add(subscription.Id.SubscriptionId!);
                 }
             }
         }
-        return null;
+        catch (RequestFailedException ex)
+        {
+            return (null, AzureFailure(ex, $"discovering Azure subscriptions and DNS zones for {zoneName}"));
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return (null, new(DnsPushOutcome.ProviderError, $"Azure DNS discovery for {zoneName} timed out. Nothing was changed; authorize a fresh review and try again."));
+        }
+        if (match is not null) return (match, null);
+        if (inaccessible.Count > 0)
+            return (null, new(DnsPushOutcome.ProviderError,
+                $"Could not establish whether Azure DNS zone {zoneName} exists: DNS zone listing was denied in subscription(s) {string.Join(", ", inaccessible)}. Grant zone-discovery access in the intended subscription and authorize again. Nothing was changed."));
+        return (null, new(DnsPushOutcome.ZoneNotFound, subscriptions == 0
+            ? $"No subscriptions are visible to this Azure sign-in. Check the selected account, tenant and subscription access. Nothing was changed."
+            : $"Azure DNS zone {zoneName} was not found in {subscriptions} visible subscription(s). Check the selected account and tenant; one sign-in does not cover every customer tenant. Nothing was changed."));
     }
+
+    private static async Task<DnsPushResult?> CheckPermissionsAsync(HttpPipeline pipeline, DnsZoneResource zone,
+        IReadOnlyList<DnsRecordChange> changes, CancellationToken cancellationToken)
+    {
+        var permissions = new List<(string[] Actions, string[] NotActions)>();
+        var endpoint = new Uri($"https://management.azure.com{zone.Id}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01");
+        try
+        {
+            Uri? next = endpoint;
+            var visited = new HashSet<Uri>();
+            while (next is not null)
+            {
+                if (next.Scheme != Uri.UriSchemeHttps || next.Host != endpoint.Host || !next.IsDefaultPort || !visited.Add(next))
+                    return new(DnsPushOutcome.ProviderError, $"Azure returned an invalid permissions page for zone {zone.Data.Name}. Nothing was changed.");
+                using var message = pipeline.CreateMessage();
+                message.Request.Method = RequestMethod.Get;
+                message.Request.Uri.Reset(next);
+                await pipeline.SendAsync(message, cancellationToken).ConfigureAwait(false);
+                if (message.Response.Status >= 400)
+                    return AzureFailure(new RequestFailedException(message.Response.Status, "Permission lookup failed."), $"checking permissions on Azure DNS zone {zone.Data.Name}");
+                if (message.Response.ContentStream is not { } stream)
+                    return new(DnsPushOutcome.ProviderError, $"Azure returned no permissions for zone {zone.Data.Name}. Nothing was changed.");
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (document.RootElement.ValueKind != JsonValueKind.Object
+                    || !document.RootElement.TryGetProperty("value", out var values) || values.ValueKind != JsonValueKind.Array)
+                    return new(DnsPushOutcome.ProviderError, $"Azure returned an invalid permissions response for zone {zone.Data.Name}. Nothing was changed.");
+                foreach (var value in values.EnumerateArray())
+                    permissions.Add((ReadActions(value, "actions"), ReadActions(value, "notActions")));
+                next = null;
+                if (document.RootElement.TryGetProperty("nextLink", out var link) && link.ValueKind != JsonValueKind.Null)
+                {
+                    if (link.ValueKind != JsonValueKind.String) throw new JsonException("Invalid permissions nextLink.");
+                    if (!string.IsNullOrEmpty(link.GetString()) && !Uri.TryCreate(link.GetString(), UriKind.Absolute, out next))
+                        throw new JsonException("Invalid permissions nextLink.");
+                }
+            }
+        }
+        catch (RequestFailedException ex)
+        {
+            return AzureFailure(ex, $"checking permissions on Azure DNS zone {zone.Data.Name}");
+        }
+        catch (JsonException)
+        {
+            return new(DnsPushOutcome.ProviderError, $"Azure returned unreadable permissions for zone {zone.Data.Name}. Nothing was changed.");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(DnsPushOutcome.ProviderError, $"Checking Azure permissions on zone {zone.Data.Name} timed out. Nothing was changed; authorize a fresh review and try again.");
+        }
+        var required = changes.SelectMany(RequiredActions).Distinct(StringComparer.OrdinalIgnoreCase);
+        var missing = required.Where(action => !permissions.Any(permission => AllowsAction(permission.Actions, permission.NotActions, action))).ToList();
+        return missing.Count == 0 ? null : new(DnsPushOutcome.ProviderError,
+            $"The signed-in Azure account lacks zone-level permission(s) on {zone.Data.Name}: {string.Join(", ", missing)}. Grant DNS Zone Contributor or an equivalent custom role at this zone or a parent scope, then authorize again. OAuth consent does not grant Azure roles. Nothing was changed.");
+    }
+
+    private static string[] ReadActions(JsonElement permission, string name)
+    {
+        if (permission.ValueKind != JsonValueKind.Object) throw new JsonException("Invalid permission entry.");
+        if (!permission.TryGetProperty(name, out var values)) return [];
+        if (values.ValueKind != JsonValueKind.Array) throw new JsonException("Invalid permission actions.");
+        return values.EnumerateArray().Select(value => value.ValueKind == JsonValueKind.String
+            ? value.GetString()! : throw new JsonException("Invalid permission action.")).ToArray();
+    }
+
+    private static IEnumerable<string> RequiredActions(DnsRecordChange change)
+    {
+        yield return $"Microsoft.Network/dnsZones/{change.RecordType}/read";
+        yield return $"Microsoft.Network/dnsZones/{change.RecordType}/write";
+        if (change.Kind == DnsRecordChangeKind.Replace)
+        {
+            yield return $"Microsoft.Network/dnsZones/{change.ExistingRecordType ?? change.RecordType}/read";
+            yield return $"Microsoft.Network/dnsZones/{change.ExistingRecordType ?? change.RecordType}/delete";
+        }
+    }
+
+    internal static bool AllowsAction(IEnumerable<string> actions, IEnumerable<string> notActions, string required) =>
+        actions.Any(pattern => MatchesAction(pattern, required)) && !notActions.Any(pattern => MatchesAction(pattern, required));
+
+    private static bool MatchesAction(string pattern, string required) =>
+        Regex.IsMatch(required, $"\\A{Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal)}\\z",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    private static DnsPushResult AzureFailure(RequestFailedException exception, string operation) =>
+        new(DnsPushOutcome.ProviderError, exception.Status switch
+        {
+            401 => $"Azure rejected the sign-in while {operation}. The token may have expired or belongs to the wrong tenant. Nothing was changed; authorize again.",
+            403 => $"Azure denied access while {operation}. Check the signed-in account's Azure RBAC permissions; OAuth consent does not grant Azure roles. Nothing was changed.",
+            429 => $"Azure rate-limited the request while {operation}. Nothing was changed by this check; wait and authorize a fresh review.",
+            _ => $"Azure failed while {operation} (HTTP {exception.Status}). Nothing was changed by this check; authorize a fresh review and try again."
+        });
 
     private static async Task<DnsPushResult> PushRecordAsync(DnsZoneResource zone, string zoneName, DnsRecordChange change, CancellationToken cancellationToken)
     {

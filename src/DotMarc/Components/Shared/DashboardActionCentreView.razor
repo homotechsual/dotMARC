@@ -1,0 +1,185 @@
+@using DotMarc.Data
+@using DotMarc.Reporting
+@using DotMarc.Components.Dialogs
+@inject IDialogService Dialogs
+
+<DashboardOperations ParseFailures="ParseFailures" />
+<div class="domain-list-toolbar mb-3">
+    <div>
+        <MudText Typo="Typo.h6">Your mail estate at a glance</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">All cards and domain queues use the current filters and your authorised scope.</MudText>
+    </div>
+</div>
+<MudGrid Spacing="3" Class="mb-5 dashboard-metrics">
+    <MudItem xs="6" md="3"><DashboardMetric Label="Domains needing action" Value="@Data.ProblemDomains.ToString("N0")" Detail="Configuration, overdue reports or sender decisions" Color="@(Data.ProblemDomains > 0 ? Color.Warning : Color.Default)" Clicked="@(() => ShowAttention("action"))" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Sender decisions outstanding" Value="@Data.SenderReviews.ToString("N0")" Detail="30 days · counted per sender per domain · cached attribution" Color="@(Data.SenderReviews > 0 ? Color.Warning : Color.Default)" Clicked="@(() => ShowAttention("senders"))" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Domains needing checks" Value="@Data.UncheckedDomains.ToString("N0")" Detail="Required or opted-in evidence not yet confirmed" Color="Color.Info" Clicked="@(() => ShowAttention("checking"))" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Domains in scope" Value="@Data.DomainCount.ToString("N0")" Detail="@($"{Data.MonitoredCount:N0} monitored · open filtered Domains")" Href="@State.ToUrl("/domains")" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="DMARC pass rate" Value="@(Data.PassRate?.ToString("P1") ?? "No data")" Detail="30 days · volume-weighted aligned SPF or DKIM" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Quarantined messages" Value="@Data.Quarantined.ToString("N0")" Detail="7 UTC dates · investigate below, not necessarily a fault" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Rejected messages" Value="@Data.Rejected.ToString("N0")" Detail="7 UTC dates · may be successful spoofing protection" /></MudItem>
+    <MudItem xs="6" md="3"><DashboardMetric Label="Reported messages" Value="@Data.Messages.ToString("N0")" Detail="@($"30 days · {Data.Reports:N0} reports · {Data.ReportingSources:N0} report sources · reported volume, not unique messages")" /></MudItem>
+</MudGrid>
+
+<MudGrid Spacing="3" Class="mb-4">
+<MudItem xs="12" lg="7">
+<MudPaper id="dashboard-attention" Outlined="true" Class="pa-4 dashboard-attention">
+    <div class="dashboard-section-header mb-2">
+        <MudText Typo="Typo.h6">Domains needing attention</MudText>
+        <div class="dashboard-section-actions">
+        <MudButton Size="Size.Small" Href="@((State with { Queue = "attention" }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open attention in Domains</MudButton>
+        @if (AttentionMode != "all")
+        {
+            <MudButton Size="Size.Small" OnClick="@(() => ShowAttention(null))">Show all attention</MudButton>
+        }
+        </div>
+    </div>
+    <div class="domain-list-toolbar mb-2" role="group" aria-label="Issue categories">
+        <MudButton Size="Size.Small" Variant="@(State.AttentionView is null ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                   aria-pressed="@(State.AttentionView is null ? "true" : "false")" OnClick="@(() => ShowAttention(null))">All (@Data.Attention.Count)</MudButton>
+        @foreach (var category in Categories)
+        {
+            <MudButton Size="Size.Small" Variant="@(SelectedCategories.Contains(category.Key) ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                       aria-pressed="@(SelectedCategories.Contains(category.Key) ? "true" : "false")" OnClick="@(() => ToggleCategory(category.Key))">
+                @category.Value (@Data.Attention.Count(row => row.MatchesCategory(category.Key)))
+            </MudButton>
+        }
+    </div>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Select multiple issue categories to match any. These narrow this queue only; domain filters still apply to the whole Dashboard.</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" aria-live="polite">@AttentionDescription · @AttentionRows.Count domains. Confirmed problems first, then sender decisions, then unchecked evidence.</MudText>
+    @if (Data.DomainCount == 0)
+    {
+        <MudAlert Severity="Severity.Info">No domains in the current scope. Change Filters; authorised users can add a domain above.</MudAlert>
+    }
+    else if (AttentionRows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">@(Data.Attention.Count == 0 ? "No outstanding problems or required checks in the stored evidence. This is not a full baseline security assessment." : "No domains match this attention category. Other attention categories may still need review.")</MudAlert>
+    }
+    else
+    {
+        <MudTable T="DashboardAttention" Items="AttentionRows" Dense="true" Hover="true" RowsPerPage="5" Class="dashboard-queue">
+            <HeaderContent><MudTh>Domain / reporting</MudTh><MudTh>Why it needs attention / next action</MudTh></HeaderContent>
+            <RowTemplate Context="row">
+                <MudTd DataLabel="Domain / reporting">
+                    <a class="dashboard-domain-name" href="@DashboardActionCentre.DomainUrl(row.Domain)" data-domain-link>@row.Domain.Name</a>
+                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">@(row.Domain.SpfCheckStatus == SpfCheckStatus.NullSpf ? "No senders (null SPF)" : row.Domain.IsMonitored ? "Reports expected" : "Reports not required")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Why it needs attention / next action">
+                    @foreach (var problem in row.Problems.Take(2))
+                    {
+                        @ProblemLine(row.Domain, problem)
+                    }
+                    @if (row.Problems.Count > 2)
+                    {
+                        <details class="dashboard-more-problems">
+                            <summary>@(row.Problems.Count - 2) more checks</summary>
+                            @foreach (var problem in row.Problems.Skip(2))
+                            {
+                                @ProblemLine(row.Domain, problem)
+                            }
+                        </details>
+                    }
+                    @if (row.SenderReviews > 0)
+                    {
+                        <div class="dashboard-sender-review">
+                            <span class="dashboard-issue-kind">Sender review</span>
+                            <a class="dashboard-issue-action" href="@DashboardActionCentre.DomainUrl(row.Domain, "sources")" data-domain-link>Review @row.SenderReviews @(row.SenderReviews == 1 ? "sender decision" : "sender decisions")</a>
+                        </div>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <PagerContent><MudTablePager PageSizeOptions="@([5, 10, 25])" /></PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+</MudItem>
+
+<MudItem xs="12" lg="5">
+<MudPaper Outlined="true" Class="pa-4 dashboard-investigations">
+    <div class="dashboard-section-header mb-2">
+        <MudText Typo="Typo.h6">Quarantines and rejects to investigate</MudText>
+        <div class="dashboard-section-actions">
+            <MudButton Size="Size.Small" Href="@((State with { Queue = "investigate", AttentionView = null }).ToUrl("/domains"))" StartIcon="@Icons.Material.Filled.OpenInNew">Open investigations in Domains</MudButton>
+        </div>
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        @Data.Days[0].Date.ToString("dd MMM") to @Data.Days[^1].Date.ToString("dd MMM yyyy") UTC, through @Data.SnapshotUtc.ToString("HH:mm") UTC.
+        Bucketed by report receipt, not message send time. Blocking does not by itself mean configuration is wrong.
+    </MudText>
+    @if (Data.Investigations.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">@(Data.SevenDayMessages == 0 ? "No message data is available in this seven-day window. This is not an all-clear." : "No quarantine or reject messages were reported in this seven-day window.")</MudAlert>
+    }
+    else
+    {
+        <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="ChartSeries" ChartLabels="ChartLabels" Width="100%" Height="260px" />
+        <MudText Typo="Typo.caption">Chart and list totals: @Data.Quarantined.ToString("N0") quarantined · @Data.Rejected.ToString("N0") rejected messages.</MudText>
+        <MudTable T="DashboardInvestigation" Items="Data.Investigations" Dense="true" Hover="true" RowsPerPage="5" Class="dashboard-queue mt-3">
+            <HeaderContent><MudTh>Domain / pass rate</MudTh><MudTh>Messages (7d)</MudTh><MudTh>Evidence</MudTh></HeaderContent>
+            <RowTemplate Context="row">
+                <MudTd DataLabel="Domain / pass rate">
+                    <a href="@DashboardActionCentre.DomainUrl(row.Domain)" data-domain-link>@row.Domain.Name</a>
+                    <MudText Typo="Typo.caption" Class="d-block domain-percentage">@(row.PassRate?.ToString("P1") ?? "No data") DMARC pass (7d)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Messages (7d)">
+                    <MudText Typo="Typo.body2"><span data-quarantined>@row.Quarantined.ToString("N0")</span> quarantined</MudText>
+                    <MudText Typo="Typo.body2"><span data-rejected>@row.Rejected.ToString("N0")</span> rejected</MudText>
+                </MudTd>
+                <MudTd DataLabel="Evidence"><MudButton Size="Size.Small" OnClick="@(() => InvestigateAsync(row))" aria-label="@($"View seven-day records for {row.Domain.Name}")">View records</MudButton></MudTd>
+            </RowTemplate>
+            <PagerContent><MudTablePager PageSizeOptions="@([5, 10, 25])" /></PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+</MudItem>
+</MudGrid>
+<DashboardPolling />
+
+@code {
+    [Parameter, EditorRequired] public DashboardActionCentre Data { get; set; } = null!;
+    [Parameter] public int ParseFailures { get; set; }
+    [Parameter, EditorRequired] public DomainListState State { get; set; } = new();
+    [Parameter] public EventCallback<DomainListState> Changed { get; set; }
+    private string AttentionMode => State.AttentionView ?? "all";
+    private static readonly KeyValuePair<string, string>[] Categories =
+    [
+        new("dns", "DNS/configuration"), new("missing", "Missing reports"),
+        new("senders", "Sender review"), new("checking", "Needs checking")
+    ];
+    private HashSet<string> SelectedCategories => (State.AttentionView?.Split(',') ?? []).ToHashSet();
+    private IReadOnlyList<DashboardAttention> AttentionRows => Data.Attention.Where(row => row.MatchesCategories(State.AttentionView)).ToList();
+    private string AttentionDescription => AttentionMode switch
+    {
+        "action" => "Confirmed problems and sender decisions",
+        "checking" => "Unconfirmed checks (not confirmed failures)",
+        "senders" => "Outstanding sender decisions from the last 30 days",
+        "missing" => "Missing expected reports (over two days or never received)",
+        "all" => "Current stored DNS checks, report expectations and 30-day sender decisions",
+        _ => string.Join(" or ", Categories.Where(category => SelectedCategories.Contains(category.Key)).Select(category => category.Value))
+    };
+    private List<ChartSeries<double>> ChartSeries =>
+    [
+        new() { Name = "Quarantined messages", Data = Data.Days.Select(day => (double)day.Quarantined).ToArray() },
+        new() { Name = "Rejected messages", Data = Data.Days.Select(day => (double)day.Rejected).ToArray() }
+    ];
+    private string[] ChartLabels => Data.Days.Select(day => day.Date.ToString("dd MMM")).ToArray();
+    private Task ShowAttention(string? mode) => Changed.InvokeAsync(State with { AttentionView = mode });
+    private Task ToggleCategory(string category)
+    {
+        var selected = SelectedCategories;
+        selected.Remove("action");
+        if (!selected.Add(category)) selected.Remove(category);
+        return ShowAttention(selected.Count == 0 ? null : string.Join(",", Categories.Where(option => selected.Contains(option.Key)).Select(option => option.Key)));
+    }
+    private static RenderFragment ProblemLine(Domain domain, DashboardProblem problem) => @<div class="@($"dashboard-problem {(problem.NeedsChecking ? "dashboard-problem-checking" : "")}")">
+        <div class="dashboard-issue-copy">
+            <span class="dashboard-issue-kind">@(problem.NeedsChecking ? "Needs checking" : "Action needed")</span>
+            <span class="dashboard-issue-description">@problem.Description.TrimEnd('.').</span>
+        </div>
+        <a class="dashboard-issue-action" href="@DashboardActionCentre.DomainUrl(domain, problem.Tab)" data-domain-link>@problem.Action</a>
+    </div>;
+    private Task InvestigateAsync(DashboardInvestigation row) => Dialogs.ShowAsync<DashboardInvestigationDialog>(
+        $"Seven-day evidence: {row.Domain.Name}",
+        new DialogParameters<DashboardInvestigationDialog> { { dialog => dialog.Investigation, row }, { dialog => dialog.SnapshotUtc, Data.SnapshotUtc } },
+        new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.Large });
+}

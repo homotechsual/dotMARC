@@ -8,6 +8,7 @@
     <base href="/" />
     <link href="@Assets["_content/MudBlazor/MudBlazor.min.css"]" rel="stylesheet" />
     <link href="@Assets["app.css"]" rel="stylesheet" />
+    <link href="@Assets["DotMarc.styles.css"]" rel="stylesheet" />
     <link rel="icon" type="image/svg+xml" href="@Assets["favicon.svg"]" />
     <ImportMap />
     <HeadOutlet @rendermode="PageRenderMode" />
@@ -40,9 +41,9 @@
         // over a BroadcastChannel too, matched by this push's own id, and the popup looks closed here
         // while the person is still signing in, so "closed" means "waiting", not "cancelled".
         let currentDnsPush = null;
-        window.dotMarcOpenDnsPush = (url, dotNetRef) => {
+        window.dotMarcOpenDnsPush = (url, dotNetRef, existingPushId) => {
             currentDnsPush?.finish(null);
-            const pushId = crypto.randomUUID();
+            const pushId = existingPushId || crypto.randomUUID();
             const popup = window.open(`${url}&pushId=${pushId}`, 'dnsPush', 'width=520,height=680');
             if (!popup) {
                 dotNetRef.invokeMethodAsync('OnDnsPushPopupBlocked');
@@ -91,9 +92,12 @@
                     giveUp = setTimeout(() => finish('cancelled'), 6 * 60 * 1000);
                 }
             }, 500);
-            currentDnsPush = { finish };
+            currentDnsPush = { finish, pushId };
         };
         window.dotMarcCancelDnsPush = () => currentDnsPush?.finish('cancelled');
+        window.dotMarcReleaseDnsPush = pushId => {
+            if (currentDnsPush?.pushId === pushId) currentDnsPush.finish(null);
+        };
     </script>
 </body>
 </html>

@@ -232,6 +232,10 @@ namespace DotMarc.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AdditionalRuaAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
                     b.Property<string>("DkimCheckDetail")
                         .HasColumnType("text");
 
@@ -266,14 +270,28 @@ namespace DotMarc.Migrations
                     b.Property<DateTimeOffset?>("DmarcCheckedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DmarcNonExistentSubdomainPolicy")
+                        .HasColumnType("text");
+
                     b.Property<int?>("DmarcPercent")
                         .HasColumnType("integer");
 
                     b.Property<string>("DmarcPolicy")
                         .HasColumnType("text");
 
+                    b.Property<string[]>("DmarcProblems")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string[]>("DmarcRecords")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
                     b.Property<string>("DmarcSubdomainPolicy")
                         .HasColumnType("text");
+
+                    b.Property<bool>("DmarcTesting")
+                        .HasColumnType("boolean");
 
                     b.Property<string[]>("DnsNameservers")
                         .IsRequired()
@@ -336,6 +354,9 @@ namespace DotMarc.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("OverrideAdditionalRuaAddress")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
@@ -350,6 +371,12 @@ namespace DotMarc.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SpfRangesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcPolicy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcSubdomainPolicy")
                         .HasColumnType("text");
 
                     b.Property<string>("TlsrptCheckDetail")
@@ -449,8 +476,21 @@ namespace DotMarc.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AdditionalRuaAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("OverrideAdditionalRuaAddress")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TargetDmarcPolicy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcSubdomainPolicy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -1085,6 +1125,102 @@ namespace DotMarc.Migrations
                     b.ToTable("UserDashboardPreferences");
                 });
 
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("StartedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("StartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.ToTable("DnsPushBatches");
+                });
+
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatchDomain", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("DomainId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DomainName")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<DateTimeOffset?>("FinishedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Included")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlanFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId", "Position");
+
+                    b.ToTable("DnsPushBatchDomains");
+                });
+
             modelBuilder.Entity("DotMarc.Email.EmailSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -1487,6 +1623,12 @@ namespace DotMarc.Migrations
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<string>("TargetDmarcPolicy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetDmarcSubdomainPolicy")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -2597,6 +2739,15 @@ namespace DotMarc.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatchDomain", b =>
+                {
+                    b.HasOne("DotMarc.DnsPush.DnsPushBatch", null)
+                        .WithMany("Domains")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DotMarc.Notifications.AlertEvent", b =>
                 {
                     b.HasOne("DotMarc.Notifications.AlertRule", null)
@@ -2757,6 +2908,11 @@ namespace DotMarc.Migrations
             modelBuilder.Entity("DotMarc.Data.TlsrptReportPolicy", b =>
                 {
                     b.Navigation("FailureDetails");
+                });
+
+            modelBuilder.Entity("DotMarc.DnsPush.DnsPushBatch", b =>
+                {
+                    b.Navigation("Domains");
                 });
 
             modelBuilder.Entity("DotMarc.Notifications.AlertEvent", b =>

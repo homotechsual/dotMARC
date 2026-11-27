@@ -1,0 +1,18 @@
+<MudTooltip Text="@Label">
+    <span role="img" aria-label="@Label" class="domain-status-icon">
+        <MudIcon Icon="@Icon" Color="@Color" Size="Size.Small" />
+    </span>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public Color Color { get; set; }
+    private string Icon => Color switch
+    {
+        Color.Success => Icons.Material.Filled.CheckCircleOutline,
+        Color.Error => Icons.Material.Filled.Error,
+        Color.Warning => Icons.Material.Filled.Warning,
+        Color.Info => Icons.Material.Outlined.Info,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+}

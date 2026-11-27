@@ -1,6 +1,6 @@
 namespace DotMarc.Data;
 
-/// <summary>The result of the most recent RFC 7489 §7.1 DMARC authorization-record check for a
+/// <summary>The result of the most recent RFC 9990 §4 DMARC authorization-record check for a
 /// Domain - see DotMarc.Dns.DmarcDnsChecker.CheckAuthorizationAsync. Split out from
 /// DmarcCheckStatus so the own-record check and this one can be shown (and independently
 /// corrected) regardless of the other's state; the old DmarcCheckStatus.MissingAuthorizationRecord

@@ -1,0 +1,15 @@
+@page "/senders/baseline"
+@page "/psa/settings"
+@page "/audit"
+@inject NavigationManager Navigation
+
+@code {
+    // The destination page enforces access, so there is no [Authorize] here.
+    protected override void OnInitialized()
+    {
+        if (LegacyRedirectTargets.DestinationFor(new Uri(Navigation.Uri)) is { } destination)
+        {
+            Navigation.NavigateTo(destination, replace: true);
+        }
+    }
+}

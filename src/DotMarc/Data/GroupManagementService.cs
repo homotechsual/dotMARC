@@ -153,6 +153,29 @@ public static class GroupManagementService
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public enum SetScopedDomainGroupsResult { Updated, DomainNotAccessible, InvalidGroups, LastAccessibleGroup }
+
+    /// <summary>UI assignment preserves hidden memberships and never removes a scoped editor's last accessible group.
+    /// The caller checks DomainsEdit using the current principal before supplying its current scope.</summary>
+    public static async Task<SetScopedDomainGroupsResult> SetScopedDomainGroupsAsync(
+        DotMarcDbContext context, AuditActor actor, int domainId, IReadOnlyCollection<int> scopedGroupIds,
+        IReadOnlyCollection<int> requestedIds, CancellationToken cancellationToken = default)
+    {
+        var domain = await context.Domains.Include(domain => domain.Groups)
+            .SingleOrDefaultAsync(domain => domain.Id == domainId
+                && (scopedGroupIds.Count == 0 || domain.Groups.Any(group => scopedGroupIds.Contains(group.Id))), cancellationToken).ConfigureAwait(false);
+        if (domain is null) return SetScopedDomainGroupsResult.DomainNotAccessible;
+        var requested = requestedIds.Distinct().ToList();
+        if (scopedGroupIds.Count > 0 && requested.Any(id => !scopedGroupIds.Contains(id))
+            || await context.Groups.CountAsync(group => requested.Contains(group.Id), cancellationToken).ConfigureAwait(false) != requested.Count)
+            return SetScopedDomainGroupsResult.InvalidGroups;
+        if (scopedGroupIds.Count > 0 && requested.Count == 0)
+            return SetScopedDomainGroupsResult.LastAccessibleGroup;
+        var hidden = domain.Groups.Where(group => scopedGroupIds.Count > 0 && !scopedGroupIds.Contains(group.Id)).Select(group => group.Id);
+        await SetDomainGroupsAsync(context, actor, domainId, requested.Concat(hidden).Distinct().ToList(), cancellationToken).ConfigureAwait(false);
+        return SetScopedDomainGroupsResult.Updated;
+    }
+
     /// <summary>Links (or, with null, unlinks) a Group to a company in one PSA, from that PSA's column on Manage groups.</summary>
     public static async Task SetPsaCompanyAsync(DotMarcDbContext context, AuditActor actor, int groupId, PsaKind psa, PsaCompany? company, CancellationToken cancellationToken = default)
     {

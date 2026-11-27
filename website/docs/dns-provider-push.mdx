@@ -23,6 +23,41 @@ All three providers are independently optional and configured the same way regar
   }}
 />
 
+## Bulk DNS from Domains {/* #bulk-dns-from-inventory */}
+
+On **Domains**, select domains using their **Select for DNS** checkboxes, or choose **Select matching domains**. Selection is shared between All domains and By group, including domains listed in several groups. Sorting keeps the selection; filtering or losing access removes hidden IDs with a notification. Dashboard has no bulk selection.
+
+The selection toolbar stays below the app bar while scrolling. **Recheck selected providers** runs read-only provider/zone detection immediately for domain editors, saves each result and refreshes Domains before DNS review. It reports successes, failures and checks not attempted. No provider sign-in or DNS write is involved. New domains added through the shared form or Import also attempt provider detection immediately after creation, rather than waiting behind the mailbox and other health checks in the scheduled polling cycle.
+
+Choose **Review selected DNS**, select **DMARC**, **TLS reporting** or **MTA-STS hosting**, then choose a provider. Each provider has a separate batch, limited to 50 distinct domains. Domains with no detected provider or no configured push option are listed for manual setup instead; their Overview has individual manual DNS controls.
+
+The review page stores the exact additions, removals and warnings for every domain, so refreshing does not silently substitute a new plan. Already-correct and refused domains are shown but not pushed. A CNAME delegation is unchecked by default and requires an explicit check for that domain because replacing it ends the delegation.
+
+**Authorize and push checked domains** saves the checked subset and opens one provider sign-in for the batch. The review expires after 30 minutes. Only its owner can view or authorize it, and current record-target permission and domain scope are rechecked. Before each write, dotMARC detects the provider again and compares the current plan with the reviewed fingerprint; changed plans are skipped rather than published.
+
+Results refresh automatically and survive a page reload. Each domain shows whether it was pushed, already correct, excluded, skipped after changes, refused, failed or not attempted. Provider acceptance is not verified DNS propagation. A failed replacement can leave missing or duplicate records: check the provider before retrying. **Create fresh review for unpushed domains** never reuses a sign-in or silently retries writes. Batches interrupted by an application restart are marked interrupted and require a fresh review/sign-in.
+
+DMARC/TLS reporting need `DomainsEdit`; MTA-STS hosting needs `MtaStsManage`. SPF, DKIM keys and external DMARC authorization are not bulk targets in 0.14.
+
+### Try the demo
+
+Demo pushes are simulated in memory and never contact or change a real DNS provider. Use the existing sample domains:
+
+* **aurora-retail.example** is already correct for DMARC/TLS reporting.
+* **shop.aurora-retail.example** can be pushed successfully through the demo Cloudflare provider.
+* **cobalt-freight.example** fails with an explicit demo rejection, while **fleet.cobalt-freight.example** succeeds in the same Azure DNS batch, demonstrating partial results.
+* **brightline-legal.example** is listed for manual setup because its provider has no push option.
+
+The demo authorization redirects straight back to dotMARC. Simulated records last until the process restarts or the daily dataset reset; they are not real DNS health observations.
+
+## New-domain setup
+
+After adding a domain, **Review DNS setup** on Overview combines DMARC, TLS reporting (when this instance has a TLS-report mailbox) and enabled MTA-STS hosting records in one review and provider authorization. Combined setup requires both `DomainsEdit` and `MtaStsManage`; users without both can use the individual controls they are allowed to access.
+
+With no configured push option, the same plan is shown as manual records to copy. No record is published automatically. Changes to DNS or setup settings after review stop the combined push and require another review. Provider writes are not transactional: a failure can leave earlier records published, so check current DNS before retrying.
+
+SPF and DKIM keys still require mail-platform details and separate review. External report destinations may need authorization in another zone. MTA-STS hosting must finish HTTPS provisioning before its policy ID can be published from the MTA-STS controls.
+
 ## Editing SPF
 
 **Edit SPF** on a domain's SPF check opens the SPF editor. It starts from the live record. If the domain has more than one SPF record (an error, since receivers allow only one), it starts from them merged into one. With no record, it starts with an include for each mail service dotMARC detected.
@@ -46,6 +81,24 @@ The domain's apex usually holds other TXT records too, such as site verification
 The ending for new records is set under **Manage → DNS push settings → DNS records** (`~all` by default).
 
 </details>
+
+## DMARC policy and your target
+
+If a [DMARC target](./baselines.mdx#domain) applies to a domain, the DMARC push uses it. A new record is written with the domain's effective target (`p`, and `sp` when it differs). An existing record that falls short is raised to the target: a weaker `p`, `sp` or `np` is raised, and a `pct` or `t=y` is removed. The other tags are kept in their order, and the record is written with "; " between tags, so its spacing may change. A record with problems, or one that sits below its target, is rebuilt as described under [Repairing a DMARC record](#repairing-a-dmarc-record). The plan shows the change like any other before anything is written.
+
+The push never lowers a policy. A record that is already stricter than the target is left as it is, and a record that already meets the target is unchanged. This holds for a single push and for a bulk push.
+
+With no target set at any level, the push behaves as it always has: a new record starts at `p=none`, and an existing record keeps its policy.
+
+## Repairing a DMARC record
+
+When the DMARC record has a [problem](./dmarc-and-mta-sts.mdx#record-problems) or sits below its target, the DMARC push rebuilds the record the way the domain page shows its **Suggested record**: `v=DMARC1` first, the tags joined with "; ", and a repeated `p`, `sp` or `np` keeping its strictest value. A repeated `rua` or `ruf` is joined into one tag. The push writes the configured primary report mailbox first, followed by the effective secondary address from [Domain Baselines](./baselines.mdx#report-destinations). A group/domain override replaces unrelated existing addresses, and can explicitly require primary-only delivery. Without a scoped override, other existing `rua` addresses are kept only when **Keep other rua addresses when pushing** is on and there is room within two total destinations. Conflicting group addresses require a domain override before DNS setup. The review screen lists each change in plain words, for example "Removed the repeated p=none", and carries the label "Repairs a malformed DMARC record" only when the record has a breaking problem. Text that was not a valid tag is reported as discarded.
+
+If `_dmarc` is a CNAME to another service, the push replaces the CNAME with a fresh record of your own rather than the suggestion, and the review screen flags the lost delegation. A TXT value that looks like a DMARC record but is malformed is removed when a proper record sits beside it. Other values, including SPF records, are left alone.
+
+If the name holds more than one DMARC record, the push removes every one of them and writes a single clean record built from their combined values, because receivers discard all records when there is more than one. TXT values at the name that are not DMARC records, such as a verification token, are left alone. A single DMARC record beside such values is updated without touching them.
+
+Without a target, `pct` and `t` are kept as they are, and `rf` and `ri` are dropped. With a target, `pct` and `t=y` are removed too. A valid record with no problems and no target produces exactly the plan it always did.
 
 ## DKIM records
 
@@ -105,6 +158,18 @@ After you click **Continue** on that step, a **second** step appears listing the
 ]} />
 
 ## Azure DNS
+
+An Azure sign-in authorizes dotMARC to act as that user, not as a subscription administrator. The current provider reuses one ARM access token, enumerates subscriptions visible to that token and searches their DNS zones by name. The user needs sufficient access for zone discovery and record writes, such as DNS Zone Contributor at the appropriate scope. Azure enforces RBAC on the actual record operations; consent to `user_impersonation` does not grant Azure roles.
+
+One batch can cover accessible subscriptions in that token's tenant context. A multitenant app registration permits customers from different tenants to sign in separately; it does not make one login token cover every tenant the account belongs to. Different customer tenants need separate authorizations.
+
+Before changing any records for a domain, dotMARC discovers its zones and checks the signed-in user's effective zone-level ARM permissions for every planned record type: read and write, plus read/delete of the old type when replacing a CNAME or TXT record. Grant **DNS Zone Contributor** or an equivalent custom role on each zone or a parent scope. The account also needs subscription and DNS-zone listing access, and `Microsoft.Authorization/permissions/read` on the zone for this preflight. Record-only grants are not sufficient for dotMARC's zone-level preflight.
+
+A subscription whose DNS-zone listing returns **403** does not stop discovery in other subscriptions. If no match is found and some subscriptions were inaccessible, the result says discovery was incomplete rather than claiming the zone is missing. No visible subscriptions, an expired/rejected sign-in, rate limiting and missing permissions have separate explanations. Multiple accessible zones with the same name are refused rather than choosing one arbitrarily; use the Azure portal for that ambiguous case.
+
+The permission check is not a guarantee of a successful write: Azure still enforces current RBAC, deny assignments, locks and other constraints on each actual operation. A role or zone changing after preflight can still produce a failed or partial push, which is reported per domain. Nothing about the user's token is stored.
+
+For 0.14, live API validation used the production provider's confidential authorization-code exchange with PKCE: one delegated session created and read back temporary TXT records in three zones across two subscriptions in one tenant. A separate authorization validated a fourth zone in another tenant. All temporary records were deleted and their absence verified. These inactive Azure zones were tested through an isolated harness, not the normal public-provider detection flow, so this proves API discovery, permission preflight and TXT publishing, not public DNS propagation or every record-conversion path.
 
 Register a *third*, separate Entra app registration (do not reuse the mailbox or dashboard app from [your deployment's Entra setup](./getting-started.mdx#choose-how-to-run-it)). Go to **App registrations** → **New registration**, set **Supported account types** to the multitenant option (accounts in any organizational directory) - this flow lets each customer authorize a push into *their own* tenant, which is a different tenant than the one this app registration lives in, so it must not be restricted to a single tenant. Then **Authentication** → add a **Web** redirect URI of `https://<your-deployment-host>/dns-push/azure-dns/callback`, then **API permissions** → add the delegated **Azure Service Management** → `user_impersonation` permission.
 
@@ -185,6 +250,10 @@ https://github.com/homotechsual/dotMARC/blob/main/scripts/dns-push/create-azure-
 ]} />
 
 ## Google Cloud DNS
+
+One interactive authorization can cover multiple managed zones across projects that the signed-in Google account can discover and edit. dotMARC lists visible projects, searches their managed zones and reuses the same access token for each domain. Google IAM, enabled APIs and organization policies still govern access; OAuth consent does not grant project or DNS roles. Projects whose zones cannot be listed are skipped during discovery. There is no explicit per-zone write-permission preflight, so a successful sign-in does not guarantee every selected domain can be published.
+
+The supported workflow remains fresh interactive authorization: Azure across accessible subscriptions in one tenant context, and Google across accessible projects. Stored app-only credentials and unattended multi-customer publishing are separate future work. **Google Cloud DNS has not been live-validated for 0.14**, including multi-project publishing; its behavior is covered by automated tests and provider documentation, not a real-account publishing result.
 
 In a Google Cloud project, enable the **Cloud DNS API** and **Cloud Resource Manager API**, then create an OAuth client at **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID** (application type **Web application**), with an authorized redirect URI of `https://<your-deployment-host>/dns-push/google-cloud-dns/callback`. On the **OAuth consent screen**, add both scopes dotMARC requests: `.../auth/ndev.clouddns.readwrite` (read/write access to Cloud DNS) and `.../auth/cloudplatformprojects.readonly` (lets dotMARC list the customer's projects to find which one holds the target zone - it never needs a project ID entered manually).
 

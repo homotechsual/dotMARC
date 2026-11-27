@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using DotMarc.Portal;
 using DotMarc.Reporting;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -32,6 +33,7 @@ public static class DomainReadEndpoints
         [FromQuery(Name = "status")] public string[]? Status { get; set; }
         [FromQuery(Name = "policy")] public string[]? Policy { get; set; }
         [FromQuery(Name = "dnsProvider")] public string[]? DnsProvider { get; set; }
+        [FromQuery(Name = "dmarcTarget")] public string[]? DmarcTarget { get; set; }
         [FromQuery(Name = "lastReportAfter")] public string? LastReportAfter { get; set; }
         [FromQuery(Name = "lastReportBefore")] public string? LastReportBefore { get; set; }
         [FromQuery(Name = "noReports")] public string? NoReports { get; set; }
@@ -63,6 +65,7 @@ public static class DomainReadEndpoints
             .DocumentsFilter("status", "One or more plain-language statuses, worked out as the client portal does." + ApiFilterDocs.ListHint, Enum.GetNames<PortalHealth>())
             .DocumentsFilter("policy", "One or more published DMARC policies." + ApiFilterDocs.ListHint, Enum.GetNames<DmarcPolicyLevel>())
             .DocumentsFilter("dnsProvider", "One or more DNS providers." + ApiFilterDocs.ListHint, Enum.GetNames<DetectedDnsProvider>())
+            .DocumentsFilter("dmarcTarget", "One or more outcomes against the DMARC target that applies to the domain: meets, below, or checking (not yet checked). Only monitored domains with a target match, as on the Baselines page." + ApiFilterDocs.ListHint, ApiDmarcTarget.OutcomeNames)
             .DocumentsFilter("lastReportAfter", "Last report received at or after this date or time. Domains with no report never match.")
             .DocumentsFilter("lastReportBefore", "Last report received before this date or time. Domains with no report never match.")
             .DocumentsFilter("noReports", "true for domains that have never had a report, false for those that have.", type: JsonSchemaType.Boolean)
@@ -141,6 +144,7 @@ public static class DomainReadEndpoints
         var statuses = reader.Enum<PortalHealth>("status", filters.Status);
         var policies = reader.Enum<DmarcPolicyLevel>("policy", filters.Policy);
         var providers = reader.Enum<DetectedDnsProvider>("dnsProvider", filters.DnsProvider);
+        var dmarcTargets = reader.OneOf("dmarcTarget", filters.DmarcTarget, ApiDmarcTarget.OutcomeNames);
         var lastReportAfter = reader.Date("lastReportAfter", filters.LastReportAfter);
         var lastReportBefore = reader.Date("lastReportBefore", filters.LastReportBefore);
         reader.Range("lastReportAfter", lastReportAfter, "lastReportBefore", lastReportBefore);
@@ -196,15 +200,16 @@ public static class DomainReadEndpoints
         var cutoffUtc = DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow());
         int totalCount;
         List<int> pageIds;
-        if (statuses.Count == 0 && passRateBelow is null && passRateAtLeast is null)
+        if (statuses.Count == 0 && dmarcTargets.Count == 0 && passRateBelow is null && passRateAtLeast is null)
         {
             totalCount = await ordered.CountAsync(cancellationToken);
             pageIds = await ordered.Skip((pageNumber - 1) * size).Take(size).Select(domain => domain.Id).ToListAsync(cancellationToken);
         }
         else
         {
-            // The status and pass rate are worked out outside the query, so filter every candidate here, then page.
-            var candidates = await ordered.ToListAsync(cancellationToken);
+            // The status, pass rate and DMARC target are worked out outside the query, so filter every candidate here, then page.
+            var candidates = await ordered.Include(domain => domain.Groups).ToListAsync(cancellationToken);
+            var targetSettings = dmarcTargets.Count > 0 ? await DnsRecordSettingsService.GetAsync(context, cancellationToken) : null;
             // Each is worked out only when a filter needs it.
             var candidateRates = passRateBelow is not null || passRateAtLeast is not null
                 ? await PassRatesAsync(context, candidates.Select(domain => domain.Id).ToList(), cutoffUtc, cancellationToken)
@@ -217,7 +222,8 @@ public static class DomainReadEndpoints
                 var rate = PassRateOf(candidateRates, domain.Id);
                 return (passRateBelow is null || (rate is { } below && below < passRateBelow))
                     && (passRateAtLeast is null || (rate is { } atLeast && atLeast >= passRateAtLeast))
-                    && (statuses.Count == 0 || statuses.Contains(PortalStatus.For(domain, domain.LastReportReceivedUtc is not null, openAlerts![domain.Name].ToList()).Health));
+                    && (statuses.Count == 0 || statuses.Contains(PortalStatus.For(domain, domain.LastReportReceivedUtc is not null, openAlerts![domain.Name].ToList()).Health))
+                    && (dmarcTargets.Count == 0 || MatchesDmarcTarget(domain, targetSettings!, dmarcTargets));
             }).Select(domain => domain.Id).ToList();
             totalCount = matching.Count;
             pageIds = matching.Skip((pageNumber - 1) * size).Take(size).ToList();
@@ -232,7 +238,8 @@ public static class DomainReadEndpoints
             .OrderBy(domain => pageIds.IndexOf(domain.Id))
             .ToList();
         var passRates = await PassRatesAsync(context, pageIds, cutoffUtc, cancellationToken);
-        var items = domains.Select(domain => ApiDomain.From(domain, scope, PassRateOf(passRates, domain.Id))).ToList();
+        var settings = await DnsRecordSettingsService.GetAsync(context, cancellationToken);
+        var items = domains.Select(domain => ApiDomain.From(domain, scope, PassRateOf(passRates, domain.Id), ApiDmarcTarget.For(domain, settings))).ToList();
         return TypedResults.Ok(new ApiPage<ApiDomain>(items, pageNumber, size, totalCount));
     }
 
@@ -248,7 +255,8 @@ public static class DomainReadEndpoints
         }
 
         var passRates = await PassRatesAsync(context, [found.Id], DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow()), cancellationToken);
-        return TypedResults.Ok(ApiDomainDetail.From(found, scope, PassRateOf(passRates, found.Id)));
+        var settings = await DnsRecordSettingsService.GetAsync(context, cancellationToken);
+        return TypedResults.Ok(ApiDomainDetail.From(found, scope, PassRateOf(passRates, found.Id), ApiDmarcTarget.For(found, settings)));
     }
 
     private static async Task<Results<Ok<ApiReportSummary>, ValidationProblem, ProblemHttpResult>> GetReportSummaryAsync(
@@ -323,6 +331,11 @@ public static class DomainReadEndpoints
                 breakdown.InferredSpfFailure, breakdown.InferredDkimFailure, breakdown.InferredBothFailure),
             topSources));
     }
+
+    /// <summary>Whether the domain is monitored and its outcome against its target is one of those asked for. Unmonitored
+    /// domains never match, so the filter agrees with the counts on the Baselines page.</summary>
+    private static bool MatchesDmarcTarget(Domain domain, DnsRecordSettings settings, IReadOnlyList<string> outcomes) =>
+        domain.IsMonitored && ApiDmarcTarget.For(domain, settings) is { } target && outcomes.Contains(target.Outcome);
 
     private static double? PassRateOf(Dictionary<int, double> passRates, int domainId) =>
         passRates.TryGetValue(domainId, out var passRate) ? passRate : null;

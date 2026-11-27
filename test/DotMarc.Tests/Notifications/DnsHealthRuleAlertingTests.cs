@@ -153,4 +153,64 @@ public sealed class DnsHealthRuleAlertingTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.False((await verify.AlertEvents.SingleAsync(alert => alert.Id == alertId)).IsResolved);
     }
+
+    private async Task SeedDomainWithNonePolicyAsync()
+    {
+        await using var context = CreateContext();
+        var domain = new Domain
+        {
+            Name = "target.example", IsMonitored = true, FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-30), LastReportReceivedUtc = DateTimeOffset.UtcNow,
+            DmarcCheckStatus = DmarcCheckStatus.Ok, DmarcCheckedUtc = DateTimeOffset.UtcNow.AddMinutes(-5),
+            DmarcPolicy = DmarcPolicyLevel.None, DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcPercent = 100,
+            DmarcRecords = ["v=DMARC1; p=none"]
+        };
+        domain.AlertStates.Add(new DomainAlertState
+        {
+            Item = DnsHealthItems.DmarcTarget,
+            PendingSinceUtc = DateTimeOffset.UtcNow.AddHours(-2), RecheckDueUtc = DateTimeOffset.UtcNow.AddHours(-2).AddMinutes(15)
+        });
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync();
+    }
+
+    private async Task SetSystemTargetAsync(DmarcPolicyLevel? policy)
+    {
+        await using var context = CreateContext();
+        var recordSettings = await DnsRecordSettingsService.GetAsync(context);
+        recordSettings.TargetDmarcPolicy = policy;
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ADomainBelowTheSystemTarget_OpensAnAlert_AndClearingTheTargetResolvesIt()
+    {
+        await SeedDomainWithNonePolicyAsync();
+        await SetSystemTargetAsync(DmarcPolicyLevel.Reject);
+
+        await RunCycleAsync();
+
+        await using (var verify = CreateContext())
+        {
+            var alert = await verify.AlertEvents.SingleAsync(candidate => candidate.AlertType == AlertTypes.DmarcPolicyBelowTarget);
+            Assert.False(alert.IsResolved);
+            Assert.Equal("The DMARC policy for target.example is p=none; its target is p=reject (system-wide). Reasons: p is none, target is reject.", alert.Message);
+        }
+
+        await SetSystemTargetAsync(null);
+        await RunCycleAsync();
+
+        await using var afterClearing = CreateContext();
+        Assert.True((await afterClearing.AlertEvents.SingleAsync(candidate => candidate.AlertType == AlertTypes.DmarcPolicyBelowTarget)).IsResolved);
+    }
+
+    [Fact]
+    public async Task WithNoTargetAnywhere_TheCycleRaisesNoBelowTargetAlert()
+    {
+        await SeedDomainWithNonePolicyAsync();
+
+        await RunCycleAsync();
+
+        await using var verify = CreateContext();
+        Assert.DoesNotContain(await verify.AlertEvents.ToListAsync(), alert => alert.AlertType == AlertTypes.DmarcPolicyBelowTarget);
+    }
 }

@@ -17,11 +17,27 @@ A **Role** is a named bundle of permissions. Two are built in:
 * **Admin**: every permission, locked (its name and permission set can never be changed or deleted).
 * **Viewer**: read-only (`DomainsView`, `GroupsView`, `TagsView`, `AlertsView`), and the only role that can be restricted to specific Groups.
 
-Admins can also create custom roles covering any subset of the available permissions, domain management, Group/Tag management, access management, MTA-STS hosting (`MtaStsView`, `MtaStsManage`), [alerting](./alerts.mdx) (`AlertsView`, `AlertsManage`, which also covers adding and editing the [destinations](./alerts.mdx#destinations) alerts are sent to), DNS provider push configuration (`DnsPushManage`), viewing the in-app [server logs](./server-logs.mdx) (`LogsView`), reading or setting retention for the [audit log](./audit-log.mdx) (`AuditView`, `AuditManage`), marking senders as authorised or unauthorised (`SenderReview`), and creating, changing, ordering and deleting [alert rules](./alerts.mdx) (`AlertRulesManage`) are each independently grantable. The Admin role has `AlertRulesManage`; a custom role has to be given it on the Access page.
+Inventory (`/domains`) requires `DomainsView`, not a domain-write permission. Its management controls still require their individual Add/Edit/Delete/Reorder permissions, and current group scope is enforced on reads and writes. Moving the list does not give Viewers editing access. **Manage > Groups** and **Manage > Tags** are separate destinations: each requires at least one of its existing management permissions, and every operation keeps its own permission check.
+
+Admins can also create custom roles covering any subset of the available permissions, domain management, Group/Tag management, access management, MTA-STS hosting (`MtaStsView`, `MtaStsManage`), [alerting](./alerts.mdx) (`AlertsView`, `AlertsManage`, which also covers adding and editing the [destinations](./alerts.mdx#destinations) alerts are sent to), DNS provider push configuration (`DnsPushManage`), viewing the in-app [server logs](./server-logs.mdx) (`LogsView`), reading or setting retention for the [audit log](./audit-log.mdx) (`AuditView`, `AuditManage`), marking senders as authorised or unauthorised (`SenderReview`), and creating, changing, ordering and deleting [alert rules](./alerts.mdx) (`AlertRulesManage`) are each independently grantable. The Admin role has `AlertRulesManage`; a custom role has to be given it on the Access page. Setting [DMARC targets](./baselines.mdx#domain) is its own permission, `BaselinesManage`, described under [Baselines](#baselines).
+
+## Baselines
+
+`BaselinesManage` lets someone set the target DMARC policy on the [Baselines](./baselines.mdx#domain) Domain tab, with **Domain baseline** on the Groups page, and on a domain's target card. What a holder can change follows their group scope, as with sender decisions:
+
+| Who holds `BaselinesManage` | System target | Group target | Domain target |
+| --- | --- | --- | --- |
+| Staff with no group limit | Yes | Any group | Any domain |
+| Staff limited to some groups | No (shown read-only) | Their own groups | Domains in their groups |
+| Client portal users | No | No | No |
+
+Viewing a domain's effective target needs only `DomainsView`. Pushing a raised policy to DNS still needs `DomainsEdit`, so setting a standard and applying it can be held by different people. The Sender tab keeps `SenderReview`.
+
+The Admin role gets `BaselinesManage` automatically when you upgrade. Custom roles do not, so nobody gains the power by upgrading: add it to a custom role on the Access page.
 
 ## Granting access
 
-Access is granted from the **Manage Access** page: type an email, pick a role, and if the role is Viewer, optionally pick which Groups they can see. This works identically whether the person is internal staff or an external client contact.
+Access is granted from the **Manage Access** page: select **Grant access** on People to open the form, type an email, pick a role, and if the role is Viewer, optionally pick which Groups they can see. Roles uses **Add role**, and API keys uses **Create key**, to open their forms. Each list keeps search visible, followed by sort, advanced filters and the creation action. This works identically whether the person is internal staff or an external client contact.
 
 <ThemedImage
   alt="dotMARC Manage Access page showing roles and pending access grants"

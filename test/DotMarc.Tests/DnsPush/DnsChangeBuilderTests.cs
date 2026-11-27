@@ -1,3 +1,4 @@
+using DotMarc.Baselines;
 using DotMarc.Data;
 using DotMarc.DnsPush;
 using DotMarc.Graph;
@@ -17,12 +18,96 @@ public sealed class DnsChangeBuilderTests
         ClientId = "client", TenantId = "tenant", ClientSecret = "secret", MailboxAddress = "rua@dotmarc.example", TlsrptMailboxAddress = tlsrptMailbox,
     });
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("domain@example.com")]
+    public async Task Dmarc_ScopedDestinationsReplaceLegacyAddressesWithoutMutatingSettings(string? secondary)
+    {
+        var reader = new FakeDnsRecordSettingsReader
+        {
+            Settings = new() { AdditionalRuaAddress = "system@example.com", KeepOtherRuaAddresses = true },
+            Destination = new(secondary, "Domain override")
+        };
+        foreach (var existing in new[] { null, "v=DMARC1; p=reject; rua=mailto:old@example.com" })
+        {
+            var lookup = new FakeDmarcTxtLookup { Result = new(existing, null) };
+            var plan = await new DmarcChangeBuilder(lookup, Graph(), reader, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
+            var value = Assert.Single(plan.Changes).DesiredValue;
+            Assert.DoesNotContain("old@example.com", value);
+            Assert.DoesNotContain("system@example.com", value);
+            Assert.Contains("rua=mailto:rua@dotmarc.example" + (secondary is null ? "" : $",mailto:{secondary}"), value);
+        }
+        Assert.True(reader.Settings.KeepOtherRuaAddresses);
+        Assert.Equal("system@example.com", reader.Settings.AdditionalRuaAddress);
+    }
+
+    [Fact]
+    public async Task Dmarc_ConflictingDestinationsRefuseAllChanges()
+    {
+        var reader = new FakeDnsRecordSettingsReader { Destination = new(null, "Conflict", true) };
+        var plan = await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), reader, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
+        Assert.Equal("report-address-conflict", plan.Refusal);
+        Assert.Empty(plan.Changes);
+    }
+
+    [Theory]
+    [InlineData(false, true, 2)]
+    [InlineData(true, true, 3)]
+    [InlineData(false, false, 1)]
+    public async Task DomainSetup_CombinesAvailableRecordsInOneReview(bool mtaEnabled, bool tlsEnabled, int count)
+    {
+        var graph = Graph(tlsEnabled ? "tlsrpt@dotmarc.example" : null);
+        var builder = new DomainSetupChangeBuilder(
+            new(new FakeDmarcTxtLookup(), graph, new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()),
+            new(new FakeTlsrptTxtLookup(), graph),
+            new(Options.Create(new MtaStsOptions { HostingHostname = "mta-sts.dotmarc.example" }), new FakeMtaStsCnameLookup(), new FakeMtaStsHostProvisioner()), graph);
+        var request = new DnsPushRequest(new Domain { Id = 1, Name = "contoso.com", MtaStsEnabled = mtaEnabled }, "cloudflare", "contoso.com", null);
+        var plan = await builder.BuildAsync(request, CancellationToken.None);
+        Assert.Null(plan.Refusal);
+        Assert.Equal(count, plan.Changes.Count);
+        Assert.Equal("DomainDnsSetup", builder.RequiredPolicy);
+        Assert.Contains(plan.Notes, note => note.Contains("not transactional", StringComparison.Ordinal));
+        if (!tlsEnabled) Assert.Contains(plan.Notes, note => note.Contains("no configured TLS report mailbox", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DomainSetup_ConflictingAddressesBlockEveryRecord()
+    {
+        var graph = Graph();
+        var builder = new DomainSetupChangeBuilder(
+            new(new FakeDmarcTxtLookup(), graph, new FakeDnsRecordSettingsReader { Destination = new(null, "Conflict", true) }, new FakeDmarcTargetReader()),
+            new(new FakeTlsrptTxtLookup(), graph),
+            new(Options.Create(new MtaStsOptions()), new FakeMtaStsCnameLookup(), new FakeMtaStsHostProvisioner()), graph);
+        var plan = await builder.BuildAsync(Request(), CancellationToken.None);
+        Assert.Equal("report-address-conflict", plan.Refusal);
+        Assert.Empty(plan.Changes);
+    }
+
+    [Fact]
+    public async Task DomainSetup_RequiresTheReviewedPlanToStillMatch()
+    {
+        var graph = Graph();
+        var lookup = new FakeDmarcTxtLookup();
+        var builder = new DomainSetupChangeBuilder(
+            new(lookup, graph, new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()),
+            new(new FakeTlsrptTxtLookup(), graph),
+            new(Options.Create(new MtaStsOptions()), new FakeMtaStsCnameLookup(), new FakeMtaStsHostProvisioner()), graph);
+        var request = Request();
+        var reviewed = await builder.BuildAsync(request, CancellationToken.None);
+        var authorized = request with { Payload = DnsPlanFingerprint.Of(reviewed.Changes) };
+        Assert.Null((await builder.BuildAsync(authorized, CancellationToken.None)).Refusal);
+        lookup.Result = new("v=DMARC1; p=reject; rua=mailto:changed@example.com", null);
+        var changed = await builder.BuildAsync(authorized, CancellationToken.None);
+        Assert.Equal("setup-changed", changed.Refusal);
+        Assert.Empty(changed.Changes);
+    }
+
     private static DnsPushRequest Request(string provider = "cloudflare") => new(Contoso, provider, "contoso.com", null);
 
     [Fact]
     public async Task Dmarc_CreatesARecord_WhenThereIsNone()
     {
-        var plan = await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None);
+        var plan = await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
 
         var change = Assert.Single(plan.Changes);
         Assert.Equal((DnsRecordChangeKind.Create, "TXT", "_dmarc.contoso.com", "v=DMARC1; p=none; rua=mailto:rua@dotmarc.example"),
@@ -34,7 +119,7 @@ public sealed class DnsChangeBuilderTests
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=reject; rua=mailto:old@example.com", null) };
 
-        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
 
         Assert.Equal((DnsRecordChangeKind.Merge, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com"), (change.Kind, change.DesiredValue));
     }
@@ -45,7 +130,7 @@ public sealed class DnsChangeBuilderTests
         var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=reject; rua=mailto:old@example.com", null) };
         var settings = new FakeDnsRecordSettingsReader { Settings = new() { KeepOtherRuaAddresses = false } };
 
-        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), settings).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), settings, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
 
         Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example", change.DesiredValue);
     }
@@ -55,9 +140,9 @@ public sealed class DnsChangeBuilderTests
     {
         var settings = new FakeDnsRecordSettingsReader { Settings = new() { AdditionalRuaAddress = "second@tool.example" } };
 
-        var created = Assert.Single((await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), settings).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var created = Assert.Single((await new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), settings, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
         var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=reject; rua=mailto:old@example.com", null) };
-        var merged = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), settings).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var merged = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), settings, new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
 
         Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example,mailto:second@tool.example", created.DesiredValue);
         Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:second@tool.example", merged.DesiredValue);
@@ -68,17 +153,195 @@ public sealed class DnsChangeBuilderTests
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("v=DMARC1; p=none", "contoso.dmarc-service.example") };
 
-        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
+        var change = Assert.Single((await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None)).Changes);
 
         Assert.Equal((DnsRecordChangeKind.Replace, "CNAME"), (change.Kind, change.ExistingRecordType));
     }
 
     [Fact]
-    public async Task Dmarc_RefusesARecordItCantMergeInto()
+    public async Task Dmarc_AddsARecordBesideAValueThatIsNotDmarc()
     {
         var lookup = new FakeDmarcTxtLookup { Result = new("not dmarc", null) };
 
-        Assert.Equal("unmergeable", (await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader()).BuildAsync(Request(), CancellationToken.None)).Refusal);
+        var plan = await new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()).BuildAsync(Request(), CancellationToken.None);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Null(plan.Refusal);
+        Assert.Equal((DnsRecordChangeKind.ReplaceTxtValues, "v=DMARC1; p=none; rua=mailto:rua@dotmarc.example"), (change.Kind, change.DesiredValue));
+        Assert.Empty(change.ValuesToRemove!);
+    }
+
+    private static EffectiveDmarcTarget Effective(DmarcPolicyLevel policy, DmarcPolicyLevel? subdomainPolicy = null) =>
+        new(policy, subdomainPolicy ?? policy, DmarcTargetSource.System, [], null, null);
+
+    private static async Task<DnsRecordChange> DmarcChange(string? existingRecord, EffectiveDmarcTarget? target, string? delegatedCname = null)
+    {
+        var lookup = existingRecord is null && delegatedCname is null ? new FakeDmarcTxtLookup() : new FakeDmarcTxtLookup { Result = new(existingRecord, delegatedCname) };
+        var builder = new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader { Target = target });
+        return Assert.Single((await builder.BuildAsync(Request(), CancellationToken.None)).Changes);
+    }
+
+    [Fact]
+    public async Task Dmarc_CreatesTheTargetPolicy_ForAMissingRecord() =>
+        Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example", (await DmarcChange(null, Effective(DmarcPolicyLevel.Reject))).DesiredValue);
+
+    [Fact]
+    public async Task Dmarc_MergesRuaAndRaisesABelowTargetRecordInOneChange()
+    {
+        var change = await DmarcChange("v=DMARC1; p=none; rua=mailto:old@example.com", Effective(DmarcPolicyLevel.Reject));
+
+        Assert.Equal((DnsRecordChangeKind.Merge, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com"), (change.Kind, change.DesiredValue));
+    }
+
+    [Fact]
+    public async Task Dmarc_OnlyMergesRua_WhenTheRecordIsStricterThanTheTarget() =>
+        Assert.Equal(
+            "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com",
+            (await DmarcChange("v=DMARC1; p=reject; rua=mailto:old@example.com", Effective(DmarcPolicyLevel.Quarantine))).DesiredValue);
+
+    [Fact]
+    public async Task Dmarc_ReplacesADelegatedCnameWithTheTargetPolicy() =>
+        Assert.Equal(
+            "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example",
+            (await DmarcChange(null, Effective(DmarcPolicyLevel.Reject), "contoso.dmarc-service.example")).DesiredValue);
+
+    [Fact]
+    public async Task Dmarc_AddsTheTargetPolicyBesideAValueThatIsNotDmarc()
+    {
+        var lookup = new FakeDmarcTxtLookup { Result = new("not dmarc", null) };
+        var builder = new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader { Target = Effective(DmarcPolicyLevel.Reject) });
+
+        var change = Assert.Single((await builder.BuildAsync(Request(), CancellationToken.None)).Changes);
+
+        Assert.Equal((DnsRecordChangeKind.ReplaceTxtValues, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example"), (change.Kind, change.DesiredValue));
+        Assert.Empty(change.ValuesToRemove!);
+    }
+
+    private static async Task<DnsChangePlan> DmarcPlan(string[] txtValues, EffectiveDmarcTarget? target = null)
+    {
+        var lookup = new FakeDmarcTxtLookup { Result = new(txtValues[0], null) { TxtValues = txtValues } };
+        var builder = new DmarcChangeBuilder(lookup, Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader { Target = target });
+        return await builder.BuildAsync(Request(), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Dmarc_ACleanRecordAndNoTarget_HasNoNotes()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=reject; rua=mailto:old@example.com"]);
+
+        Assert.Empty(plan.Notes);
+        Assert.Equal("v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com", Assert.Single(plan.Changes).DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_ARepeatedPolicyTag_BecomesOneMergeWithTheRepairedValueAndNotes()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none; p=reject; rua=mailto:old@example.com"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal((DnsRecordChangeKind.Merge, "v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example,mailto:old@example.com", "v=DMARC1; p=none; p=reject; rua=mailto:old@example.com"),
+            (change.Kind, change.DesiredValue, change.ExistingValue));
+        Assert.Equal("Repairs a malformed DMARC record", plan.Notes[0]);
+        Assert.Contains(plan.Notes, note => note.Contains("repeated", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Dmarc_RepeatedRuaTags_KeepTheVendorAddressWhenKeepingOthersIsOn()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none; rua=mailto:vendor@x.example; rua=mailto:rua@dotmarc.example"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example,mailto:vendor@x.example", change.DesiredValue);
+        Assert.Contains("Joined the repeated rua tags into one.", plan.Notes);
+    }
+
+    [Fact]
+    public async Task Dmarc_AnSpfRecordAtTheName_IsLeftAloneAndTheDmarcRecordAddedBesideIt()
+    {
+        var plan = await DmarcPlan(["v=spf1 -all"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Empty(change.ValuesToRemove!);
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example", change.DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_SeveralRecords_AreReplacedByOneAndNonDmarcValuesAreLeftAlone()
+    {
+        string[] values = ["v=DMARC1; p=none; rua=mailto:a@example.com", "google-site-verification=abc", "v=DMARC1; p=reject"];
+
+        var plan = await DmarcPlan(values);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(["v=DMARC1; p=none; rua=mailto:a@example.com", "v=DMARC1; p=reject"], change.ValuesToRemove);
+        Assert.Contains("p=reject", change.DesiredValue);
+        Assert.DoesNotContain("p=none", change.DesiredValue);
+        Assert.Equal("Repairs a malformed DMARC record", plan.Notes[0]);
+    }
+
+    [Fact]
+    public async Task Dmarc_ATargetRaiseOnACleanRecord_ListsItsChangesButNotTheRepairsNote()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none; rua=mailto:old@example.com"], Effective(DmarcPolicyLevel.Reject));
+
+        Assert.NotEmpty(plan.Notes);
+        Assert.DoesNotContain("Repairs a malformed DMARC record", plan.Notes);
+        Assert.Contains("p=reject", Assert.Single(plan.Changes).DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_ALookAlikeValueBesideAProperRecord_IsRemovedAndNamedInTheNotes()
+    {
+        string[] values = ["v=DMARC1; p=reject", "v=DMARC1 p=none"];
+
+        var plan = await DmarcPlan(values);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(values, change.ValuesToRemove);
+        Assert.Contains("Removes a value that looked like a DMARC record but was malformed: v=DMARC1 p=none", plan.Notes);
+    }
+
+    [Fact]
+    public async Task Dmarc_NeverLowersEnforcement_WhenTheTargetIsWeaker()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=reject; p=none"], Effective(DmarcPolicyLevel.Quarantine));
+
+        Assert.Contains("p=reject", Assert.Single(plan.Changes).DesiredValue);
+        Assert.DoesNotContain("p=none", Assert.Single(plan.Changes).DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_OneRecordBesideAVerificationToken_IsReplacedWithoutTouchingTheToken()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=none", "google-site-verification=abc"]);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(["v=DMARC1; p=none"], change.ValuesToRemove);
+        Assert.Equal("v=DMARC1; p=none", change.ExistingValue);
+        Assert.Equal("v=DMARC1; p=none; rua=mailto:rua@dotmarc.example", change.DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_ATargetRaiseBesideAVerificationToken_KeepsTheToken()
+    {
+        var plan = await DmarcPlan(["google-site-verification=abc", "v=DMARC1; p=none; rua=mailto:old@example.com"], Effective(DmarcPolicyLevel.Reject));
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(DnsRecordChangeKind.ReplaceTxtValues, change.Kind);
+        Assert.Equal(["v=DMARC1; p=none; rua=mailto:old@example.com"], change.ValuesToRemove);
+        Assert.Contains("p=reject", change.DesiredValue);
+    }
+
+    [Fact]
+    public async Task Dmarc_AnUpToDateRecordBesideAVerificationToken_HasNothingToChange()
+    {
+        var plan = await DmarcPlan(["v=DMARC1; p=reject; rua=mailto:rua@dotmarc.example", "google-site-verification=abc"]);
+
+        Assert.True(DnsPushReview.From(plan).NothingToChange);
     }
 
     [Fact]
@@ -140,7 +403,7 @@ public sealed class DnsChangeBuilderTests
     [Fact]
     public void Find_LooksBuildersUpByTarget()
     {
-        IDnsChangeBuilder[] builders = [new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), new FakeDnsRecordSettingsReader()), new TlsrptChangeBuilder(new FakeTlsrptTxtLookup(), Graph())];
+        IDnsChangeBuilder[] builders = [new DmarcChangeBuilder(new FakeDmarcTxtLookup(), Graph(), new FakeDnsRecordSettingsReader(), new FakeDmarcTargetReader()), new TlsrptChangeBuilder(new FakeTlsrptTxtLookup(), Graph())];
 
         Assert.IsType<TlsrptChangeBuilder>(builders.Find("tlsrpt"));
         Assert.Null(builders.Find("nope"));

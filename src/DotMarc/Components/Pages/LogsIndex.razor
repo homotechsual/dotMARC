@@ -1,0 +1,34 @@
+@page "/logs"
+@attribute [Authorize]
+@using DotMarc.Components.Shared
+@using DotMarc.ServerLogs
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject NavigationManager Navigation
+
+<AppPageTitle>dotMARC - Logs</AppPageTitle>
+
+@if (_noAccess)
+{
+    <MudText Typo="Typo.h4" Class="mb-2">Logs</MudText>
+    <MudText Typo="Typo.body1">You do not have access to any logs.</MudText>
+}
+
+@code {
+    private bool _noAccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var first = TabbedPageNavigation.FirstVisible(await LogsTabs.ForAsync(user, AuthorizationService));
+        if (first is null)
+        {
+            _noAccess = true;
+            return;
+        }
+
+        Navigation.NavigateTo(first.Href, replace: true);
+    }
+}

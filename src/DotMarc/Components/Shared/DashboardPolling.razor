@@ -1,0 +1,96 @@
+@using DotMarc.Data
+@using DotMarc.Graph
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IServiceProvider Services
+@inject DotMarc.Ingestion.PollNowSignal PollNow
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject ILogger<DashboardPolling> Logger
+
+<MudExpansionPanels Class="mt-4">
+    <MudExpansionPanel @bind-Expanded="_expanded">
+        <TitleContent>
+            <MudIcon Icon="@(_last is { Succeeded: true, ParseFailures: 0 } ? Icons.Material.Filled.CheckCircleOutline : Icons.Material.Filled.Warning)" Color="@(_last is { Succeeded: true, ParseFailures: 0 } ? Color.Success : Color.Warning)" Class="mr-2" />
+            <MudText Color="@(_last?.Succeeded == false ? Color.Error : Color.Default)">
+                Polling status (all domains): @(_last is null ? "Not polled yet" : !_last.Succeeded ? "Failed" : _last.ParseFailures > 0 ? "Parse failures" : "OK")
+            </MudText>
+        </TitleContent>
+        <ChildContent>
+            @if (_last is not null)
+            {
+                <MudText>Last polled: @_last.PolledUtc.ToString("g")</MudText>
+                <MudText>Messages checked: @_last.MessagesChecked. Reports parsed: @_last.ReportsParsed. Parse failures: @_last.ParseFailures.</MudText>
+                @if (!_last.Succeeded)
+                {
+                    <MudText Color="Color.Error" Style="overflow-wrap:anywhere">@LinkedText(_last.ErrorMessage ?? "No error message was recorded.")</MudText>
+                }
+            }
+            @if (Services.GetService<MailboxAccessCheck>() is not null)
+            {
+                <AuthorizeView Policy="LogsView">
+                    <MudButton Disabled="_busy" OnClick="CheckAsync">Check mailbox access</MudButton>
+                    <MudButton Disabled="_busy" OnClick="PollAsync">Poll now</MudButton>
+                    @foreach (var result in _checks)
+                    {
+                        <MudAlert Severity="@(result.Problem is null ? Severity.Success : Severity.Warning)">
+                            @result.Purpose: @result.Summary @LinkedText(result.Problem ?? "")
+                        </MudAlert>
+                    }
+                </AuthorizeView>
+            }
+        </ChildContent>
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+@code {
+    private static RenderFragment LinkedText(string text) => @<span>
+        @foreach (var part in TextLinks.Split(text))
+        {
+            if (part.IsLink) { <MudLink Href="@part.Text" Target="_blank" Underline="Underline.Always">@part.Text</MudLink> }
+            else { @part.Text }
+        }
+    </span>;
+    private PollCycle? _last;
+    private bool _busy;
+    private bool _expanded;
+    private IReadOnlyList<MailboxCheckResult> _checks = [];
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _last = await db.PollCycles.AsNoTracking().OrderByDescending(poll => poll.PolledUtc).FirstOrDefaultAsync();
+        _expanded = _last is not { Succeeded: true, ParseFailures: 0 };
+    }
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (!(await Authorization.AuthorizeAsync((await Authentication.GetAuthenticationStateAsync()).User, "LogsView")).Succeeded)
+        {
+            Snackbar.Add("You no longer have permission to check polling.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try { await action(); }
+        catch (TimeoutException) { Snackbar.Add("Polling is taking a while. Reload to see its result.", Severity.Info); }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException)
+        {
+            Logger.LogWarning(exception, "Mailbox operation failed");
+            Snackbar.Add("The mailbox operation failed. Check Logs for details.", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+    private Task CheckAsync() => RunAsync(async () =>
+    {
+        await using var scope = Services.CreateAsyncScope();
+        _checks = await scope.ServiceProvider.GetRequiredService<MailboxAccessCheck>().CheckAsync(CancellationToken.None);
+    });
+    private Task PollAsync() => RunAsync(async () =>
+    {
+        await PollNow.RequestAsync().WaitAsync(TimeSpan.FromMinutes(2));
+        await LoadAsync();
+        Snackbar.Add(_last?.Succeeded == true ? "Mailbox polled." : "Polling failed. Expand polling status for details.", _last?.Succeeded == true ? Severity.Success : Severity.Error);
+    });
+}

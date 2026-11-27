@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Dns;
 
 namespace DotMarc.Notifications;
 
@@ -28,7 +29,9 @@ public static class DnsHealthChecks
     public static IReadOnlyList<DnsHealthCheck> All { get; } =
     [
         new(DnsHealthItems.Dmarc, AlertTypes.DmarcRecordBroken, "DMARC record",
-            domain => domain.DmarcCheckStatus switch
+            domain => domain.SpfCheckStatus == SpfCheckStatus.NullSpf && domain.DmarcCheckStatus == DmarcCheckStatus.Misconfigured
+                && domain.DmarcRecords.Count > 0 && DmarcRecordAnalysis.Analyse(domain.DmarcRecords) is { Records.Count: > 0, IsValid: true }
+                ? DnsCheckHealth.Passing : domain.DmarcCheckStatus switch
             {
                 // Another rua address beside dotMARC's own (within the limit) is information, not a fault.
                 DmarcCheckStatus.Ok or DmarcCheckStatus.OtherReportAddresses => DnsCheckHealth.Passing,
@@ -38,7 +41,7 @@ public static class DnsHealthChecks
             domain => domain.DmarcCheckedUtc, domain => domain.DmarcCheckStatus.ToString(), domain => domain.DmarcCheckDetail,
             settings => settings.DmarcAlertMode),
         new(DnsHealthItems.DmarcAuthorization, AlertTypes.DmarcAuthorizationBroken, "DMARC authorization record",
-            domain => domain.DmarcAuthorizationCheckStatus switch
+            domain => domain.SpfCheckStatus == SpfCheckStatus.NullSpf ? DnsCheckHealth.Ignored : domain.DmarcAuthorizationCheckStatus switch
             {
                 DmarcAuthorizationCheckStatus.Ok => DnsCheckHealth.Passing,
                 DmarcAuthorizationCheckStatus.Missing => DnsCheckHealth.Failing,
@@ -75,9 +78,11 @@ public static class DnsHealthChecks
             domain => domain.MxCheckedUtc, domain => domain.MxCheckStatus.ToString(), domain => domain.MxCheckDetail,
             settings => settings.MxAlertMode),
         new(DnsHealthItems.Dkim, AlertTypes.DkimRecordBroken, "DKIM",
-            domain => domain.DkimCheckStatus switch
+            domain => domain.SpfCheckStatus == SpfCheckStatus.NullSpf && domain.DkimCheckStatus == DkimCheckStatus.Missing
+                ? DnsCheckHealth.Ignored : domain.DkimCheckStatus switch
             {
                 DkimCheckStatus.Ok => DnsCheckHealth.Passing,
+                DkimCheckStatus.NoSendingKeys => domain.SpfCheckStatus == SpfCheckStatus.NullSpf ? DnsCheckHealth.Passing : DnsCheckHealth.Ignored,
                 DkimCheckStatus.NotConfigured => DnsCheckHealth.Ignored,
                 _ => DnsCheckHealth.Failing
             },

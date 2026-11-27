@@ -32,6 +32,20 @@
         </MudAlert>
     }
 
+    <MudTable Items="@(_keys ?? [])" Hover="true" Dense="true" Class="mt-4" T="ApiKey" Breakpoint="Breakpoint.Sm" Filter="Matches">
+    <ToolBarContent>
+    <ListToolbar Label="API key controls" SearchLabel="Search API keys" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@(_activeFilter is null ? 0 : 1)" ClearFilters="@(() => _activeFilter = null)">
+        <SortContent><ListTableSort TItem="ApiKey" @ref="_tableSort" /></SortContent>
+        <FiltersContent>
+            <MudSelect T="bool?" Label="Status" @bind-Value="_activeFilter" Clearable="true">
+                <MudSelectItem T="bool?" Value="true">Active</MudSelectItem><MudSelectItem T="bool?" Value="false">Expired or revoked</MudSelectItem>
+            </MudSelect>
+        </FiltersContent>
+        <Actions><MudButton OnClick="@(() => _showAdd = !_showAdd)" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                            aria-controls="create-api-key" aria-expanded="@_showAdd.ToString().ToLowerInvariant()">@(_showAdd ? "Close create key" : "Create key")</MudButton></Actions>
+    </ListToolbar>
+    <div id="create-api-key" hidden="@(!_showAdd)">
     <MudGrid Class="mt-2">
         <MudItem xs="12" md="4">
             <MudTextField @bind-Value="_name" Label="Name" Placeholder="Halo sync" Variant="Variant.Outlined" Immediate="true"
@@ -66,17 +80,15 @@
             </MudItem>
         }
     </MudGrid>
-
-    @if (_keys is { Count: > 0 })
-    {
-        <MudTable Items="_keys" Hover="true" Dense="true" Class="mt-4" T="ApiKey" Breakpoint="Breakpoint.Sm">
+    </div>
+    </ToolBarContent>
             <HeaderContent>
-                <MudTh>Name</MudTh>
+                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Name" SortBy="new Func<ApiKey, object>(key => key.Name)">Name</MudTableSortLabel></MudTh>
                 <MudTh>Key</MudTh>
                 <MudTh>Role</MudTh>
                 <MudTh>Groups</MudTh>
-                <MudTh>Created</MudTh>
-                <MudTh>Expires</MudTh>
+                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Created" SortBy="new Func<ApiKey, object>(key => key.CreatedUtc)">Created</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Expires" SortBy="new Func<ApiKey, object>(key => key.ExpiresUtc)">Expires</MudTableSortLabel></MudTh>
                 <MudTh>Last used</MudTh>
                 <MudTh></MudTh>
             </HeaderContent>
@@ -109,15 +121,18 @@
                     }
                 </MudTd>
             </RowTemplate>
+        <NoRecordsContent><MudText Typo="Typo.body2">No API keys match. Create a key or change your search and filters.</MudText></NoRecordsContent>
         </MudTable>
-    }
-    else if (_keys is not null)
-    {
-        <MudText Typo="Typo.body2" Class="mt-4">No API keys yet.</MudText>
-    }
 </div>
 
 @code {
+    private ListTableSort<ApiKey>? _tableSort;
+    private Task RefreshSort(SortDirection _) => _tableSort?.RefreshAsync() ?? Task.CompletedTask;
+    private string? _search;
+    private bool _showAdd, _showFilters;
+    private bool? _activeFilter;
+    private bool Matches(ApiKey key) => (string.IsNullOrWhiteSpace(_search) || key.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        && (_activeFilter is null || IsInUse(key) == _activeFilter);
     private List<ApiKey>? _keys;
     private List<Role> _offeredRoles = [];
     private List<Group> _groups = [];

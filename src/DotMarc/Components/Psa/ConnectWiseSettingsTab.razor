@@ -20,7 +20,7 @@ else
     <MudPaper Class="pa-4">
         <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
             <MudText Typo="Typo.h5">ConnectWise</MudText>
-            <FieldWithHelp Topic="ConnectWise tickets" Inline="true" Help="Opens a ConnectWise ticket for each alert (as set under 'Which alerts create tickets' on Alert settings) and closes it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket closed in ConnectWise resolves its alert.">
+            <FieldWithHelp Topic="ConnectWise tickets" Inline="true" Help="Opens a ConnectWise ticket for each alert (as set under 'Which alerts create tickets' on the Settings tab) and closes it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket closed in ConnectWise resolves its alert.">
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable ConnectWise tickets" />
 </FieldWithHelp>
         </div>

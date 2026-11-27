@@ -18,6 +18,7 @@
 @inject IMxHostsLookup MxHostsLookup
 @inject ISnackbar Snackbar
 @inject ILogger<ImportDomains> Logger
+@inject DotMarc.DnsPush.DnsProviderCheckService ProviderChecks
 
 <AppPageTitle>dotMARC - Import domains</AppPageTitle>
 <MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
@@ -26,21 +27,44 @@
     <DocsLink Href="https://dotmarc.app/docs/import-domains" Text="Columns, modes and examples" Class="ml-2" />
 </div>
 
+@if (_plan is null && _result is null)
+{
+    <AddDomainForm GroupId="GroupId" />
+    <MudText Typo="Typo.h6" Class="mb-2">Import multiple domains</MudText>
+    <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">The single-domain group choice above does not apply to imports. Use the groups column to assign imported domains.</MudText>
+}
+
 @if (_result is not null)
 {
     <MudAlert Severity="Severity.Success" Class="mb-3">
         Added @_result.Added, updated @_result.Updated, @_result.Unchanged unchanged, skipped @_result.SkippedExisting already monitored
-        and @_result.Invalid invalid. Health checks run for the new domains within the next polling cycle.
+        and @_result.Invalid invalid. DNS provider detection is attempted immediately; other health checks run within the next polling cycle.
     </MudAlert>
-    <MudTable Items="_result.Rows" Dense="true" Hover="true" RowsPerPage="50">
-        <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>What happened</MudTh></HeaderContent>
+    <MudTable Items="_result.Rows" T="ImportRowOutcome" Dense="true" Hover="true" RowsPerPage="50" Filter="OutcomeMatches">
+        <ToolBarContent>
+            <ListToolbar Label="Import result controls" SearchLabel="Search imported domains" @bind-Search="_resultSearch" @bind-Expanded="_showResultFilters"
+                         FilterCount="@(_outcomeFilter is null ? 0 : 1)" ClearFilters="@(() => _outcomeFilter = null)">
+                <SortContent><ListTableSort TItem="ImportRowOutcome" @ref="_resultSort" /></SortContent>
+                <FiltersContent>
+                    <MudSelect T="string" Label="What happened" @bind-Value="_outcomeFilter" Clearable="true">
+                        @foreach (var outcome in _result.Rows.Select(row => row.Outcome).Distinct().Order()) { <MudSelectItem Value="@outcome">@outcome</MudSelectItem> }
+                    </MudSelect>
+                </FiltersContent>
+            </ListToolbar>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Line" SortBy="new Func<ImportRowOutcome, object>(row => row.LineNumber)">Line</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domain" SortBy="new Func<ImportRowOutcome, object>(row => row.Domain)">Domain</MudTableSortLabel></MudTh>
+            <MudTh>What happened</MudTh>
+        </HeaderContent>
         <RowTemplate><MudTd>@context.LineNumber</MudTd><MudTd>@context.Domain</MudTd><MudTd>@context.Outcome</MudTd></RowTemplate>
         <PagerContent><MudTablePager /></PagerContent>
     </MudTable>
     <div class="d-flex mt-3" style="gap:0.5rem">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/domains">Go to Manage domains</MudButton>
-        <MudButton Variant="Variant.Outlined" OnClick="StartOver">Import more</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/domains">Go to Domains</MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="StartOver" Disabled="_busy">Import more</MudButton>
     </div>
+    @if (_busy) { <MudText role="status">Checking DNS providers for newly imported domains...</MudText> }
 }
 else if (_plan is null)
 {
@@ -109,11 +133,13 @@ else
     {
         <MudPaper Class="pa-4 mb-3" Elevation="1">
             <MudText Typo="Typo.subtitle1" Class="mb-2">Names that don't exist yet</MudText>
+            <ListToolbar Label="Import name controls" SearchLabel="Search unresolved names" @bind-Search="_nameSearch" />
             <MudSimpleTable Dense="true" Elevation="0">
                 <thead><tr><th>Name</th><th>Used on lines</th><th>What to do</th></tr></thead>
                 <tbody>
                     @foreach (var unknown in _plan.UnknownNames)
                     {
+                        if (!string.IsNullOrWhiteSpace(_nameSearch) && !unknown.Name.Contains(_nameSearch, StringComparison.OrdinalIgnoreCase)) { continue; }
                         <tr>
                             <td><MudChip T="string" Size="Size.Small">@KindLabel(unknown.Kind)</MudChip> @unknown.Name</td>
                             <td>@string.Join(", ", unknown.LineNumbers)</td>
@@ -150,8 +176,24 @@ else
         </MudPaper>
     }
 
-    <MudTable Items="_plan.Rows" Dense="true" Hover="true" RowsPerPage="50">
-        <HeaderContent><MudTh>Line</MudTh><MudTh>Domain</MudTh><MudTh>Status</MudTh><MudTh>What will happen</MudTh></HeaderContent>
+    <MudTable Items="_plan.Rows" T="PlannedRow" Dense="true" Hover="true" RowsPerPage="50" Filter="PlannedMatches">
+        <ToolBarContent>
+            <ListToolbar Label="Import preview controls" SearchLabel="Search preview domains" @bind-Search="_previewSearch" @bind-Expanded="_showPreviewFilters"
+                         FilterCount="@(_statusFilter is null ? 0 : 1)" ClearFilters="@(() => _statusFilter = null)">
+                <SortContent><ListTableSort TItem="PlannedRow" @ref="_previewSort" /></SortContent>
+                <FiltersContent>
+                    <MudSelect T="ImportRowStatus?" Label="Status" @bind-Value="_statusFilter" Clearable="true">
+                        @foreach (var status in Enum.GetValues<ImportRowStatus>()) { <MudSelectItem T="ImportRowStatus?" Value="@status">@StatusLabel(status)</MudSelectItem> }
+                    </MudSelect>
+                </FiltersContent>
+            </ListToolbar>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Search and filters only change the preview. Import still applies the complete plan.</MudText>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Line" SortBy="new Func<PlannedRow, object>(row => row.LineNumber)">Line</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domain" SortBy="new Func<PlannedRow, object>(row => row.Domain ?? row.RawDomain)">Domain</MudTableSortLabel></MudTh>
+            <MudTh>Status</MudTh><MudTh>What will happen</MudTh>
+        </HeaderContent>
         <RowTemplate>
             <MudTd>@context.LineNumber</MudTd>
             <MudTd>@(context.Domain ?? context.RawDomain)</MudTd>
@@ -188,6 +230,18 @@ else
 }
 
 @code {
+    private ListTableSort<ImportRowOutcome>? _resultSort;
+    private ListTableSort<PlannedRow>? _previewSort;
+    private Task RefreshSort(SortDirection _) => Task.WhenAll(_resultSort?.RefreshAsync() ?? Task.CompletedTask, _previewSort?.RefreshAsync() ?? Task.CompletedTask);
+    private string? _previewSearch, _resultSearch, _nameSearch, _outcomeFilter;
+    private ImportRowStatus? _statusFilter;
+    private bool _showPreviewFilters, _showResultFilters;
+    private bool PlannedMatches(PlannedRow row) => (string.IsNullOrWhiteSpace(_previewSearch)
+        || (row.Domain ?? row.RawDomain).Contains(_previewSearch, StringComparison.OrdinalIgnoreCase))
+        && (_statusFilter is null || row.Status == _statusFilter);
+    private bool OutcomeMatches(ImportRowOutcome row) => (string.IsNullOrWhiteSpace(_resultSearch)
+        || row.Domain.Contains(_resultSearch, StringComparison.OrdinalIgnoreCase)) && (_outcomeFilter is null || row.Outcome == _outcomeFilter);
+    [SupplyParameterFromQuery(Name = "group")] public int? GroupId { get; set; }
     private static readonly Dictionary<string, object?> DownloadAttribute = new() { ["download"] = "" };
 
     private string _pasteText = "";
@@ -345,10 +399,38 @@ else
         {
             _busy = false;
         }
+        if (_result is { } imported) await CheckImportedProvidersAsync(imported);
+    }
+
+    private async Task CheckImportedProvidersAsync(ImportResult imported)
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var names = imported.Rows.Where(row => row.Outcome == "Added").Select(row => row.Domain).ToArray();
+            var ids = await db.Domains.Where(domain => names.Contains(domain.Name)).Select(domain => domain.Id).ToListAsync();
+            var failures = 0;
+            foreach (var id in ids)
+            {
+                var scope = DotMarc.Portal.PortalData.ScopedGroupIds((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+                if (!(await ProviderChecks.CheckAsync(id, scope)).Succeeded) failures++;
+            }
+            if (failures > 0) Snackbar.Add($"Import saved, but provider detection failed for {failures} domains. Recheck their providers from Domains.", Severity.Warning);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Provider detection after import failed");
+            Snackbar.Add("Import saved, but provider detection did not finish. Recheck providers from Domains.", Severity.Warning);
+        }
+        finally { _busy = false; }
     }
 
     private void StartOver()
     {
+        _previewSearch = _resultSearch = _nameSearch = _outcomeFilter = null;
+        _statusFilter = null;
+        _showPreviewFilters = _showResultFilters = false;
         (_result, _plan, _table, _snapshot, _uploadedRows, _uploadedFileName, _pasteText) = (null, null, null, null, null, null, "");
         _mode = ExistingDomainMode.Skip;
         _resolutions.Clear();

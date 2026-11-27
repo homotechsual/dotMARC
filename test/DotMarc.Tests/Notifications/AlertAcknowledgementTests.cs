@@ -161,7 +161,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
         await using var verify = CreateContext();
         Assert.All(await verify.AlertEvents.ToListAsync(), alert => Assert.True(alert.IsResolved));
         var state = await verify.DomainAlertStates.SingleAsync();
-        Assert.Equal("p=quarantine; sp=quarantine; pct=100", state.Baseline);
+        Assert.Equal("p=quarantine; sp=quarantine; pct=100; t=n", state.Baseline);
         Assert.Null(state.PendingSinceUtc);
         var entry = await verify.AuditEntries.SingleAsync();
         Assert.Equal(AuditActions.AlertAcknowledged, entry.Action);
@@ -251,7 +251,7 @@ public sealed class AlertAcknowledgementTests : IAsyncLifetime
 
         await using var verify = CreateContext();
         Assert.True((await verify.AlertEvents.SingleAsync()).IsResolved);
-        Assert.Equal("p=quarantine; sp=quarantine; pct=100", (await verify.DomainAlertStates.SingleAsync(state => state.Item == DnsHealthItems.DmarcPolicy)).Baseline);
+        Assert.Equal("p=quarantine; sp=quarantine; pct=100; t=n", (await verify.DomainAlertStates.SingleAsync(state => state.Item == DnsHealthItems.DmarcPolicy)).Baseline);
         var entry = await verify.AuditEntries.SingleAsync(candidate => candidate.Action == AuditActions.AlertAcknowledged);
         Assert.Equal(AuditActorKind.System, entry.ActorKind);
     }

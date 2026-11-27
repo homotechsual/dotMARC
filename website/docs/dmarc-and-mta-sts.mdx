@@ -18,6 +18,16 @@ DMARC doesn't do anything on its own - it's a policy layer on top of two older m
 
 A message can fail SPF or DKIM individually and still pass DMARC (it only needs one of the two to align with the visible From: domain) - which is exactly why DMARC aggregate reports are useful: they show you real-world pass/fail combinations you'd otherwise never see.
 
+### Report-observed DKIM selectors
+
+Open a domain's **Overview > DKIM > Configure selectors** to see selectors observed in its retained DMARC report authentication details. Only DKIM signatures whose signing domain exactly matches the monitored domain are included (case and a trailing DNS dot are ignored). A parent, child or third-party signing domain is not counted, even if DMARC relaxed alignment would accept it.
+
+Each suggestion shows the number of messages that used the selector and the latest report period end in UTC, not the time dotMARC received the report. Duplicate signatures using the same selector in one aggregate record count its messages only once. A message signed with different selectors can contribute to each selector's count. Failed signatures are included as evidence of use, not proof that the key is currently valid.
+
+Choose **Add selector** to append it to the editable draft without replacing your existing selectors or stored records. Nothing is saved until **Save**, and **Cancel** discards the additions. Existing selectors are not automatically removed or refreshed from reports; manual configuration stays authoritative. Empty or malformed selectors are not suggested. Old reports without parsed authentication details, or domains without reports, may have no suggestions.
+
+This is not provider-wide key discovery, automatic selector maintenance or a DNS publishing action. Known inbox-provider prefills for an empty selector list remain editable independently of report evidence.
+
 ## The DMARC record
 
 The record that turns monitoring on is a TXT record at `_dmarc.<domain>`:
@@ -30,6 +40,38 @@ v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@example.uk
 * `rua=` is where aggregate reports get sent. For dotMARC to see anything, this has to point at the mailbox address it polls (`Graph__MailboxAddress`).
 
 dotMARC's **DMARC record** check confirms a record exists, starts with `v=DMARC1`, and that its `rua=` matches the configured mailbox - not just that a DMARC record exists at all.
+
+### Record problems
+
+dotMARC judges the record against [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), the current DMARC standard. It replaced RFC 7489 in May 2026. The DMARC record check names each problem it finds, on the domain page under **Record problems**. There are two kinds.
+
+**Breaking problems** are ones where receivers may ignore the record or read it as `p=none`. They set the check to Misconfigured, so the **DMARC record broken** alert covers them (see [DNS health alerts](./alerts.mdx#dns-health-alerts)).
+
+| Problem | What receivers do |
+| --- | --- |
+| `v=DMARC1` missing, not first, or not exactly `DMARC1` | Ignore the whole record. |
+| More than one DMARC record at `_dmarc.<domain>` | Discard all of them. A TXT value at that name is counted as a DMARC record when it starts with `v=DMARC1`. A value that only looks like one, because its `v` value starts with `DMARC` in any case (for example `v=dmarc1`) or it holds a `v=DMARC1` tag that is not first, is read as a DMARC record with a version problem and is not counted beside a proper record. Any other value, such as an SPF record or a verification token, is not DMARC and is ignored. |
+| A tag that appears more than once | RFC 9989 does not say what to do with a repeated tag. dotMARC follows the DKIM tag-list rule that DMARC's syntax inherits (RFC 6376 section 3.2), under which the record is malformed, so receivers may ignore it. |
+| No `p` tag, or a `p` that is not `none`, `quarantine` or `reject` | Treat the record as `p=none` when it has a valid `rua`, otherwise apply no DMARC processing (RFC 9989 section 4.10.1). |
+| An invalid `sp` or `np` | The same: `p=none`, or no DMARC processing without a valid `rua`. |
+
+**Informational problems** mean the record works but is out of date or not enforcing. They do not change the check status or raise an alert. They show on the domain page, and where they affect a [target](./baselines.mdx#meeting-a-target) they appear as the reason the domain is below it.
+
+* `pct`, `rf` or `ri` present. RFC 9989 removed all three. Receivers that follow it ignore them, but older receivers still apply `pct`, so a `pct` below 100 counts against a target.
+* `t=y`, testing mode. RFC 9989 added `t` (`y` or `n`, default `n`) to replace `pct=0`. With `t=y` the domain asks receivers not to apply the policy and to act one level lower, so `p=reject` is treated as `quarantine`. Turn it off once you are confident in the policy.
+
+RFC 9989 also adds `np`, the policy for subdomains that do not exist. When a record has no `np`, those subdomains follow `sp`, and then `p`.
+
+### Suggested record and repair
+
+When a record has a problem, or sits below its target, the domain page shows a **Suggested record** with a Copy button and a line for each change. dotMARC's [DNS push](./dns-provider-push.mdx#repairing-a-dmarc-record) writes this record too, with dotMARC's report address first in `rua`, then the additional `rua` address from the DNS push settings if one is set, then other existing `rua` addresses only while there is room (a record lists at most two) and only when **Keep other rua addresses when pushing** is on. The additional address is one system-wide setting: it applies to every domain and is not affected by groups, baselines or DMARC targets. The repair:
+
+* puts `v=DMARC1` first and writes each tag once, keeping the other tags in their original order;
+* keeps the strictest valid value of a repeated `p`, `sp` or `np`, so nothing a receiver might have applied is weakened, keeps `t=n` when `t` is repeated, joins repeated `rua` and `ruf` tags into one with each address once, and keeps the first value of any other repeated tag;
+* writes a missing or invalid `p` as `p=none`, or as the strictest valid `p` found, and drops an invalid `sp` or `np` so it inherits;
+* combines several DMARC records into one by the same rules, and leaves unrelated TXT values at the name alone;
+* drops `rf` and `ri`, which have no effect on enforcement;
+* keeps `pct` and `t` as they are when there is no target, because removing them would change enforcement without anyone asking. They stay flagged. With a target, `pct` and `t=y` are removed and `p`, `sp` and `np` are raised to it, never lowered.
 
 ### More than one `rua=` address
 
@@ -49,17 +91,17 @@ Every address needs its `mailto:` prefix, because `rua=` is a list of URIs. `rua
 
 **Push via your DNS provider** stays available for the information, too-many and misconfigured statuses. It shows you the change to confirm first, keeps every other tag, and writes `rua=` as dotMARC's mailbox first, then:
 
-1. the **additional rua address**, if an admin has set one,
+1. the effective **secondary DMARC report address**, if one is set in [Domain Baselines](./baselines.mdx#report-destinations),
 2. then any other addresses already in the record, in their original order, adding a missing `mailto:`,
 
-up to the limit of two addresses in total. Two settings in the **DNS records** section of the DNS push settings page control this:
+up to the limit of two addresses in total. These settings control this:
 
-* **Keep other rua addresses when pushing** (on by default). Turn it off and a push writes dotMARC's mailbox, plus the additional address if there is one, and nothing else. Use that when you finish a trial and want the other address gone.
-* **Additional rua address**. A second destination added to every DMARC record dotMARC pushes, for example to keep sending reports to another tool. If its domain differs from the domain being monitored, that domain must publish an authorization record (see below) or receivers won't send reports to it.
+* **Keep other rua addresses when pushing**, under **DNS push settings → DNS records** (on by default). With system-inherited destinations, turn it off to remove old destinations. A group or domain report-address override always replaces unrelated existing addresses, regardless of this setting.
+* **Secondary DMARC report address**, under **Baselines → Domain → Report destinations**. Set a system default, then optional group/domain overrides. An enabled blank override means primary-only delivery; conflicting group overrides require a domain override before DNS setup. If the destination's domain differs from the monitored domain, it must authorize reports (see below) or receivers won't send reports to it. The configured primary ingestion mailbox is shown read-only.
 
 ## The DMARC authorization record
 
-This is the one that doesn't turn up much when you search for it, because it's not really called one thing: RFC 7489 §7.1 calls the mechanism **external destination verification**; other vendors call it a third-party authorization record. dotMARC's health checklist just calls it the "DMARC authorization record" since that's what it does - authorizes a report destination.
+This is the one that doesn't turn up much when you search for it, because it's not really called one thing: RFC 9990 §4 ("Verifying External Destinations", which replaced RFC 7489 §7.1 in May 2026) describes the mechanism, often called **external destination verification**; other vendors call it a third-party authorization record. dotMARC's health checklist just calls it the "DMARC authorization record" since that's what it does - authorizes a report destination. RFC 9990 also lets the receiving domain authorise every domain at once with a wildcard record at `*._report._dmarc.<its domain>` containing `v=DMARC1;`.
 
 <details>
 <summary>Why this record exists, and why it matters for dotMARC</summary>

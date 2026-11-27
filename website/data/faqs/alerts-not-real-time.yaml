@@ -9,7 +9,7 @@ answer: |
   refresh cycle. DMARC aggregate reports are typically daily, so faster polling can't reveal mail
   that receivers haven't reported yet.
 
-  Thresholds, scope and optional cooldown overrides live under **Manage > Alert rules**. Delivery goes
+  Thresholds, scope and optional cooldown overrides live under **Manage > Alerts & PSA > Rules**. Delivery goes
   to the rule's destinations, and quiet hours can hold or mute that notification without hiding the
   alert or preventing an otherwise eligible PSA ticket. Critical alerts bypass quiet hours by default,
   unless you change that on the rule. A delayed notification doesn't necessarily mean detection failed.

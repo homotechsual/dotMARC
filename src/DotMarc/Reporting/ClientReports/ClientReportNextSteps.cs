@@ -87,8 +87,11 @@ public static class ClientReportNextSteps
 
         switch (domain.DkimCheckStatus)
         {
+            case DkimCheckStatus.Missing when domain.SpfCheckStatus == SpfCheckStatus.NullSpf: yield return $"Recheck configured DKIM selectors for {name}; null SPF expects absent or revoked keys, not replacement sending keys."; break;
             case DkimCheckStatus.Missing: yield return $"A DKIM key for {name} is missing from DNS. Publish it again with the service that sends as {name}."; break;
+            case DkimCheckStatus.Misconfigured when domain.SpfCheckStatus == SpfCheckStatus.NullSpf: yield return $"Check the malformed DKIM records for {name}; remove unused keys or revoke them with an empty p= tag."; break;
             case DkimCheckStatus.Misconfigured: yield return $"A DKIM key for {name} is published incorrectly. Check it with the service that sends as {name}."; break;
+            case DkimCheckStatus.UnexpectedSendingKey: yield return $"Remove or revoke unused DKIM keys for {name}, which declares no senders in SPF. Investigate any service still signing as it."; break;
         }
 
         switch (domain.TlsrptCheckStatus)

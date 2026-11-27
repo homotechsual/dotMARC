@@ -55,7 +55,7 @@ public sealed class PsaConnectionAlertTests : IAsyncLifetime
             Assert.Equal((AlertTypes.PsaConnectionLost, "NinjaOne connection", "PSA connection lost", false),
                 (alert.AlertType, alert.DomainName, alert.Title, alert.IsResolved));
             Assert.Contains("invalid_grant", alert.Message);
-            Assert.Contains("Manage > PSA settings > NinjaOne", alert.Message);
+            Assert.Contains("Manage > Alerts & PSA > PSA > NinjaOne", alert.Message);
         }
 
         await alerting.ResolvePsaConnectionLostAsync(PsaKind.NinjaOne);

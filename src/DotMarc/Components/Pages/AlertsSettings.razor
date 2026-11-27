@@ -5,18 +5,18 @@
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject ILogger<AlertsSettings> Logger
 @inject IDialogService DialogService
 
-<AppPageTitle>dotMARC - Alert Settings</AppPageTitle>
-<div class="d-flex align-center mb-4">
-    <MudText Typo="Typo.h4">Alert settings</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/alerts" Text="How alerts work" Class="ml-2" />
-</div>
+<AppPageTitle>dotMARC - Alerts &amp; PSA - Settings</AppPageTitle>
+<TabbedPage Title="Alerts & PSA" Tabs="_tabs">
 
 @if (_settings is null)
 {
@@ -26,10 +26,11 @@ else
 {
     <MudPaper Class="pa-4">
         <MudGrid>
-            <MudItem xs="12">
+            <MudItem xs="12" Class="d-flex align-center">
                 <FieldWithHelp Topic="Enable notifications" Inline="true" Help="Turns alerting on or off. While it's off, dotMARC raises no alerts, so nothing is sent to any channel and no PSA tickets are opened.">
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable notifications" />
 </FieldWithHelp>
+                <DocsLink Href="https://dotmarc.app/docs/alerts" Text="How alerts work" Class="ml-2" />
             </MudItem>
 
             <MudItem xs="12" md="6">
@@ -52,7 +53,7 @@ else
 
             <MudItem xs="12">
                 <MudAlert Severity="Severity.Info" Dense="true">
-                    When each alert is raised, for which domains, and how serious it is now live in <MudLink Href="/alerts/rules">Alert rules</MudLink>.
+                    When each alert is raised, for which domains, and how serious it is now live on the <MudLink Href="/alerts/rules">Rules tab</MudLink>.
                     The thresholds, DNS check modes and sender settings that used to be here are rule settings there.
                 </MudAlert>
             </MudItem>
@@ -65,13 +66,21 @@ else
 <MudPaper Class="pa-4 mt-4">
     <div class="d-flex align-center flex-wrap mb-1" style="gap: 0.5rem;">
         <MudText Typo="Typo.h5">Where alerts go</MudText>
-        <MudSpacer />
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditDestinationAsync(null))">Add a destination</MudButton>
     </div>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         A destination is a Teams channel, a Slack channel or a webhook. Each alert rule sends to all of them, or only to the ones it chooses
-        under <MudLink Href="/alerts/rules">Alert rules</MudLink>. PSA tickets are set up under PSA settings.
+        on the <MudLink Href="/alerts/rules">Rules tab</MudLink>. PSA tickets are set up on the <MudLink Href="/alerts/psa">PSA tab</MudLink>.
     </MudText>
+    <ListToolbar Label="Alert destination controls" SearchLabel="Search destinations" @bind-Search="_destinationSearch" @bind-Expanded="_showDestinationFilters"
+                 FilterCount="@(_destinationEnabledFilter is null ? 0 : 1)" ClearFilters="@(() => _destinationEnabledFilter = null)">
+        <SortContent><ListNameSort @bind-Descending="_destinationDescending" /></SortContent>
+        <FiltersContent>
+            <MudSelect T="bool?" Label="Status" @bind-Value="_destinationEnabledFilter" Clearable="true">
+                <MudSelectItem T="bool?" Value="true">Enabled</MudSelectItem><MudSelectItem T="bool?" Value="false">Disabled</MudSelectItem>
+            </MudSelect>
+        </FiltersContent>
+        <Actions><MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditDestinationAsync(null))">Add a destination</MudButton></Actions>
+    </ListToolbar>
     @if (_destinations is null)
     {
         <MudProgressCircular Indeterminate="true" />
@@ -89,7 +98,9 @@ else
                 <tr><th>Name</th><th>Kind</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
-                @foreach (var destination in _destinations)
+                @foreach (var destination in (_destinationDescending ? _destinations.OrderByDescending(destination => destination.Name) : _destinations.OrderBy(destination => destination.Name))
+                    .Where(destination => (string.IsNullOrWhiteSpace(_destinationSearch) || destination.Name.Contains(_destinationSearch, StringComparison.OrdinalIgnoreCase))
+                        && (_destinationEnabledFilter is null || destination.Enabled == _destinationEnabledFilter)))
                 {
                     <tr @key="destination.Id">
                         <td>@destination.Name</td>
@@ -108,13 +119,13 @@ else
 
 <MudPaper Class="pa-4 mt-4">
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-        PSA connections have moved to <MudLink Href="/psa/settings">PSA settings</MudLink>.
+        PSA connections have moved to the <MudLink Href="/alerts/psa">PSA tab</MudLink>.
     </MudAlert>
     <MudText Typo="Typo.h5" Class="mb-1">Which alerts create tickets</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         These apply to every PSA. Turn off an alert type to stop it opening tickets. The alert is still recorded and any
         notification to its destinations still goes out. A group can override this for its own domains from Manage
-        groups. A domain with its own company set on Manage domains uses these settings.
+        groups. A domain with its own company set in Domains uses these settings.
     </MudText>
     @foreach (var alertType in AlertTypes.All)
     {
@@ -129,8 +140,13 @@ else
         </div>
     }
 </MudPaper>
+</TabbedPage>
 
 @code {
+    private string? _destinationSearch;
+    private bool _showDestinationFilters, _destinationDescending;
+    private bool? _destinationEnabledFilter;
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
     private NotificationSettings? _settings;
     private IReadOnlyList<AlertDestinationSummary>? _destinations;
     private IReadOnlyList<string> _zones = [];
@@ -229,6 +245,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _tabs = await AlertsPsaTabs.ForAsync(user, AuthorizationService);
         await using var db = await DbFactory.CreateDbContextAsync();
         _settings = await NotificationSettingsService.GetAsync(db);
         _globalTicketRules = await AlertTicketRuleService.GetGlobalAsync(db);

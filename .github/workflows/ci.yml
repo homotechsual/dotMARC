@@ -1,9 +1,12 @@
 name: CI
 
 on:
+  # A push to main runs CI, and CI finishing is what builds the :edge image and redeploys the demo, so only what changes the image,
+  # the demo's deployment or these workflows should start it. The website has its own workflows, and the docs, the release scripts
+  # and the other workflows don't change what runs. This filter applies to pushes only: the pull_request trigger below has none,
+  # because main requires the test check on every pull request.
   push:
     branches: [main]
-    # Only image/build/deployment inputs should start the CI -> Publish -> demo chain.
     paths:
       - "src/**"
       - "test/**"
@@ -50,7 +53,7 @@ jobs:
         run: node scripts/ci-scope.mjs
 
       - name: Test the release scripts
-        run: node --test scripts/release-tags.test.mjs
+        run: node --test scripts/release-tags.test.mjs scripts/release-issues.test.mjs
 
       - name: Set up .NET
         if: steps.scope.outputs.needed == 'true'

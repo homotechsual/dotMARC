@@ -40,6 +40,18 @@ public sealed class DmarcCheckCycleTests : IAsyncLifetime
         new(new FakeGraphMailboxClient(), context, NullLogger<PollingService>.Instance);
 
     [Fact]
+    public async Task NullSpfChecksPolicyWithoutRequiringReportingAuthorization()
+    {
+        var domain = new Domain { Name = "parked.example", SpfCheckStatus = SpfCheckStatus.NullSpf };
+        var checker = new FakeDmarcDnsChecker();
+        await PollingService.RunSingleDmarcCheckAsync(domain, checker, "reports@example.com", CancellationToken.None);
+        Assert.False(checker.ExpectsReports);
+        await PollingService.RunSingleDmarcAuthorizationCheckAsync(domain, checker, "reports@example.com", CancellationToken.None);
+        Assert.Empty(checker.AuthorizationCheckedDomains);
+        Assert.Equal(DmarcAuthorizationCheckStatus.NotApplicable, domain.DmarcAuthorizationCheckStatus);
+    }
+
+    [Fact]
     public async Task RunDmarcCheckCycleAsync_ChecksADomainNeverCheckedBefore()
     {
         using var context = CreateContext();
@@ -188,5 +200,40 @@ public sealed class DmarcCheckCycleTests : IAsyncLifetime
         Assert.Null(domain.DmarcPolicy);
         Assert.Null(domain.DmarcSubdomainPolicy);
         Assert.Null(domain.DmarcPercent);
+    }
+
+    [Fact]
+    public async Task RunDmarcCheckCycleAsync_StoresTheAnalysis_AndClearsItWhenTheRecordGoes()
+    {
+        using var context = CreateContext();
+        context.Domains.Add(new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow });
+        await context.SaveChangesAsync();
+        var analysis = DmarcRecordAnalysis.Analyse(["v=DMARC1; p=none; p=reject; sp=quarantine; np=reject; pct=50; t=y", "v=DMARC2; p=none"]);
+        var policy = new DmarcPolicyTags(analysis.Policy!.Value, analysis.EffectiveSubdomainPolicy!.Value, analysis.Percent!.Value);
+        var checker = new FakeDmarcDnsChecker { Result = new(DmarcCheckStatus.Misconfigured, "problem", policy, analysis) };
+        var service = CreateService(context);
+
+        await service.RunDmarcCheckCycleAsync(context, checker, "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        var domain = await CreateContext().Domains.SingleAsync();
+        Assert.Equal((DmarcPolicyLevel.Reject, DmarcPolicyLevel.Quarantine, 50), (domain.DmarcPolicy!.Value, domain.DmarcSubdomainPolicy!.Value, domain.DmarcPercent!.Value));
+        Assert.Equal(DmarcPolicyLevel.Reject, domain.DmarcNonExistentSubdomainPolicy);
+        Assert.True(domain.DmarcTesting);
+        Assert.Equal(["v=DMARC1; p=none; p=reject; sp=quarantine; np=reject; pct=50; t=y", "v=DMARC2; p=none"], domain.DmarcRecords);
+        Assert.Contains("RepeatedTag:p", domain.DmarcProblems);
+        Assert.Contains("ObsoleteTag:pct", domain.DmarcProblems);
+        Assert.Contains("TestingMode", domain.DmarcProblems);
+
+        var tracked = context.Domains.Single();
+        tracked.DmarcCheckedUtc = DateTimeOffset.UtcNow.AddDays(-2);
+        await context.SaveChangesAsync();
+        checker.Result = new(DmarcCheckStatus.MissingOwnRecord, "No TXT record found at _dmarc.contoso.io");
+        await service.RunDmarcCheckCycleAsync(context, checker, "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        var cleared = await CreateContext().Domains.SingleAsync();
+        Assert.Null(cleared.DmarcNonExistentSubdomainPolicy);
+        Assert.False(cleared.DmarcTesting);
+        Assert.Empty(cleared.DmarcRecords);
+        Assert.Empty(cleared.DmarcProblems);
     }
 }

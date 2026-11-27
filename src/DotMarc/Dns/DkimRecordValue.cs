@@ -42,9 +42,26 @@ public static partial class DkimRecordValue
     /// <summary>The p= tag's key with any whitespace removed, or null if there isn't one.</summary>
     public static string? PublicKey(string txt) =>
         txt.Split(';', StringSplitOptions.TrimEntries)
-            .Where(tag => tag.StartsWith("p=", StringComparison.OrdinalIgnoreCase))
-            .Select(tag => Whitespace().Replace(tag[2..], ""))
+            .Where(tag => tag.IndexOf('=') is var separator and > 0 && string.Equals(tag[..separator].Trim(), "p", StringComparison.OrdinalIgnoreCase))
+            .Select(tag => Whitespace().Replace(tag[(tag.IndexOf('=') + 1)..], ""))
             .FirstOrDefault();
+
+    /// <summary>RFC 6376 revocation is an explicitly empty p tag, not an absent or malformed tag.</summary>
+    public static bool IsRevoked(string txt)
+    {
+        var tags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string? firstTag = null;
+        foreach (var part in txt.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = part.IndexOf('=');
+            if (separator <= 0 || !TagName().IsMatch(part[..separator].Trim())
+                || !tags.TryAdd(part[..separator].Trim(), part[(separator + 1)..].Trim()))
+                return false;
+            firstTag ??= part[..separator].Trim();
+        }
+        return tags.TryGetValue("p", out var key) && key.Length == 0
+            && (!tags.TryGetValue("v", out var version) || version == "DKIM1" && string.Equals(firstTag, "v", StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>Fastmail's DKIM records are CNAMEs whose targets follow from the selector and domain.</summary>
     public static string? FastmailTarget(string selector, string domainName) =>
@@ -94,6 +111,9 @@ public static partial class DkimRecordValue
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9_]*$")]
+    private static partial Regex TagName();
 
     [GeneratedRegex(@"\bselector([12])-[a-z0-9-]+\._domainkey\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\.?", RegexOptions.IgnoreCase)]
     private static partial Regex Microsoft365Target();

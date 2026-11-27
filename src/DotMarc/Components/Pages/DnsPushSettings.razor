@@ -97,11 +97,7 @@
         <FieldWithHelp Topic="Keep other rua addresses" Help="When you push a DMARC record, keep the report addresses already in its rua= tag instead of replacing them all with dotMARC's. A record can list two addresses in total, counting dotMARC's, because some receivers ignore the rest. Turn this off to make a push write dotMARC's address only.">
             <MudSwitch T="bool" @bind-Value="_dnsRecordSettings.KeepOtherRuaAddresses" Color="Color.Primary" Label="Keep other rua addresses when pushing" />
         </FieldWithHelp>
-        <div style="max-width:360px" class="mt-2">
-        <FieldWithHelp Topic="Additional rua address" Help="A second report destination added to every DMARC record dotMARC pushes, after dotMARC's own address. Use it to send reports to another tool as well. It takes one of the two places a record can reliably list. Leave blank for none. If its domain differs from the domain being monitored, that domain must publish an authorization record (RFC 7489 section 7.1) or receivers will not send reports to it.">
-        <MudTextField T="string" Label="Additional rua address" @bind-Value="_additionalRuaAddress" Variant="Variant.Outlined" Placeholder="reports@example.com" MaxLength="DnsRecordSettings.MaxAdditionalRuaAddressLength" />
-        </FieldWithHelp>
-        </div>
+        <MudText Typo="Typo.body2" Class="mt-2">Manage primary and secondary report destinations, including group and domain overrides, on <MudLink Href="/baselines/domain">Domain Baselines</MudLink>.</MudText>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveDnsRecordSettingsAsync">Save</MudButton>
     </MudPaper>
 }
@@ -114,7 +110,6 @@
     private AzureDnsSettings? _azureDnsSettings;
     private GoogleCloudDnsSettings? _googleCloudDnsSettings;
     private DnsRecordSettings? _dnsRecordSettings;
-    private string? _additionalRuaAddress;
     private string? _newCloudflareClientSecret;
     private string? _newAzureDnsClientSecret;
     private string? _newGoogleCloudDnsClientSecret;
@@ -126,14 +121,14 @@
         _azureDnsSettings = await AzureDnsSettingsService.GetAsync(db);
         _googleCloudDnsSettings = await GoogleCloudDnsSettingsService.GetAsync(db);
         _dnsRecordSettings = await DnsRecordSettingsService.GetAsync(db);
-        _additionalRuaAddress = _dnsRecordSettings.AdditionalRuaAddress;
     }
 
     private async Task SaveDnsRecordSettingsAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        var current = await DnsRecordSettingsService.GetAsync(db);
         var saved = await DnsRecordSettingsService.SaveAsync(db, await AuditActorAccessor.GetAsync(), _dnsRecordSettings!.SpfAllQualifier,
-            _dnsRecordSettings.KeepOtherRuaAddresses, _additionalRuaAddress);
+            _dnsRecordSettings.KeepOtherRuaAddresses, current.AdditionalRuaAddress);
         if (!saved)
         {
             Snackbar.Add("The additional rua address must be a single email address, with no spaces, commas or mailto: prefix.", Severity.Error);

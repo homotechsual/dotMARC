@@ -20,6 +20,7 @@ public static class AlertTypes
     public const string DkimRecordBroken = "DkimRecordBroken";
     public const string MtaStsFailing = "MtaStsFailing";
     public const string DmarcPolicyWeakened = "DmarcPolicyWeakened";
+    public const string DmarcPolicyBelowTarget = "DmarcPolicyBelowTarget";
     public const string NameserversChanged = "NameserversChanged";
     public const string ApiKeyExpiring = "ApiKeyExpiring";
     public const string ClientReportFailed = "ClientReportFailed";
@@ -44,6 +45,7 @@ public static class AlertTypes
         new(DkimRecordBroken, "DKIM broken", "A DKIM selector set for the domain is missing or broken."),
         new(MtaStsFailing, "MTA-STS failing", "dotMARC stopped being able to serve the domain's MTA-STS policy."),
         new(DmarcPolicyWeakened, "DMARC policy weakened", "The domain's DMARC policy, subdomain policy or percentage went down."),
+        new(DmarcPolicyBelowTarget, "DMARC policy below target", "The domain's DMARC policy is weaker than the target set for it.", CreatesTicketByDefault: false),
         new(NameserversChanged, "Nameservers changed", "The domain's nameservers changed, often the start of a DNS migration.", CreatesTicketByDefault: false),
         new(ApiKeyExpiring, "API key expiring", "An API key expires within 14 days. Make a replacement before whatever uses it stops working.", CreatesTicketByDefault: false),
         new(ClientReportFailed, "Client report failed", "A scheduled client report couldn't be sent for 24 hours.", CreatesTicketByDefault: false),
@@ -60,7 +62,7 @@ public static class AlertTypes
     public static IReadOnlyList<string> DnsHealth { get; } =
     [
         DmarcRecordBroken, DmarcAuthorizationBroken, TlsrptRecordBroken, SpfRecordBroken, MxRecordBroken, DkimRecordBroken,
-        MtaStsFailing, DmarcPolicyWeakened, NameserversChanged
+        MtaStsFailing, DmarcPolicyWeakened, DmarcPolicyBelowTarget, NameserversChanged
     ];
 
     public static AlertTypeInfo? Find(string key) => All.FirstOrDefault(alertType => alertType.Key == key);

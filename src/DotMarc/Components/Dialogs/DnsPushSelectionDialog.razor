@@ -1,0 +1,121 @@
+@using DotMarc.Audit
+@using DotMarc.Data
+@using DotMarc.DnsPush
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject AuditActorAccessor Actor
+@inject IEnumerable<IDnsPushProvider> Providers
+@inject DnsPushBatchService Batches
+@inject NavigationManager Navigation
+@inject ILogger<DnsPushSelectionDialog> Logger
+
+<MudDialog>
+    <TitleContent>Review selected domains for DNS push</TitleContent>
+    <DialogContent>
+        <MudText Class="mb-3">Choose a record target, then a DNS provider. Each provider has its own review and sign-in. No DNS changes are made while preparing a review.</MudText>
+        @if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+        <MudSelect T="string" Label="DNS record target" @bind-Value="_target" Disabled="_busy" Variant="Variant.Outlined" Class="mb-3">
+            @if (_canEdit)
+            {
+                <MudSelectItem Value="@("dmarc")">DMARC</MudSelectItem>
+                <MudSelectItem Value="@("tlsrpt")">TLS reporting</MudSelectItem>
+            }
+            @if (_canMta) { <MudSelectItem Value="@("mta-sts")">MTA-STS hosting</MudSelectItem> }
+        </MudSelect>
+        @if (_selection is not null)
+        {
+            @foreach (var provider in _selection.Providers)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mb-3">
+                    <MudText Typo="Typo.subtitle1">@provider.Provider · @provider.Domains.Count domains</MudText>
+                    <MudText Typo="Typo.body2">@string.Join(", ", provider.Domains.Select(domain => domain.Name))</MudText>
+                    @if (provider.OverLimit)
+                    {
+                        <MudAlert Severity="Severity.Warning">Select at most @DnsPushBatchLimits.MaxDomains domains per provider.</MudAlert>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" Disabled="@(_busy || provider.OverLimit || string.IsNullOrEmpty(_target))"
+                               OnClick="@(() => ReviewAsync(provider))">Review @provider.Provider</MudButton>
+                </MudPaper>
+            }
+            @if (_selection.Manual.Count > 0)
+            {
+                <MudAlert Severity="Severity.Info">Set up manually: these domains have no detected provider or no configured push option. Open their Overview DNS controls for manual records; they are not included in a batch.</MudAlert>
+                @foreach (var domain in _selection.Manual)
+                {
+                    <MudText Typo="Typo.body2" Class="my-1"><MudLink Href="@($"/domains/{Uri.EscapeDataString(domain.Name)}")">@domain.Name</MudLink> · @domain.Provider</MudText>
+                }
+            }
+        }
+        else if (_error is null) { <MudProgressCircular Indeterminate="true" /> }
+    </DialogContent>
+    <DialogActions><MudButton OnClick="@(() => Dialog.Cancel())" Disabled="_busy">Cancel</MudButton></DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public IReadOnlyList<int> DomainIds { get; set; } = [];
+    private DnsPushSelection? _selection;
+    private bool _canEdit, _canMta, _busy;
+    private string _target = "";
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = (await Authentication.GetAuthenticationStateAsync()).User;
+            _canEdit = (await Authorization.AuthorizeAsync(user, "DomainsEdit")).Succeeded;
+            _canMta = (await Authorization.AuthorizeAsync(user, "MtaStsManage")).Succeeded;
+            _target = _canEdit ? "dmarc" : _canMta ? "mta-sts" : "";
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (_target.Length == 0 || !await DnsPushBatchAccess.InScopeAsync(db, user, DomainIds))
+                throw new DnsPushBatchException("You no longer have permission for this selection. Close the review and refresh Domains.");
+            var configured = new List<string>();
+            foreach (var provider in Providers)
+                if (await provider.IsConfiguredAsync()) configured.Add(provider.ProviderKey);
+            var domains = await db.Domains.Where(domain => DomainIds.Contains(domain.Id))
+                .Select(domain => new SelectedDnsDomain(domain.Id, domain.Name, domain.DnsProvider)).ToListAsync();
+            if (domains.Count != DomainIds.Distinct().Count())
+                throw new DnsPushBatchException("Some selected domains no longer exist. Close the review and refresh Domains.");
+            _selection = DnsPushSelection.Group(domains, configured);
+        }
+        catch (DnsPushBatchException exception) { _error = exception.Message; }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Loading DNS push selection failed");
+            _error = "Could not load the selection. Close this dialog and refresh Domains.";
+        }
+    }
+
+    private async Task ReviewAsync(DnsPushProviderGroup provider)
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var user = (await Authentication.GetAuthenticationStateAsync()).User;
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var ids = provider.Domains.Select(domain => domain.Id).ToArray();
+            if (!(await Authorization.AuthorizeAsync(user, _target == "mta-sts" ? "MtaStsManage" : "DomainsEdit")).Succeeded
+                || !await DnsPushBatchAccess.InScopeAsync(db, user, ids))
+                throw new DnsPushBatchException("You no longer have permission to review these domains.");
+            if (await Providers.FindConfiguredAsync(provider.Provider) is null)
+                throw new DnsPushBatchException("This DNS provider is no longer configured. Close the dialog and refresh Domains.");
+            var batch = await Batches.CreateAsync(db, await Actor.GetAsync(), provider.Provider, _target, ids);
+            Dialog.Close();
+            Navigation.NavigateTo($"/dns-push/batches/{batch.Id}");
+        }
+        catch (DnsPushBatchException exception) { _error = exception.Message; }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException or HttpRequestException)
+        {
+            Logger.LogWarning(exception, "Preparing DNS push batch failed");
+            _error = "Could not prepare this DNS review. No DNS was changed. Try again.";
+        }
+        finally { _busy = false; }
+    }
+}

@@ -14,6 +14,79 @@ public sealed class DkimDnsCheckerTests
         return (new DkimDnsChecker(http), handler);
     }
 
+    [Theory]
+    [InlineData("""{"Status":0}""")]
+    [InlineData("""{"Status":3}""")]
+    [InlineData("""{"Status":0,"Answer":[{"type":16,"data":"\"v=DKIM1; p=\""}]}""")]
+    [InlineData("""{"Status":0,"Answer":[{"type":5,"data":"old.example."},{"type":16,"data":"\"v=DKIM1; p=\""}]}""")]
+    [InlineData("""{"Status":0,"Answer":[{"type":5,"data":"old.example."}]}""")]
+    public async Task NullSpf_AllowsAbsentOrRevokedKnownKeys_RegardlessOfStoredSendingRecord(string response)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = response;
+        var result = await checker.CheckAsync("parked.example", ["selector1"], CancellationToken.None, [ExpectedCname], expectsNoSenders: true);
+        Assert.Equal(DkimCheckStatus.NoSendingKeys, result.Status);
+        Assert.Contains("Other selectors have not been enumerated", result.Detail);
+    }
+
+    [Theory]
+    [InlineData("""{"Status":0,"Answer":[{"type":16,"data":"\"v=DKIM1; p=ABC\""}]}""")]
+    [InlineData("""{"Status":0,"Answer":[{"type":5,"data":"provider.example."},{"type":16,"data":"\"v=DKIM1; p=ABC\""}]}""")]
+    [InlineData("""{"Status":0,"Answer":[{"type":16,"data":"\"v=DKIM1; p=\""},{"type":16,"data":"\"v=DKIM1; p=ABC\""}]}""")]
+    public async Task NullSpf_PublishedKeysStayVisibleEvenWithoutAMatchingStoredRecord(string response)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = response;
+        var result = await checker.CheckAsync("parked.example", ["selector1"], CancellationToken.None, [ExpectedCname], expectsNoSenders: true);
+        Assert.Equal(DkimCheckStatus.UnexpectedSendingKey, result.Status);
+        Assert.Contains("selector1", result.Detail);
+    }
+
+    [Theory]
+    [InlineData("v=DKIM1")]
+    [InlineData("v=DKIM1; p=; p=")]
+    [InlineData("v=DKIM2; p=")]
+    [InlineData("not a key")]
+    public async Task NullSpf_MalformedRecordsAreNotProofOfRevocation(string value)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((16, $"\"{value}\""));
+        Assert.Equal(DkimCheckStatus.Misconfigured, (await checker.CheckAsync("parked.example", ["s"], CancellationToken.None, expectsNoSenders: true)).Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EmptySelectorsDoNotClaimHealthyAbsence(bool noSenders)
+    {
+        var (checker, handler) = CreateChecker();
+        Assert.Equal(DkimCheckStatus.NotConfigured, (await checker.CheckAsync("parked.example", [], CancellationToken.None, expectsNoSenders: noSenders)).Status);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("""{"Status":2}""")]
+    [InlineData("""{"Status":5}""")]
+    [InlineData("""{}""")]
+    [InlineData("""null""")]
+    [InlineData("""{"Status":0,"TC":true}""")]
+    [InlineData("""{"Status":3,"Answer":[{"type":16,"data":"\"v=DKIM1; p=\""}]}""")]
+    public async Task IncompleteOrFailedDnsNeverProvesAbsence(string response)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = response;
+        await Assert.ThrowsAsync<HttpRequestException>(() => checker.CheckAsync("parked.example", ["s"], CancellationToken.None, expectsNoSenders: true));
+        await Assert.ThrowsAsync<HttpRequestException>(() => checker.LookupSelectorAsync("parked.example", "s", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RevokedKeyIsNotUsableOnASendingDomain()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = Answers((16, "\"v=DKIM1; p=\""));
+        Assert.Equal(DkimCheckStatus.Misconfigured, (await checker.CheckAsync("active.example", ["s"], CancellationToken.None)).Status);
+    }
+
     [Fact]
     public async Task CheckAsync_ReturnsMissing_WhenTheSelectorHasNoTxtRecord()
     {

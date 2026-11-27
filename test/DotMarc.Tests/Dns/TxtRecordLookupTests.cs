@@ -12,6 +12,19 @@ public sealed class TxtRecordLookupTests
         return (new TxtRecordLookup(new HttpClient(handler) { BaseAddress = new Uri("https://cloudflare-dns.com/") }), handler);
     }
 
+    [Theory]
+    [InlineData("""{}""")]
+    [InlineData("""{"Status":0,"TC":true}""")]
+    [InlineData("""{"Status":0,"Answer":[{"type":16}]}""")]
+    [InlineData("""{"Status":3,"Answer":[{"type":16,"data":"\"p=\""}]}""")]
+    public async Task IncompleteResponsesAreErrorsNotHealthyAbsence(string response)
+    {
+        var (lookup, handler) = Create();
+        handler.ResponseBody = response;
+        await Assert.ThrowsAsync<HttpRequestException>(() => lookup.GetTxtValuesAsync("parked.example", CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() => lookup.LookupWithCnameAsync("parked.example", CancellationToken.None));
+    }
+
     [Fact]
     public async Task GetTxtValues_ReturnsEveryTxtValue_WithChunksJoined()
     {

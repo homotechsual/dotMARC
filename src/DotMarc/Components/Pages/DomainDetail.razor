@@ -1,6 +1,7 @@
 @page "/domains/{DomainName}"
 @page "/domains/{DomainName}/{Tab}"
 @attribute [Authorize(Policy = "DomainsView")]
+@using DotMarc.Baselines
 @using DotMarc.Data
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
@@ -15,6 +16,7 @@
 @using DotMarc.Components.Dialogs
 @using DotMarc.Components.Shared
 @using DotMarc.Notifications
+@using DotMarc.Portal
 @inject AuditActorAccessor AuditActorAccessor
 @inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
@@ -39,7 +41,7 @@
 @implements IDisposable
 
 <AppPageTitle>dotMARC - @DomainName</AppPageTitle>
-<MudButton Href="/dashboard" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
+<MudButton OnClick="BackToListAsync" Disabled="@(!RendererInfo.IsInteractive)" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
 @if (_domain is not null && _domain.DnsProvider.ToProviderKey() is not null)
 {
@@ -54,6 +56,21 @@
 }
 else
 {
+    @if (Setup)
+    {
+        <MudPaper Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6">Next: set up DNS</MudText>
+            <MudText Typo="Typo.body2">The domain is saved. Review DMARC and TLS reporting records together, plus MTA-STS hosting records if enabled. Nothing is published until you review the plan and authorize your DNS provider.</MudText>
+            <MudText Typo="Typo.caption" Class="d-block mb-2">SPF and DKIM keys need your mail platform's details and are configured separately. External report destinations may need authorization in their own DNS zones.</MudText>
+            <AuthorizeView Policy="DomainDnsSetup">
+                <Authorized>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SetupDnsAsync" Disabled="@(_settingUpDns || !RendererInfo.IsInteractive)">Review DNS setup</MudButton>
+                </Authorized>
+                <NotAuthorized><MudText Typo="Typo.body2">Combined setup requires DomainsEdit and MtaStsManage. Use the individual DNS controls below where your permissions allow.</MudText></NotAuthorized>
+            </AuthorizeView>
+            <MudButton OnClick="@(() => Setup = false)">Later</MudButton>
+        </MudPaper>
+    }
     <MudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync">
         <MudTabPanel Text="Overview">
             <MudGrid Class="my-2">
@@ -63,11 +80,27 @@ else
             </MudGrid>
             @if (UnreviewedSenderCount is > 0 and var unreviewedSenders)
             {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="my-2">
-                    @unreviewedSenders @(unreviewedSenders == 1 ? "sender needs" : "senders need") a decision.
-                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => NavigateToTabAsync("sources"))">Review</MudButton>
-                </MudAlert>
+                <MudPaper Outlined="true" Class="pa-3 my-2 domain-sender-review">
+                    <div class="d-flex align-center" style="gap:12px; flex-wrap:wrap;">
+                        <MudIcon Icon="@Icons.Material.Filled.RateReview" Color="Color.Info" />
+                        <div style="flex:1; min-width:180px;">
+                            <MudText Typo="Typo.subtitle2">@unreviewedSenders @(unreviewedSenders == 1 ? "sender needs" : "senders need") a decision</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@(_canReviewSenders ? "Inspect service and source-IP evidence before deciding." : "You can view the evidence; a sender reviewer must record decisions.")</MudText>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RateReview"
+                                   Href="@($"/domains/{DomainName}/sources")" aria-label="@(_canReviewSenders ? $"Review sender decisions for {DomainName}" : $"View sender evidence for {DomainName}")">@(_canReviewSenders ? "Review" : "View evidence")</MudButton>
+                    </div>
+                </MudPaper>
             }
+            <MudPaper Outlined="true" Class="pa-3 my-3 domain-groups">
+                <MudText Typo="Typo.subtitle1">Groups</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@(_visibleGroupNames.Count == 0 ? "No groups assigned in your scope." : string.Join(", ", _visibleGroupNames))</MudText>
+                @if (_canEditGroups)
+                {
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Workspaces"
+                               Disabled="@(!RendererInfo.IsInteractive || _savingGroups)" OnClick="ChangeGroupsAsync">Change groups</MudButton>
+                }
+            </MudPaper>
             @if (_hasTrend)
             {
                 <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_xAxisLabels" Width="100%" Height="250px" />
@@ -76,7 +109,7 @@ else
             {
                 <MudAlert Severity="Severity.Info" Dense="true" Class="my-4">
                     No DMARC reports received for this domain in the last 30 days. If they should be arriving, check mailbox
-                    access on the <MudLink Href="/dashboard">dashboard</MudLink>.
+                    access in <MudLink Href="/domains">Domains</MudLink>.
                 </MudAlert>
             }
             @if (_reasonBreakdown is { Total: > 0 } breakdown)
@@ -93,6 +126,38 @@ else
                     </MudGrid>
                 </MudPaper>
             }
+            <MudPaper Class="pa-4 mt-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">DMARC target</MudText>
+                @if (_effectiveTarget is { } effectiveTarget)
+                {
+                    <MudText Typo="Typo.body1">DMARC target: @DmarcTargetText.Policy(effectiveTarget), @DmarcTargetText.Source(effectiveTarget)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@TargetOutcomeLabel</MudText>
+                    @if (_targetOutcome == DmarcTargetOutcome.Below && _targetReasons.Count > 0)
+                    {
+                        <ul class="mt-1 mb-0" style="padding-left:20px;">
+                            @foreach (var reason in _targetReasons)
+                            {
+                                <li><MudText Typo="Typo.body2">@reason</MudText></li>
+                            }
+                        </ul>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1">No DMARC target applies.</MudText>
+                }
+                @if (_canChangeTarget)
+                {
+                    <details class="mt-3"><summary>Report destinations</summary><DmarcReportAddresses DomainId="_domain.Id" /></details>
+                    <div class="mt-2 d-flex" style="gap:8px;">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChangeTargetAsync">@(_domain.DmarcTarget is null ? "Set target" : "Change target")</MudButton>
+                        @if (_domain.DmarcTarget is not null)
+                        {
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearTargetAsync">Clear target</MudButton>
+                        }
+                    </div>
+                }
+            </MudPaper>
             <MudPaper Class="pa-4 mt-4" Elevation="1">
                 <div class="d-flex align-center mb-2">
                     <MudText Typo="Typo.subtitle1">Domain health</MudText>
@@ -130,7 +195,8 @@ else
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDmarcAsync" title="Recheck now" />
                                 }
                                 @if (_domain.DmarcCheckStatus is DmarcCheckStatus.MissingOwnRecord or DmarcCheckStatus.Misconfigured
-                                    or DmarcCheckStatus.OtherReportAddresses or DmarcCheckStatus.TooManyReportAddresses)
+                                    or DmarcCheckStatus.OtherReportAddresses or DmarcCheckStatus.TooManyReportAddresses
+                                    || _targetOutcome == DmarcTargetOutcome.Below)
                                 {
                                     @if (_isPushingDmarcRecord)
                                     {
@@ -146,6 +212,36 @@ else
                         </AuthorizeView>
                     </ActionContent>
                 </DomainHealthCheckRow>
+
+                @if (_recordProblems.Count > 0 || _suggestedRecord is not null)
+                {
+                    <div class="py-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                        @if (_recordProblems.Count > 0)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Record problems</MudText>
+                            @foreach (var problem in _recordProblems)
+                            {
+                                <MudAlert Severity="@(problem.Kind.IsBreaking() ? Severity.Error : Severity.Info)" Dense="true" Class="mb-1">@problem.Description</MudAlert>
+                            }
+                        }
+                        @if (_suggestedRecord is { } suggestedRecord)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Suggested record</MudText>
+                            <div class="d-flex align-center" style="gap:8px;">
+                                <code style="word-break:break-all;">@suggestedRecord.Record</code>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy"
+                                           OnClick="CopySuggestedRecordAsync">Copy</MudButton>
+                            </div>
+                            <ul class="mt-1 mb-0" style="padding-left:20px;">
+                                @foreach (var change in suggestedRecord.Changes)
+                                {
+                                    <li><MudText Typo="Typo.body2">@change</MudText></li>
+                                }
+                            </ul>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">DNS setup uses the configured primary mailbox first, then the secondary destination inherited from Domain Baselines or overridden for this domain. With a group or domain override, unrelated existing rua addresses are removed; otherwise Keep other rua addresses applies, up to two destinations in total.</MudText>
+                        }
+                    </div>
+                }
 
                 <DomainHealthCheckRow Title="DMARC authorization record"
                                       StatusColor="@DmarcAuthorizationStatusPresentation.GetColor(_domain.DmarcAuthorizationCheckStatus)"
@@ -278,9 +374,13 @@ else
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RecheckDkimAsync" title="Recheck now" />
                                 }
-                                @if (_domain.DkimRecords.Count > 0 && _domain.DkimCheckStatus is DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured)
+                                @if (_domain.SpfCheckStatus != SpfCheckStatus.NullSpf && _domain.DkimRecords.Count > 0 && _domain.DkimCheckStatus is DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured)
                                 {
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudSync" OnClick="PushDkimRecordsAsync">Push DKIM records</MudButton>
+                                }
+                                @if (_domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
+                                {
+                                    <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">Null SPF: check known selectors for absent or revoked keys. No selectors configured does not prove all keys are absent.</MudText>
                                 }
                                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenDkimSelectorsDialogAsync">Configure selectors</MudButton>
                             </Authorized>
@@ -336,35 +436,28 @@ else
             {
                 <MudTable Items="_tlsrptReports" Hover="true" T="TlsrptReport" CustomHeader="true" Filter="TlsrptReportMatchesFilters">
                     <ToolBarContent>
-                        <MudSpacer />
-                        <MudButton Variant="@(_showTlsrptFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                                   OnClick="@(() => _showTlsrptFilters = !_showTlsrptFilters)">@(_showTlsrptFilters ? "Hide filters" : "Filters")</MudButton>
+                        <ListToolbar Label="TLS report controls" SearchLabel="Search TLS report senders" @bind-Search="_tlsrptFromFilter" @bind-Expanded="_showTlsrptFilters"
+                                     FilterCount="@TlsFilterCount" ClearFilters="ClearTlsFilters">
+                            <SortContent><ListTableSort TItem="TlsrptReport" @ref="_tlsSort" /></SortContent>
+                            <FiltersContent>
+                                <MudTextField Label="Date range contains" @bind-Value="_tlsrptDateRangeFilter" Immediate="true" />
+                                <MudTextField Label="Policy contains" @bind-Value="_tlsrptPolicyFilter" Immediate="true" />
+                                <MudSelect T="bool?" Label="Failed sessions" @bind-Value="_tlsrptHasFailuresFilter" Clearable="true">
+                                    <MudSelectItem T="bool?" Value="true">Some failed</MudSelectItem><MudSelectItem T="bool?" Value="false">None failed</MudSelectItem>
+                                </MudSelect>
+                                <MudTextField Label="Failure details contain" @bind-Value="_tlsrptFailureDetailFilter" Immediate="true" />
+                            </FiltersContent>
+                        </ListToolbar>
                     </ToolBarContent>
                     <HeaderContent>
                         <tr>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="From" SortBy="new Func<TlsrptReport, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Date range" SortBy="new Func<TlsrptReport, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
                             <MudTh>Policy</MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.SuccessfulSessionCount))">Successful sessions</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.FailedSessionCount))">Failed sessions</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Successful sessions" SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.SuccessfulSessionCount))">Successful sessions</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Failed sessions" SortBy="new Func<TlsrptReport, object>(r => r.Policies.Sum(policy => policy.FailedSessionCount))">Failed sessions</MudTableSortLabel></MudTh>
                             <MudTh>Failure details</MudTh>
                         </tr>
-                        @if (_showTlsrptFilters)
-                        {
-                        <tr>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptFromFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptDateRangeFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptPolicyFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                            <MudTh></MudTh>
-                            <MudTh>
-                                <MudSelect T="bool?" Value="_tlsrptHasFailuresFilter" ValueChanged="@(v => _tlsrptHasFailuresFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                    <MudSelectItem T="bool?" Value="true">Some failed</MudSelectItem>
-                                    <MudSelectItem T="bool?" Value="false">None failed</MudSelectItem>
-                                </MudSelect>
-                            </MudTh>
-                            <MudTh><MudTextField T="string" @bind-Value="_tlsrptFailureDetailFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                        </tr>
-                        }
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.ReportingOrg</MudTd>
@@ -381,71 +474,48 @@ else
         <MudTabPanel Text="Sources">
             <SenderServicesTable Result="_senderResult" DecisionFor="DecisionFor" IpDecisionFor="IpDecisionFor" Policy="@(_domain?.DmarcPolicy ?? DmarcPolicyLevel.None)"
                                  GroupNames="_groupNames" CanReview="_canReviewSenders" OnDecide="DecideAsync" />
+            <MudText Typo="Typo.subtitle1">Source IP evidence</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">Per-IP decisions are available by expanding a service's Source IPs above.</MudText>
             <MudTable Items="_sources" Hover="true" T="SourceRow" CustomHeader="true" Filter="SourceMatchesFilters">
                 <ToolBarContent>
-                    <MudSpacer />
-                    <MudButton Variant="@(_showSourceFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                               OnClick="@(() => _showSourceFilters = !_showSourceFilters)">@(_showSourceFilters ? "Hide filters" : "Filters")</MudButton>
+                    <ListToolbar Label="Source IP controls" SearchLabel="Search source IPs" @bind-Search="_sourceIpFilter" @bind-Expanded="_showSourceFilters"
+                                 FilterCount="@SourceFilterCount" ClearFilters="ClearSourceFilters">
+                        <SortContent><ListTableSort TItem="SourceRow" @ref="_sourceSort" /></SortContent>
+                        <FiltersContent>
+                            <MudNumericField T="int?" Label="Minimum volume" @bind-Value="_sourceMinVolumeFilter" Min="0" />
+                            <MudSelect T="bool?" Label="First seen" @bind-Value="_sourceIsNewFilter" Clearable="true">
+                                <MudSelectItem T="bool?" Value="true">New</MudSelectItem><MudSelectItem T="bool?" Value="false">Seen before</MudSelectItem>
+                            </MudSelect>
+                            <MudSelect T="string" Label="SPF" @bind-Value="_sourceSpfFilter" Clearable="true">
+                                @foreach (var result in _sources.Select(s => s.SpfResult).Distinct().Order()) { <MudSelectItem Value="result">@result</MudSelectItem> }
+                            </MudSelect>
+                            <MudSelect T="string" Label="DKIM" @bind-Value="_sourceDkimFilter" Clearable="true">
+                                @foreach (var result in _sources.Select(s => s.DkimResult).Distinct().Order()) { <MudSelectItem Value="result">@result</MudSelectItem> }
+                            </MudSelect>
+                            <MudSelect T="string" Label="Disposition" @bind-Value="_sourceDispositionFilter" Clearable="true">
+                                @foreach (var disposition in _sources.Select(s => s.Disposition).Distinct().Order()) { <MudSelectItem Value="disposition">@disposition</MudSelectItem> }
+                            </MudSelect>
+                            <MudTextField Label="Reason contains" @bind-Value="_sourceReasonFilter" Immediate="true" />
+                            <MudTextField Label="Owner contains" @bind-Value="_sourceOwnerFilter" Immediate="true" />
+                            <SearchableSelect TValue="string" Label="Country" Options="@(_sources.Where(s => s.Country is not null).Select(s => s.Country!).Distinct().Order().Select(country => new SelectOption<string>(country, country)).ToList())"
+                                              Value="_sourceCountryFilter" ValueChanged="@(v => _sourceCountryFilter = v)" Clearable="true" />
+                        </FiltersContent>
+                    </ListToolbar>
                 </ToolBarContent>
                 <HeaderContent>
                     <tr>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.SourceIp)">Source IP</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => ServiceFor(s.SourceIp))">Service</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Volume)">Volume</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Source IP" SortBy="new Func<SourceRow, object>(s => s.SourceIp)">Source IP</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Service" SortBy="new Func<SourceRow, object>(s => ServiceFor(s.SourceIp))">Service</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Volume" SortBy="new Func<SourceRow, object>(s => s.Volume)">Volume</MudTableSortLabel></MudTh>
                         <MudTh>7d trend</MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.FirstSeenUtc ?? DateTimeOffset.MinValue)">First seen</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.SpfResult)">SPF</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.DkimResult)">DKIM</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Disposition)">Disposition</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.ReasonSummary)">Reason</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Organization ?? string.Empty)">Owner</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<SourceRow, object>(s => s.Country ?? string.Empty)">Country</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="First seen" SortBy="new Func<SourceRow, object>(s => s.FirstSeenUtc ?? DateTimeOffset.MinValue)">First seen</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="SPF" SortBy="new Func<SourceRow, object>(s => s.SpfResult)">SPF</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="DKIM" SortBy="new Func<SourceRow, object>(s => s.DkimResult)">DKIM</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Disposition" SortBy="new Func<SourceRow, object>(s => s.Disposition)">Disposition</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Reason" SortBy="new Func<SourceRow, object>(s => s.ReasonSummary)">Reason</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Owner" SortBy="new Func<SourceRow, object>(s => s.Organization ?? string.Empty)">Owner</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Country" SortBy="new Func<SourceRow, object>(s => s.Country ?? string.Empty)">Country</MudTableSortLabel></MudTh>
                     </tr>
-                    @if (_showSourceFilters)
-                    {
-                    <tr>
-                        <MudTh><MudTextField T="string" @bind-Value="_sourceIpFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                        <MudTh></MudTh>
-                        <MudTh><MudNumericField T="int?" @bind-Value="_sourceMinVolumeFilter" Placeholder="Min" Margin="Margin.Dense" Min="0" /></MudTh>
-                        <MudTh></MudTh>
-                        <MudTh>
-                            <MudSelect T="bool?" Value="_sourceIsNewFilter" ValueChanged="@(v => _sourceIsNewFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                <MudSelectItem T="bool?" Value="true">New</MudSelectItem>
-                                <MudSelectItem T="bool?" Value="false">Seen before</MudSelectItem>
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh>
-                            <MudSelect T="string" Value="_sourceSpfFilter" ValueChanged="@(v => _sourceSpfFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var result in _sources.Select(s => s.SpfResult).Distinct().OrderBy(r => r))
-                                {
-                                    <MudSelectItem T="string" Value="result">@result</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh>
-                            <MudSelect T="string" Value="_sourceDkimFilter" ValueChanged="@(v => _sourceDkimFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var result in _sources.Select(s => s.DkimResult).Distinct().OrderBy(r => r))
-                                {
-                                    <MudSelectItem T="string" Value="result">@result</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh>
-                            <MudSelect T="string" Value="_sourceDispositionFilter" ValueChanged="@(v => _sourceDispositionFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense">
-                                @foreach (var disposition in _sources.Select(s => s.Disposition).Distinct().OrderBy(d => d))
-                                {
-                                    <MudSelectItem T="string" Value="disposition">@disposition</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTh>
-                        <MudTh><MudTextField T="string" @bind-Value="_sourceReasonFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                        <MudTh><MudTextField T="string" @bind-Value="_sourceOwnerFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                        <MudTh>
-                            <SearchableSelect TValue="string" Options="@(_sources.Where(s => s.Country is not null).Select(s => s.Country!).Distinct().OrderBy(c => c).Select(country => new SelectOption<string>(country, country)).ToList())"
-                                              Value="_sourceCountryFilter" ValueChanged="@(v => _sourceCountryFilter = v)" Clearable="true" Placeholder="Any" Margin="Margin.Dense" />
-                        </MudTh>
-                    </tr>
-                    }
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.SourceIp</MudTd>
@@ -507,22 +577,17 @@ else
         <MudTabPanel Text="Raw reports">
             <MudTable Items="_reports" Hover="true" T="Report" CustomHeader="true" Filter="ReportMatchesFilters">
                 <ToolBarContent>
-                    <MudSpacer />
-                    <MudButton Variant="@(_showReportFilters ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterList"
-                               OnClick="@(() => _showReportFilters = !_showReportFilters)">@(_showReportFilters ? "Hide filters" : "Filters")</MudButton>
+                    <ListToolbar Label="Raw report controls" SearchLabel="Search report senders" @bind-Search="_reportFromFilter" @bind-Expanded="_showReportFilters"
+                                 FilterCount="@(string.IsNullOrWhiteSpace(_reportDateRangeFilter) ? 0 : 1)" ClearFilters="@(() => _reportDateRangeFilter = null)">
+                        <SortContent><ListTableSort TItem="Report" @ref="_reportSort" /></SortContent>
+                        <FiltersContent><MudTextField Label="Date range contains" @bind-Value="_reportDateRangeFilter" Immediate="true" /></FiltersContent>
+                    </ListToolbar>
                 </ToolBarContent>
                 <HeaderContent>
                     <tr>
-                        <MudTh><MudTableSortLabel SortBy="new Func<Report, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<Report, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="From" SortBy="new Func<Report, object>(r => r.ReportingOrg)">From</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Date range" SortBy="new Func<Report, object>(r => r.DateRangeBeginUtc)">Date range</MudTableSortLabel></MudTh>
                     </tr>
-                    @if (_showReportFilters)
-                    {
-                    <tr>
-                        <MudTh><MudTextField T="string" @bind-Value="_reportFromFilter" Placeholder="Search" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense" /></MudTh>
-                        <MudTh><MudTextField T="string" @bind-Value="_reportDateRangeFilter" Placeholder="Search" Immediate="true" Margin="Margin.Dense" /></MudTh>
-                    </tr>
-                    }
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.ReportingOrg</MudTd>
@@ -534,6 +599,72 @@ else
 }
 
 @code {
+    private ListTableSort<TlsrptReport>? _tlsSort;
+    private ListTableSort<SourceRow>? _sourceSort;
+    private ListTableSort<Report>? _reportSort;
+    private Task RefreshSort(SortDirection _) => Task.WhenAll(_tlsSort?.RefreshAsync() ?? Task.CompletedTask,
+        _sourceSort?.RefreshAsync() ?? Task.CompletedTask, _reportSort?.RefreshAsync() ?? Task.CompletedTask);
+    private int TlsFilterCount => new[] { _tlsrptDateRangeFilter, _tlsrptPolicyFilter, _tlsrptFailureDetailFilter }.Count(value => !string.IsNullOrWhiteSpace(value))
+        + (_tlsrptHasFailuresFilter is null ? 0 : 1);
+    private void ClearTlsFilters() { _tlsrptDateRangeFilter = _tlsrptPolicyFilter = _tlsrptFailureDetailFilter = null; _tlsrptHasFailuresFilter = null; }
+    private int SourceFilterCount => new[] { _sourceSpfFilter, _sourceDkimFilter, _sourceDispositionFilter, _sourceReasonFilter, _sourceOwnerFilter, _sourceCountryFilter }.Count(value => !string.IsNullOrWhiteSpace(value))
+        + (_sourceMinVolumeFilter is null ? 0 : 1) + (_sourceIsNewFilter is null ? 0 : 1);
+    private void ClearSourceFilters()
+    {
+        _sourceSpfFilter = _sourceDkimFilter = _sourceDispositionFilter = _sourceReasonFilter = _sourceOwnerFilter = _sourceCountryFilter = null;
+        _sourceMinVolumeFilter = null; _sourceIsNewFilter = null;
+    }
+    [SupplyParameterFromQuery(Name = "setup")] public bool Setup { get; set; }
+    private bool _settingUpDns;
+
+    private async Task SetupDnsAsync()
+    {
+        if (_settingUpDns || _domain is null) return;
+        _settingUpDns = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            if (!(await AuthorizationService.AuthorizeAsync(user, "DomainDnsSetup")).Succeeded)
+            {
+                Snackbar.Add("You no longer have permission for combined DNS setup.", Severity.Warning);
+                return;
+            }
+            var detection = await DnsProviderDetector.DetectAsync(DomainName, CancellationToken.None);
+            _domain.DnsProvider = detection.Provider;
+            _domain.DnsZone = detection.ZoneName;
+            var provider = await DnsPushProviders.FindConfiguredAsync(detection.Provider.ToProviderKey());
+            if (provider is null)
+            {
+                await ShowManualRecordsAsync("domain-setup", null, NoPushOptionReason, "Could not build DNS setup. Check DNS and enabled MTA-STS hosting configuration.");
+                return;
+            }
+            var plan = await BuildPlanAsync("domain-setup", provider.ProviderKey, "Could not build DNS setup. Check DNS and enabled MTA-STS hosting configuration.");
+            if (plan is not null && await DialogService.ConfirmDnsPushAsync(plan))
+                await OpenDnsPushPopupAsync(provider.ProviderKey, _domain.Id, "domain-setup", DnsPlanFingerprint.Of(plan.Changes));
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Preparing DNS setup for {DomainName} failed", DomainName);
+            Snackbar.Add("Could not prepare DNS setup. Check the domain's DNS and try again.", Severity.Error);
+        }
+        finally { _settingUpDns = false; }
+    }
+    private async Task BackToListAsync()
+    {
+        try
+        {
+            await using var module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./listPosition.js");
+            await module.InvokeVoidAsync("back");
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "Returning to the domain list failed");
+            Snackbar.Add("The previous list position is unavailable.", Severity.Warning);
+            Navigation.NavigateTo("/domains");
+        }
+    }
     private static readonly SemaphoreSlim EnrichmentThrottle = new(4);
     private static readonly string[] TabSlugs = ["overview", "mta-sts", "tls-reports", "sources", "raw-reports"];
 
@@ -547,12 +678,188 @@ else
     private List<SenderDecision> _decisions = [];
     private Dictionary<int, string> _groupNames = [];
     private bool _canReviewSenders;
+    private bool _canEditGroups;
+    private bool _savingGroups;
+    private List<string> _visibleGroupNames = [];
+    private EffectiveDmarcTarget? _effectiveTarget;
+    private DmarcTargetOutcome _targetOutcome;
+    private bool _canChangeTarget;
 
     /// <summary>Senders with no decision at any level. Read each render, so it follows a saved decision and finished lookups.</summary>
     private int? UnreviewedSenderCount => _senderResult is { } result && _domain is not null
         ? SenderDecisionSummaries.CountUnreviewed(result, (service, ip) =>
             SenderDecisionResolver.Resolve(_decisions, _domain.Id, _groupNames.Keys.ToList(), service, ip, _groupNames))
         : null;
+
+    private string TargetOutcomeLabel => _targetOutcome switch
+    {
+        DmarcTargetOutcome.Meets => "Meets target",
+        DmarcTargetOutcome.Below => "Below target",
+        DmarcTargetOutcome.NeedsChecking => "Needs checking",
+        _ => "No target"
+    };
+
+    private IReadOnlyList<string> _targetReasons = [];
+    private List<DmarcRecordProblem> _recordProblems = [];
+    private DmarcRecordRepairResult? _suggestedRecord;
+
+    private async Task ChangeGroupsAsync()
+    {
+        if (_domain is null || _savingGroups) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
+        var scope = PortalData.ScopedGroupIds((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        var groups = await db.Groups.AsNoTracking().Where(group => scope.Count == 0 || scope.Contains(group.Id)).OrderBy(group => group.Name).ToListAsync();
+        var current = await db.Domains.Where(domain => domain.Id == _domain.Id).SelectMany(domain => domain.Groups.Select(group => group.Id)).ToListAsync();
+        var dialog = await DialogService.ShowAsync<DomainGroupsDialog>($"Groups for {DomainName}", new DialogParameters<DomainGroupsDialog>
+        {
+            { choice => choice.DomainName, DomainName },
+            { choice => choice.Options, groups.Select(group => new SelectOption<int>(group.Id, group.Name)).ToList() },
+            { choice => choice.Selected, current.Where(id => scope.Count == 0 || scope.Contains(id)).ToArray() },
+            { choice => choice.IsScoped, scope.Count > 0 }
+        }, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (await dialog.Result is not { Canceled: false, Data: int[] selected }) return;
+        _savingGroups = true;
+        try
+        {
+            await using var save = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(save, Permission.DomainsEdit)) return;
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var result = await GroupManagementService.SetScopedDomainGroupsAsync(save, await AuditActorAccessor.GetAsync(), _domain.Id, PortalData.ScopedGroupIds(user), selected);
+            if (result != GroupManagementService.SetScopedDomainGroupsResult.Updated)
+            {
+                Snackbar.Add(result == GroupManagementService.SetScopedDomainGroupsResult.LastAccessibleGroup
+                    ? "Keep at least one of your groups."
+                    : "The domain or selected groups are no longer available to you. Reopen Change groups and try again.", Severity.Warning);
+                return;
+            }
+            _domain.Groups = await save.Domains.AsNoTracking().Where(domain => domain.Id == _domain.Id).SelectMany(domain => domain.Groups).ToListAsync();
+            _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
+            var newScope = PortalData.ScopedGroupIds(user);
+            _visibleGroupNames = _domain.Groups.Where(group => newScope.Count == 0 || newScope.Contains(group.Id)).OrderBy(group => group.Name).Select(group => group.Name).ToList();
+            _decisions = await SenderDecisionService.LoadForDomainAsync(save, _domain.Id);
+            _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(user, AuthorizationService, _groupNames.Keys.ToList());
+            await ResolveTargetAsync(save);
+            Snackbar.Add("Domain groups saved.", Severity.Success);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Saving groups for {DomainName} failed.", DomainName);
+            Snackbar.Add("Could not save domain groups. Reload and try again.", Severity.Error);
+        }
+        finally { _savingGroups = false; }
+    }
+
+    private async Task<bool> MayChangeDomainAsync(DotMarcDbContext db, Permission permission)
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var scope = PortalData.ScopedGroupIds(user);
+        var allowed = !ClientPortalGate.IsPortalUser(user)
+            && (await AuthorizationService.AuthorizeAsync(user, permission.ToString())).Succeeded
+            && await db.Domains.AnyAsync(domain => domain.Id == _domain!.Id && (scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id))));
+        if (!allowed) Snackbar.Add("You no longer have permission to change this domain.", Severity.Warning);
+        return allowed;
+    }
+
+    private async Task CopySuggestedRecordAsync()
+    {
+        if (_suggestedRecord is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _suggestedRecord.Record);
+        }
+        catch (JSException)
+        {
+            // The clipboard API needs a secure context (HTTPS or localhost) and can be refused by the browser.
+            Snackbar.Add("Couldn't copy automatically. Select the text and copy it manually.", Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add("Record copied.", Severity.Success);
+    }
+
+    private async Task ResolveTargetAsync(DotMarcDbContext db)
+    {
+        var settings = await DnsRecordSettingsService.GetAsync(db);
+        _effectiveTarget = DmarcTargetResolver.Resolve(_domain!, settings);
+        _targetOutcome = DmarcTargetCheck.Outcome(_domain!, _effectiveTarget);
+        _targetReasons = DmarcTargetCheck.Reasons(_domain!, _effectiveTarget);
+        _recordProblems = _domain!.DmarcProblems.Select(DmarcRecordProblem.Parse).OfType<DmarcRecordProblem>().ToList();
+        _suggestedRecord = DmarcRecordRepair.Build(DmarcRecordAnalysis.Analyse(_domain.DmarcRecords), _effectiveTarget);
+    }
+
+    private async Task ChangeTargetAsync()
+    {
+        if (_domain is null || !_canChangeTarget)
+        {
+            return;
+        }
+
+        var heading = $"DMARC target for {_domain.Name}";
+        var parameters = new DialogParameters<DmarcTargetDialog>
+        {
+            { x => x.Heading, heading },
+            { x => x.Current, _domain.DmarcTarget },
+        };
+        var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        if (result is null || result.Canceled)
+        {
+            return;
+        }
+
+        await SaveTargetAsync(((DmarcTargetDialog.DmarcTargetDialogResult)result.Data!).Target);
+    }
+
+    /// <summary>Reads the person's access afresh, since the page was opened with a copy that a change of permissions or groups since would make wrong.
+    /// Says so when access was lost, rather than doing nothing.</summary>
+    private async Task<bool> StillMayChangeTargetAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var currentGroupIds = await db.Domains.AsNoTracking().Where(domain => domain.Id == _domain!.Id).SelectMany(domain => domain.Groups.Select(group => group.Id)).ToListAsync();
+        _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(user, AuthorizationService, currentGroupIds);
+        if (!_canChangeTarget)
+        {
+            Snackbar.Add("You no longer have access to change this domain's DMARC target.", Severity.Warning);
+        }
+
+        return _canChangeTarget;
+    }
+
+    private async Task ClearTargetAsync() => await SaveTargetAsync(null);
+
+    private async Task SaveTargetAsync(DmarcTarget? target)
+    {
+        if (_domain is null || !await StillMayChangeTargetAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await DmarcTargetService.SetDomainAsync(db, await AuditActorAccessor.GetAsync(), _domain.Id, target))
+            {
+                Snackbar.Add("This domain no longer exists.", Severity.Error);
+                return;
+            }
+
+            _domain.TargetDmarcPolicy = target?.Policy;
+            _domain.TargetDmarcSubdomainPolicy = target is null || target.SubdomainPolicy == target.Policy ? null : target.SubdomainPolicy;
+            await ResolveTargetAsync(db);
+            Snackbar.Add(target is null ? "Cleared the DMARC target" : "Saved the DMARC target", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+        {
+            Logger.LogWarning(ex, "Saving the DMARC target for {DomainName} failed.", DomainName);
+            Snackbar.Add("Could not save the DMARC target. Try again.", Severity.Error);
+        }
+    }
 
     private ResolvedSenderDecision DecisionFor(SenderServiceRow row) =>
         SenderDecisionResolver.Resolve(_decisions, _domain!.Id, _groupNames.Keys.ToList(), row.IsUnrecognised ? null : row.Name, string.Empty, _groupNames);
@@ -595,6 +902,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(db, Permission.SenderReview)) return;
             var actor = await AuditActorAccessor.GetAsync();
             if (choice.Reset)
             {
@@ -755,7 +1063,7 @@ else
     {
         _activeTabIndex = index;
         var slug = TabSlugs[index >= 0 && index < TabSlugs.Length ? index : 0];
-        Navigation.NavigateTo($"/domains/{DomainName}/{slug}", replace: true);
+        Navigation.NavigateTo($"/domains/{DomainName}/{slug}", new NavigationOptions { ReplaceHistoryEntry = true, HistoryEntryState = Navigation.HistoryEntryState });
         return Task.CompletedTask;
     }
 
@@ -810,9 +1118,14 @@ else
             }
         }
 
-        _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, "SenderReview")).Succeeded;
+        _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.SenderReview))).Succeeded;
+        _canEditGroups = !ClientPortalGate.IsPortalUser(authState.User) && (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.DomainsEdit))).Succeeded;
         _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
+        var visibleScope = PortalData.ScopedGroupIds(authState.User);
+        _visibleGroupNames = _domain.Groups.Where(group => visibleScope.Count == 0 || visibleScope.Contains(group.Id)).OrderBy(group => group.Name).Select(group => group.Name).ToList();
         _decisions = await SenderDecisionService.LoadForDomainAsync(db, _domain.Id);
+        _canChangeTarget = await BaselineAccess.MayChangeDomainAsync(authState.User, AuthorizationService, _groupNames.Keys.ToList());
+        await ResolveTargetAsync(db);
 
         _reports = _domain.Reports.OrderByDescending(r => r.ReceivedUtc).ToList();
         _tlsrptReports = _domain.TlsrptReports.OrderByDescending(report => report.ReceivedUtc).ToList();
@@ -1007,7 +1320,7 @@ else
         }
     }
 
-    /// <summary>Pushes the RFC 7489 §7.1 authorization record proving the mailbox's own domain
+    /// <summary>Pushes the RFC 9990 §4 authorization record proving the mailbox's own domain
     /// accepts DMARC reports for this monitored domain. Unlike PushDmarcRecordAsync/
     /// PushTlsrptRecordAsync, the record being pushed doesn't live in THIS domain's zone - it
     /// lives in the mailbox's domain's zone (typically the MSP's own domain), so provider
@@ -1110,6 +1423,7 @@ else
             Snackbar.Add(plan.Refusal switch
             {
                 "unmergeable" => "Couldn't safely compute a fix for this record - it needs a manual look.",
+                "report-address-conflict" => "Groups specify conflicting secondary report addresses. Set a domain report-destination override before reviewing DMARC DNS.",
                 "nothing-to-push" => "DNS already matches what dotMARC would write, so there's nothing to push.",
                 "zone-not-found" => "That DNS provider doesn't host this zone, so dotMARC can't push the record there.",
                 _ => lookupFailedMessage,
@@ -1148,6 +1462,14 @@ else
             _domain!.DmarcCheckStatus = domain.DmarcCheckStatus;
             _domain.DmarcCheckedUtc = domain.DmarcCheckedUtc;
             _domain.DmarcCheckDetail = domain.DmarcCheckDetail;
+            _domain.DmarcPolicy = domain.DmarcPolicy;
+            _domain.DmarcSubdomainPolicy = domain.DmarcSubdomainPolicy;
+            _domain.DmarcPercent = domain.DmarcPercent;
+            _domain.DmarcNonExistentSubdomainPolicy = domain.DmarcNonExistentSubdomainPolicy;
+            _domain.DmarcTesting = domain.DmarcTesting;
+            _domain.DmarcRecords = domain.DmarcRecords;
+            _domain.DmarcProblems = domain.DmarcProblems;
+            await ResolveTargetAsync(db);
         }
         finally
         {
@@ -1242,6 +1564,9 @@ else
             _domain!.SpfCheckStatus = domain.SpfCheckStatus;
             _domain.SpfCheckedUtc = domain.SpfCheckedUtc;
             _domain.SpfCheckDetail = domain.SpfCheckDetail;
+            _domain.DkimCheckedUtc = domain.DkimCheckedUtc;
+            _domain.DmarcCheckedUtc = domain.DmarcCheckedUtc;
+            _domain.DmarcAuthorizationCheckedUtc = domain.DmarcAuthorizationCheckedUtc;
         }
         finally
         {
@@ -1314,6 +1639,7 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
             var domain = await db.Domains.SingleAsync(d => d.Id == _domain!.Id);
             try
             {
@@ -1339,11 +1665,28 @@ else
 
     private async Task OpenDkimSelectorsDialogAsync()
     {
+        IReadOnlyList<DkimObservedSelector> observed = [];
+        string? suggestionsError = null;
+        await using (var suggestionsDb = await DbFactory.CreateDbContextAsync())
+        {
+            if (!await MayChangeDomainAsync(suggestionsDb, Permission.DomainsEdit)) return;
+            try
+            {
+                observed = await DkimObservedSelectors.GetAsync(suggestionsDb, _domain!.Id);
+            }
+            catch (Exception exception) when (exception is Npgsql.NpgsqlException or InvalidOperationException)
+            {
+                Logger.LogWarning(exception, "Loading observed DKIM selectors for domain {DomainId} failed", _domain!.Id);
+                suggestionsError = "Could not load report-observed suggestions. Manual selector editing is still available.";
+            }
+        }
         var parameters = new DialogParameters<ConfigureDkimSelectorsDialog>
         {
             { x => x.DomainName, DomainName },
             { x => x.CurrentSelectors, _domain!.DkimSelectors },
             { x => x.CurrentRecords, _domain!.DkimRecords },
+            { x => x.ObservedSelectors, observed },
+            { x => x.SuggestionsError, suggestionsError },
             { x => x.DetectedInboxProvider, _detectedMailServices.FirstOrDefault(s => s.Kind == DetectedMailServiceKind.Inbox)?.ProviderName }
         };
         var dialogRef = await DialogService.ShowAsync<ConfigureDkimSelectorsDialog>("Configure DKIM selectors", parameters);
@@ -1355,6 +1698,7 @@ else
 
         var dialogResult = (ConfigureDkimSelectorsDialog.DkimSelectorsDialogResult)result.Data!;
         await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await MayChangeDomainAsync(db, Permission.DomainsEdit)) return;
         var actor = await AuditActorAccessor.GetAsync();
         await DomainManagementService.SetDkimSelectorsAsync(db, actor, _domain!.Id, dialogResult.Selectors, CancellationToken.None);
         try
@@ -1467,6 +1811,13 @@ else
             case "pushed":
                 Snackbar.Add("DNS record pushed. It can take a few minutes to propagate.", Severity.Success);
                 break;
+            case "setup-changed":
+                Snackbar.Add("DNS or setup settings changed after review. Review DNS setup again before publishing.", Severity.Warning);
+                break;
+            case "setup-failed":
+                Snackbar.Add("DNS setup did not complete. Some changes may already be published, and a failed replacement can leave records missing or duplicated. Check every reviewed record in your DNS provider before retrying.",
+                    Severity.Error, config => config.RequireInteraction = true);
+                break;
             case "cancelled":
                 break; // user backed out of the provider's consent screen - no need to say anything
             case "zone-not-found":
@@ -1474,6 +1825,9 @@ else
                 break;
             case "unmergeable":
                 Snackbar.Add("Couldn't safely compute a fix for that record - it needs a manual look.", Severity.Warning);
+                break;
+            case "report-address-conflict":
+                Snackbar.Add("Groups specify conflicting report addresses. Set a domain report-destination override before retrying.", Severity.Warning);
                 break;
             case "replace-failed":
                 // Distinct from the generic "error" case on purpose: this specific outcome means
@@ -1486,7 +1840,7 @@ else
                     Severity.Error, config => config.RequireInteraction = true);
                 break;
             case "error":
-                Snackbar.Add("The DNS push failed. Try again, or add the record manually.", Severity.Error);
+                Snackbar.Add("The DNS push failed. Some records may already have changed; check current DNS before retrying or making manual changes.", Severity.Error);
                 break;
             case "spf-changed":
                 Snackbar.Add("SPF changed since you opened the editor. Reopen it to start from the current record.", Severity.Warning);
@@ -1497,6 +1851,11 @@ else
             case "spf-duplicate":
                 Snackbar.Add(
                     "The new SPF record was added, but the old one couldn't be removed, so the domain now has two SPF records and receivers will treat it as having none. Remove the old one in your DNS provider.",
+                    Severity.Error, config => config.RequireInteraction = true);
+                break;
+            case "dmarc-duplicate":
+                Snackbar.Add(
+                    "The new DMARC record was added, but the old one could not be removed, so the name now has two DMARC records. Receivers ignore DMARC when there are two. Delete the old record at your DNS provider.",
                     Severity.Error, config => config.RequireInteraction = true);
                 break;
             case "nothing-to-push":

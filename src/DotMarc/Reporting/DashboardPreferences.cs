@@ -22,6 +22,29 @@ public static class DashboardPreferencesStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    public static async Task<DomainListDefaults> GetListsAsync(DotMarcDbContext db, string userKey)
+    {
+        var json = await db.UserDashboardPreferences.AsNoTracking().Where(row => row.UserKey == userKey)
+            .Select(row => row.SettingsJson).SingleOrDefaultAsync().ConfigureAwait(false);
+        return json is null ? new() : DomainListDefaults.Parse(json);
+    }
+
+    public static async Task SaveListAsync(DotMarcDbContext db, string userKey, bool inventory, DomainListState? state)
+    {
+        state?.Validate();
+        var defaults = await GetListsAsync(db, userKey).ConfigureAwait(false);
+        defaults = inventory ? defaults with { Inventory = state?.AsDefault() } : defaults with { Dashboard = state?.AsDefault() };
+        var existing = await db.UserDashboardPreferences.SingleOrDefaultAsync(row => row.UserKey == userKey).ConfigureAwait(false);
+        if (existing is null)
+        {
+            existing = new UserDashboardPreference { UserKey = userKey, SettingsJson = "" };
+            db.UserDashboardPreferences.Add(existing);
+        }
+        existing.SettingsJson = JsonSerializer.Serialize(defaults, DomainListDefaults.JsonOptions);
+        existing.UpdatedUtc = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync().ConfigureAwait(false);
+    }
+
     /// <summary>The saved preferences, or null when this person has none (or what is saved can't be read, in which case
     /// they simply start from the defaults).</summary>
     public static async Task<DashboardPreferences?> GetAsync(DotMarcDbContext db, string userKey, CancellationToken cancellationToken = default)

@@ -1,22 +1,24 @@
-@page "/psa/settings"
+@page "/alerts/psa"
 @attribute [Authorize(Policy = "AlertsManage")]
 @using DotMarc.Components.Psa
 @using DotMarc.Components.Shared
 @using DotMarc.Psa
+@using DotMarc.Notifications
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 
-<AppPageTitle>dotMARC - PSA Settings</AppPageTitle>
-<div class="d-flex align-center mb-1">
-    <MudText Typo="Typo.h4">PSA settings</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" Class="ml-2" />
-</div>
+<AppPageTitle>dotMARC - Alerts &amp; PSA - PSA</AppPageTitle>
+<TabbedPage Title="Alerts & PSA" Tabs="_tabs">
 <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
     Turn on any PSA dotMARC should raise tickets in. You can use more than one: each Group or Domain links to a company in
     each, and an alert raises a ticket in every PSA its domain is linked in. Which alert types raise tickets is set under
-    <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+    the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
+    <DocsLink Href="https://dotmarc.app/docs/psa-integration" Text="Sync alerts to PSA tickets" Class="ml-2" />
 </MudText>
 
-<MudTabs @bind-ActivePanelIndex="_activeTab">
+<MudTabs @bind-ActivePanelIndex="_activeTab" Class="psa-vendor-tabs" Elevation="0" Rounded="false" SliderColor="Color.Transparent" TabPanelsClass="mt-3">
     <MudTabPanel Text="HaloPSA" Icon="@TabIcon(_haloEnabled)">
         <div class="pt-4"><HaloPsaSettingsTab EnabledChanged="@(enabled => _haloEnabled = enabled)" /></div>
     </MudTabPanel>
@@ -33,8 +35,11 @@
         <div class="pt-4"><SuperOpsSettingsTab EnabledChanged="@(enabled => _superOpsEnabled = enabled)" /></div>
     </MudTabPanel>
 </MudTabs>
+</TabbedPage>
 
 @code {
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
+
     /// <summary>Which PSA's tab to open, such as "ninjaone" after its sign-in.</summary>
     [SupplyParameterFromQuery(Name = "psa")] public string? Psa { get; set; }
 
@@ -47,8 +52,11 @@
     private bool _autotaskEnabled;
     private bool _superOpsEnabled;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _tabs = await AlertsPsaTabs.ForAsync(user, AuthorizationService);
+
         // The tabs are in PsaKind order.
         if (Enum.GetValues<PsaKind>().ToList().FindIndex(psa => string.Equals(psa.ToString(), Psa, StringComparison.OrdinalIgnoreCase)) is var index and >= 0)
         {

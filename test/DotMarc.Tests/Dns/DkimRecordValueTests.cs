@@ -7,6 +7,23 @@ namespace DotMarc.Tests.Dns;
 public sealed class DkimRecordValueTests
 {
     [Theory]
+    [InlineData("v=DKIM1; p=", true)]
+    [InlineData("p= ;", true)]
+    [InlineData("v=DKIM1; k=rsa; p= ;", true)]
+    [InlineData(" v = DKIM1 ; p = ;", true)]
+    [InlineData("v=DKIM1; p=ABC", false)]
+    [InlineData("v=DKIM1", false)]
+    [InlineData("v=DKIM2; p=", false)]
+    [InlineData("v=DKIM1; p=; p=", false)]
+    [InlineData("p=; v=DKIM1", false)]
+    [InlineData("v=DKIM1; malformed; p=", false)]
+    [InlineData("v=DKIM1; invalid name=x; p=", false)]
+    public void RevocationNeedsAnExplicitUnambiguousEmptyKey(string value, bool expected)
+    {
+        Assert.Equal(expected, DkimRecordValue.IsRevoked(value));
+    }
+
+    [Theory]
     [InlineData("\"v=DKIM1; k=rsa; \" \"p=MIIBIjAN\"", "v=DKIM1; k=rsa; p=MIIBIjAN")]
     [InlineData("v=DKIM1;  k=rsa;\r\n p=MIIB\nIjAN", "v=DKIM1; k=rsa; p=MIIBIjAN")]
     [InlineData("  v=DKIM1; p=ABC  ", "v=DKIM1; p=ABC")]

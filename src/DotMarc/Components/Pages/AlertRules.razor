@@ -17,16 +17,14 @@
 @inject ILogger<AlertRules> Logger
 @inject NavigationManager Navigation
 
-<AppPageTitle>dotMARC - Alert rules</AppPageTitle>
+<AppPageTitle>dotMARC - Alerts &amp; PSA - Rules</AppPageTitle>
 
-<div class="d-flex align-center mb-1">
-    <MudText Typo="Typo.h4">Alert rules</MudText>
-    <DocsLink Href="https://dotmarc.app/docs/alerts#alert-rules" Text="How alert rules work" Class="ml-2" />
-</div>
+<TabbedPage Title="Alerts & PSA" Tabs="_tabs">
 <MudText Typo="Typo.body1" Class="mb-4">
     Each rule decides when one kind of alert is raised, for which domains, how serious it is, where it is sent and whether it opens a ticket. For a domain,
     rules of a kind run in the order shown, top to bottom, and stop at the first one that stops processing. The destinations themselves and the global
-    cooldown are on <MudLink Href="/alerts/settings">Alert settings</MudLink>.
+    cooldown are on the <MudLink Href="/alerts/settings">Settings tab</MudLink>.
+    <DocsLink Href="https://dotmarc.app/docs/alert-rules" Text="How alert rules work" Class="ml-2" />
 </MudText>
 
 @if (!_loaded)
@@ -35,6 +33,19 @@
 }
 else
 {
+    <ListToolbar Label="Alert rule controls" SearchLabel="Search alert rules" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@((_kindFilter is null ? 0 : 1) + (_enabledFilter is null ? 0 : 1))"
+                 ClearFilters="@(() => { _kindFilter = null; _enabledFilter = null; })">
+        <FiltersContent>
+            <MudSelect T="string" Label="Alert kind" @bind-Value="_kindFilter" Clearable="true">
+                @foreach (var kind in _kinds) { <MudSelectItem Value="@kind.Key">@kind.DisplayName</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="bool?" Label="Status" @bind-Value="_enabledFilter" Clearable="true">
+                <MudSelectItem T="bool?" Value="true">On</MudSelectItem><MudSelectItem T="bool?" Value="false">Off</MudSelectItem>
+            </MudSelect>
+        </FiltersContent>
+    </ListToolbar>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">Filtering only changes what is shown. Rule order, reach and processing are unchanged.</MudText>
     @if (_canManage && _deadCount > 0)
     {
         <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
@@ -47,6 +58,7 @@ else
 
     @foreach (var kind in _kinds)
     {
+        if (_kindFilter is not null && _kindFilter != kind.Key) { continue; }
         var rules = RulesOf(kind);
         var reach = kind.HasDomainScope ? AlertRulePresentation.Reach(rules, _domainFacts).ToDictionary(entry => entry.RuleId) : [];
         var description = AlertTypes.Find(kind.Key)?.Description;
@@ -82,6 +94,7 @@ else
                 <tbody>
                     @foreach (var rule in rules)
                     {
+                        if (!Matches(rule)) { continue; }
                         var ruleReach = reach.GetValueOrDefault(rule.Id);
                         <tr @key="rule.Id">
                             @if (_canManage)
@@ -155,8 +168,15 @@ else
         </MudPaper>
     }
 }
+</TabbedPage>
 
 @code {
+    private string? _search, _kindFilter;
+    private bool _showFilters;
+    private bool? _enabledFilter;
+    private bool Matches(AlertRule rule) => (string.IsNullOrWhiteSpace(_search) || rule.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        && (_enabledFilter is null || rule.Enabled == _enabledFilter);
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
     private bool _loaded;
     private bool _canManage;
     private List<AlertRuleKind> _kinds = [];
@@ -180,6 +200,8 @@ else
             Navigation.NavigateTo("/AccessDenied");
             return;
         }
+
+        _tabs = await AlertsPsaTabs.ForAsync(user, AuthorizationService);
 
         await ReloadAsync();
     }

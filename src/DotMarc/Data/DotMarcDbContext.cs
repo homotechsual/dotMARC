@@ -43,6 +43,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AlertRuleEscalationDestination> AlertRuleEscalationDestinations => Set<AlertRuleEscalationDestination>();
     public DbSet<DotMarc.Psa.PsaCompanyLink> PsaCompanyLinks => Set<DotMarc.Psa.PsaCompanyLink>();
     public DbSet<DotMarc.Psa.AlertTicket> AlertTickets => Set<DotMarc.Psa.AlertTicket>();
+    public DbSet<DotMarc.DnsPush.DnsPushBatch> DnsPushBatches => Set<DotMarc.DnsPush.DnsPushBatch>();
+    public DbSet<DotMarc.DnsPush.DnsPushBatchDomain> DnsPushBatchDomains => Set<DotMarc.DnsPush.DnsPushBatchDomain>();
     public DbSet<DomainAlertState> DomainAlertStates => Set<DomainAlertState>();
     public DbSet<DomainDkimRecord> DomainDkimRecords => Set<DomainDkimRecord>();
     public DbSet<DnsRecordSettings> DnsRecordSettings => Set<DnsRecordSettings>();
@@ -83,6 +85,10 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.DnsProvider).HasConversion<string>();
             entity.Property(d => d.DmarcPolicy).HasConversion<string>();
             entity.Property(d => d.DmarcSubdomainPolicy).HasConversion<string>();
+            entity.Property(d => d.DmarcNonExistentSubdomainPolicy).HasConversion<string>();
+            entity.Property(d => d.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(d => d.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
+            entity.Property(d => d.TargetDmarcSubdomainPolicy).HasConversion<string>();
 
             // Without an explicit ValueComparer, EF Core's default comparer generation for a
             // List<string> behind a value converter throws at runtime ("cannot be used as a
@@ -91,6 +97,24 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(d => d.MtaStsMxHosts)
                 .HasConversion(
                     hosts => hosts.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
+
+            entity.Property(d => d.DmarcRecords)
+                .HasConversion(
+                    records => records.ToArray(),
+                    stored => stored.ToList())
+                .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                    (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                    c => c.Aggregate(0, (hash, h) => HashCode.Combine(hash, h)),
+                    c => c.ToList()));
+
+            entity.Property(d => d.DmarcProblems)
+                .HasConversion(
+                    problems => problems.ToArray(),
                     stored => stored.ToList())
                 .Metadata.SetValueComparer(new ValueComparer<List<string>>(
                     (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
@@ -227,6 +251,9 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<Group>(entity =>
         {
             entity.HasIndex(g => g.Name).IsUnique();
+            entity.Property(g => g.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(g => g.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
+            entity.Property(g => g.TargetDmarcSubdomainPolicy).HasConversion<string>();
         });
 
         modelBuilder.Entity<Tag>(entity =>
@@ -371,6 +398,26 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<NotificationSettings>().Property(settings => settings.TimeZoneId).HasMaxLength(100).HasDefaultValue("UTC");
 
+        modelBuilder.Entity<DotMarc.DnsPush.DnsPushBatch>(entity =>
+        {
+            entity.Property(batch => batch.StartedBy).HasMaxLength(UserDashboardPreference.MaxUserKeyLength);
+            entity.Property(batch => batch.Provider).HasMaxLength(50);
+            entity.Property(batch => batch.Target).HasMaxLength(50);
+            entity.Property(batch => batch.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(batch => batch.ExpiresUtc);
+            entity.HasMany(batch => batch.Domains).WithOne().HasForeignKey(row => row.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // No foreign key to Domains on purpose: a batch row keeps the domain's name and outlives the domain if it is deleted.
+        modelBuilder.Entity<DotMarc.DnsPush.DnsPushBatchDomain>(entity =>
+        {
+            entity.Property(row => row.DomainName).HasMaxLength(253);
+            entity.Property(row => row.Status).HasConversion<string>().HasMaxLength(30);
+            entity.Property(row => row.PlanFingerprint).HasMaxLength(64);
+            entity.Property(row => row.Detail).HasMaxLength(500);
+            entity.HasIndex(row => new { row.BatchId, row.Position });
+        });
+
         modelBuilder.Entity<AlertDestination>(entity =>
         {
             entity.Property(destination => destination.Name).HasMaxLength(100);
@@ -453,6 +500,8 @@ public sealed class DotMarcDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<DnsRecordSettings>(entity =>
         {
             entity.Property(settings => settings.SpfAllQualifier).HasConversion<string>().HasMaxLength(10);
+            entity.Property(settings => settings.TargetDmarcPolicy).HasConversion<string>();
+            entity.Property(settings => settings.TargetDmarcSubdomainPolicy).HasConversion<string>();
             entity.Property(settings => settings.AdditionalRuaAddress).HasMaxLength(DotMarc.Notifications.DnsRecordSettings.MaxAdditionalRuaAddressLength);
         });
 

@@ -1,0 +1,260 @@
+@page "/baselines/domain"
+@attribute [Authorize(Policy = nameof(Permission.BaselinesManage))]
+@using System.Security.Claims
+@using DotMarc.Baselines
+@using DotMarc.Components.Dialogs
+@using DotMarc.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AuditActorAccessor AuditActorAccessor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<BaselinesDomain> Logger
+
+<AppPageTitle>dotMARC - Baselines - Domain</AppPageTitle>
+
+@if (_summary is not null)
+{
+    <TabbedPage Title="Baselines" Tabs="_tabs">
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Set the DMARC policy you want domains to reach, make exceptions where needed, then review the gaps. Saving a target changes dotMARC's expectations, not published DNS.
+            <DocsLink Href="https://dotmarc.app/docs/baselines" Text="How baselines work" Class="ml-2" />
+        </MudText>
+
+        <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">1 · Set the defaults</MudText>
+        <MudText Typo="Typo.h6" Class="mb-1">System-wide defaults</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Set the DMARC policy target and report destinations used unless groups or individual domains override them. The primary ingestion mailbox is configuration-owned and cannot be changed here.</MudText>
+        <div class="d-flex align-start flex-wrap mb-4" style="gap:12px;">
+            <div style="flex:1; min-width:200px;">
+                <MudTextField T="string" Label="DMARC policy target" Value="@(_summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System))"
+                              ReadOnly="true" Disabled="@(!_mayChangeSystem)" Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true"
+                              HelperText="Choose the policy domains should publish. Editing this target does not change DNS." />
+            </div>
+            @if (_mayChangeSystem)
+            {
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" Class="mt-2" OnClick="ChangeSystemAsync">@(_summary.System is null ? "Set default target" : "Edit default target")</MudButton>
+            }
+        </div>
+        <DmarcReportAddresses ShowHeading="false" />
+        </MudPaper>
+        <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">2 · Add exceptions only where needed</MudText>
+        <MudText Typo="Typo.h6" Class="mb-1">Group and domain overrides</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Leave a group inheriting the default unless it needs a different target. An override can be stricter or weaker; a domain's own target takes precedence.</MudText>
+        <details class="mb-3">
+            <summary>How targets are inherited</summary>
+            <MudText Typo="Typo.body2" Class="mt-2">Domain override → strictest target among its groups → system-wide default. Multiple group targets are compared separately for p and sp. With no target at any level, a domain is not assessed against a target.</MudText>
+        </details>
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Group overrides</MudText>
+        @if (_summary.Groups.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">There are no groups.</MudText>
+        }
+        else
+        {
+            <details class="mb-4">
+            <summary>View @_summary.Groups.Count group targets and edit overrides</summary>
+            <ListToolbar Label="Group target controls" SearchLabel="Search group targets" @bind-Search="_groupSearch" @bind-Expanded="_showGroupFilters"
+                         FilterCount="@(_groupOverrideFilter is null ? 0 : 1)" ClearFilters="@(() => _groupOverrideFilter = null)">
+                <SortContent><ListNameSort @bind-Descending="_groupDescending" /></SortContent>
+                <FiltersContent>
+                    <MudSelect T="bool?" Label="Target at this level" @bind-Value="_groupOverrideFilter" Clearable="true">
+                        <MudSelectItem T="bool?" Value="true">Group override</MudSelectItem><MudSelectItem T="bool?" Value="false">Inherited</MudSelectItem>
+                    </MudSelect>
+                </FiltersContent>
+            </ListToolbar>
+            <MudSimpleTable Dense="true" Hover="true" Class="mb-4" Style="overflow-x:auto;">
+                <thead>
+                    <tr>
+                        <th>Group</th>
+                        <th>Domains</th>
+                        <th>Target at this level</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var group in (_groupDescending ? _summary.Groups.OrderByDescending(group => group.Name) : _summary.Groups.OrderBy(group => group.Name))
+                        .Where(group => (string.IsNullOrWhiteSpace(_groupSearch) || group.Name.Contains(_groupSearch, StringComparison.OrdinalIgnoreCase))
+                            && (_groupOverrideFilter is null || (group.Target is not null) == _groupOverrideFilter)))
+                    {
+                        <tr>
+                            <td>@group.Name</td>
+                            <td>@group.DomainCount</td>
+                            <td>
+                                <MudText Typo="Typo.body2">@(group.Target is null ? "Inherits system default" : DmarcTargetText.Stored(group.Target))</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(group.Target is null ? _summary.System is null ? "No system-wide target" : DmarcTargetText.Stored(_summary.System) : "Group override") · domain and other group targets may take precedence</MudText>
+                            </td>
+                            <td>
+                                <details class="mb-2"><summary>Report destinations</summary><DmarcReportAddresses GroupId="group.Id" /></details>
+                                @if (BaselineAccess.MayChangeGroup(_user, group.Id))
+                                {
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeGroupAsync(group))" aria-label="@($"{(group.Target is null ? "Set override" : "Edit override")} for {group.Name}")">@(group.Target is null ? "Set override" : "Edit override")</MudButton>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            </details>
+        }
+
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Individual domain overrides</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Open a domain's Overview to set or clear its own target and see exactly which target applies.</MudText>
+        <MudButton Href="/domains" Size="Size.Small" Variant="Variant.Outlined" Class="mb-3">Choose a domain in Domains</MudButton>
+        @if (_summary.Overrides.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No individual overrides. Domains inherit their group target or the system default where one is set.</MudText>
+        }
+        else
+        {
+            <ListToolbar Label="Domain override controls" SearchLabel="Search domain overrides" @bind-Search="_domainSearch">
+                <SortContent><ListNameSort @bind-Descending="_domainDescending" /></SortContent>
+            </ListToolbar>
+            <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
+                <thead>
+                    <tr>
+                        <th>Domain</th>
+                        <th>Target</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var domainOverride in (_domainDescending ? _summary.Overrides.OrderByDescending(domain => domain.Name) : _summary.Overrides.OrderBy(domain => domain.Name))
+                        .Where(domain => string.IsNullOrWhiteSpace(_domainSearch) || domain.Name.Contains(_domainSearch, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <tr>
+                            <td><MudLink Href="@($"/domains/{domainOverride.Name}")">@domainOverride.Name</MudLink></td>
+                            <td>@DmarcTargetText.Stored(domainOverride.Target)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        </MudPaper>
+        <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">3 · Review and resolve gaps</MudText>
+            <MudText Typo="Typo.h6" Class="mb-2">Monitored domains against their effective targets</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Counts cover your authorised groups and current stored DNS checks. Unchecked domains are not confirmed failures; domains without a target are not counted below target.</MudText>
+            <div class="domain-list-toolbar mb-3">
+                <MudButton Href="/domains?target=below" Variant="Variant.Outlined" Color="Color.Warning">Review @_summary.BelowCount below target</MudButton>
+                <MudButton Href="/domains?target=checking" Variant="Variant.Outlined" Color="Color.Info">Review @_summary.NeedsCheckingCount needing checks</MudButton>
+            </div>
+            <MudText Typo="Typo.body2">Open an affected domain → compare the observed record with its target → review the proposed DNS changes or update DNS manually. Saving a target does not publish records, and a DNS push never lowers a stricter policy.</MudText>
+        </MudPaper>
+    </TabbedPage>
+}
+
+@code {
+    private string? _groupSearch, _domainSearch;
+    private bool _showGroupFilters, _groupDescending, _domainDescending;
+    private bool? _groupOverrideFilter;
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
+    private DmarcTargetSummary? _summary;
+    private ClaimsPrincipal _user = new();
+    private bool _mayChangeSystem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _mayChangeSystem = await BaselineAccess.MayChangeSystemAsync(_user, AuthorizationService);
+        _tabs = await BaselineTabs.ForAsync(_user, AuthorizationService);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _summary = await DmarcTargetSummary.LoadAsync(db, _user);
+    }
+
+    private async Task<DmarcTargetDialog.DmarcTargetDialogResult?> AskAsync(string heading, DmarcTarget? current, string unsetLabel, string scopeDescription)
+    {
+        var parameters = new DialogParameters<DmarcTargetDialog>
+        {
+            { x => x.Heading, heading },
+            { x => x.Current, current },
+            { x => x.UnsetLabel, unsetLabel },
+            { x => x.ScopeDescription, scopeDescription },
+        };
+        var dialogRef = await DialogService.ShowAsync<DmarcTargetDialog>(heading, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialogRef.Result;
+        return result is null || result.Canceled ? null : (DmarcTargetDialog.DmarcTargetDialogResult)result.Data!;
+    }
+
+    private const string AccessLostMessage = "You no longer have access to change that DMARC target.";
+
+    /// <summary>Reads the person's access afresh, so a change since the page opened (a removed permission, or a group taken away) is honoured.
+    /// Says so when access was lost, rather than doing nothing.</summary>
+    private async Task<bool> StillMayChangeAsync(Func<ClaimsPrincipal, Task<bool>> mayChange)
+    {
+        _user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _mayChangeSystem = await BaselineAccess.MayChangeSystemAsync(_user, AuthorizationService);
+        if (await mayChange(_user))
+        {
+            return true;
+        }
+
+        Snackbar.Add(AccessLostMessage, Severity.Warning);
+        await ReloadAsync();
+        return false;
+    }
+
+    private async Task ChangeSystemAsync()
+    {
+        Func<ClaimsPrincipal, Task<bool>> mayChange = user => BaselineAccess.MayChangeSystemAsync(user, AuthorizationService);
+        if (!await StillMayChangeAsync(mayChange) || await AskAsync("System-wide DMARC target", _summary!.System, "No default target", "Applies to domains without a group or individual override. Removing it stops target assessment only where no other target applies.") is not { } choice)
+        {
+            return;
+        }
+
+        await SaveAsync("the system-wide target", mayChange, async (db, actor) =>
+        {
+            await DmarcTargetService.SetSystemAsync(db, actor, choice.Target);
+            return true;
+        });
+    }
+
+    private async Task ChangeGroupAsync(GroupTargetRow group)
+    {
+        Func<ClaimsPrincipal, Task<bool>> mayChange = user => BaselineAccess.MayChangeGroupAsync(user, AuthorizationService, group.Id);
+        if (!await StillMayChangeAsync(mayChange) || await AskAsync($"DMARC target for {group.Name}", group.Target, "Inherit system default", $"Overrides the system default for domains in {group.Name}. Other group targets and individual domain overrides may take precedence. Removing this override restores inheritance.") is not { } choice)
+        {
+            return;
+        }
+
+        await SaveAsync(group.Name, mayChange, (db, actor) => DmarcTargetService.SetGroupAsync(db, actor, group.Id, choice.Target));
+    }
+
+    private async Task SaveAsync(string what, Func<ClaimsPrincipal, Task<bool>> mayChange, Func<DotMarcDbContext, DotMarc.Audit.AuditActor, Task<bool>> save)
+    {
+        // The dialog can stay open while access changes, so check again before saving.
+        if (!await StillMayChangeAsync(mayChange))
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (await save(db, await AuditActorAccessor.GetAsync()))
+            {
+                Snackbar.Add($"Saved the DMARC target for {what}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("That group no longer exists.", Severity.Error);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+        {
+            Logger.LogWarning(ex, "Saving the DMARC target for {Target} failed.", what);
+            Snackbar.Add("Could not save the DMARC target. Try again.", Severity.Error);
+        }
+
+        await ReloadAsync();
+    }
+}

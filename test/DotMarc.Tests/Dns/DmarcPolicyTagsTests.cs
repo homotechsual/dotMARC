@@ -7,6 +7,28 @@ namespace DotMarc.Tests.Dns;
 public sealed class DmarcPolicyTagsTests
 {
     [Fact]
+    public void SamplingChangesDoNotWeakenAnEntirelyMonitoringPolicy()
+    {
+        var baseline = new DmarcPolicyTags(DmarcPolicyLevel.None, DmarcPolicyLevel.None, 100);
+        Assert.False(new DmarcPolicyTags(DmarcPolicyLevel.None, DmarcPolicyLevel.None, 0).IsWeakerThan(baseline));
+        Assert.False(new DmarcPolicyTags(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Reject, 50).IsWeakerThan(baseline));
+        Assert.True(new DmarcPolicyTags(DmarcPolicyLevel.None, DmarcPolicyLevel.Reject, 0)
+            .IsWeakerThan(new(DmarcPolicyLevel.None, DmarcPolicyLevel.Reject, 100)));
+    }
+
+    [Fact]
+    public void NonExistentSubdomainsAndTestingRoundTripAndPreserveProtection()
+    {
+        var baseline = DmarcPolicyTags.Parse("p=reject; sp=reject; pct=100")!;
+        Assert.True(DmarcPolicyTags.Parse("p=reject; np=none")!.IsWeakerThan(baseline));
+        Assert.True(DmarcPolicyTags.Parse("p=reject; t=y")!.IsWeakerThan(baseline));
+        var tags = DmarcPolicyTags.Parse("p=reject; sp=reject; np=quarantine; t=y")!;
+        Assert.Equal(tags, DmarcPolicyTags.Parse(tags.Format()));
+        Assert.False(DmarcPolicyTags.Parse("p=none; t=y")!.IsWeakerThan(new(DmarcPolicyLevel.None, DmarcPolicyLevel.None, 100)));
+        Assert.False(DmarcPolicyTags.Parse("p=reject; np=reject")!.IsWeakerThan(baseline));
+    }
+
+    [Fact]
     public void Parse_ReadsPAndFillsSpAndPctFromTheirDefaults()
     {
         Assert.Equal(new DmarcPolicyTags(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Reject, 100),
@@ -67,7 +89,7 @@ public sealed class DmarcPolicyTagsTests
     {
         var tags = new DmarcPolicyTags(DmarcPolicyLevel.Quarantine, DmarcPolicyLevel.None, 25);
 
-        Assert.Equal("p=quarantine; sp=none; pct=25", tags.Format());
+        Assert.Equal("p=quarantine; sp=none; pct=25; t=n", tags.Format());
         Assert.Equal(tags, DmarcPolicyTags.Parse(tags.Format()));
     }
 

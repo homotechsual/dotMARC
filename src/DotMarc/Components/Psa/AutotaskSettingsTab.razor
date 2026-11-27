@@ -22,7 +22,7 @@ else
     <MudPaper Class="pa-4">
         <div class="d-flex align-center justify-space-between flex-wrap mb-2" style="gap: 0.5rem;">
             <MudText Typo="Typo.h5">Autotask</MudText>
-            <FieldWithHelp Topic="Autotask tickets" Inline="true" Help="Opens an Autotask ticket for each alert (as set under 'Which alerts create tickets' on Alert settings) and completes it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket completed in Autotask resolves its alert.">
+            <FieldWithHelp Topic="Autotask tickets" Inline="true" Help="Opens an Autotask ticket for each alert (as set under 'Which alerts create tickets' on the Settings tab) and completes it when the alert resolves. dotMARC checks open tickets every few minutes, so a ticket completed in Autotask resolves its alert.">
 <MudSwitch @bind-Value="_settings.Enabled" Color="Color.Primary" Label="Enable Autotask tickets" />
 </FieldWithHelp>
         </div>

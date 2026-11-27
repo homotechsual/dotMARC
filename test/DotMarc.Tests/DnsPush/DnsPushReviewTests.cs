@@ -136,4 +136,13 @@ public sealed class DnsPushReviewTests
             $"TXT	_dmarc.contoso.com	v=DMARC1; p=none{Environment.NewLine}CNAME	mta-sts.contoso.com	host.example.net",
             text);
     }
+
+    [Fact]
+    public void TheReview_CarriesThePlansNotes()
+    {
+        var plan = new DnsChangePlan([new DnsRecordChange(DnsRecordChangeKind.Create, "TXT", "_dmarc.contoso.com", "v=DMARC1; p=none", null, Zone)], null) { Notes = ["Repairs a malformed DMARC record"] };
+
+        Assert.Equal(["Repairs a malformed DMARC record"], DnsPushReview.From(plan).Notes);
+        Assert.Empty(DnsPushReview.From(DnsChangePlan.Refuse("error")).Notes);
+    }
 }

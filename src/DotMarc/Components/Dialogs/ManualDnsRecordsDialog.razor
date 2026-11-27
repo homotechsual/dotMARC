@@ -4,6 +4,17 @@
 <MudDialog>
     <TitleContent>Add these DNS records</TitleContent>
     <DialogContent>
+        @if (Review.Notes.Count > 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-3">
+                <ul class="my-0">
+                    @foreach (var note in Review.Notes)
+                    {
+                        <li>@note</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
         @if (Review.NothingToChange)
         {
             <MudAlert Severity="Severity.Info">DNS already holds everything dotMARC would write, so there is nothing to add.</MudAlert>

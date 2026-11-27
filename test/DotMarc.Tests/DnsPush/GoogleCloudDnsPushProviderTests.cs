@@ -47,6 +47,97 @@ public sealed class GoogleCloudDnsPushProviderTests : IAsyncLifetime
         return new GoogleCloudDnsPushProvider(new FakeDbContextFactory(_connectionString), secrets, new HttpClient(handler));
     }
 
+    private sealed record ForeignSession : IDnsPushSession;
+
+    private static DnsRecordChange DkimCname(string zoneName) =>
+        new(DnsRecordChangeKind.Create, "CNAME", $"selector1._domainkey.{zoneName}", $"selector1-{zoneName.Replace('.', '-')}._domainkey.example.onmicrosoft.com", null, zoneName);
+
+    [Fact]
+    public async Task OneExchange_ServesPushesToSeveralZones_WithOneTokenRequest()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"projects":[{"projectId":"p1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"managedZones":[{"name":"z1","dnsName":"contoso.com."}]}""");
+        handler.ResponseBodies.Enqueue("""{"rrsets":[]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        handler.ResponseBodies.Enqueue("""{"projects":[{"projectId":"p1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"managedZones":[{"name":"z2","dnsName":"fabrikam.com."}]}""");
+        handler.ResponseBodies.Enqueue("""{"rrsets":[]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        var provider = await CreateProviderAsync(handler);
+
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+        var first = await provider.PushAsync(exchange.Session!, [DkimCname("contoso.com")], CancellationToken.None);
+        var second = await provider.PushAsync(exchange.Session!, [DkimCname("fabrikam.com")], CancellationToken.None);
+
+        Assert.Null(exchange.Failure);
+        Assert.Equal(DnsPushOutcome.Pushed, first.Outcome);
+        Assert.Equal(DnsPushOutcome.Pushed, second.Outcome);
+        Assert.Single(handler.Requests, request => request.RequestUri!.Host == "oauth2.googleapis.com");
+        Assert.Equal(9, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task APushToAZoneNoProjectHas_IsZoneNotFound_AndALaterPushToAnotherZoneStillWorks()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.ResponseBodies.Enqueue("""{"access_token":"token"}""");
+        handler.ResponseBodies.Enqueue("""{"projects":[{"projectId":"p1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"managedZones":[]}""");
+        handler.ResponseBodies.Enqueue("""{"projects":[{"projectId":"p1"}]}""");
+        handler.ResponseBodies.Enqueue("""{"managedZones":[{"name":"z2","dnsName":"fabrikam.com."}]}""");
+        handler.ResponseBodies.Enqueue("""{"rrsets":[]}""");
+        handler.ResponseBodies.Enqueue("{}");
+        var provider = await CreateProviderAsync(handler);
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        var missing = await provider.PushAsync(exchange.Session!, [DkimCname("missing.example")], CancellationToken.None);
+        var present = await provider.PushAsync(exchange.Session!, [DkimCname("fabrikam.com")], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.ZoneNotFound, missing.Outcome);
+        Assert.Equal(DnsPushOutcome.Pushed, present.Outcome);
+    }
+
+    [Fact]
+    public async Task ARejectedAuthorizationCode_IsAFailureWithNoSession()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.StatusCodes.Enqueue(System.Net.HttpStatusCode.BadRequest);
+        var provider = await CreateProviderAsync(handler);
+
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        Assert.Null(exchange.Session);
+        Assert.Equal(DnsPushOutcome.ProviderError, exchange.Failure!.Outcome);
+        Assert.Contains("rejected the authorization code", exchange.Failure.DetailMessage);
+    }
+
+    [Fact]
+    public async Task WhenGooglePushIsNotConfigured_ExchangeIsAFailure_AndNothingIsSent()
+    {
+        var handler = new FakeHttpMessageHandler();
+        var provider = new GoogleCloudDnsPushProvider(new FakeDbContextFactory(_connectionString), new FakeSecretStore(), new HttpClient(handler));
+
+        var exchange = await provider.ExchangeAsync("code", "verifier", "https://dotmarc.example/callback", CancellationToken.None);
+
+        Assert.Null(exchange.Session);
+        Assert.Contains("not configured", exchange.Failure!.DetailMessage);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ASessionFromAnotherProvider_IsRefused_AndNothingIsSent()
+    {
+        var handler = new FakeHttpMessageHandler();
+        var provider = await CreateProviderAsync(handler);
+
+        var result = await provider.PushAsync(new ForeignSession(), [DkimCname("contoso.com")], CancellationToken.None);
+
+        Assert.Equal(DnsPushOutcome.ProviderError, result.Outcome);
+        Assert.Empty(handler.Requests);
+    }
+
     [Fact]
     public async Task ReplaceTxtValues_KeepsOtherValuesAtTheName()
     {

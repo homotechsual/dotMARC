@@ -15,7 +15,7 @@ It works with the following PSAs, documentation for each is on its own page:
 - [Autotask](./psa/autotask.mdx)
 - [SuperOps](./psa/superops.mdx)
 
-Each has a tab under **Manage > PSA settings**. You can turn on more than one, for example while you move from one PSA to another: each PSA gets its own ticket for an alert, and each is opened and closed independently, so one PSA being down never stops another from getting its ticket.
+Each has a tab under **Manage > Alerts & PSA > PSA**. You can turn on more than one, for example while you move from one PSA to another: each PSA gets its own ticket for an alert, and each is opened and closed independently, so one PSA being down never stops another from getting its ticket.
 
 ## Link Groups to companies
 
@@ -34,12 +34,12 @@ If a PSA's companies can't be loaded, the page says which PSA and why, and that 
 
 Ticket creation follows the alert rule's **Ticket mode** first: **Never open a ticket** suppresses it, **Always open a ticket** overrides the ticket switches but still needs a ready PSA connection and company mapping, and **Follow the ticket rules** uses the group/global settings below. See [Alert rules: Tickets](./alert-rules.mdx#tickets). Existing-open-ticket suppression still applies.
 
-Most domain alert types create tickets by default. Nameserver changes, new senders awaiting review and the three metric alert types do not; system alerts about API key expiry, client report failure and PSA connection loss also default to no tickets. To change the ticket rules, open **Manage > Alert settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every PSA when the alert rule follows ticket rules. The alert is still recorded, and notification delivery still follows its destinations and quiet hours.
+Most domain alert types create tickets by default. Nameserver changes, new senders awaiting review and the three metric alert types do not; system alerts about API key expiry, client report failure and PSA connection loss also default to no tickets. To change the ticket rules, open **Manage > Alerts & PSA > Settings**. **Which alerts create tickets** lists each alert type with a switch, and applies to every PSA when the alert rule follows ticket rules. The alert is still recorded, and notification delivery still follows its destinations and quiet hours.
 
-A Group can override this for its own domains. On **Manage > Groups**, a Group linked to a company has a **Ticket rules** button. For each alert type choose *Use default* (follow Alert settings), *Always create tickets* or *Never create tickets*. A Group with overrides shows a badge such as "2 overrides".
+A Group can override this for its own domains. On **Manage > Groups**, a Group linked to a company has a **Ticket rules** button. For each alert type choose *Use default* (follow the Settings tab of Alerts & PSA), *Always create tickets* or *Never create tickets*. A Group with overrides shows a badge such as "2 overrides".
 
 - For each PSA, the rules of the Group whose company the ticket goes to apply. Other Groups' rules are ignored for that PSA.
-- A domain with its own company set on **Manage > Domains** follows Alert settings for that PSA.
+- A domain with its own company set on **Manage > Domains** follows the Settings tab of Alerts & PSA for that PSA.
 
 Changing a rule affects alerts raised from then on. It doesn't create tickets for alerts that are already open, and it doesn't stop an existing ticket from closing when its alert resolves.
 

@@ -24,6 +24,10 @@
     "major": 10,
     "reason": "11.x needs net11.0"
   },
+  "Npgsql.EntityFrameworkCore.PostgreSQL": {
+    "major": 10,
+    "reason": "11.x targets net11.0 and requires EF Core 11; dotMARC stays on net10.0 LTS and EF Core 10"
+  },
   "System.Security.Cryptography.Pkcs": {
     "major": 10,
     "reason": "Pinned for security fixes, versioned with the runtime: 11.x needs net11.0"

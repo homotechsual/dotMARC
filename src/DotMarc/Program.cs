@@ -257,12 +257,17 @@ builder.Services.AddHttpClient<DotMarc.DnsPush.GoogleCloudDnsPushProvider>();
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsPushProvider>(sp => sp.GetRequiredService<DotMarc.DnsPush.GoogleCloudDnsPushProvider>());
 
 builder.Services.AddSingleton<DotMarc.DnsPush.IDnsRecordSettingsReader, DotMarc.DnsPush.DnsRecordSettingsReader>();
+builder.Services.AddSingleton<DotMarc.Baselines.IDmarcTargetReader, DotMarc.Baselines.DmarcTargetReader>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.MtaStsChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DmarcAuthorizationChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.TlsrptChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.SpfChangeBuilder>();
 builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DkimChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.DmarcChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.TlsrptChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.MtaStsChangeBuilder>();
+builder.Services.AddTransient<DotMarc.DnsPush.IDnsChangeBuilder, DotMarc.DnsPush.DomainSetupChangeBuilder>();
 
 builder.Services.AddHttpClient<DotMarc.DnsPush.IDnsProviderDetector, DotMarc.DnsPush.DnsProviderDetector>(client =>
 {
@@ -326,6 +331,14 @@ builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts
 });
 
 builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushStateProtector>();
+// Transient, not singleton: it holds the typed HTTP client of the provider detector, which should not live for ever.
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushPlanner>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchService>();
+builder.Services.AddSingleton<DotMarc.DnsPush.DnsPushBatchQueue>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchCallback>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsPushBatchRunner>();
+builder.Services.AddHostedService<DotMarc.DnsPush.DnsPushBatchWorker>();
+builder.Services.AddTransient<DotMarc.DnsPush.DnsProviderCheckService>();
 
 builder.Services.AddHttpClient<DotMarc.IpEnrichment.IIpInfoLookup, DotMarc.IpEnrichment.RdapIpInfoLookup>(client =>
 {
@@ -442,10 +455,20 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("DomainsWrite", policy => policy.RequireClaim(
         DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
         nameof(Permission.DomainsAdd), nameof(Permission.DomainsEdit), nameof(Permission.DomainsReorder), nameof(Permission.DomainsDelete)));
+    options.AddPolicy("DomainDnsSetup", policy => policy
+        .RequireClaim(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.DomainsEdit))
+        .RequireClaim(DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.MtaStsManage)));
 
     options.AddPolicy("GroupsOrTagsWrite", policy => policy.RequireClaim(
         DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
         nameof(Permission.GroupsAdd), nameof(Permission.GroupsRename), nameof(Permission.GroupsDelete),
+        nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
+
+    options.AddPolicy("GroupsManage", policy => policy.RequireClaim(
+        DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
+        nameof(Permission.GroupsAdd), nameof(Permission.GroupsRename), nameof(Permission.GroupsDelete)));
+    options.AddPolicy("TagsManage", policy => policy.RequireClaim(
+        DotMarc.Security.UserAccessClaimsTransformation.PermissionClaimType,
         nameof(Permission.TagsAdd), nameof(Permission.TagsEdit), nameof(Permission.TagsDelete)));
 
     ApiPolicies.Add(options);
@@ -465,6 +488,28 @@ builder.Services.AddHostedService<DotMarc.Reporting.ClientReports.ClientReportSc
 builder.Services.Configure<InitialAdminsOptions>(builder.Configuration.GetSection(InitialAdminsOptions.SectionName));
 
 builder.Services.AddCascadingAuthenticationState();
+
+if (demoOptions.Enabled)
+{
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IDnsPushProvider>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IDnsProviderDetector>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IDmarcTxtLookup>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<ITlsrptTxtLookup>(builder.Services);
+    Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<DotMarc.MtaSts.IMtaStsCnameLookup>(builder.Services);
+    builder.Services.AddSingleton<DotMarc.Demo.DemoDnsRecords>();
+    foreach (var key in new[] { "cloudflare", "azure-dns", "google-cloud-dns" })
+        builder.Services.AddSingleton<IDnsPushProvider>(services => new DotMarc.Demo.DemoDnsPushProvider(key, services.GetRequiredService<DotMarc.Demo.DemoDnsRecords>()));
+    builder.Services.AddSingleton<IDnsProviderDetector, DotMarc.Demo.DemoDnsProviderDetector>();
+    builder.Services.AddSingleton<IDmarcTxtLookup, DotMarc.Demo.DemoDmarcTxtLookup>();
+    builder.Services.AddSingleton<ITlsrptTxtLookup, DotMarc.Demo.DemoTlsrptTxtLookup>();
+    builder.Services.AddSingleton<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.Demo.DemoMtaStsCnameLookup>();
+    builder.Services.Configure<GraphOptions>(options =>
+    {
+        options.MailboxAddress = "dmarc@demo.example";
+        options.TlsrptMailboxAddress = "tlsrpt@demo.example";
+    });
+    builder.Services.Configure<DotMarc.MtaSts.MtaStsOptions>(options => { options.HostingHostname = "mta-sts.demo.example"; options.Provisioner = "Caddy"; });
+}
 
 var app = builder.Build();
 
@@ -672,11 +717,12 @@ app.MapGet("/audit/export", async (HttpContext httpContext, IDbContextFactory<Do
 app.MapGet("/dns-push/{provider}/start", async (
     string provider, int domainId, string target, string? payload, string? pushId, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
-    IAuthorizationService authorizationService) =>
+    IAuthorizationService authorizationService, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
 {
     // An edited SPF record is a few hundred characters; a payload far longer than that isn't one.
     var changeBuilder = changeBuilders.Find(target);
-    if (changeBuilder is null || payload?.Length > 4000)
+    if (changeBuilder is null || payload?.Length > 4000
+        || target == "domain-setup" && (payload?.Length != 64 || !payload.All(char.IsAsciiHexDigit)))
     {
         return Results.BadRequest();
     }
@@ -691,6 +737,14 @@ app.MapGet("/dns-push/{provider}/start", async (
     if (!authResult.Succeeded)
     {
         return Results.Forbid();
+    }
+    if (target == "domain-setup")
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(httpContext.RequestAborted);
+        var scope = DotMarc.Portal.PortalData.ScopedGroupIds(httpContext.User);
+        if (!await context.Domains.AnyAsync(domain => domain.Id == domainId
+            && (scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id))), httpContext.RequestAborted))
+            return Results.NotFound();
     }
 
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -707,10 +761,56 @@ app.MapGet("/dns-push/{provider}/start", async (
     return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
 });
 
+// The same sign-in as /start, for a batch of domains reviewed beforehand (see DnsPushBatchService). Only the batch id travels in the state.
+app.MapGet("/dns-push/{provider}/start-batch", async (
+    string provider, Guid batchId, HttpContext httpContext,
+    IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
+    IAuthorizationService authorizationService, IDbContextFactory<DotMarcDbContext> dbContextFactory) =>
+{
+    // Only from dotMARC's own pages: see DnsPushStartGuard for why a link from elsewhere mustn't start a push.
+    if (!DnsPushStartGuard.IsFromThisSite(httpContext.Request))
+    {
+        return Results.BadRequest();
+    }
+
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    var check = await DnsPushBatchGate.CheckAsync(
+        context, batchId, DotMarc.Reporting.DashboardPreferencesStore.UserKeyOf(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User)), provider, DateTimeOffset.UtcNow, CancellationToken.None);
+    if (check.Problem is { } problem)
+    {
+        return problem switch
+        {
+            DnsPushBatchProblem.NotFound => Results.NotFound(),
+            DnsPushBatchProblem.SomeoneElses => Results.Forbid(),
+            _ => Results.BadRequest()
+        };
+    }
+
+    var batch = check.Batch!;
+    if (changeBuilders.Find(batch.Target) is not { } changeBuilder || !(await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy)).Succeeded)
+    {
+        return Results.Forbid();
+    }
+    if (!await DnsPushBatchAccess.InScopeAsync(context, httpContext.User, batch.Domains.Where(row => row.Included).Select(row => row.DomainId), httpContext.RequestAborted))
+        return Results.Forbid();
+
+    var pushProvider = await pushProviders.FindConfiguredAsync(provider);
+    if (pushProvider is null)
+    {
+        return Results.NotFound();
+    }
+
+    var (codeVerifier, codeChallenge) = PkceGenerator.Generate();
+    var state = stateProtector.Protect(0, batch.Target, codeVerifier, DateTimeOffset.UtcNow, pushId: batchId.ToString(), batchId: batchId);
+    var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
+
+    return Results.Redirect(await pushProvider.BuildAuthorizationUrlAsync(state, codeChallenge, redirectUri));
+});
+
 app.MapGet("/dns-push/{provider}/callback", async (
     string provider, string? code, string? state, string? error, HttpContext httpContext,
     IEnumerable<IDnsPushProvider> pushProviders, IEnumerable<IDnsChangeBuilder> changeBuilders, DnsPushStateProtector stateProtector,
-    IDbContextFactory<DotMarcDbContext> dbContextFactory, IDnsProviderDetector dnsProviderDetector,
+    IDbContextFactory<DotMarcDbContext> dbContextFactory, DnsPushPlanner planner, DnsPushBatchCallback batchCallback,
     IAuthorizationService authorizationService, DotMarc.Audit.AuditRecorder auditRecorder, ILogger<Program> logger, AppTitle appTitle) =>
 {
     var pushProvider = await pushProviders.FindConfiguredAsync(provider);
@@ -718,6 +818,16 @@ app.MapGet("/dns-push/{provider}/callback", async (
     if (pushProvider is null || decodedState is null)
     {
         return DnsPushPopupResult.Close("invalid", appTitle, decodedState?.PushId);
+    }
+
+    // A batch of domains: the batch has its own checks and runs in the background. Anything without a batch id is a single-domain push, below.
+    if (decodedState.BatchId is not null)
+    {
+        await using var batchContext = await dbContextFactory.CreateDbContextAsync();
+        var batchRedirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
+        var batchFlag = await batchCallback.HandleAsync(
+            batchContext, pushProvider, decodedState, code, error, batchRedirectUri, httpContext.User, DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), CancellationToken.None);
+        return DnsPushPopupResult.Close(batchFlag, appTitle, decodedState.PushId);
     }
 
     // The signed state proves the /start redirect was legitimate, but says nothing about whether
@@ -728,6 +838,10 @@ app.MapGet("/dns-push/{provider}/callback", async (
     if (changeBuilder is null)
     {
         return DnsPushPopupResult.Close("invalid", appTitle, decodedState?.PushId);
+    }
+    if (decodedState.PushTarget == "domain-setup" && decodedState.Payload is null)
+    {
+        return DnsPushPopupResult.Close("invalid", appTitle, decodedState.PushId);
     }
     var authResult = await authorizationService.AuthorizeAsync(httpContext.User, changeBuilder.RequiredPolicy);
     if (!authResult.Succeeded)
@@ -741,48 +855,28 @@ app.MapGet("/dns-push/{provider}/callback", async (
     {
         return DnsPushPopupResult.Close("invalid", appTitle, decodedState?.PushId);
     }
+    if (decodedState.PushTarget == "domain-setup")
+    {
+        var scope = DotMarc.Portal.PortalData.ScopedGroupIds(httpContext.User);
+        if (scope.Count > 0 && !await context.Domains.AnyAsync(candidate => candidate.Id == domain.Id
+            && candidate.Groups.Any(group => scope.Contains(group.Id))))
+            return DnsPushPopupResult.Close("invalid", appTitle, decodedState.PushId);
+    }
 
     if (error is not null || code is null)
     {
         return DnsPushPopupResult.Close("cancelled", appTitle, decodedState.PushId);
     }
 
-    // Every push target except dmarc-auth writes into domain.Name's own zone; dmarc-auth writes
-    // into the mailbox's domain's zone instead and resolves that separately below. Resolving here
-    // (rather than trusting whatever the UI's cached provider chip showed when the page loaded)
-    // catches the case where DNS moved provider between page load and the user clicking push -
-    // treated the same as ZoneNotFound rather than silently pushing to the wrong provider.
-    string? domainZone = null;
-    if (changeBuilder.WritesToDomainZone)
+    // The zone is found again now, and the plan built now, by the same planner a batch uses: see DnsPushPlanner for why (a domain whose DNS
+    // moved provider since the page loaded is zone not found, never pushed to the wrong provider).
+    var planning = await planner.PlanAsync(domain, changeBuilder, provider, decodedState.Payload, CancellationToken.None);
+    if (planning.Flag is not null)
     {
-        DnsProviderDetectionResult domainZoneDetection;
-        try
-        {
-            domainZoneDetection = await dnsProviderDetector.DetectAsync(domain.Name, CancellationToken.None);
-        }
-        catch (HttpRequestException)
-        {
-            // A transient DNS lookup failure here is not the same as "zone not found" (which
-            // means the lookup succeeded but no configured account owns that zone) - report it
-            // as a generic error instead of implying a permissions/configuration problem that
-            // doesn't exist.
-            return DnsPushPopupResult.Close("error", appTitle, decodedState.PushId);
-        }
-        var domainProviderKey = domainZoneDetection.Provider.ToProviderKey();
-        if (!string.Equals(domainProviderKey, provider, StringComparison.OrdinalIgnoreCase))
-        {
-            return DnsPushPopupResult.Close("zone-not-found", appTitle, decodedState.PushId);
-        }
-        domainZone = domainZoneDetection.ZoneName;
+        return DnsPushPopupResult.Close(planning.Flag, appTitle, decodedState.PushId);
     }
 
-    var plan = await changeBuilder.BuildAsync(new DnsPushRequest(domain, provider, domainZone, decodedState.Payload), CancellationToken.None);
-    if (plan.Refusal is not null)
-    {
-        return DnsPushPopupResult.Close(plan.Refusal, appTitle, decodedState.PushId);
-    }
-
-    var changes = plan.Changes;
+    var changes = planning.Plan!.Changes;
 
     var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/dns-push/{provider}/callback";
     var result = await pushProvider.ExchangeAndPushAsync(code, decodedState.CodeVerifier, redirectUri, changes, CancellationToken.None);
@@ -794,14 +888,9 @@ app.MapGet("/dns-push/{provider}/callback", async (
         await auditRecorder.RecordAsync(pushEntry);
     }
 
-    var resultFlag = result.Outcome switch
-    {
-        DnsPushOutcome.Pushed => "pushed",
-        DnsPushOutcome.ZoneNotFound => "zone-not-found",
-        DnsPushOutcome.ReplaceFailedAfterDelete => "replace-failed",
-        DnsPushOutcome.LeftDuplicateRecord => "spf-duplicate",
-        _ => "error"
-    };
+    var resultFlag = DnsPushPopupResult.FlagFor(result.Outcome);
+    if (decodedState.PushTarget == "domain-setup" && result.Outcome != DnsPushOutcome.Pushed)
+        resultFlag = "setup-failed";
 
     // The popup's postMessage carries only this coarse flag - DetailMessage never reaches the
     // browser - so this is the only place the specific reason (status codes, provider error text)
@@ -828,14 +917,14 @@ app.MapGet("/psa/ninjaone/connect", async (HttpContext httpContext, DotMarc.Psa.
     var actor = DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User);
     var state = stateProtector.Protect(DotMarc.Psa.NinjaOne.NinjaOneStateProtector.UserKey(actor), timeProvider.GetUtcNow());
     var url = await connector.BuildAuthorizationUrlAsync(DotMarc.Psa.NinjaOne.NinjaOneConnector.RedirectUri(httpContext.Request), state, httpContext.RequestAborted);
-    return Results.Redirect(url ?? "/psa/settings?psa=ninjaone&ninjaone=not-configured");
+    return Results.Redirect(url ?? "/alerts/psa?psa=ninjaone&ninjaone=not-configured");
 }).RequireAuthorization(nameof(Permission.AlertsManage));
 
 app.MapGet(DotMarc.Psa.NinjaOne.NinjaOneConnector.CallbackPath, async (string? code, string? state, string? error, HttpContext httpContext, DotMarc.Psa.NinjaOne.NinjaOneConnector connector) =>
 {
     var outcome = await connector.CompleteAsync(DotMarc.Audit.AuditActor.FromPrincipal(httpContext.User), state, code, error,
         DotMarc.Psa.NinjaOne.NinjaOneConnector.RedirectUri(httpContext.Request), httpContext.RequestAborted);
-    return Results.Redirect($"/psa/settings?psa=ninjaone&ninjaone={DotMarc.Psa.NinjaOne.NinjaOneConnector.OutcomeKey(outcome)}");
+    return Results.Redirect($"/alerts/psa?psa=ninjaone&ninjaone={DotMarc.Psa.NinjaOne.NinjaOneConnector.OutcomeKey(outcome)}");
 }).RequireAuthorization(nameof(Permission.AlertsManage));
 
 // Unauthenticated by necessity - HaloPSA's own outbound webhook config isn't confirmed to support

@@ -11,5 +11,7 @@ public enum DkimCheckStatus
     NotConfigured,
     Ok,
     Missing,
-    Misconfigured
+    Misconfigured,
+    NoSendingKeys,
+    UnexpectedSendingKey
 }

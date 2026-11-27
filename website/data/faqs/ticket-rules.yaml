@@ -1,6 +1,6 @@
 question: Can I stop certain alerts, or certain clients, from creating PSA tickets?
 answer: |
-  Yes. On **Alert settings**, the **Which alerts create tickets** panel has a switch for each alert type, and applies
+  Yes. On the **Settings** tab of **Manage > Alerts & PSA**, the **Which alerts create tickets** panel has a switch for each alert type, and applies
   to every PSA when the alert rule follows ticket rules. The alert is still recorded and notification delivery
   still follows its destinations and quiet hours.
 

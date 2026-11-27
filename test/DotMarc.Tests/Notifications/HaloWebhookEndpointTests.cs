@@ -136,7 +136,7 @@ public sealed class HaloWebhookEndpointTests : IAsyncLifetime
         await using var verify = new DotMarcDbContext(new DbContextOptionsBuilder<DotMarcDbContext>().UseNpgsql(_connectionString).Options);
         Assert.True((await verify.AlertEvents.SingleAsync(alert => alert.Tickets.Any(ticket => ticket.TicketId == "5151"))).IsResolved);
         var domainId = (await verify.Domains.SingleAsync(candidate => candidate.Name == "policy.example")).Id;
-        Assert.Equal("p=none; sp=none; pct=100", (await verify.DomainAlertStates.SingleAsync(state => state.DomainId == domainId)).Baseline);
+        Assert.Equal("p=none; sp=none; pct=100; t=n", (await verify.DomainAlertStates.SingleAsync(state => state.DomainId == domainId)).Baseline);
     }
 
     private HaloWebhookReceipt LatestReceipt() =>

@@ -20,6 +20,31 @@ public sealed class Domain
     public DmarcPolicyLevel? DmarcPolicy { get; set; }
     public DmarcPolicyLevel? DmarcSubdomainPolicy { get; set; }
     public int? DmarcPercent { get; set; }
+
+    /// <summary>The np tag the DMARC record actually publishes (strictest valid value); null when it has none.</summary>
+    public DmarcPolicyLevel? DmarcNonExistentSubdomainPolicy { get; set; }
+
+    /// <summary>True when the DMARC record has t=y (testing mode, RFC 9989).</summary>
+    public bool DmarcTesting { get; set; }
+
+    /// <summary>Every DMARC-like TXT value at _dmarc.&lt;domain&gt; at the last check: the records, then any
+    /// look-alike values ignored beside them. Empty when there is no DMARC record.</summary>
+    public List<string> DmarcRecords { get; set; } = [];
+
+    /// <summary>The problems found in the DMARC record, each as its kind or kind:tag, for example RepeatedTag:p.</summary>
+    public List<string> DmarcProblems { get; set; } = [];
+
+    /// <summary>The DMARC policy this domain should reach. Null when none is set.</summary>
+    public DmarcPolicyLevel? TargetDmarcPolicy { get; set; }
+
+    /// <summary>The target subdomain policy. Null follows <see cref="TargetDmarcPolicy"/>.</summary>
+    public DmarcPolicyLevel? TargetDmarcSubdomainPolicy { get; set; }
+    public bool OverrideAdditionalRuaAddress { get; set; }
+    public string? AdditionalRuaAddress { get; set; }
+
+    /// <summary>The target this row holds, or null when none is set. An unset subdomain policy follows the policy.</summary>
+    public DotMarc.Baselines.DmarcTarget? DmarcTarget =>
+        TargetDmarcPolicy is { } policy ? new(policy, TargetDmarcSubdomainPolicy) : null;
     public TlsrptCheckStatus TlsrptCheckStatus { get; set; }
     public DateTimeOffset? TlsrptCheckedUtc { get; set; }
     public string? TlsrptCheckDetail { get; set; }

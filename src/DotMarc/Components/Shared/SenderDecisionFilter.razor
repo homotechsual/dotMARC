@@ -1,0 +1,15 @@
+@using DotMarc.Data
+@using DotMarc.Reporting
+
+<MudSelect T="string" Label="Decision" Value="Value" ValueChanged="ValueChanged" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+    @foreach (var status in Enum.GetValues<SenderDecisionStatus>().Select(status => (SenderDecisionStatus?)status).Prepend(null))
+    {
+        var label = SenderDecisionPresentation.StatusLabel(status);
+        <MudSelectItem Value="@label">@label</MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+}

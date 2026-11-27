@@ -374,7 +374,7 @@ public sealed class PollingService : BackgroundService
             var nowUtc = DateTimeOffset.UtcNow;
             var staleDomains = await context.Domains
                 .Where(d => d.DmarcCheckedUtc == null || d.DmarcCheckedUtc < cutoff
-                    || d.AlertStates.Any(state => (state.Item == DnsHealthItems.Dmarc || state.Item == DnsHealthItems.DmarcPolicy) && state.RecheckDueUtc <= nowUtc && d.DmarcCheckedUtc < state.RecheckDueUtc))
+                    || d.AlertStates.Any(state => (state.Item == DnsHealthItems.Dmarc || state.Item == DnsHealthItems.DmarcPolicy || state.Item == DnsHealthItems.DmarcTarget) && state.RecheckDueUtc <= nowUtc && d.DmarcCheckedUtc < state.RecheckDueUtc))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -467,13 +467,17 @@ public sealed class PollingService : BackgroundService
     /// batch, a manual recheck saves immediately for just the one domain).</summary>
     internal static async Task RunSingleDmarcCheckAsync(Domain domain, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
     {
-        var result = await dmarcChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
+        var result = await dmarcChecker.CheckAsync(domain.Name, mailboxAddress, cancellationToken, domain.SpfCheckStatus != SpfCheckStatus.NullSpf).ConfigureAwait(false);
         domain.DmarcCheckStatus = result.Status;
         domain.DmarcCheckedUtc = DateTimeOffset.UtcNow;
         domain.DmarcCheckDetail = result.Detail;
         domain.DmarcPolicy = result.Policy?.Policy;
         domain.DmarcSubdomainPolicy = result.Policy?.SubdomainPolicy;
         domain.DmarcPercent = result.Policy?.Percent;
+        domain.DmarcNonExistentSubdomainPolicy = result.Analysis?.NonExistentPolicy;
+        domain.DmarcTesting = result.Analysis?.Testing ?? false;
+        domain.DmarcRecords = result.Analysis is { } analysis ? [.. analysis.Records, .. analysis.IgnoredCandidates] : [];
+        domain.DmarcProblems = result.Analysis?.Problems.Select(problem => problem.Stored).ToList() ?? [];
     }
 
     /// <summary>TLSRPT counterpart to RunSingleDmarcCheckAsync - see its remarks.</summary>
@@ -486,10 +490,16 @@ public sealed class PollingService : BackgroundService
     }
 
     /// <summary>DMARC-authorization counterpart to RunSingleDmarcCheckAsync - see its remarks.
-    /// Always calls CheckAuthorizationAsync regardless of the (separate) own-record DMARC status,
-    /// so the two are independently accurate.</summary>
+    /// Independent of the own-record DMARC status; null-SPF domains do not require reporting authorization.</summary>
     internal static async Task RunSingleDmarcAuthorizationCheckAsync(Domain domain, IDmarcDnsChecker dmarcChecker, string mailboxAddress, CancellationToken cancellationToken)
     {
+        if (domain.SpfCheckStatus == SpfCheckStatus.NullSpf)
+        {
+            domain.DmarcAuthorizationCheckStatus = DmarcAuthorizationCheckStatus.NotApplicable;
+            domain.DmarcAuthorizationCheckedUtc = DateTimeOffset.UtcNow;
+            domain.DmarcAuthorizationCheckDetail = "Reporting to dotMARC is optional for a domain with null SPF.";
+            return;
+        }
         var result = await dmarcChecker.CheckAuthorizationAsync(domain.Name, mailboxAddress, cancellationToken).ConfigureAwait(false);
         domain.DmarcAuthorizationCheckStatus = result.Status;
         domain.DmarcAuthorizationCheckedUtc = DateTimeOffset.UtcNow;
@@ -500,6 +510,12 @@ public sealed class PollingService : BackgroundService
     internal static async Task RunSingleSpfCheckAsync(Domain domain, ISpfDnsChecker spfChecker, CancellationToken cancellationToken)
     {
         var result = await spfChecker.CheckAsync(domain.Name, cancellationToken).ConfigureAwait(false);
+        if ((domain.SpfCheckStatus == SpfCheckStatus.NullSpf) != (result.Status == SpfCheckStatus.NullSpf))
+        {
+            domain.DkimCheckedUtc = null;
+            domain.DmarcCheckedUtc = null;
+            domain.DmarcAuthorizationCheckedUtc = null;
+        }
         domain.SpfCheckStatus = result.Status;
         domain.SpfCheckedUtc = DateTimeOffset.UtcNow;
         domain.SpfCheckDetail = result.Detail;
@@ -531,7 +547,7 @@ public sealed class PollingService : BackgroundService
         }
 
         var expectedRecords = domain.DkimRecords.Select(record => new DkimExpectedRecord(record.Selector, record.RecordType, record.Value)).ToList();
-        var result = await dkimChecker.CheckAsync(domain.Name, domain.DkimSelectors, cancellationToken, expectedRecords).ConfigureAwait(false);
+        var result = await dkimChecker.CheckAsync(domain.Name, domain.DkimSelectors, cancellationToken, expectedRecords, domain.SpfCheckStatus == SpfCheckStatus.NullSpf).ConfigureAwait(false);
         domain.DkimCheckStatus = result.Status;
         domain.DkimCheckedUtc = DateTimeOffset.UtcNow;
         domain.DkimCheckDetail = result.Detail;

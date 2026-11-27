@@ -12,7 +12,7 @@ public sealed class DmarcAuthorizationChangeBuilder(
 
     public async Task<DnsChangePlan> BuildAsync(DnsPushRequest request, CancellationToken cancellationToken)
     {
-        // RFC 7489 §7.1: when the rua= mailbox's domain differs from the domain being monitored
+        // RFC 9990 §4: when the rua= mailbox's domain differs from the domain being monitored
         // (the normal MSP shape - a shared mailbox on the MSP's own domain, not each client's),
         // that mailbox's domain must publish this record proving it accepts reports for the
         // monitored domain. Unlike the "dmarc"/"tlsrpt" targets, this record's zone is the

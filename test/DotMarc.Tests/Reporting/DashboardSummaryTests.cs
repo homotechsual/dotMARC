@@ -214,4 +214,22 @@ public class DashboardSummaryTests
         Assert.Equal(40, summary.ReasonBreakdown.NoReasonGiven);
         Assert.Equal(40, summary.ReasonBreakdown.Total);
     }
+
+    [Fact]
+    public void Build_WorksOutEachDomainsOutcomeAgainstItsTarget()
+    {
+        var settings = new DotMarc.Notifications.DnsRecordSettings { TargetDmarcPolicy = DmarcPolicyLevel.Reject };
+        var below = DomainWith("below.test", true, null);
+        below.DmarcCheckStatus = DmarcCheckStatus.Ok;
+        below.DmarcCheckedUtc = DateTimeOffset.UtcNow;
+        below.DmarcPolicy = DmarcPolicyLevel.None;
+        var neverCheckedDomain = DomainWith("unchecked.test", true, null);
+
+        var (_, rows) = DashboardSummary.Build([below, neverCheckedDomain], parseFailureCount: 0, settings);
+        var (_, rowsWithoutSettings) = DashboardSummary.Build([below], parseFailureCount: 0);
+
+        Assert.Equal(DotMarc.Baselines.DmarcTargetOutcome.Below, rows.Single(row => row.Name == "below.test").TargetOutcome);
+        Assert.Equal(DotMarc.Baselines.DmarcTargetOutcome.NeedsChecking, rows.Single(row => row.Name == "unchecked.test").TargetOutcome);
+        Assert.Equal(DotMarc.Baselines.DmarcTargetOutcome.NoTarget, Assert.Single(rowsWithoutSettings).TargetOutcome);
+    }
 }

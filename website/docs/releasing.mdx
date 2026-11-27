@@ -25,7 +25,7 @@ Set repository variables `DOTMARC_DEMO_DOMAIN` and `DOTMARC_NEXT_DOMAIN` to the 
 4. Assign approved work to a milestone named `v0.14.0`, or `v0.14.0 — Release theme`. Its description supplies the public release summary. Leave its due date empty unless you want that target date shown publicly.
 5. Moving an issue to another milestone moves its target release. Work without a displayed release milestone appears as unscheduled.
 
-Close implemented issues with GitHub's completed reason. Declined, duplicate and invalid issues are not presented as shipped. A completed issue stays marked as awaiting release until a matching non-draft, non-prerelease GitHub Release exists. Closing a milestone alone does not publish a release.
+An issue is not done until its release is cut. While work is under way, or finished on `develop` but not yet released, the issue stays open with `status:in-progress`. When the work is finished, also add `release:ready`: the roadmap then shows the issue as completed and awaiting release. Do not close it by hand; the release workflow closes it when the release is published. Declined, duplicate and invalid issues are closed with those reasons and are not presented as shipped.
 
 Progress counts include only public roadmap issues, not internal tasks or pull requests, and do not estimate effort.
 
@@ -36,13 +36,14 @@ Progress counts include only public roadmap issues, not internal tasks or pull r
 | Version, scope, milestone assignment and issue decisions | Maintainer | Manual |
 | Validate, test, build and publish images; create GitHub Release | Release workflow | Version tag push |
 | Refresh public roadmap | Feedback Worker | Signed GitHub webhook and ten-minute scheduled reconciliation |
+| Close the milestone's `release:ready` issues as `status:shipped`, move its other open issues to the next milestone, close the milestone | Release workflow (`scripts/release-issues.mjs`) | After the GitHub Release is published (not for pre-releases) |
 | Refresh website release badge and release-note pages | Website publish workflow | Dispatch after GitHub Release |
 | Feature-request issue creation | Feedback Worker | Validated, protected website submission |
 
-No release workflow automatically closes requests, changes their scope or emails subscribers.
+When no later milestone is open, the release workflow creates the next minor one (for example `v0.15.0` after `v0.14.0`) for the issues it moves. To see what a release would do without changing anything, run `node scripts/release-issues.mjs <version> --dry-run` with `GITHUB_REPOSITORY` and `GITHUB_TOKEN` set. No workflow changes an issue's scope or emails subscribers.
 
 ## Before tagging
 
-Reconcile milestone membership with actual shipping scope. Move slipped work to a later milestone or leave it unscheduled. Close completed issues, prepare the release post and follow the existing release script checks. After publication, check the GitHub Release and the website roadmap.
+Reconcile milestone membership with actual shipping scope: every issue whose work is finished and in the release carries `release:ready`, and anything without it moves to the next milestone when the release is published. Prepare the release post and follow the existing release script checks. After publication, check the GitHub Release and the website roadmap.
 
 The Worker displays its last successful refresh time and flags cached data when GitHub is unavailable. See [Feedback and roadmap operations](./feedback-roadmap.mdx) for configuration, deployment and migration.

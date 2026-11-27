@@ -1,7 +1,8 @@
-@page "/senders/baseline"
+@page "/baselines/sender"
 @page "/groups/{GroupId:int}/senders"
-@attribute [Authorize(Policy = "SenderReview")]
+@attribute [Authorize(Policy = nameof(Permission.SenderReview))]
 @using DotMarc.Components.Dialogs
+@using DotMarc.Baselines
 @using DotMarc.Data
 @using DotMarc.Reporting
 @using Microsoft.AspNetCore.Authorization
@@ -9,6 +10,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject AuditActorAccessor AuditActorAccessor
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject IDbContextFactory<DotMarcDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -16,39 +18,73 @@
 @inject ILogger<SenderDefaults> Logger
 @implements IDisposable
 
-<AppPageTitle>dotMARC - @Title</AppPageTitle>
+<AppPageTitle>dotMARC - @(GroupId is null ? "Baselines - Sender" : Title)</AppPageTitle>
 
 @if (_rows is not null)
 {
-    @if (GroupId is not null)
+    @if (GroupId is null)
+    {
+        <TabbedPage Title="Baselines" Tabs="_tabs">
+            @SenderContent
+        </TabbedPage>
+    }
+    else
     {
         <MudButton Href="/groups" StartIcon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" Class="mb-2">Back to groups</MudButton>
+        <MudText Typo="Typo.h4" Class="mb-1">@Title</MudText>
+        @SenderContent
     }
-    <MudText Typo="Typo.h4" Class="mb-1">@Title</MudText>
+}
+
+@code {
+    private string? _search, _decisionFilter;
+    private bool _showFilters, _descending;
+    private IEnumerable<DefaultRow> VisibleRows
+    {
+        get
+        {
+            var rows = (_rows ?? []).Where(row => (string.IsNullOrWhiteSpace(_search) || row.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                && (_decisionFilter is null || SenderDecisionPresentation.StatusLabel(row.Status) == _decisionFilter));
+            return _descending ? rows.OrderByDescending(row => row.Name, StringComparer.OrdinalIgnoreCase) : rows.OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+    [Parameter] public int? GroupId { get; set; }
+
+    private RenderFragment SenderContent => @<text>
     <MudText Typo="Typo.body1" Class="mb-4">
         @if (GroupId is null)
         {
-            <text>A decision here applies to every domain whose reports show that service. A group's defaults override it for that group's domains, and a domain's own decision overrides both.</text>
+            <text>Record which services your team expects to send, review undecided senders, then make exceptions for individual groups or domains. Decisions are labels for dotMARC; they do not authorise a service in DNS or block mail.</text>
         }
         else
         {
-            <text>These decisions apply to the domains in this group whose reports show the service. They override the baseline, and a domain's own decision overrides them.</text>
+            <text>Set sender exceptions for this group. Inherited decisions remain in effect until you override them; a domain's own decision takes precedence. Decisions do not change DNS or block mail.</text>
         }
     </MudText>
-
+    <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+    <MudText Typo="Typo.overline" Class="mud-text-secondary">1 · @(GroupId is null ? "Set default decisions" : "Set group exceptions")</MudText>
+    <MudText Typo="Typo.h6" Class="mb-2">@(GroupId is null ? "Estate-wide sender decisions" : "Sender decisions for this group")</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Choose Authorised, Unauthorised or Under review for a service. Unreviewed means no decision has been recorded. Domain counts describe observed 30-day evidence, not the number of domains guaranteed to inherit this decision.</MudText>
+    <details>
+    <summary>View @(_rows!.Count) services and set decisions</summary>
+    <ListToolbar Label="Sender default controls" SearchLabel="Search services" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@(_decisionFilter is null ? 0 : 1)" ClearFilters="@(() => _decisionFilter = null)">
+        <SortContent><ListNameSort @bind-Descending="_descending" /></SortContent>
+        <FiltersContent><SenderDecisionFilter @bind-Value="_decisionFilter" /></FiltersContent>
+    </ListToolbar>
     <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
         <thead>
             <tr>
                 <th>Service</th>
                 <th title="Monitored domains whose last 30 days of reports show this service. Found means strong evidence. Likely means the service is attributed on weaker evidence.">Domains</th>
-                <th>Decision</th>
-                <th>Source</th>
+                <th>Effective decision</th>
+                <th>Where it comes from</th>
                 <th>Note</th>
-                <th></th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in _rows)
+            @foreach (var row in VisibleRows)
             {
                 <tr>
                     <td>@(row.InCatalogue ? row.Name : $"{row.Name} (no longer recognised)")</td>
@@ -68,7 +104,7 @@
                     <td>
                         @if (row.InCatalogue)
                         {
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeAsync(row))">Change</MudButton>
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ChangeAsync(row))" aria-label="@($"{(row.Own is null ? "Set decision" : "Edit decision")} for {row.Name}")">@(row.Own is null ? GroupId is null ? "Set decision" : "Set override" : "Edit decision")</MudButton>
                         }
                         else
                         {
@@ -79,10 +115,30 @@
             }
         </tbody>
     </MudSimpleTable>
-}
+    </details>
+    </MudPaper>
+    <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">2 · Review undecided senders</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Investigate before making a decision</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Open the Dashboard sender-review queue, choose a domain, then inspect its Sources evidence. Decide whether the service belongs across the estate, only in a group, or only on that domain. Under review is a recorded decision, not an undecided sender.</MudText>
+        <AuthorizeView Policy="DomainsView">
+            <MudButton Href="@(GroupId is { } reviewGroup ? $"/dashboard?group={reviewGroup}&attention=senders" : "/dashboard?group=all&attention=senders")" Variant="Variant.Outlined">Review outstanding sender decisions</MudButton>
+        </AuthorizeView>
+    </MudPaper>
+    <MudPaper Outlined="true" Class="pa-4 mb-4 baseline-step">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">3 · Add exceptions where needed</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Keep exceptions close to their scope</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Group defaults override estate defaults. A domain's own service or source-IP decision can override both. Resetting a decision restores inheritance; resetting an estate default leaves the sender unreviewed where no other decision applies.</MudText>
+        <AuthorizeView Policy="GroupsManage">
+            <MudButton Href="/groups" Variant="Variant.Outlined" Class="mr-2">Choose a group for sender defaults</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="DomainsView">
+            <MudButton Href="@(GroupId is { } domainGroup ? $"/domains?group={domainGroup}" : "/domains")" Variant="Variant.Outlined">Choose a domain → Sources</MudButton>
+        </AuthorizeView>
+    </MudPaper>
+    </text>;
 
-@code {
-    [Parameter] public int? GroupId { get; set; }
+    private IReadOnlyList<TabbedPageTab> _tabs = [];
 
     private string? _groupName;
     private List<DefaultRow>? _rows;
@@ -146,7 +202,7 @@
         }
     }
 
-    private string Title => GroupId is null ? "Sender baseline" : $"Sender defaults for {_groupName}";
+    private string Title => GroupId is null ? "Baselines" : $"Sender defaults for {_groupName}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -155,6 +211,11 @@
         {
             Navigation.NavigateTo("/AccessDenied");
             return;
+        }
+
+        if (GroupId is null)
+        {
+            _tabs = await BaselineTabs.ForAsync(user, AuthorizationService);
         }
 
         if (GroupId is { } groupId)
@@ -201,12 +262,12 @@
         var own = _decisions.FirstOrDefault(decision => IsOwn(decision) && decision.Kind == SenderDecisionKind.Service && decision.Key == name);
         if (GroupId is null)
         {
-            return new DefaultRow(name, inCatalogue, own, own?.Status, own is null ? string.Empty : "set here", own?.Note);
+            return new DefaultRow(name, inCatalogue, own, own?.Status, own is null ? "No estate default" : "Estate default", own?.Note);
         }
 
         // What this group's domains get: the group's own decision, else the baseline's.
         var effective = _decisions.FirstOrDefault(decision => decision.Scope == SenderDecisionScope.Baseline && decision.Kind == SenderDecisionKind.Service && decision.Key == name);
-        var source = own is not null ? "set for this group" : effective is not null ? "from the baseline" : string.Empty;
+        var source = own is not null ? "Group override" : effective is not null ? "Inherits estate default" : "No inherited decision";
         return new DefaultRow(name, inCatalogue, own, own?.Status ?? effective?.Status, source, own?.Note);
     }
 
@@ -222,6 +283,9 @@
             { x => x.CurrentNote, row.Own?.Note },
             { x => x.HasOwnDecision, row.Own is not null },
             { x => x.InheritedText, row.Own is null && baseline is not null ? $"Currently {SenderDecisionPresentation.StatusLabel(baseline.Status)}, from the baseline." : null },
+            { x => x.ScopeDescription, GroupId is null ? "Estate-wide default for this service. Group and domain decisions may override it." : $"Applies to domains in {_groupName} unless a domain has its own decision." },
+            { x => x.ResetLabel, GroupId is null ? "Remove estate default" : "Restore inherited decision" },
+            { x => x.Subject, GroupId is null ? "the applicable domains" : "this group's domains" },
         };
         var dialogRef = await DialogService.ShowAsync<SenderDecisionDialog>($"Decide on {row.Name}", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var result = await dialogRef.Result;

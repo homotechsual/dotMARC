@@ -5,14 +5,14 @@ description: Read dotMARC's recent server log entries from inside the app, to di
 
 # Server logs
 
-dotMARC keeps its most recent log entries in memory and shows them under **Manage → Server logs**, so an error you hit in the app (a failed HaloPSA call, a rejected DNS push) can be diagnosed without needing access to the host's own logs.
+dotMARC keeps its most recent log entries in memory and shows them under **Manage > Logs > Server**, so an error you hit in the app (a failed HaloPSA call, a rejected DNS push) can be diagnosed without needing access to the host's own logs.
 
 ## What you see
 
 The page lists the latest entries, newest first, with the time (UTC), level, source and message. An entry that carries an exception has an expandable **Exception** section.
 
-* **Minimum level**: Error, Warning (the default) or Information.
-* **Search**: matches the message, the source (the logger's name) and the exception text, ignoring case.
+* **Search server logs**: always visible; matches the message, the source (the logger's name) and the exception text, ignoring case.
+* **Filters > Minimum level**: Error, Warning (the default) or Information. Collapsing the panel retains the level. **Clear filters** resets it to Warning without clearing search.
 * **Auto-refresh**: reloads the list every five seconds while you watch something happen.
 * **Copy shown entries**: copies what's on screen, handy for a bug report.
 

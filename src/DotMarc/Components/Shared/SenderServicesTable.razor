@@ -11,11 +11,24 @@ else
     <MudText Typo="Typo.subtitle1" Class="mb-1">Senders</MudText>
     <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
         The services your reports point to. Evidence is a score of the signals found for a service, not a certainty.
+        Expand Source IPs to inspect evidence and @((CanReview ? "record decisions for individual IPs." : "view inherited or recorded IP decisions. You do not have permission to change decisions."))
     </MudText>
+    <ListToolbar Label="Sender controls" SearchLabel="Search services or source IPs" @bind-Search="_search" @bind-Expanded="_showFilters"
+                 FilterCount="@(_decisionFilter is null ? 0 : 1)" ClearFilters="@(() => _decisionFilter = null)">
+        <SortContent>
+            <MudSelect T="string" Label="Sort senders" @bind-Value="_sort" Variant="Variant.Outlined" Margin="Margin.Dense" Class="list-sort">
+                <MudSelectItem Value="@("")">Default order</MudSelectItem>
+                <MudSelectItem Value="@("name")">Name (A to Z)</MudSelectItem>
+                <MudSelectItem Value="@("name-desc")">Name (Z to A)</MudSelectItem>
+                <MudSelectItem Value="@("volume")">Most messages</MudSelectItem>
+            </MudSelect>
+        </SortContent>
+        <FiltersContent><SenderDecisionFilter @bind-Value="_decisionFilter" /></FiltersContent>
+    </ListToolbar>
     <MudSimpleTable Dense="true" Hover="true" Class="mb-6" Style="overflow-x:auto;">
         <thead>
             <tr>
-                <th style="width:48px;"></th>
+                <th>Source IPs &amp; evidence</th>
                 <th>Service</th>
                 <th>Messages</th>
                 <th>Share</th>
@@ -27,13 +40,14 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in Rows())
+            @foreach (var row in VisibleRows())
             {
                 var resolved = RowDecision(row);
                 <tr>
                     <td>
-                        <MudIconButton Icon="@(IsOpen(row) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small"
-                                       title="@ToggleTitle(row)" OnClick="@(() => Toggle(row))" />
+                        <MudButton StartIcon="@(IsOpen(row) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small"
+                                   Variant="Variant.Outlined" aria-label="@ToggleTitle(row)" aria-expanded="@(IsOpen(row) ? "true" : "false")"
+                                   OnClick="@(() => Toggle(row))">Source IPs (@row.SourceIps.Count)</MudButton>
                     </td>
                     <td>@(row.IsUnrecognised ? "Not matched to a known service" : row.Name)</td>
                     <td>@row.Messages.ToString("N0")</td>
@@ -47,7 +61,7 @@ else
                     <td>
                         @if (row.IsUnrecognised)
                         {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Decide per IP, below</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@(CanReview ? "Expand Source IPs to decide per IP" : "Expand Source IPs to view decisions")</MudText>
                         }
                         else
                         {
@@ -89,7 +103,7 @@ else
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Source IPs</MudText>
                             @foreach (var ip in row.SourceIps)
                             {
-                                <div class="d-flex align-center" style="gap:0.5rem;">
+                                <div class="d-flex align-center" style="gap:0.5rem; flex-wrap:wrap;">
                                     <span>@ip</span>
                                     @DecisionChip(IpResolved(ip), ip, ip, SenderDecisionKind.Ip)
                                 </div>
@@ -103,6 +117,22 @@ else
 }
 
 @code {
+    private string? _search, _decisionFilter;
+    private string _sort = "";
+    private bool _showFilters;
+    private IEnumerable<SenderServiceRow> VisibleRows()
+    {
+        var rows = Rows().Where(row => (string.IsNullOrWhiteSpace(_search) || row.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || row.SourceIps.Any(ip => ip.Contains(_search, StringComparison.OrdinalIgnoreCase)))
+            && (_decisionFilter is null || SenderDecisionPresentation.StatusLabel(RowDecision(row).Status) == _decisionFilter));
+        return _sort switch
+        {
+            "name" => rows.OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase),
+            "name-desc" => rows.OrderByDescending(row => row.Name, StringComparer.OrdinalIgnoreCase),
+            "volume" => rows.OrderByDescending(row => row.Messages),
+            _ => rows
+        };
+    }
     [Parameter] public SenderIdentificationResult? Result { get; set; }
 
     /// <summary>The decision that applies to a service row. Unrecognised rows have no row-level decision.</summary>
@@ -139,7 +169,7 @@ else
 
     /// <summary>The status as a read-only chip, with a "Decide" or "Change" button beside it for people who may review. Where the
     /// decision came from is in the chip's tooltip rather than a second line under every chip.</summary>
-    private RenderFragment DecisionChip(ResolvedSenderDecision resolved, string key, string label, SenderDecisionKind kind) => @<div class="d-flex align-center" style="gap:0.5rem; white-space:nowrap;">
+    private RenderFragment DecisionChip(ResolvedSenderDecision resolved, string key, string label, SenderDecisionKind kind) => @<div class="d-flex align-center" style="gap:0.5rem; flex-wrap:wrap;">
         @{
             var tooltip = ChipTooltip(resolved, kind);
         }
@@ -149,6 +179,7 @@ else
         @if (CanReview)
         {
             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                       aria-label="@($"{(resolved.Status is null ? "Decide on" : "Change decision for")} {(kind == SenderDecisionKind.Ip ? "source IP" : "service")} {label}")"
                        OnClick="@(() => OnDecide.InvokeAsync(new SenderDecisionRequest(kind, key, label)))">@(resolved.Status is null ? "Decide" : "Change")</MudButton>
         }
     </div>;
@@ -186,7 +217,7 @@ else
         }
     }
 
-    private string ToggleTitle(SenderServiceRow row) => IsOpen(row) ? "Hide details" : "Show details";
+    private string ToggleTitle(SenderServiceRow row) => $"{(IsOpen(row) ? "Hide" : "Show")} source IPs and evidence for {(row.IsUnrecognised ? "unrecognised senders" : row.Name)}";
 
     private static string Percent(double value) => value.ToString("P0");
 

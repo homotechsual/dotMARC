@@ -1,0 +1,44 @@
+<div class="list-toolbar mb-3" role="group" aria-label="@Label" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()">
+    <MudTextField T="string" Label="@SearchLabel" Value="Search" ValueChanged="SearchChanged" Immediate="true"
+                  Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="list-search" />
+    @SortContent
+    @if (FiltersContent is not null)
+    {
+        <MudButton Variant="@(Expanded ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FilterList" Disabled="@(!RendererInfo.IsInteractive)" OnClick="@(() => ExpandedChanged.InvokeAsync(!Expanded))"
+                   aria-controls="@PanelId" aria-expanded="@Expanded.ToString().ToLowerInvariant()">
+            Filters (@FilterCount)
+        </MudButton>
+    }
+    @Actions
+</div>
+@if (FiltersContent is not null)
+{
+    <MudCollapse Expanded="Expanded">
+        <MudPaper id="@PanelId" Outlined="true" Class="pa-3 mb-3 list-filters">
+            <div class="list-filter-fields">@FiltersContent</div>
+            @if (ClearFilters.HasDelegate)
+            {
+                <MudButton Class="mt-2" Size="Size.Small" StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearFilters">Clear filters</MudButton>
+            }
+        </MudPaper>
+    </MudCollapse>
+}
+
+@code {
+    [Parameter] public string Label { get; set; } = "List controls";
+    [Parameter] public string SearchLabel { get; set; } = "Search";
+    [Parameter] public string? Search { get; set; }
+    [Parameter] public EventCallback<string?> SearchChanged { get; set; }
+    [Parameter] public bool Expanded { get; set; }
+    [Parameter] public EventCallback<bool> ExpandedChanged { get; set; }
+    [Parameter] public int FilterCount { get; set; }
+    [Parameter] public RenderFragment? SortContent { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public RenderFragment? FiltersContent { get; set; }
+    [Parameter] public EventCallback ClearFilters { get; set; }
+    [Parameter] public string? FilterId { get; set; }
+    private readonly string _filterId = $"list-filters-{Guid.NewGuid():N}";
+    private string PanelId => FilterId ?? _filterId;
+}

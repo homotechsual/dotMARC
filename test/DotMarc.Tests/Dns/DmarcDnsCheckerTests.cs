@@ -16,6 +16,43 @@ public class DmarcDnsCheckerTests
 
     private const string NxDomainResponse = """{"Status":3}""";
 
+    [Theory]
+    [InlineData("""{"Status":2}""")]
+    [InlineData("""{"Status":5}""")]
+    [InlineData("""{}""")]
+    [InlineData("""null""")]
+    [InlineData("""{"Status":0,"TC":true}""")]
+    public async Task FailedOrIncompleteDnsDoesNotBecomeAMissingRecord(string response)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = response;
+        await Assert.ThrowsAsync<HttpRequestException>(() => checker.CheckAsync("parked.example", "reports@other.example", CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() => checker.CheckAuthorizationAsync("parked.example", "reports@other.example", CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("v=DMARC1; p=reject")]
+    [InlineData("v=DMARC1; p=reject; rua=mailto:another@example.com")]
+    public async Task NoSenderDomainDoesNotRequireDotMarcRua(string record)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers(record);
+        var result = await checker.CheckAsync("parked.example", "reports@example.com", CancellationToken.None, expectsReports: false);
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+        Assert.Equal(DmarcPolicyLevel.Reject, result.Policy!.Policy);
+        Assert.True(result.Analysis!.IsValid);
+    }
+
+    [Theory]
+    [InlineData("v=DMARC1; p=reject; p=none")]
+    [InlineData("v=DMARC1; p=bogus")]
+    public async Task NoSenderDomainStillRequiresValidDmarc(string record)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers(record);
+        Assert.Equal(DmarcCheckStatus.Misconfigured, (await checker.CheckAsync("parked.example", "reports@example.com", CancellationToken.None, expectsReports: false)).Status);
+    }
+
     [Fact]
     public async Task CheckAsync_ReturnsMissingOwnRecord_WhenNoDmarcRecordExists()
     {
@@ -29,11 +66,23 @@ public class DmarcDnsCheckerTests
     }
 
     [Fact]
-    public async Task CheckAsync_ReturnsMisconfigured_WhenRecordDoesNotStartWithVDmarc1()
+    public async Task CheckAsync_SaysNoDmarcRecord_WhenOtherTxtValuesSitAtTheName()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers("google-site-verification=abc");
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.MissingOwnRecord, result.Status);
+        Assert.Equal("No DMARC record found at _dmarc.contoso.io", result.Detail);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsMisconfigured_WhenTheVersionIsNotDMARC1()
     {
         var (checker, handler) = CreateChecker();
         handler.ResponseBody = """
-            {"Status":0,"Answer":[{"type":16,"data":"\"not a dmarc record\""}]}
+            {"Status":0,"Answer":[{"type":16,"data":"\"v=DMARC2; p=none\""}]}
             """;
 
         var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
@@ -311,5 +360,77 @@ public class DmarcDnsCheckerTests
         var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
 
         Assert.Null(result.Policy);
+    }
+
+    private static string TxtAnswers(params string[] txtValues) =>
+        "{\"Status\":0,\"Answer\":[" + string.Join(",", txtValues.Select(value => "{\"type\":16,\"data\":\"\\\"" + value + "\\\"\"}")) + "]}";
+
+    [Theory]
+    [InlineData("v=DMARC1; p=none; p=reject; rua=mailto:rua.dmarc@mjco.uk", DmarcRecordProblemKind.RepeatedTag)]
+    [InlineData("v=DMARC1; rua=mailto:rua.dmarc@mjco.uk", DmarcRecordProblemKind.MissingPolicy)]
+    [InlineData("p=reject; v=DMARC1; rua=mailto:rua.dmarc@mjco.uk", DmarcRecordProblemKind.VersionMissingOrNotFirst)]
+    public async Task CheckAsync_ReturnsMisconfigured_NamingTheBreakingProblem(string record, DmarcRecordProblemKind expectedKind)
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers(record);
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Misconfigured, result.Status);
+        var problem = Assert.Single(result.Analysis!.Problems, candidate => candidate.Kind == expectedKind);
+        Assert.Contains(problem.Description, result.Detail);
+        Assert.NotNull(result.Policy);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsMisconfigured_WhenThereAreTwoDmarcRecords()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers("v=DMARC1; p=none; rua=mailto:rua.dmarc@mjco.uk", "v=DMARC1; p=reject");
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Misconfigured, result.Status);
+        Assert.Contains(result.Analysis!.Problems, problem => problem.Kind == DmarcRecordProblemKind.MultipleRecords);
+        Assert.Equal(2, result.Analysis.Records.Count);
+    }
+
+    [Fact]
+    public async Task CheckAsync_KeepsTheRuaStatus_WhenOnlyInformationalProblemsExist()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers("v=DMARC1; p=reject; pct=100; t=y; rf=afrf; rua=mailto:rua.dmarc@mjco.uk");
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+        Assert.Null(result.Detail);
+        Assert.True(result.Analysis!.Testing);
+        Assert.Contains(result.Analysis.Problems, problem => problem.Kind == DmarcRecordProblemKind.ObsoleteTag && problem.Tag == "pct");
+        Assert.Contains(result.Analysis.Problems, problem => problem.Kind == DmarcRecordProblemKind.TestingMode);
+    }
+
+    [Fact]
+    public async Task CheckAsync_TreatsADmarcRecordBesideAVerificationValueAsOneRecord()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers("some-verification=abc123", "v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk");
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.Ok, result.Status);
+        Assert.Equal(["v=DMARC1; p=quarantine; rua=mailto:rua.dmarc@mjco.uk"], result.Analysis!.Records);
+    }
+
+    [Fact]
+    public async Task CheckAsync_ReturnsMissingOwnRecord_WhenOnlyUnrelatedValuesExist()
+    {
+        var (checker, handler) = CreateChecker();
+        handler.ResponseBody = TxtAnswers("some-verification=abc123");
+
+        var result = await checker.CheckAsync("contoso.io", "rua.dmarc@mjco.uk", CancellationToken.None);
+
+        Assert.Equal(DmarcCheckStatus.MissingOwnRecord, result.Status);
+        Assert.Null(result.Analysis);
     }
 }

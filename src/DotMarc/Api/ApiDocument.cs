@@ -165,7 +165,7 @@ internal static class ApiExamples
 
     private static readonly Dictionary<Type, object> Samples = new()
     {
-        [typeof(ApiDomain)] = new ApiDomain(42, "contoso.example", true, [new ApiNamedRef(3, "Contoso")], [new ApiNamedRef(7, "Microsoft 365")], ExampleTime, 0.987),
+        [typeof(ApiDomain)] = new ApiDomain(42, "contoso.example", true, [new ApiNamedRef(3, "Contoso")], [new ApiNamedRef(7, "Microsoft 365")], ExampleTime, 0.987, new ApiDmarcTarget("reject", "reject", "group", "below")),
         [typeof(ApiGroup)] = new ApiGroup(3, "Contoso", 12),
         [typeof(ApiTag)] = new ApiTag(7, "Microsoft 365", "Primary", 30),
         [typeof(ApiCheck)] = new ApiCheck("Ok", ExampleTime, null),

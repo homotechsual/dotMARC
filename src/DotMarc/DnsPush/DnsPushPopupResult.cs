@@ -13,6 +13,17 @@ public static class DnsPushPopupResult
 {
     public static IResult Close(string outcome, AppTitle title, string? pushId = null) => Results.Content(Html(outcome, pushId, title), "text/html");
 
+    /// <summary>The coarse flag the popup and the opening page get for a provider outcome.</summary>
+    public static string FlagFor(DnsPushOutcome outcome) => outcome switch
+    {
+        DnsPushOutcome.Pushed => "pushed",
+        DnsPushOutcome.ZoneNotFound => "zone-not-found",
+        DnsPushOutcome.ReplaceFailedAfterDelete => "replace-failed",
+        DnsPushOutcome.LeftDuplicateRecord => "spf-duplicate",
+        DnsPushOutcome.LeftDuplicateDmarcRecord => "dmarc-duplicate",
+        _ => "error"
+    };
+
     public static string Html(string outcome, string? pushId, AppTitle title)
     {
         // The serializer's default encoder escapes <, >, & and quotes, so nothing in the values can end the script.
@@ -52,15 +63,20 @@ public static class DnsPushPopupResult
     private static (string Heading, string Detail) Describe(string outcome) => outcome switch
     {
         "pushed" => ("Records pushed", "dotMARC updated the DNS records. It can take a few minutes for the change to be seen everywhere."),
+        "batch-started" => ("Batch started", "dotMARC is pushing the records to each domain now. You can close this window and follow the results in dotMARC."),
         "cancelled" => ("Push cancelled", "The sign-in at your DNS provider was cancelled, so nothing was changed."),
         "invalid" => ("Push not started", "This push expired or couldn't be checked, so nothing was changed. Start it again from dotMARC."),
         "zone-not-found" => ("Couldn't find the domain", "Couldn't find the domain in the DNS account you signed in to, so nothing was changed."),
         "unmergeable" => ("Nothing pushed", "dotMARC couldn't safely work out the change to that record, so it needs a manual look."),
         "nothing-to-push" => ("Nothing to push", "DNS already matches what dotMARC would push."),
+        "report-address-conflict" => ("Report destinations conflict", "Groups specify different secondary report addresses. Set a domain override, then review DNS setup again. Nothing was pushed."),
+        "setup-changed" => ("Setup changed", "DNS or setup settings changed after review. Nothing was pushed. Review DNS setup again before publishing."),
+        "setup-failed" => ("DNS setup did not complete", "Some DNS changes may already be published. A failed replacement can leave a record missing or duplicated. Check every reviewed record in your DNS provider before retrying."),
         "replace-failed" => ("Push failed partway", "The old record was deleted, but creating its replacement failed, so there's no record at that name. Add it by hand in your DNS provider."),
         "spf-changed" => ("SPF changed", "The SPF record changed since you opened the editor, so nothing was pushed. Reopen the editor to start from the current record."),
         "spf-too-many-lookups" => ("Nothing pushed", "That SPF record would need more than 10 DNS lookups, so it wasn't pushed."),
         "spf-duplicate" => ("Push failed partway", "The new SPF record was added, but the old one couldn't be removed, so the domain has two SPF records. Remove the old one in your DNS provider."),
+        "dmarc-duplicate" => ("Push failed partway", "The new DMARC record was added, but the old one could not be removed, so the name now has two DMARC records. Receivers ignore DMARC when there are two. Delete the old record at your DNS provider."),
         "error" => ("DNS push failed", "The DNS push failed. Try again, or add the record by hand."),
         _ => ("The DNS push finished", "Go back to dotMARC to see the result."),
     };

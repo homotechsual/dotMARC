@@ -57,8 +57,15 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
 
+    env:
+      # A workflow_run workflow runs from the default branch, and github.sha is that branch's head, not the commit CI ran for.
+      # Build and tag the commit CI passed on, as the demo deployment does.
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Compute image name
         id: image
@@ -101,7 +108,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.name }}:edge
-            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:${{ env.SOURCE_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -123,6 +130,6 @@ jobs:
           push: true
           tags: |
             ${{ steps.dockerhub.outputs.name }}:edge
-            ${{ steps.dockerhub.outputs.name }}:${{ github.sha }}
+            ${{ steps.dockerhub.outputs.name }}:${{ env.SOURCE_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

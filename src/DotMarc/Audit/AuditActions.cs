@@ -57,9 +57,11 @@ public static class AuditActions
     public const string AzureDnsSettingsSaved = "settings.azure_dns.saved";
     public const string GoogleCloudDnsSettingsSaved = "settings.google_cloud_dns.saved";
     public const string DnsRecordSettingsSaved = "settings.dns_records.saved";
+    public const string DmarcTargetSaved = "baseline.dmarc_target_saved";
     public const string AuditSettingsSaved = "settings.audit.saved";
     public const string DnsPushed = "dns.pushed";
     public const string DnsPushFailed = "dns.push_failed";
+    public const string DnsPushBatchStarted = "dns.push_batch_started";
     public const string HaloIntegrationTested = "halo.integration_tested";
     public const string ConnectWiseIntegrationTested = "connectwise.integration_tested";
     public const string AutotaskIntegrationTested = "autotask.integration_tested";
@@ -137,9 +139,11 @@ public static class AuditActions
         (AzureDnsSettingsSaved, "Azure DNS settings saved"),
         (GoogleCloudDnsSettingsSaved, "Google Cloud DNS settings saved"),
         (DnsRecordSettingsSaved, "DNS record settings saved"),
+        (DmarcTargetSaved, "DMARC target saved"),
         (AuditSettingsSaved, "Audit retention changed"),
         (DnsPushed, "DNS records pushed"),
         (DnsPushFailed, "DNS push failed partway"),
+        (DnsPushBatchStarted, "DNS push batch started"),
         (HaloIntegrationTested, "HaloPSA integration tested"),
         (ConnectWiseIntegrationTested, "ConnectWise integration tested"),
         (AutotaskIntegrationTested, "Autotask integration tested"),

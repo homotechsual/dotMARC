@@ -19,6 +19,8 @@ public static class DnsPushAudit
                 $"A DNS push for {domain.Name} to {provider} failed after deleting the old record, so the name may now have no record"),
             DnsPushOutcome.LeftDuplicateRecord => (AuditActions.DnsPushFailed,
                 $"A DNS push for {domain.Name} to {provider} added the new SPF record but couldn't remove the old one, so the domain has more than one SPF record"),
+            DnsPushOutcome.LeftDuplicateDmarcRecord => (AuditActions.DnsPushFailed,
+                $"A DNS push for {domain.Name} to {provider} added the new DMARC record but couldn't remove the old one, so the domain has more than one DMARC record"),
             DnsPushOutcome.ProviderError => (AuditActions.DnsPushFailed,
                 $"A DNS push for {domain.Name} to {provider} failed partway, so some of these records may already be live"),
             _ => (null, null)
@@ -32,7 +34,7 @@ public static class DnsPushAudit
         // The provider's error text isn't included: it adds nothing to "what changed" and is already in the server log.
         return AuditLog.Create(actor, AuditEntryKind.Change, action, AuditTarget.For(domain), summary!,
             changes.Select(change => new AuditFieldChange(
-                change.Kind == DnsRecordChangeKind.ReplaceTxtValues ? $"SPF {change.Name}" : $"{change.RecordType} {change.Name}",
+                change.Kind == DnsRecordChangeKind.ReplaceTxtValues && !DmarcRecordName.IsDmarcName(change.Name) ? $"SPF {change.Name}" : $"{change.RecordType} {change.Name}",
                 change.ExistingValue, change.DesiredValue)).ToList());
     }
 }

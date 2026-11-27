@@ -34,9 +34,21 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
                 // history (SpfRangesJson, AlertRuleId) don't exist yet, so they are added here and dropped again before migrating
                 // on. The old Halo columns are set in SQL, because they leave the model in a later change.
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"SpfRangesJson\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"TargetDmarcPolicy\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"TargetDmarcSubdomainPolicy\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"TargetDmarcPolicy\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"TargetDmarcSubdomainPolicy\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"AdditionalRuaAddress\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"OverrideAdditionalRuaAddress\" boolean NOT NULL DEFAULT false");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"AdditionalRuaAddress\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" ADD COLUMN \"OverrideAdditionalRuaAddress\" boolean NOT NULL DEFAULT false");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"AlertRuleId\" integer");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"NotifiedUtc\" timestamp with time zone");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" ADD COLUMN \"EscalatedUtc\" timestamp with time zone");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"DmarcNonExistentSubdomainPolicy\" text");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"DmarcTesting\" boolean NOT NULL DEFAULT false");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"DmarcRecords\" text[] NOT NULL DEFAULT '{{}}'");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" ADD COLUMN \"DmarcProblems\" text[] NOT NULL DEFAULT '{{}}'");
                 var group = new Group { Name = "Client A" };
                 var domain = new Domain { Name = "contoso.io", FirstSeenUtc = DateTimeOffset.UtcNow };
                 var openAlert = new AlertEvent { DomainName = "contoso.io", AlertType = "MissedReport", Severity = "Warning", Title = "open", Message = "m" };
@@ -52,9 +64,21 @@ public sealed class PsaDataMigrationTests(PostgresContainerFixture fixture)
                 await context.Database.ExecuteSqlRawAsync("UPDATE \"AlertEvents\" SET \"ExternalTicketProvider\" = 'HaloPSA', \"ExternalTicketId\" = '101' WHERE \"Id\" = {0}", resolvedAlertId);
 
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"SpfRangesJson\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"TargetDmarcPolicy\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"TargetDmarcSubdomainPolicy\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"TargetDmarcPolicy\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"TargetDmarcSubdomainPolicy\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"AdditionalRuaAddress\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"OverrideAdditionalRuaAddress\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"AdditionalRuaAddress\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Groups\" DROP COLUMN \"OverrideAdditionalRuaAddress\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"AlertRuleId\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"NotifiedUtc\"");
                 await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"AlertEvents\" DROP COLUMN \"EscalatedUtc\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"DmarcNonExistentSubdomainPolicy\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"DmarcTesting\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"DmarcRecords\"");
+                await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Domains\" DROP COLUMN \"DmarcProblems\"");
                 await context.Database.MigrateAsync();
             }
 

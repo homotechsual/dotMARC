@@ -30,14 +30,15 @@ public sealed class TxtRecordLookup : ITxtRecordLookup
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type=TXT");
         request.Headers.Accept.ParseAdd("application/dns-json");
-        var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var parsed = JsonSerializer.Deserialize<DnsOverHttpsResponse>(body, JsonOptions);
 
         // 0 is an answer and 3 (NXDOMAIN) is a real "nothing here". Anything else, such as SERVFAIL, means the resolver
         // couldn't find out, which must not be read as "no record".
-        if (parsed is null || parsed.Status is not (0 or 3))
+        if (parsed is null || parsed.Truncated || parsed.Status is not (0 or 3)
+            || parsed.Answer?.Any(answer => answer.Data is null || parsed.Status == 3 && answer.Type == 16) == true)
         {
             throw new HttpRequestException($"The DNS resolver couldn't look up {name} (status {parsed?.Status}).");
         }
@@ -46,7 +47,8 @@ public sealed class TxtRecordLookup : ITxtRecordLookup
     }
 
     private sealed record DnsOverHttpsResponse(
-        [property: JsonPropertyName("Status")] int Status,
+        [property: JsonPropertyName("Status")] int? Status,
+        [property: JsonPropertyName("TC")] bool Truncated,
         [property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
     private sealed record DnsAnswer([property: JsonPropertyName("type")] int Type, [property: JsonPropertyName("data")] string Data);
 }

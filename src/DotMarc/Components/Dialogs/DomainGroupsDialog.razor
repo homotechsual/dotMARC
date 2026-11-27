@@ -1,0 +1,27 @@
+@using DotMarc.Data
+@using DotMarc.Components.Shared
+<MudDialog>
+    <TitleContent>Groups for @DomainName</TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">Choose the groups this domain belongs to. Group targets and sender defaults apply immediately after saving.</MudText>
+        @if (IsScoped)
+        {
+            <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Only your groups are shown. Keep at least one selected; memberships outside your scope are preserved.</MudText>
+        }
+        <SearchableMultiSelect TValue="int" Label="Domain groups" Options="Options" SelectedValues="_selected" SelectedValuesChanged="@(ids => _selected = ids)" Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(IsScoped && _selected.Count == 0)" OnClick="@(() => MudDialog.Close(DialogResult.Ok(_selected.ToArray())))">Save groups</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string DomainName { get; set; } = "";
+    [Parameter] public IReadOnlyList<SelectOption<int>> Options { get; set; } = [];
+    [Parameter] public IReadOnlyCollection<int> Selected { get; set; } = [];
+    [Parameter] public bool IsScoped { get; set; }
+    private IReadOnlyCollection<int> _selected = [];
+    protected override void OnInitialized() => _selected = Selected.ToArray();
+}

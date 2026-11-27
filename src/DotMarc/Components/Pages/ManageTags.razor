@@ -1,0 +1,136 @@
+@page "/tags"
+@attribute [Authorize(Policy = "TagsManage")]
+@using DotMarc.Data
+@using DotMarc.Components.Dialogs
+@using DotMarc.Components.Shared
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuditActorAccessor Actor
+@inject IAuthorizationService Authorization
+@inject AuthenticationStateProvider Authentication
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject ILogger<ManageTags> Logger
+
+<AppPageTitle>dotMARC - Tags</AppPageTitle>
+<MudButton Href="/domains" StartIcon="@Icons.Material.Filled.ArrowBack">Domains</MudButton>
+<MudText Typo="Typo.h4">Tags</MudText>
+<MudText Class="mb-4">Tags help filter domains; they never grant access. Enable management in Domains, then expand a domain to assign tags.</MudText>
+<MudTable Items="@(_tags ?? [])" T="TagRow" Filter="Matches">
+<ToolBarContent>
+<ListToolbar Label="Tag controls" SearchLabel="Search tags" Search="@_search" SearchChanged="@(value => _search = value ?? "")"
+             @bind-Expanded="_showFilters" FilterCount="@((_filterColor is null ? 0 : 1) + (_minDomains is null ? 0 : 1))"
+             ClearFilters="@(() => { _filterColor = null; _minDomains = null; })">
+    <SortContent>
+        <ListTableSort TItem="TagRow" @ref="_tableSort" />
+    </SortContent>
+    <Actions><AuthorizeView Policy="TagsAdd">
+        <MudButton OnClick="@(() => _showAdd = !_showAdd)" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   aria-controls="add-tag" aria-expanded="@_showAdd.ToString().ToLowerInvariant()">@(_showAdd ? "Close add tag" : "Add tag")</MudButton>
+    </AuthorizeView></Actions>
+    <FiltersContent>
+        <MudSelect T="Color?" Label="Color" @bind-Value="_filterColor" Clearable="true">
+            @foreach (var color in TagManagementService.AllowedColors) { <MudSelectItem T="Color?" Value="color">@color</MudSelectItem> }
+        </MudSelect>
+        <MudNumericField T="int?" Label="Minimum domains" @bind-Value="_minDomains" Min="0" />
+    </FiltersContent>
+</ListToolbar>
+<AuthorizeView Policy="TagsAdd">
+    <div id="add-tag" hidden="@(!_showAdd)">
+    <div class="domain-list-toolbar mb-4">
+        <MudTextField T="string" Label="Tag name" @bind-Value="_name" />
+        <MudSelect T="Color" Label="Color" @bind-Value="_color">
+            @foreach (var color in TagManagementService.AllowedColors) { <MudSelectItem Value="color">@color</MudSelectItem> }
+        </MudSelect>
+        <MudButton OnClick="AddAsync" Disabled="@(!RendererInfo.IsInteractive)" Variant="Variant.Filled" Color="Color.Primary">Add tag</MudButton>
+    </div>
+    </div>
+</AuthorizeView>
+</ToolBarContent>
+        <HeaderContent>
+            <MudTh>Preview</MudTh><MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Name" SortBy="new Func<TagRow, object>(tag => tag.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Color" SortBy="new Func<TagRow, object>(tag => tag.Color)">Color</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domains" SortBy="new Func<TagRow, object>(tag => tag.Count)">Domains</MudTableSortLabel></MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate Context="tag">
+            <MudTd><MudChip T="string" Color="tag.Color">@tag.Name</MudChip></MudTd>
+            <MudTd><AuthorizeView Policy="TagsEdit" Context="editName">
+                <Authorized><MudTextField T="string" Value="tag.Name" ValueChanged="@(name => UpdateAsync(tag, name, tag.Color))" /></Authorized>
+                <NotAuthorized>@tag.Name</NotAuthorized>
+            </AuthorizeView></MudTd>
+            <MudTd><AuthorizeView Policy="TagsEdit" Context="editColor">
+                <Authorized><MudSelect T="Color" Value="tag.Color" ValueChanged="@(color => UpdateAsync(tag, tag.Name, color))">
+                    @foreach (var color in TagManagementService.AllowedColors) { <MudSelectItem Value="color">@color</MudSelectItem> }
+                </MudSelect></Authorized>
+                <NotAuthorized>@tag.Color</NotAuthorized>
+            </AuthorizeView></MudTd>
+            <MudTd>@tag.Count</MudTd>
+            <MudTd><AuthorizeView Policy="TagsDelete" Context="delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteAsync(tag))" aria-label="@($"Remove {tag.Name}")" /></AuthorizeView></MudTd>
+        </RowTemplate>
+        <NoRecordsContent><MudText>No matching tags.</MudText></NoRecordsContent>
+    </MudTable>
+
+@code {
+    private ListTableSort<TagRow>? _tableSort;
+    private Task RefreshSort(SortDirection _) => _tableSort?.RefreshAsync() ?? Task.CompletedTask;
+    private List<TagRow>? _tags;
+    private string _name = "", _search = "";
+    private Color _color = Color.Primary;
+    private Color? _filterColor;
+    private int? _minDomains;
+    private bool _showFilters;
+    private bool _showAdd;
+    private sealed record TagRow(int Id, string Name, Color Color, int Count);
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _tags = await db.Tags.AsNoTracking().OrderBy(tag => tag.Name).Select(tag => new TagRow(tag.Id, tag.Name, tag.Color, tag.Domains.Count)).ToListAsync();
+    }
+    private bool Matches(TagRow tag) => tag.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        && (_filterColor is null || tag.Color == _filterColor) && (_minDomains is null || tag.Count >= _minDomains);
+    private async Task RunAsync(Permission permission, Func<DotMarcDbContext, Task> action)
+    {
+        if (!(await Authorization.AuthorizeAsync((await Authentication.GetAuthenticationStateAsync()).User, permission.ToString())).Succeeded)
+        {
+            Snackbar.Add("You no longer have permission to change tags.", Severity.Warning);
+            return;
+        }
+        try { await using var db = await DbFactory.CreateDbContextAsync(); await action(db); await LoadAsync(); }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Changing tags failed");
+            Snackbar.Add("Could not save the tag. Try again.", Severity.Error);
+        }
+    }
+    private bool ShowResult(TagManagementService.AddTagResult result)
+    {
+        var error = result switch
+        {
+            TagManagementService.AddTagResult.InvalidName => "Enter a tag name.",
+            TagManagementService.AddTagResult.AlreadyExists => "A tag with that name already exists.",
+            TagManagementService.AddTagResult.InvalidColor => "Choose one of the available colors.",
+            _ => null
+        };
+        if (error is not null) Snackbar.Add(error, Severity.Warning);
+        return error is null;
+    }
+    private Task AddAsync() => RunAsync(Permission.TagsAdd, async db =>
+    {
+        if (ShowResult(await TagManagementService.AddTagAsync(db, await Actor.GetAsync(), _name, _color)))
+        { _name = ""; _color = Color.Primary; }
+    });
+    private Task UpdateAsync(TagRow tag, string name, Color color) => RunAsync(Permission.TagsEdit,
+        async db => { ShowResult(await TagManagementService.UpdateTagAsync(db, await Actor.GetAsync(), tag.Id, name, color)); });
+    private async Task DeleteAsync(TagRow tag)
+    {
+        var dialog = await Dialogs.ShowAsync<ConfirmDeleteLabelDialog>(new DialogParameters<ConfirmDeleteLabelDialog>
+        {
+            { choice => choice.Kind, "tag" }, { choice => choice.LabelName, tag.Name }, { choice => choice.DomainCount, tag.Count }
+        });
+        if (await dialog.Result is { Canceled: false })
+            await RunAsync(Permission.TagsDelete, async db => await TagManagementService.RemoveTagAsync(db, await Actor.GetAsync(), tag.Id));
+    }
+}

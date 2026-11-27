@@ -53,7 +53,7 @@ Halo may put a role's permissions into the access token it issues, and dotMARC r
 
 ## Configure dotMARC
 
-Open **Manage > PSA settings** and choose the **HaloPSA** tab: enable it, fill in the account name/URLs/client ID, and paste in the client secret (it's write-only: once saved, you won't see it again, only whether one is configured). Under **Ticket defaults**, click **Load options from Halo** to fill the dropdowns, then pick the ticket type new tickets should use, the default priority, and which Halo status counts as "closed" for resolving the alert back. The names you pick are saved with the settings, so they still show by name when you come back before loading the lists again.
+Open **Manage > Alerts & PSA > PSA** and choose the **HaloPSA** tab: enable it, fill in the account name/URLs/client ID, and paste in the client secret (it's write-only: once saved, you won't see it again, only whether one is configured). Under **Ticket defaults**, click **Load options from Halo** to fill the dropdowns, then pick the ticket type new tickets should use, the default priority, and which Halo status counts as "closed" for resolving the alert back. The names you pick are saved with the settings, so they still show by name when you come back before loading the lists again.
 
 Under **Webhook**, click **Generate new secret**, click **Save HaloPSA settings**, then copy the shown webhook URL into HaloPSA's own outbound webhook configuration, triggered on ticket status change. Save first: the secret only takes effect once it's persisted, so a URL copied before saving 404s until you do. This is what lets a ticket closed directly in Halo resolve the dotMARC alert straight away. dotMARC also checks its open Halo tickets every few minutes, so a webhook that goes missing only delays the resolution.
 
@@ -72,7 +72,7 @@ Where the client secret itself is stored (Postgres, encrypted, or Azure Key Vaul
 
 dotMARC keeps Halo's sign-in (an access token) in memory for about an hour. Halo can bake the API agent's permissions into that token when it issues it, so after changing the agent's role or permissions in Halo, use **Clear cached sign-in** (beside the client secret) to make the next call sign in again. Saving the HaloPSA settings clears it too, and so does restarting the app.
 
-If loading the options fails, the message shown quotes what HaloPSA answered (an OAuth error such as `invalid_scope`, an HTTP status, or the start of a response that wasn't in the expected shape). The full detail, including the exception, is under **Manage > Server logs** (see [Server logs](../server-logs.mdx)).
+If loading the options fails, the message shown quotes what HaloPSA answered (an OAuth error such as `invalid_scope`, an HTTP status, or the start of a response that wasn't in the expected shape). The full detail, including the exception, is under **Manage > Logs > Server** (see [Server logs](../server-logs.mdx)).
 
 ## Who tickets are assigned to
 

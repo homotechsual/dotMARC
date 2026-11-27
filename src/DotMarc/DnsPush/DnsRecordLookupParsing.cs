@@ -15,8 +15,9 @@ public static class DnsRecordLookupParsing
 
         var list = answers.ToList();
         var cname = list.FirstOrDefault(a => a.Type == 5).Data;
-        var txt = list.FirstOrDefault(a => a.Type == 16);
-        var directValue = txt.Data is null ? null : string.Join("", txt.Data.Split("\" \"")).Trim('"');
-        return new DnsRecordLookupResult(directValue, cname);
+        var txtValues = list.Where(a => a.Type == 16 && a.Data is not null).Select(a => JoinSegments(a.Data)).ToList();
+        return new DnsRecordLookupResult(txtValues.FirstOrDefault(), cname) { TxtValues = txtValues };
     }
+
+    private static string JoinSegments(string data) => string.Join("", data.Split("\" \"")).Trim('"');
 }

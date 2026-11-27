@@ -24,7 +24,7 @@ Each of these is a kind of alert with its own [rules](./alert-rules.mdx). By def
 
 ## Cooldown and re-firing
 
-Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for a domain, a new occurrence of the same condition is suppressed until the configured **cooldown** elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle. A rule can set its own cooldown instead of the one on Alert settings. The cooldown applies per rule, so two rules that both apply to a domain each keep their own.
+Alerts don't re-fire on every check. If an alert of the same type is already open (unresolved) for a domain, a new occurrence of the same condition is suppressed until the configured **cooldown** elapses since the open alert was created, so a genuinely down domain doesn't page you every cycle. A rule can set its own cooldown instead of the one on the Settings tab. The cooldown applies per rule, so two rules that both apply to a domain each keep their own.
 
 ## The Alerts page
 
@@ -36,7 +36,7 @@ Open DMARC policy weakened and nameservers changed alerts have an **Acknowledge*
 
 ## Alert settings
 
-**Alert settings** (`/alerts/settings`) configures delivery. It requires the `AlertsManage` permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](./alert-rules.mdx), and where each rule's alerts go is chosen from the destinations set up here.
+The **Settings** tab of **Manage > Alerts & PSA** (`/alerts/settings`) configures delivery. It requires the `AlertsManage` permission, granted separately from `AlertsView`. What is alerted on, and when, is set by [alert rules](./alert-rules.mdx), and where each rule's alerts go is chosen from the destinations set up here.
 
 | Setting | Description |
 | --- | --- |
@@ -50,11 +50,11 @@ Webhook URLs must be absolute HTTPS URLs with no embedded credentials (no `https
 
 ### Destinations
 
-A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you need under **Where alerts go** on Alert settings, for example one shared Teams channel and one Slack channel per client. A destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
+A **destination** is somewhere alerts are sent: a Teams channel, a Slack channel or a generic webhook. Add as many as you need under **Where alerts go** on the Settings tab, for example one shared Teams channel and one Slack channel per client. A destination has a name, a kind, a webhook URL and an on/off switch. **Send test** in its dialog posts a marked test alert to the URL as typed, before you save. A destination that is off receives nothing, whichever rules send to it.
 
 Each [alert rule](./alert-rules.mdx) either sends to **all destinations** (the default) or only to the destinations you choose for it. A rule that sends to chosen destinations and has none ticked still raises and records its alerts, but doesn't send them anywhere, which is how to keep a kind of alert in the Alerts page without posting it. Deleting a destination removes it from every rule that chose it, and says how many did first. A rule that chose only that destination then sends nowhere.
 
-The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the [audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with `AlertsManage`. The Alert rules page shows destination names, never URLs.
+The webhook URL is a secret: it lets anyone post to the channel. It is shown as a password field, is never written to the [audit log](./audit-log.mdx) (the log records that it changed, not what it was), and is only visible to people with `AlertsManage`. The Rules tab shows destination names, never URLs.
 
 **Upgrading.** Alerts raised before quiet hours existed count as already notified, so an upgrade never sends them again, and every existing rule has quiet hours and escalation switched off. The Teams, Slack and generic webhook channels you had before become destinations on upgrade, named `Teams`, `Slack` and `Generic webhook`, keeping their URL and on/off switch. A channel with no URL becomes nothing. Every rule sends to all destinations until someone changes it, so alerts go to the same places as before.
 
@@ -112,17 +112,33 @@ dotMARC checks each domain's DMARC, DMARC authorization, TLS-RPT, SPF, MX, DKIM 
 
 | Type | Raised when | Resolves when | Severity |
 | --- | --- | --- | --- |
-| `DmarcRecordBroken` | The DMARC record is missing or broken. | The check passes again. | Warning |
+| `DmarcRecordBroken` | The DMARC record is missing or broken. Broken includes the [record problems](./dmarc-and-mta-sts.mdx#record-problems) that make receivers ignore the record: a repeated tag, several records, `v=DMARC1` not first, or a missing or invalid `p`, `sp` or `np`. Obsolete tags and testing mode are not syntax failures; testing may still cause a policy-weakened or below-target alert. | The check passes again. | Warning |
 | `DmarcAuthorizationBroken` | The record that lets reports go to dotMARC's mailbox is missing. | The check passes again. | Warning |
 | `TlsrptRecordBroken` | The TLS-RPT record is missing or broken. | The check passes again. | Warning |
 | `SpfRecordBroken` | The SPF record is missing, duplicated or broken. A `-all`-only record counts as passing. | The check passes again. | Warning |
 | `MxRecordBroken` | There's no MX record, or the mail server's name doesn't resolve. A null MX counts as passing. | The check passes again. | Warning |
-| `DkimRecordBroken` | A DKIM selector set for the domain is missing or broken. | The check passes again, or the selectors are removed. | Warning |
+| `DkimRecordBroken` | A configured sending selector is missing or broken; on a null-SPF domain, a configured selector publishes a key or malformed revocation rather than being absent or revoked. | The check passes again, or the selectors are removed. | Warning |
 | `MtaStsFailing` | dotMARC stopped being able to serve the domain's MTA-STS policy. | MTA-STS is active again, or turned off. | Warning |
-| `DmarcPolicyWeakened` | `p`, `sp` or `pct` went down, for example from `p=reject` to `p=quarantine`. | The policy goes back up, or the alert is closed (see below). | Warning |
+| `DmarcPolicyWeakened` | `p`, effective `sp` or effective `np` went down, testing was enabled on an enforcing policy, or legacy `pct` fell on an enforcing policy. Sampling changes on an entirely monitoring-only policy do not weaken enforcement. | The policy goes back up, or the alert is closed (see below). | Warning |
+| `DmarcPolicyBelowTarget` | The domain's DMARC policy is below the [target](./baselines.mdx#domain) set for it. It never fires without a target, stays quiet while the DMARC record is missing or unreadable, and doesn't raise tickets by default. | The domain meets its target, or the target is removed. | Warning |
 | `NameserversChanged` | The domain's nameservers changed, often the start of a DNS migration. | They change back, or the alert is closed (see below). | Info |
 
 A check that hasn't run yet, or doesn't apply (no DKIM selectors, MTA-STS turned off or still being set up), never alerts.
+
+### Non-sending and parked domains
+
+dotMARC uses an observed SPF record containing only `v=spf1 -all` to identify a no-sender domain. Null MX (`0 .`) separately declares no inbound mail; it does not establish that a domain sends no mail.
+
+For a domain that neither sends nor receives mail, the expected posture is:
+
+* **SPF:** `v=spf1 -all`.
+* **MX:** a null MX, `0 .`, as defined by [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505).
+* **DKIM:** no published keys at known selectors, or an explicitly revoked key such as `v=DKIM1; p=`. [RFC 6376 section 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) defines an empty `p` as revocation; an absent `p` is malformed, not revoked. A published key can still permit aligned DKIM to pass despite null SPF, so unused keys remain visible for investigation.
+* **DMARC:** a valid enforcing record such as `v=DMARC1; p=reject`, with subdomains inheriting reject unless explicitly set. Avoid weaker `sp`/`np`, testing mode and partial legacy enforcement. A `rua` destination is optional for this posture; dotMARC does not require its reporting mailbox or reporting-authorization record on a null-SPF domain. See [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989).
+
+DKIM checks cover **only configured selectors**, including their CNAME targets; DNS does not offer reliable enumeration of every selector. No configured selectors means **Not configured**, not proof that every key is absent. Confirmed absent/revoked configured selectors produce `NoSendingKeys`; a published key produces `UnexpectedSendingKey`. Both are exposed by the API and its DKIM filter. A DNS resolver error, malformed response or truncated answer is logged as a failed lookup and keeps the last recorded result and timestamp, never establishing healthy absence.
+
+Null SPF never suppresses a real DMARC policy downgrade. Older accepted policies learn previously untracked `np`/testing fields before comparing later changes, without inventing a historical downgrade. After upgrading, recheck existing null-SPF domains to replace older sending-key/reporting statuses; old missing-key evidence appears as needing verification rather than a recommendation to publish a sending key.
 
 ### When a check alerts
 
@@ -166,7 +182,7 @@ Sent as a `POST` to a Slack incoming webhook, using Slack's Block Kit layout: a 
 
 1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
 2. Under **Incoming Webhooks**, turn them on, then **Add New Webhook to Workspace** and pick the channel.
-3. On Alert settings, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
+3. On the Settings tab, choose **Add a destination**, pick the kind **Slack**, paste the URL (it starts `https://hooks.slack.com/services/`) into **Webhook URL**, and use **Send test** to check it.
 
 </details>
 

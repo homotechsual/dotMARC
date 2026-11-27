@@ -44,6 +44,22 @@ public sealed record AuditFilter
         Summary = NullIfBlank(query["summary"]),
     };
 
+    /// <summary>Reads an address's query string for the page itself. The default start date is kept unless the address
+    /// sets <c>from</c> or <c>to</c>, so a link such as <c>?who=sam</c> still searches the default range.</summary>
+    public static AuditFilter FromAddress(IQueryCollection query, DateOnly defaultFrom)
+    {
+        var filter = FromQuery(query);
+        return query.ContainsKey("from") || query.ContainsKey("to") ? filter : filter with { From = defaultFrom };
+    }
+
+    /// <summary>True when a text or kind criterion is set. The page opens the advanced filters for incoming filtered links.</summary>
+    public bool HasColumnFilters =>
+        Kind is not null
+        || !string.IsNullOrWhiteSpace(Who)
+        || !string.IsNullOrWhiteSpace(Action)
+        || !string.IsNullOrWhiteSpace(Target)
+        || !string.IsNullOrWhiteSpace(Summary);
+
     /// <summary>A short description for the audit.exported entry, such as <c>from 2026-09-01, who contains "sam"</c>.</summary>
     public string Describe()
     {

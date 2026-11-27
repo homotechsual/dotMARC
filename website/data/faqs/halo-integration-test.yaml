@@ -1,6 +1,6 @@
 question: How do I check my PSA integration actually works?
 answer: |
-  Use **Test the integration** on your PSA's tab under **Manage > PSA settings**. It creates a clearly marked test
+  Use **Test the integration** on your PSA's tab under **Manage > Alerts & PSA > PSA**. It creates a clearly marked test
   ticket from your most recent alert's details, reads it back, closes it using your closed status, and reads it back
   again to check dotMARC sees the close. For HaloPSA it then waits for Halo to call the webhook back. It shows each
   step as it goes, and if a step fails the message says what the PSA answered or what to check, for example a wrong

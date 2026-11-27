@@ -5,11 +5,13 @@ namespace DotMarc.DnsPush;
 /// DmarcTxtLookup's doc comment for why), so this only needs enough to know which domain and which
 /// flow, plus the PKCE verifier the /start step generated. Payload carries the SPF editor's proposed record; every
 /// other target leaves it null. PushId is the id the pushing page made up, handed back with the result so the page can
-/// pick its own result out of the BroadcastChannel (see DnsPushPopupResult).</summary>
+/// pick its own result out of the BroadcastChannel (see DnsPushPopupResult). BatchId is set only for a batch of domains: the batch holds the
+/// domains, so DomainId is 0 and PushTarget is the batch's target. A state without one is a single-domain push and never touches a batch.</summary>
 public sealed record DnsPushState(
     int DomainId,
     string PushTarget,
     string CodeVerifier,
     DateTimeOffset ExpiresAtUtc,
     string? Payload = null,
-    string? PushId = null);
+    string? PushId = null,
+    Guid? BatchId = null);

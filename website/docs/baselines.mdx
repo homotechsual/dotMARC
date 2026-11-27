@@ -1,0 +1,104 @@
+---
+sidebar_position: 8.5
+description: Set the DMARC policy your domains should reach, system-wide, per group or per domain, and the sender baseline that every domain starts from.
+---
+
+# Baselines
+
+**Baselines** (`/baselines`) hold the standards your domains are measured against. It opens **Domain** by default, for the DMARC policy every domain should reach, with **Sender** second for sending-service decisions across your estate. People who can access only Sender land on that tab instead. The old Sender baseline page at `/senders/baseline` still redirects to Sender, so existing bookmarks keep working.
+
+## Sender
+
+The Sender tab is the Sender baseline: a decision recorded here applies to every domain unless a group or a domain says otherwise. It works exactly as it did before it moved. How decisions are made, and how a group's or a domain's decision overrides the baseline, is described in [Decide which senders are authorised](./getting-started.mdx#decide-which-senders-are-authorised). The tab needs the `SenderReview` permission.
+
+Follow the three sections:
+
+1. **Set default decisions.** Record an estate-wide decision only when it is appropriate for the service across the estate. Rows show the effective decision and its origin; observed 30-day domain counts are evidence, not a guarantee that those domains inherit the default.
+2. **Review undecided senders.** Open the Dashboard sender-review queue, choose a domain and inspect Sources before deciding. Under review is already a recorded decision.
+3. **Add exceptions where needed.** Use group sender defaults or a domain's Sources decisions for narrower intent. Removing an estate default leaves the sender unreviewed where no other decision applies; restoring a group decision to inherited uses the estate default.
+
+The service table is collapsed initially so the complete pathway stays visible. Expand **View services and set decisions** to inspect and edit individual services.
+
+Decisions change dotMARC's labels and alerts, not DNS or receiver enforcement. The save dialog identifies the scope you are changing.
+
+## Domain
+
+The Domain tab sets a **target DMARC policy**: the policy a domain should publish. dotMARC then shows which domains fall short, raises an alert for them, and can raise their records for you with the [DNS provider push](./dns-provider-push.mdx#dmarc-policy-and-your-target). Nothing changes until a target is set: with no target at any level there are no new alerts, no below-target counts, and pushes behave exactly as before.
+
+The page follows **Set the defaults → Add exceptions only where needed → Review and resolve gaps**:
+
+1. Set or edit the system-wide default. Saving sets dotMARC's expectation; it does not publish DNS.
+2. Leave groups inheriting the system default unless they need an override. The table distinguishes inheritance from a group override, with **Set override** or **Edit override** actions. Other group targets and individual overrides can still take precedence. Choose a domain in Domains to view or change its individual target on Overview.
+3. Open the below-target or needs-checking list, choose a domain, compare its observed record with its effective target, then review DNS changes or update DNS manually. Counts are monitored domains in your authorised scope. Unchecked evidence is not a confirmed failure.
+
+Group targets are collapsed initially because exceptions are optional. Expand **View group targets and edit overrides** when needed; inheritance details are available separately.
+
+On **Groups**, each Baselines section displays its effective group policy, such as **Inherited (Reject)** or **Quarantine**, with a separate subdomain policy when it differs. Search, sort, filters and **Add group** stay together above the cards; the creation inputs appear only after choosing Add group. This group summary is not a claim that every member domain inherits it: individual domain overrides and stricter memberships can still take precedence.
+
+The target dialog explains the scope and distinguishes removing the system default from restoring group/domain inheritance. Target saves may affect below-target alerts but never change mail handling themselves.
+
+### Report destinations
+
+The **Set the defaults** card shows the **DMARC policy target** in an outlined field with a set/edit action, alongside both report addresses, without expanding a section. The primary mailbox comes from `Graph:MailboxAddress` and is shown as a disabled input; it cannot be replaced in the UI. Group and domain exceptions keep their expandable **Report destinations** sections.
+
+Set an optional secondary address at system level, override it for a group, or use the domain's Overview target card for an individual override. Enable **Override secondary report address** and leave the address blank to require the primary mailbox only. Turn the override off to restore inheritance.
+
+Domain overrides win. Otherwise, overriding groups must agree (case-insensitively); a primary-only group override conflicts with an address override. Conflicts block DMARC and combined DNS setup until a domain override resolves them. With no group override, the system secondary applies.
+
+Saving records the change in the audit log but does not publish DNS. Group/domain overrides replace unrelated existing `rua` destinations, even when **Keep other rua addresses** is enabled. System inheritance still respects that DNS push setting. External destinations may need report authorization in their own DNS zone.
+
+### What a target is
+
+A target is a `p` value (`none`, `quarantine` or `reject`) and an optional `sp` for subdomains. When `sp` is not set it follows `p`, as it does in a DMARC record. The editor shows **Follows p (currently Quarantine)**, for example, to make the effective policy clear. Choosing the same value for `sp` and `p` saves it as **Follows p**, without changing the effective subdomain policy. There is no setting for `pct`: a target is only met at `pct=100`, because a partial rollout is not yet the policy.
+
+### Three levels
+
+A target can be set at three levels, and each is optional.
+
+| Level | Applies to | Set from |
+| --- | --- | --- |
+| System | Every domain with no group or domain target. | The Domain tab. |
+| Group | Every domain in the group. | The Domain tab, or **Domain baseline** on the Groups page. |
+| Domain | One domain. | The target card on the domain's page. The Domain tab lists these overrides and links to them. |
+
+For each domain dotMARC uses the first of these that applies: the domain's own target, then the strictest target among its groups, then the system target. If none is set, the domain has no target and is never reported as below it.
+
+:::warning Strictest group wins
+A domain can be in more than one group. When it is, and it has no target of its own, it uses the **strictest** of its groups' targets, compared separately for `p` and `sp`.
+
+For example, a domain in **Contoso** (`p=reject`) and **Parked-Estate** (`p=quarantine`) with no override of its own uses `p=reject`. Everywhere dotMARC shows that target it says where it came from, for example "p=reject" with "strictest of Contoso and Parked-Estate".
+
+A group's target also **replaces** the system target for its domains, even when it is weaker. The system target is a default, not a floor: if the system target is `reject` and a group's is `quarantine`, that group's domains are held to `quarantine`. A domain's own target replaces both.
+:::
+
+### Meeting a target
+
+dotMARC judges records against [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), which replaced RFC 7489 in May 2026. Where RFC 7489 receivers still in service would behave differently, dotMARC takes the cautious reading. A domain meets its target when its last DMARC check found all of these:
+
+* A valid record: exactly one DMARC record, `v=DMARC1` first, no repeated tag, a valid `p`, and a valid `sp` and `np` when present. See [record problems](./dmarc-and-mta-sts.mdx#record-problems).
+* `p` at least as strict as the target's `p`.
+* `sp` (which is `p` when the record has no `sp`) at least as strict as the target's `sp`.
+* `np`, the policy for subdomains that do not exist (which is `sp` when the record has no `np`, else `p`), at least as strict as the target's `sp`. A target's `sp` covers existing and non-existent subdomains, so there is no separate `np` target.
+* Testing mode off. `t=y` asks receivers not to apply the policy, so it counts against any target that asks for enforcement. It has no effect on a target of `none`.
+* `pct` absent or 100. RFC 9989 removed `pct`, but receivers that still follow RFC 7489 apply it, so a record with a `pct` below 100 stays below target.
+
+A policy stricter than the target counts as meeting it. There are four outcomes:
+
+* **Meets target**: all of the above hold.
+* **Below target**: the record was read and one does not hold, the record is invalid, or the domain has no DMARC record. The domain page lists each reason in plain words, for example "p is none, target is reject" or "Testing mode (t=y) is on".
+* **Needs checking**: the domain has not been checked yet. It is not counted as below target until it has.
+* **No target**: no level applies.
+
+The Domain tab shows how many domains are below target and how many need checking, each linking to Domains with the **DMARC target** filter applied (`/domains?target=below` and `/domains?target=checking`). These links cover all authorised groups and do not inherit unrelated saved filters. The old Dashboard target links still forward to Domains. The filter covers monitored domains only. The [API](./api.mdx) returns the same outcome as `dmarcTarget` on each domain and takes a `dmarcTarget` filter (`meets`, `below` or `checking`) on the domain list.
+
+### The alert
+
+**DMARC policy below target** is raised for a domain that is below its target, and closes when the domain meets it again or the target is removed. It is a kind of alert with its own [rule](./alert-rules.mdx#dmarc-policy-below-target), enabled by default, and it does not open a PSA ticket by default, because it reports a standing posture rather than a breakage, and setting a target for many domains at once should not flood your PSA. It never fires without a target. While the DMARC record is missing or unreadable the **DMARC record broken** alert covers the domain, so this one stays quiet (a record that is broken but still readable raises both alerts), though the domain still counts as below target on the Domain tab and in the filter. See [DNS health alerts](./alerts.mdx#dns-health-alerts).
+
+### Raising records with the push
+
+The [DNS provider push](./dns-provider-push.mdx#dmarc-policy-and-your-target) writes a domain's effective target into a new DMARC record, and raises an existing record that falls short. It never lowers a stricter policy.
+
+### Who can change targets
+
+Changing a target needs the `BaselinesManage` permission. Staff with no group limit can change every level. Staff limited to some groups can change the targets of their own groups and of domains in those groups, see the system target read-only, and never change it. Client portal users cannot change targets. Viewing a domain's target needs only `DomainsView`. See [Permissions & Access](./permissions-and-access.mdx#baselines).

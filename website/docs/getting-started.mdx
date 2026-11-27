@@ -44,7 +44,9 @@ Not sure? [**Deploy with Docker**](./deploy-with-docker.mdx) is the faster path 
 
 ## What you'll see
 
-Once your first DMARC report arrives (this looks the same regardless of which path you chose above), the dashboard shows pass/fail rates, DNS status, and polling status across every monitored domain:
+Once your first DMARC report arrives, **Dashboard** shows the action centre: message volume and pass rates, domains needing attention, outstanding sender decisions, and quarantines/rejects to investigate. **Domains** in the main navigation is the full domain list, with per-domain report and DNS status. The screenshot below shows the earlier combined layout; in 0.14 the list has its own page.
+
+On narrower screens, use the **Open navigation** menu beside the logo to reach Dashboard, Domains, Alerts and the management pages your permissions allow. The menu scrolls on short screens, and dark mode and sign-out remain directly available in the app bar.
 
 <ThemedImage
   alt="dotMARC dashboard showing pass/fail rates, DNS status, and polling status across monitored domains"
@@ -53,6 +55,38 @@ Once your first DMARC report arrives (this looks the same regardless of which pa
     dark: useBaseUrl('/img/screenshots/dashboard-admin-dark.png'),
   }}
 />
+
+### Domains and filters
+
+Staff lists use the same control order: visible **Search**, **Sort** where ordering is available, one **Filters** button, then **Add** and other list actions. Search labels say what they match, such as domains, message IDs or audit summaries; they are not a cross-field global search. Add, Grant access and Create key open their input forms only when selected. Controls wrap on narrow screens.
+
+Domains supports **All domains** and **By group**. Both use exactly one **Filters** panel above the list, with visible domain search and sort outside it. The panel contains Group, Tag, report status, pass rate, last report, monitored state, DMARC target and DNS status filters. Domains also includes minimum report count, PSA company override and Dashboard queue filters. Filters apply to every group together; groups without matches disappear. A domain in several groups may appear in each, but the matching-domain count counts it once.
+
+Collapsing Filters leaves the criteria active. The button counts advanced criteria, not the visible search or sort. **Clear filters** resets the advanced criteria while keeping search and sort; clear the search input separately to remove that criterion. It does not change your access scope or saved default. Server logs reset to their default Warning level. Domains also shows a summary below the toolbar. **Save as my default** remembers structured criteria, view and sort for that page; text searches and temporary Dashboard queues are not saved as defaults. Dashboard and Domains defaults are independent. Existing saved Dashboard list preferences migrate to Domains. Audit and server logs keep newest-first ordering; alert rules keep processing order even when filtered.
+
+Status columns use compact labelled icons: hover for the status, or open the domain for full detail. Use **Show management columns**, then expand a domain's **Manage** control for group/tag assignment, PSA overrides, report counts and deletion, subject to your existing permissions. Management opens beneath the row rather than appending wide columns; group/tag/report sorting is in **Sort domains**. When a table still overflows, a synchronized horizontal scrollbar remains at the browser bottom while that table is in view, including keyboard access. Manual drag ordering requires All domains with no active filters or column sort. Authorised DNS editors can select domains and choose **Review selected DNS** for [bulk DNS review and results](./dns-provider-push.mdx#bulk-dns-from-inventory). The selection toolbar stays beneath the app bar while scrolling. Selection follows distinct domains across grouped views, survives sorting and drops domains hidden by filters or changed access. Add and Import are available with domain-creation permission. **Manage > Tags** owns tag creation, renaming, colours and deletion, separately from Groups.
+
+Opening a domain and using its **Back** button or browser Back restores the list's filters, sort and position for up to 30 minutes in the same tab. Fresh navigation starts from that page's saved default. A directly opened domain falls back to Domains.
+
+### Dashboard action centre
+
+The summary cards and both domain queues share the single **Filters** panel and your authorised group scope. Large numbers, labels and reporting windows are shown consistently; a missing pass rate reads **No data**, not 0% or an all-clear.
+
+Both queue sections place their **Open ... in Domains** action directly below the title, left-aligned consistently on desktop and mobile. Action labels wrap rather than pushing beyond a narrow card.
+
+The first row puts action, sender decisions and checks before the domain count. The second shows pass rate, quarantined, rejected and reported messages. Reported messages is observed aggregate volume over 30 days, not a deduplicated count of unique mail across receivers.
+
+**Domains needing attention** explains each confirmed DNS/configuration problem, overdue expected report or unresolved sender decision, with links to the relevant domain tab. Confirmed problems appear first, then sender decisions, then unchecked evidence, with deterministic name tie-breaking. Click an action, sender-review or needs-checking card to narrow this queue; **Show all attention** restores the whole queue without changing the domain filters. **Open attention in Domains** carries the same scope, filters and selected issue categories into a full-page domain list using the same attention predicate. **Clear dashboard queue** removes just the temporary queue criterion. Queue choices survive Back navigation but are not saved as defaults. Unknown checks are labelled **Needs checking**, not confirmed failures. DKIM selectors and MTA-STS are assessed only when configured, and null-SPF domains do not require incoming DMARC reports, usable DKIM selectors or MTA-STS. Known DKIM selectors on null-SPF domains are checked for absence/revocation instead: published keys and malformed records remain visible, while old sending-key evidence needs verification. See [Non-sending and parked domains](./alerts.mdx#non-sending-and-parked-domains). This is a view of existing observations, not the deferred baseline-aware security score.
+
+Sender-review counts use the same unresolved-decision resolver as Domain Overview, including domain/group/default decisions: **Under review** is already a decision, not an unresolved sender. Counts cover 30 days and are per sender per domain, not globally unique organisations. Dashboard uses cached sender attribution without performing new DNS or IP lookups; Domain Sources can refine attribution when its live lookups finish.
+
+The attention queue also has multi-select **Issue categories**: **DNS/configuration**, **Missing reports**, **Sender review** and **Needs checking**. Select any combination to match a domain in any selected category, counted once. **All** clears the category selection. Counts show matching domains under the current shared domain filters; they can overlap and should not be added together. Category choices survive Back but do not affect summary cards, investigations or saved domain defaults; only the explicit **Open attention in Domains** action carries them to the list.
+
+Each attention row separates the domain name, labelled issue descriptions, action links and sender-review work, without the extra report-context column. Authorised users can **Add domain** directly on Dashboard, Domains or Import. On Dashboard and Domains the button reveals the form only when needed; direct `#add-domain` links reveal and focus it automatically. The shared form validates names and duplicates and defaults **Add to group** to the current group filter, which is also carried by the **Import domains** link. You can change that choice without changing your filters. Scoped editors must choose one of their groups; assigning a group also requires domain-edit permission. Creation does not publish DNS or require a baseline. Expand **Advanced** for policy, monitoring, DKIM selectors and MTA-STS settings. By default the saved domain opens on Overview with a DNS-review prompt; clear **Open domain and set up DNS** to stay on the current page with a confirmation link. See [single-domain onboarding](./import-domains.mdx#add-just-one-domain).
+
+**Quarantines and rejects to investigate** is separate from configuration problems: rejecting spoofing can mean protection is working. **Open investigations in Domains** opens the same domain set under the current scope and filters. Its chart, domain counts and **View records** evidence all use the same seven UTC calendar dates, including today through the displayed snapshot time, bucketed by when reports arrived. Counts are messages, not report or record counts. The evidence dialog shows receiver, receipt time, source IP, disposition, aligned SPF/DKIM results and any supplied override/authentication evidence. The domain Sources page retains its separate 30-day view.
+
+Authorised users also see **Integration and ingestion status**, explicitly global and unaffected by domain filters: the latest mailbox poll result, retained parse failures and enabled PSA configuration problems. It stays in place but collapses to a status icon and heading when the available checks show no problems; unknown polling, failures, parse errors, missing PSA configuration or recent warnings leave it expanded. Recent integration warnings/errors come from this instance's retained log buffer (up to five events in the last 24 hours), may already be resolved and reset on restart. A ready configuration or an empty log buffer is not a successful live connection test. Polling diagnostics stay below the queues, collapsed after a successful poll without parse failures and expanded for unknown or failed polling.
 
 Drill into any domain for a 30-day pass/quarantine/reject chart, its DMARC record status, and a breakdown of why any rejected/quarantined mail happened - a benign forwarder tripping alignment reads very differently from no reason given at all:
 
@@ -99,6 +133,10 @@ Sources that match no known service are listed last as **Not matched to a known 
 
 ### Decide which senders are authorised
 
+Overview shows an outlined **Review** action when sender decisions are outstanding, linking directly to Sources. The count uses the same unresolved-decision resolver as Dashboard: recognised services without a service-level decision plus unrecognised IPs without an IP decision. Under review is already a decision. Sources may refine cached Dashboard attribution with live lookups.
+
+On Sources, expand a service's **Source IPs (count)** button to inspect its evidence and individual IP decisions. Each **Decide** or **Change** control names its service or IP for assistive technology. People without `SenderReview` see **View evidence** on Overview and read-only decisions on Sources, not instructions to make changes.
+
 The **Decision** column is where your team records what it has decided about a sender on this domain:
 
 * **Authorised**: it should send as this domain.
@@ -114,6 +152,12 @@ Select **Decide** (or **Change**, once there is a decision) beside the status, p
 * Client reports summarise the decisions, and the [API](./api.mdx) returns each sender's decision.
 
 The row shows who decided and when, and every change is recorded in the [audit log](./audit-log.mdx).
+
+### Change a domain's groups
+
+Overview's **Groups** section shows memberships in your authorised scope. With `DomainsEdit`, use **Change groups**, choose memberships and select **Save groups**. The domain's effective DMARC target and inherited sender decisions update immediately; group changes are recorded in the audit log.
+
+Group-limited editors can select only their own groups, must keep at least one, and cannot remove memberships outside their scope. Access and available groups are checked again on save. The same rules apply to Inventory assignment; scoped API keys also cannot remove a domain from their last accessible group. People without edit permission can view memberships but have no change control.
 
 The **Fix** column changes with the decision:
 
@@ -135,7 +179,7 @@ You don't have to decide the same sender on every domain. Decisions can be made 
 
 1. **The domain's own decision**, on the service or on a single IP. It overrides everything below.
 2. **The group's defaults**, set from **Manage > Groups** with the **Sender defaults** button on a group.
-3. **The baseline**, set from **Manage > Sender baseline**. It applies to every domain.
+3. **The baseline**, set from **Manage > Baselines > Sender**. It applies to every domain.
 
 For example, authorise Microsoft 365 in the baseline, mark it Unauthorised in the defaults of a client group that has moved away from it, and authorise it again on one domain of that client that still uses it. Each row in the Senders table says where its decision came from: set on this domain, from a group, or from the baseline. Choosing **Reset to inherited** in the dialog removes the domain's own decision, so the row falls back to the level below.
 

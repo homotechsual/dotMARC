@@ -5,7 +5,10 @@
 @using DotMarc.Demo
 @using DotMarc.Notifications
 @using DotMarc.Components.Shared
+@using DotMarc.Baselines
+@using DotMarc.ServerLogs
 @using DotMarc.Reporting
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.Extensions.Options
 @using System.Reflection
 @implements IDisposable
@@ -16,6 +19,8 @@
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuditRecorder AuditRecorder
+@inject IAuthorizationService AuthorizationService
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -24,59 +29,26 @@
 
 <DevBuildBanner />
 <MudLayout>
-    <MudAppBar Elevation="1">
-        <div class="d-flex align-center">
+    <MudAppBar Elevation="1" Class="dotmarc-appbar">
+        <div class="d-flex align-center dotmarc-brand">
             <a href="/dashboard">
                 <img src="@Assets["logo.svg"]" alt="dotMARC Logo" height="48" />
             </a>
         </div>
+        <nav class="dotmarc-desktop-navigation" aria-label="Main navigation">
         <AuthorizeView>
             <Authorized>
                 <MudButton Href="/dashboard" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Dashboard">Dashboard</MudButton>
             </Authorized>
         </AuthorizeView>
+        <AuthorizeView Policy="DomainsView">
+            <MudButton Href="/domains" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Language">Domains</MudButton>
+        </AuthorizeView>
         <AuthorizeView Policy="AlertsView">
             <MudButton Href="/alerts" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Notifications">Alerts</MudButton>
         </AuthorizeView>
         <MudMenu Label="Manage" Color="Color.Inherit" EndIcon="@Icons.Material.Filled.ExpandMore">
-            <AuthorizeView Policy="DomainsWrite">
-                <MudMenuItem Href="/domains" Icon="@Icons.Material.Filled.Language">Domains</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="GroupsOrTagsWrite">
-                <MudMenuItem Href="/groups" Icon="@Icons.Material.Filled.GroupWork">Groups</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="DnsPushManage">
-                <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="AlertsView">
-                @if (AlertRuleAccess.MayView(context.User))
-                {
-                    <MudMenuItem Href="/alerts/rules" Icon="@Icons.Material.Filled.Rule">Alert rules</MudMenuItem>
-                }
-            </AuthorizeView>
-            <AuthorizeView Policy="AlertsManage">
-                <MudMenuItem Href="/alerts/settings" Icon="@Icons.Material.Filled.NotificationsActive">Alert settings</MudMenuItem>
-                <MudMenuItem Href="/psa/settings" Icon="@Icons.Material.Filled.ConfirmationNumber">PSA settings</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="AccessManage">
-                <MudMenuItem Href="/access" Icon="@Icons.Material.Filled.ManageAccounts">Access</MudMenuItem>
-                <MudMenuItem Href="/branding/settings" Icon="@Icons.Material.Filled.Palette">Branding</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="LogsView">
-                <MudMenuItem Href="/logs" Icon="@Icons.Material.Filled.Article">Server logs</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="AuditView">
-                <MudMenuItem Href="/audit" Icon="@Icons.Material.Filled.History">Audit log</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="ReportsManage">
-                <MudMenuItem Href="/reports/settings" Icon="@Icons.Material.Filled.Email">Email &amp; reports</MudMenuItem>
-            </AuthorizeView>
-            <AuthorizeView Policy="SenderReview">
-                @if (SenderDecisionAccess.MayChangeBaseline(context.User))
-                {
-                    <MudMenuItem Href="/senders/baseline" Icon="@Icons.Material.Filled.Rule">Sender baseline</MudMenuItem>
-                }
-            </AuthorizeView>
+            @ManagementEntries()
         </MudMenu>
         @if (DemoOptions.Value.Enabled)
         {
@@ -89,7 +61,36 @@
                 </Authorized>
             </AuthorizeView>
         }
+        </nav>
         <MudSpacer />
+        <nav class="dotmarc-mobile-navigation" aria-label="Main navigation">
+            <MudMenu Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" AriaLabel="Open navigation"
+                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" PopoverClass="dotmarc-navigation-menu" MaxHeight="600">
+                <AuthorizeView>
+                    <Authorized>
+                        <MudMenuItem Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudMenuItem>
+                    </Authorized>
+                </AuthorizeView>
+                <AuthorizeView Policy="DomainsView">
+                    <MudMenuItem Href="/domains" Icon="@Icons.Material.Filled.Language">Domains</MudMenuItem>
+                </AuthorizeView>
+                <AuthorizeView Policy="AlertsView">
+                    <MudMenuItem Href="/alerts" Icon="@Icons.Material.Filled.Notifications">Alerts</MudMenuItem>
+                </AuthorizeView>
+                <MudDivider />
+                @ManagementEntries()
+                @if (DemoOptions.Value.Enabled)
+                {
+                    <AuthorizeView>
+                        <Authorized>
+                            <MudDivider />
+                            <MudMenuItem Disabled="true">Viewing as @context.User.Identity?.Name</MudMenuItem>
+                            <MudMenuItem Href="/demo" Icon="@Icons.Material.Filled.SwitchAccount">Switch persona</MudMenuItem>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+            </MudMenu>
+        </nav>
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                        Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="Toggle dark mode" />
         <AuthorizeView>
@@ -127,6 +128,37 @@
 </MudLayout>
 
 @code {
+    private RenderFragment ManagementEntries() => @<text>
+        <AuthorizeView Policy="GroupsManage">
+            <MudMenuItem Href="/groups" Icon="@Icons.Material.Filled.GroupWork">Groups</MudMenuItem>
+        </AuthorizeView>
+        <AuthorizeView Policy="TagsManage">
+            <MudMenuItem Href="/tags" Icon="@Icons.Material.Filled.Label">Tags</MudMenuItem>
+        </AuthorizeView>
+        <AuthorizeView Policy="DnsPushManage">
+            <MudMenuItem Href="/dns-push/settings" Icon="@Icons.Material.Filled.CloudSync">DNS push settings</MudMenuItem>
+        </AuthorizeView>
+        @if (_alertsPsaHref is not null)
+        {
+            <MudMenuItem Href="@_alertsPsaHref" Icon="@Icons.Material.Filled.NotificationsActive">Alerts &amp; PSA</MudMenuItem>
+        }
+        <AuthorizeView Policy="AccessManage">
+            <MudMenuItem Href="/access" Icon="@Icons.Material.Filled.ManageAccounts">Access</MudMenuItem>
+            <MudMenuItem Href="/branding/settings" Icon="@Icons.Material.Filled.Palette">Branding</MudMenuItem>
+        </AuthorizeView>
+        @if (_logsHref is not null)
+        {
+            <MudMenuItem Href="@_logsHref" Icon="@Icons.Material.Filled.Article">Logs</MudMenuItem>
+        }
+        <AuthorizeView Policy="ReportsManage">
+            <MudMenuItem Href="/reports/settings" Icon="@Icons.Material.Filled.Email">Email &amp; reports</MudMenuItem>
+        </AuthorizeView>
+        @if (_showBaselines)
+        {
+            <MudMenuItem Href="/baselines" Icon="@Icons.Material.Filled.Rule">Baselines</MudMenuItem>
+        }
+    </text>;
+
     private readonly MudTheme _theme = DotMarc.Portal.PortalTheme.Default;
 
     private bool _isDarkMode;
@@ -156,6 +188,42 @@
     {
         _versionLabel = DevBuildOptions.VersionLabel(_version, DevBuild.Value.Enabled);
         Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private bool _showBaselines;
+    private string? _alertsPsaHref;
+    private string? _logsHref;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        await RefreshTabbedMenuEntriesAsync();
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> authenticationState)
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshTabbedMenuEntriesAsync();
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            // A stale menu entry must not end the circuit, so log it and carry on.
+            Logger.LogWarning(ex, "Refreshing the Baselines, Alerts & PSA and Logs menu entries after a sign-in change failed.");
+        }
+    }
+
+    private async Task RefreshTabbedMenuEntriesAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var signedIn = user.Identity?.IsAuthenticated == true;
+        _showBaselines = signedIn && (await BaselineTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible);
+        _logsHref = signedIn && (await LogsTabs.ForAsync(user, AuthorizationService)).Any(tab => tab.Visible) ? "/logs" : null;
+        _alertsPsaHref = signedIn ? TabbedPageNavigation.FirstVisible(await AlertsPsaTabs.ForAsync(user, AuthorizationService))?.Href : null;
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args) => await RecordPageViewAsync(args.Location);
@@ -189,7 +257,11 @@
         }
     }
 
-    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
 
     private async Task ToggleDarkModeAsync()
     {

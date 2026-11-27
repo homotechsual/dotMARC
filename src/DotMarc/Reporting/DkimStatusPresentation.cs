@@ -10,8 +10,8 @@ public static class DkimStatusPresentation
 {
     public static Color GetColor(DkimCheckStatus status) => status switch
     {
-        DkimCheckStatus.Ok => Color.Success,
-        DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured => Color.Warning,
+        DkimCheckStatus.Ok or DkimCheckStatus.NoSendingKeys => Color.Success,
+        DkimCheckStatus.Missing or DkimCheckStatus.Misconfigured or DkimCheckStatus.UnexpectedSendingKey => Color.Warning,
         _ => Color.Default
     };
 
@@ -20,6 +20,8 @@ public static class DkimStatusPresentation
         DkimCheckStatus.Ok => "OK",
         DkimCheckStatus.Missing => "Selector record missing",
         DkimCheckStatus.Misconfigured => "Selector misconfigured",
+        DkimCheckStatus.NoSendingKeys => "No keys at configured selectors",
+        DkimCheckStatus.UnexpectedSendingKey => "Sending key on no-sender domain",
         _ => "Not configured"
     };
 }

@@ -603,6 +603,29 @@
         ],
         "type": "object"
       },
+      "ApiDmarcTarget": {
+        "properties": {
+          "outcome": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subdomainPolicy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy",
+          "subdomainPolicy",
+          "source",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "ApiDnsProvider": {
         "properties": {
           "provider": {
@@ -621,6 +644,12 @@
       },
       "ApiDomain": {
         "example": {
+          "dmarcTarget": {
+            "outcome": "below",
+            "policy": "reject",
+            "source": "group",
+            "subdomainPolicy": "reject"
+          },
           "groups": [
             {
               "id": 3,
@@ -640,6 +669,19 @@
           ]
         },
         "properties": {
+          "dmarcTarget": {
+            "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/ApiDmarcTarget"
+              }
+            ]
+          },
           "groups": {
             "items": {
               "$ref": "#/components/schemas/ApiNamedRef"
@@ -680,7 +722,8 @@
           "groups",
           "tags",
           "lastReportReceivedUtc",
-          "passRate"
+          "passRate",
+          "dmarcTarget"
         ],
         "type": "object"
       },
@@ -688,6 +731,19 @@
         "properties": {
           "dmarcPolicy": {
             "$ref": "#/components/schemas/ApiDmarcPolicy"
+          },
+          "dmarcTarget": {
+            "oneOf": [
+              {
+                "enum": [
+                  null
+                ],
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/ApiDmarcTarget"
+              }
+            ]
           },
           "dnsProvider": {
             "$ref": "#/components/schemas/ApiDnsProvider"
@@ -736,6 +792,7 @@
           "tags",
           "lastReportReceivedUtc",
           "passRate",
+          "dmarcTarget",
           "health",
           "dmarcPolicy",
           "dnsProvider"
@@ -2121,7 +2178,7 @@
   "info": {
     "description": "Read domains, DNS health, DMARC report summaries, groups, tags and alerts, and add, import and organise domains. Authenticate with an API key from dotMARC's Access page: `Authorization: Bearer dmk_...`. Each operation needs the permission named in its description, and a key limited to certain groups only sees their domains. Each key may make 120 requests a minute.",
     "title": "dotMARC API",
-    "version": "0.13.0"
+    "version": "0.14.0"
   },
   "openapi": "3.0.4",
   "paths": {
@@ -2212,6 +2269,7 @@
                   "DkimRecordBroken",
                   "MtaStsFailing",
                   "DmarcPolicyWeakened",
+                  "DmarcPolicyBelowTarget",
                   "NameserversChanged",
                   "ApiKeyExpiring",
                   "ClientReportFailed",
@@ -2452,6 +2510,7 @@
                   "DkimRecordBroken",
                   "MtaStsFailing",
                   "DmarcPolicyWeakened",
+                  "DmarcPolicyBelowTarget",
                   "NameserversChanged",
                   "ApiKeyExpiring",
                   "ClientReportFailed",
@@ -2820,9 +2879,11 @@
                   "settings.azure_dns.saved",
                   "settings.google_cloud_dns.saved",
                   "settings.dns_records.saved",
+                  "baseline.dmarc_target_saved",
                   "settings.audit.saved",
                   "dns.pushed",
                   "dns.push_failed",
+                  "dns.push_batch_started",
                   "halo.integration_tested",
                   "connectwise.integration_tested",
                   "autotask.integration_tested",
@@ -3149,7 +3210,9 @@
                   "NotConfigured",
                   "Ok",
                   "Missing",
-                  "Misconfigured"
+                  "Misconfigured",
+                  "NoSendingKeys",
+                  "UnexpectedSendingKey"
                 ],
                 "type": "string"
               },
@@ -3281,6 +3344,22 @@
                   "Ns1",
                   "DnsMadeEasy",
                   "Vercel"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "One or more outcomes against the DMARC target that applies to the domain: meets, below, or checking (not yet checked). Only monitored domains with a target match, as on the Baselines page. Repeat it or separate values with commas.",
+            "in": "query",
+            "name": "dmarcTarget",
+            "schema": {
+              "items": {
+                "enum": [
+                  "meets",
+                  "below",
+                  "checking"
                 ],
                 "type": "string"
               },
@@ -3681,7 +3760,7 @@
     },
     "/api/v1/domains/{domain}/groups": {
       "put": {
-        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
+        "description": "Replaces the domain's groups with exactly these. A key limited to certain groups can only name its own groups, and the domain keeps any groups outside them. Such a key cannot take the domain out of the last of its own groups, because it would then no longer see it (a 400 naming groupIds). Accepts the domain's id or its name, such as contoso.example.\n\nNeeds the DomainsEdit permission.",
         "operationId": "SetDomainGroups",
         "parameters": [
           {
