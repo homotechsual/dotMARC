@@ -1,5 +1,10 @@
 using System.Net;
 using System.Reflection;
+using System.Security.Claims;
+using DotMarc.Audit;
+using DotMarc.Baselines;
+using DotMarc.Dns;
+using DotMarc.Security;
 using DotMarc.Components.Pages;
 using DotMarc.Data;
 using DotMarc.Demo;
@@ -25,6 +30,10 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     private IAsyncDisposable? _cleanup;
     private WebApplicationFactory<Program> _factory = null!;
     private readonly FakeDnsPushProvider _dnsPush = new("cloudflare");
+    private readonly FakeSpfDnsChecker _bulkSpf = new();
+    private readonly FakeDmarcDnsChecker _bulkDmarc = new();
+    private readonly FakeDkimDnsChecker _bulkDkim = new();
+    private readonly FakeDnsProviderDetector _bulkProvider = new();
     public async Task InitializeAsync()
     {
         var (connection, cleanup) = await fixture.CreateDatabaseAsync();
@@ -37,6 +46,18 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
             {
                 services.RemoveAll<IDnsPushProvider>();
                 services.AddSingleton<IDnsPushProvider>(_dnsPush);
+                services.RemoveAll<ISpfDnsChecker>();
+                services.RemoveAll<IMxDnsChecker>();
+                services.RemoveAll<IDmarcDnsChecker>();
+                services.RemoveAll<ITlsrptDnsChecker>();
+                services.RemoveAll<IDkimDnsChecker>();
+                services.RemoveAll<IDnsProviderDetector>();
+                services.AddSingleton<ISpfDnsChecker>(_bulkSpf);
+                services.AddSingleton<IMxDnsChecker>(new FakeMxDnsChecker());
+                services.AddSingleton<IDmarcDnsChecker>(_bulkDmarc);
+                services.AddSingleton<ITlsrptDnsChecker>(new FakeTlsrptDnsChecker());
+                services.AddSingleton<IDkimDnsChecker>(_bulkDkim);
+                services.AddSingleton<IDnsProviderDetector>(_bulkProvider);
             });
         });
     }
@@ -50,6 +71,161 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         await client.PostAsync($"/demo/sign-in/{persona}", null);
         return client;
+    }
+
+    private static ClaimsPrincipal BulkUser(IEnumerable<Permission> permissions, IEnumerable<int>? groups = null, bool portal = false)
+    {
+        var claims = permissions.Select(permission => new Claim(UserAccessClaimsTransformation.PermissionClaimType, permission.ToString())).ToList();
+        claims.AddRange((groups ?? []).Select(id => new Claim(UserAccessClaimsTransformation.ScopedGroupClaimType, id.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        if (portal) claims.Add(new(UserAccessClaimsTransformation.ClientPortalClaimType, "true"));
+        return new(new ClaimsIdentity(claims, "Test"));
+    }
+
+    [Theory]
+    [InlineData(Permission.DomainsDelete, true, false, true)]
+    [InlineData(Permission.BaselinesManage, true, false, false)]
+    [InlineData(Permission.DomainsEdit, true, true, false)]
+    [InlineData(Permission.MtaStsManage, false, true, false)]
+    public async Task SelectionAndDetailActionsReflectIndividualWritePermissions(Permission permission, bool bulk, bool dns, bool remove)
+    {
+        using var client = await SignInAsync("viewer");
+        await using var db = await _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>().CreateDbContextAsync();
+        var viewer = await db.UserAccesses.Include(user => user.Role).SingleAsync(user => user.Email == DemoDataSeeder.ViewerEmail);
+        viewer.Role.Permissions.Add(permission);
+        await db.SaveChangesAsync();
+        var list = await client.GetStringAsync("/domains");
+        Assert.Equal(bulk, list.Contains("Bulk actions", StringComparison.Ordinal));
+        Assert.Equal(dns, list.Contains("Review selected DNS", StringComparison.Ordinal));
+        Assert.Contains("Select shop.aurora-retail.example", list);
+        var detail = await client.GetStringAsync("/domains/shop.aurora-retail.example");
+        Assert.Equal(remove, detail.Contains("Remove domain", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BulkActionsRecheckPermissionsScopeAndPreserveUnrelatedMemberships()
+    {
+        using var client = await SignInAsync("admin");
+        var service = _factory.Services.GetRequiredService<BulkDomainActionService>();
+        await using var db = await _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>().CreateDbContextAsync();
+        var visible = new Group { Name = "Bulk visible" };
+        var second = new Group { Name = "Bulk second" };
+        var hidden = new Group { Name = "Bulk hidden" };
+        var existingTag = new Tag { Name = "Bulk existing", Color = Color.Primary };
+        var newTag = new Tag { Name = "Bulk added", Color = Color.Secondary };
+        var domain = new Domain { Name = "bulk-scope.example", Groups = [visible, hidden], Tags = [existingTag] };
+        db.Domains.Add(domain);
+        db.Groups.Add(second);
+        db.Tags.Add(newTag);
+        await db.SaveChangesAsync();
+        var actor = AuditActor.ForSystem("Bulk test");
+        var editor = BulkUser([Permission.DomainsView, Permission.DomainsEdit, Permission.DomainsDelete, Permission.BaselinesManage], [visible.Id, second.Id]);
+        var viewOnly = BulkUser([Permission.DomainsView], [visible.Id]);
+        var portal = BulkUser(Enum.GetValues<Permission>(), [visible.Id], portal: true);
+        foreach (var action in Enum.GetValues<BulkDomainAction>())
+        {
+            var request = new BulkDomainActionRequest(action, [newTag.Id]);
+            Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, request, viewOnly, actor)).Outcome);
+            Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, request, portal, actor)).Outcome);
+            Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, request, BulkUser(Enum.GetValues<Permission>(), [second.Id]), actor)).Outcome);
+        }
+        Assert.DoesNotContain(domain.Name, _bulkProvider.CheckedDomains);
+        Assert.DoesNotContain(domain.Name, _bulkSpf.CheckedDomains);
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.AddGroups, [second.Id]), editor, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.RemoveGroups, [visible.Id]), editor, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.RemoveGroups, [second.Id]), editor, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.AddGroups, [hidden.Id]), editor, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.AddTags, [newTag.Id]), editor, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.RemoveTags, [int.MaxValue]), editor, actor)).Outcome);
+        db.ChangeTracker.Clear();
+        var stored = await db.Domains.Include(item => item.Groups).Include(item => item.Tags).AsSplitQuery().SingleAsync(item => item.Id == domain.Id);
+        Assert.Equal(new[] { second.Id, hidden.Id }.Order(), stored.Groups.Select(group => group.Id).Order());
+        Assert.Equal(new[] { existingTag.Id, newTag.Id }.Order(), stored.Tags.Select(tag => tag.Id).Order());
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.RemoveTags, [newTag.Id]), editor, actor)).Outcome);
+        db.ChangeTracker.Clear();
+        stored = await db.Domains.Include(item => item.Groups).Include(item => item.Tags).AsSplitQuery().SingleAsync(item => item.Id == domain.Id);
+        Assert.Equal(existingTag.Id, Assert.Single(stored.Tags).Id);
+        stored.Groups.Clear();
+        await db.SaveChangesAsync();
+        Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.Remove, []), editor, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(int.MaxValue, new(BulkDomainAction.Remove, []), editor, actor)).Outcome);
+        Assert.True(await db.Domains.AnyAsync(item => item.Id == domain.Id));
+        Assert.True(await db.AuditEntries.AnyAsync(entry => entry.ActorName == "Bulk test"));
+    }
+
+    [Fact]
+    public async Task BulkTargetsCanBeInheritedAndRemovalDeletesFullDmarcAndTlsHistoryWithAudit()
+    {
+        using var client = await SignInAsync("admin");
+        var service = _factory.Services.GetRequiredService<BulkDomainActionService>();
+        await using var db = await _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>().CreateDbContextAsync();
+        var domain = new Domain { Name = "bulk-delete.example", FirstSeenUtc = DateTimeOffset.UtcNow.AddYears(-1) };
+        domain.Reports.Add(new Report { ReportingOrg = "Old reporter", ReportId = "old", RawXml = "<report/>", ReceivedUtc = DateTimeOffset.UtcNow.AddMonths(-6) });
+        domain.TlsrptReports.Add(new TlsrptReport { ReportingOrg = "TLS reporter", ReportId = "old-tls", RawJson = "{}", ReceivedUtc = DateTimeOffset.UtcNow.AddMonths(-6) });
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        var user = BulkUser([Permission.DomainsView, Permission.BaselinesManage, Permission.DomainsDelete]);
+        var actor = AuditActor.ForSystem("Bulk delete test");
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.SetTarget, [], new(DmarcPolicyLevel.Reject, DmarcPolicyLevel.Reject)), user, actor)).Outcome);
+        await db.Entry(domain).ReloadAsync();
+        Assert.Equal(DmarcPolicyLevel.Reject, domain.TargetDmarcPolicy);
+        Assert.Null(domain.TargetDmarcSubdomainPolicy);
+        Assert.Equal(DomainActionOutcome.Skipped, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.SetTarget, [], new((DmarcPolicyLevel)999, null)), user, actor)).Outcome);
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.SetTarget, []), user, actor)).Outcome);
+        await db.Entry(domain).ReloadAsync();
+        Assert.Null(domain.TargetDmarcPolicy);
+        var html = await client.GetStringAsync("/domains/bulk-delete.example");
+        Assert.Contains("Remove domain", html);
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.Remove, []), user, actor)).Outcome);
+        Assert.False(await db.Domains.AnyAsync(item => item.Id == domain.Id));
+        Assert.False(await db.Reports.AnyAsync(report => report.DomainId == domain.Id));
+        Assert.False(await db.TlsrptReports.AnyAsync(report => report.DomainId == domain.Id));
+        Assert.True(await db.AuditEntries.AnyAsync(entry => entry.Action == AuditActions.DomainRemoved && entry.ActorName == actor.Name));
+    }
+
+    [Fact]
+    public async Task BulkDnsChecksRespectNullSendersPersistFailuresAndContinueOnNextDomain()
+    {
+        using var client = await SignInAsync("admin");
+        var service = _factory.Services.GetRequiredService<BulkDomainActionService>();
+        await using var db = await _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>().CreateDbContextAsync();
+        var domain = new Domain
+        {
+            Name = "bulk-dns.example", DkimSelectors = ["selector1"],
+            DkimRecords = [new DomainDkimRecord { Selector = "selector1", RecordType = DkimRecordType.Txt, Value = "v=DKIM1; p=" }],
+            MtaStsEnabled = true, MtaStsStatus = MtaStsStatus.PendingDns
+        };
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        _bulkSpf.Result = new(SpfCheckStatus.NullSpf, null);
+        var user = BulkUser([Permission.DomainsView, Permission.DomainsEdit]);
+        var actor = AuditActor.ForSystem("Bulk DNS test");
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.CheckDns, []), user, actor)).Outcome);
+        await db.Entry(domain).ReloadAsync();
+        Assert.NotNull(domain.SpfCheckedUtc);
+        Assert.NotNull(domain.MxCheckedUtc);
+        Assert.NotNull(domain.DmarcCheckedUtc);
+        Assert.NotNull(domain.DkimCheckedUtc);
+        Assert.NotNull(domain.TlsrptCheckedUtc);
+        Assert.False(_bulkDmarc.ExpectsReports);
+        Assert.True(_bulkDkim.ExpectsNoSenders);
+        Assert.Equal("v=DKIM1; p=", Assert.Single(_bulkDkim.LastExpectedRecords!).Value);
+        Assert.Empty(_bulkDmarc.AuthorizationCheckedDomains);
+        Assert.Equal(DmarcAuthorizationCheckStatus.NotApplicable, domain.DmarcAuthorizationCheckStatus);
+        Assert.Equal(MtaStsStatus.PendingDns, domain.MtaStsStatus);
+        Assert.Null(domain.MtaStsCheckedUtc);
+        var previousCheck = domain.SpfCheckedUtc;
+        _bulkDmarc.ShouldThrow = true;
+        Assert.Equal(DomainActionOutcome.Failed, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.CheckDns, []), user, actor)).Outcome);
+        await db.Entry(domain).ReloadAsync();
+        Assert.Equal(previousCheck, domain.SpfCheckedUtc);
+        _bulkDmarc.ShouldThrow = false;
+        _bulkProvider.ShouldThrow = true;
+        Assert.Equal(DomainActionOutcome.Failed, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.RecheckProviders, []), user, actor)).Outcome);
+        _bulkProvider.ShouldThrow = false;
+        Assert.Equal(DomainActionOutcome.Succeeded, (await service.ExecuteAsync(domain.Id, new(BulkDomainAction.RecheckProviders, []), user, actor)).Outcome);
+        using var stop = new CancellationTokenSource();
+        stop.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ExecuteAsync(domain.Id, new(BulkDomainAction.CheckDns, []), user, actor, stop.Token));
     }
 
     [Fact]
@@ -153,6 +329,7 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     {
         using var client = await SignInAsync(persona);
         var overview = await client.GetStringAsync("/domains/aurora-retail.example");
+        Assert.Equal(editor, overview.Contains("Remove domain", StringComparison.Ordinal));
         Assert.Contains("domain-groups", overview);
         Assert.Equal(editor, overview.Contains(">Change groups<", StringComparison.Ordinal));
         Assert.Equal(editor, overview.Contains("Review sender decisions for aurora-retail.example", StringComparison.Ordinal));

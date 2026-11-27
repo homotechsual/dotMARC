@@ -38,11 +38,17 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject BulkDomainActionService DomainActions
 @implements IDisposable
 
 <AppPageTitle>dotMARC - @DomainName</AppPageTitle>
 <MudButton OnClick="BackToListAsync" Disabled="@(!RendererInfo.IsInteractive)" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Back</MudButton>
 <MudText Typo="Typo.h4" Class="mb-4">@DomainName</MudText>
+@if (_domain is not null && _canRemoveDomain)
+{
+    <MudButton OnClick="RemoveDomainAsync" Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete"
+               Disabled="@(_removingDomain || !RendererInfo.IsInteractive)" Class="mb-3">Remove domain</MudButton>
+}
 @if (_domain is not null && _domain.DnsProvider.ToProviderKey() is not null)
 {
     <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
@@ -666,6 +672,45 @@ else
         }
     }
     private static readonly SemaphoreSlim EnrichmentThrottle = new(4);
+    private bool _canRemoveDomain, _removingDomain;
+
+    private async Task RemoveDomainAsync()
+    {
+        if (_domain is null || _removingDomain) return;
+        var id = _domain.Id;
+        _removingDomain = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var scope = PortalData.ScopedGroupIds(user);
+            if (ClientPortalGate.IsPortalUser(user) ||
+                !(await AuthorizationService.AuthorizeAsync(user, nameof(Permission.DomainsDelete))).Succeeded ||
+                !await db.Domains.AnyAsync(domain => domain.Id == id && (scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id)))))
+            {
+                Snackbar.Add("You no longer have permission to remove this domain.", Severity.Warning);
+                return;
+            }
+            var count = await db.Reports.CountAsync(report => report.DomainId == id) + await db.TlsrptReports.CountAsync(report => report.DomainId == id);
+            var dialog = await DialogService.ShowAsync<ConfirmDeleteDomainDialog>("Remove domain",
+                new DialogParameters<ConfirmDeleteDomainDialog> { { choice => choice.DomainName, _domain.Name }, { choice => choice.ReportCount, count } });
+            if (await dialog.Result is not { Canceled: false }) return;
+            user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var result = await DomainActions.ExecuteAsync(id, new(BulkDomainAction.Remove, []), user, await AuditActorAccessor.GetAsync());
+            if (result.Outcome == DomainActionOutcome.Succeeded)
+            {
+                Snackbar.Add("Domain and report history removed.", Severity.Success);
+                Navigation.NavigateTo("/domains");
+            }
+            else Snackbar.Add(result.Message, result.Outcome == DomainActionOutcome.Skipped ? Severity.Warning : Severity.Error);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Removing domain {DomainId} failed", id);
+            Snackbar.Add("Could not remove the domain. Refresh before trying again.", Severity.Error);
+        }
+        finally { _removingDomain = false; }
+    }
     private static readonly string[] TabSlugs = ["overview", "mta-sts", "tls-reports", "sources", "raw-reports"];
 
     [Parameter] public string DomainName { get; set; } = "";
@@ -1120,6 +1165,7 @@ else
 
         _canReviewSenders = (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.SenderReview))).Succeeded;
         _canEditGroups = !ClientPortalGate.IsPortalUser(authState.User) && (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.DomainsEdit))).Succeeded;
+        _canRemoveDomain = !ClientPortalGate.IsPortalUser(authState.User) && (await AuthorizationService.AuthorizeAsync(authState.User, nameof(Permission.DomainsDelete))).Succeeded;
         _groupNames = _domain.Groups.ToDictionary(group => group.Id, group => group.Name);
         var visibleScope = PortalData.ScopedGroupIds(authState.User);
         _visibleGroupNames = _domain.Groups.Where(group => visibleScope.Count == 0 || visibleScope.Contains(group.Id)).OrderBy(group => group.Name).Select(group => group.Name).ToList();

@@ -9,8 +9,9 @@
         }
         else
         {
-            <MudText>Remove <b>@DomainName</b> from monitoring? It has no report history.</MudText>
+            <MudText>Permanently remove <b>@DomainName</b>? It has no report history. This cannot be undone.</MudText>
         }
+        <MudText Class="mt-2">DNS records and externally provisioned hosting are not removed. Disable MTA-STS hosting and allow cleanup to complete before removing a hosted domain. New incoming reports can rediscover this domain.</MudText>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>

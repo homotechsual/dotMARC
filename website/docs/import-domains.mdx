@@ -20,6 +20,22 @@ Use **Add a domain** at the top of the initial Import page to save one domain im
 
 This single-domain group choice does not apply to bulk imports: use the **groups** column for those. The single-domain form is hidden while reviewing or viewing the results of a bulk import so that its snapshot stays unchanged.
 
+## Bulk actions on existing domains
+
+On **Domains**, select individual rows or use **Select matching domains**, then **Bulk actions**. The dialog shows the exact selection. Selection is shared across group views without processing a domain twice; changing filters removes hidden domains from the selection.
+
+Available actions depend on your permissions:
+
+* **Add/remove group membership** and **Add/remove tags** change only the chosen memberships, leaving other assignments intact. Hidden group memberships are preserved; scoped editors cannot remove their last accessible group.
+* **Recheck DNS providers** refreshes provider detection without changing DNS.
+* **Run DNS/health checks** runs SPF, MX, DMARC, reporting authorization, TLSRPT and configured DKIM checks, in that order. Completion means checks ran, not that every record passed. It does not publish DNS, provision MTA-STS hosting or deliver alerts.
+* **Set DMARC target** needs `BaselinesManage`. Choose a target, or explicitly choose **Inherit group or system target** to clear the selected domains' overrides. Targets change expectations and alerts, not DNS.
+* **Remove domains** needs `DomainsDelete` and requires typing `REMOVE`. It permanently deletes the selected domains and all their DMARC/TLS report history. DNS records and externally provisioned hosting are not removed: disable MTA-STS hosting and allow its cleanup to complete first. New incoming reports can rediscover deleted domains.
+
+Each domain is processed separately with a fresh permission and scope check. Results distinguish completed, skipped, failed and not-attempted domains. You can stop remaining actions; completed changes are not rolled back, and an in-progress action may have completed. Refresh and review the current state before retrying.
+
+To remove one domain, open its detail page and use **Remove domain**. The confirmation counts its full report history, including reports older than the detail page's reporting window. Removal is also available under **Show management columns** on Domains.
+
 ## Columns
 
 Only the domain is required, so a list of domains, one per line, is a complete import.

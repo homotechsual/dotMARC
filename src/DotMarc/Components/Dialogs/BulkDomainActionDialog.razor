@@ -1,0 +1,223 @@
+@using DotMarc.Audit
+@using DotMarc.Baselines
+@using DotMarc.Data
+@using DotMarc.Portal
+@using DotMarc.Components.Shared
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@implements IDisposable
+@inject IDbContextFactory<DotMarcDbContext> DbFactory
+@inject AuthenticationStateProvider Authentication
+@inject IAuthorizationService Authorization
+@inject AuditActorAccessor Actor
+@inject BulkDomainActionService Actions
+@inject ILogger<BulkDomainActionDialog> Logger
+@inject IDialogService Dialogs
+
+<MudDialog>
+    <TitleContent>Bulk domain actions</TitleContent>
+    <DialogContent>
+        <MudText>@DomainIds.Distinct().Count() selected domains. Actions apply only to this selection, not all matching domains.</MudText>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+        }
+        @if (!_loaded)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            <details class="my-2">
+                <summary>Selected domains</summary>
+                <ul>
+                    @foreach (var id in DomainIds.Distinct())
+                    {
+                        <li>@NameOf(id)</li>
+                    }
+                </ul>
+            </details>
+            <fieldset disabled="@(_running || _started)" style="border:0; padding:0; min-width:0;">
+                <MudSelect T="BulkDomainAction?" Label="Bulk action" Value="_action" ValueChanged="ChangeAction" Variant="Variant.Outlined" Class="my-3">
+                    @foreach (var action in _allowed)
+                    {
+                        <MudSelectItem T="BulkDomainAction?" Value="@((BulkDomainAction?)action)">@ActionLabel(action)</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_action is BulkDomainAction.AddGroups or BulkDomainAction.RemoveGroups)
+                {
+                    <SearchableMultiSelect TValue="int" Label="Groups to change" Options="_groups" @bind-SelectedValues="_assignmentIds" Variant="Variant.Outlined" />
+                    <MudText Typo="Typo.caption">Only selected memberships change. Hidden memberships are preserved; removing your last accessible group is refused.</MudText>
+                }
+                @if (_action is BulkDomainAction.AddTags or BulkDomainAction.RemoveTags)
+                {
+                    <SearchableMultiSelect TValue="int" Label="Tags to change" Options="_tags" @bind-SelectedValues="_assignmentIds" Variant="Variant.Outlined" />
+                    <MudText Typo="Typo.caption">Other tags are left unchanged.</MudText>
+                }
+                @if (_action == BulkDomainAction.SetTarget)
+                {
+                    <MudButton OnClick="ChooseTargetAsync" Variant="Variant.Outlined">Choose DMARC target</MudButton>
+                    @if (_targetChosen)
+                    {
+                        <MudText Class="my-2">@(_target is null ? "Inherit group or system target (clear domain overrides)" : $"Policy: {_target.Policy}; subdomains: {_target.SubdomainPolicy?.ToString() ?? "Follows p"}")</MudText>
+                    }
+                }
+                @if (_action == BulkDomainAction.CheckDns)
+                {
+                    <MudText Class="my-2">Runs SPF, MX, DMARC, reporting authorization, TLSRPT and configured DKIM checks. A completed check may still report a DNS problem. Does not publish DNS, provision MTA-STS hosting or run alert delivery.</MudText>
+                }
+                @if (_action == BulkDomainAction.RecheckProviders)
+                {
+                    <MudText Class="my-2">Refreshes provider detection without publishing DNS.</MudText>
+                }
+                @if (_action == BulkDomainAction.Remove)
+                {
+                    <MudAlert Severity="Severity.Error" Class="my-2">Permanently deletes the selected domains and all their DMARC/TLS report history. This cannot be undone. DNS records and externally provisioned hosting are not removed. Disable MTA-STS hosting and allow cleanup to complete first. New incoming reports can rediscover a domain.</MudAlert>
+                    <MudTextField T="string" Label="Type REMOVE to confirm" @bind-Value="_confirmation" Immediate="true" Variant="Variant.Outlined" />
+                }
+            </fieldset>
+            @if (_started)
+            {
+                <MudText role="status" Class="my-3">@_results.Count of @DomainIds.Distinct().Count() processed: @_results.Count(result => result.Outcome == DomainActionOutcome.Succeeded) completed, @_results.Count(result => result.Outcome == DomainActionOutcome.Skipped) skipped, @_results.Count(result => result.Outcome == DomainActionOutcome.Failed) failed. @(DomainIds.Distinct().Count() - _results.Count) not attempted.</MudText>
+                <MudText Typo="Typo.caption">Completed actions are not rolled back. Close and review the current state before retrying.</MudText>
+                <ul>
+                    @foreach (var result in _results)
+                    {
+                        <li>@NameOf(result.DomainId): @result.Outcome - @result.Message</li>
+                    }
+                </ul>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_running)
+        {
+            <MudButton OnClick="@(() => _stop.Cancel())" Disabled="@_stop.IsCancellationRequested">Stop remaining actions</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="Close">@(_started ? "Close" : "Cancel")</MudButton>
+            @if (!_started)
+            {
+                <MudButton OnClick="RunAsync" Disabled="@(!CanRun)" Variant="Variant.Filled" Color="@(_action == BulkDomainAction.Remove ? Color.Error : Color.Primary)">Apply to selected domains</MudButton>
+            }
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public IReadOnlyList<int> DomainIds { get; set; } = [];
+    private readonly CancellationTokenSource _stop = new();
+    private bool _loaded, _running, _started, _disposed;
+    private string? _error;
+    private string _confirmation = "";
+    private BulkDomainAction? _action;
+    private IReadOnlyCollection<int> _assignmentIds = [];
+    private DmarcTarget? _target;
+    private bool _targetChosen;
+    private List<SelectOption<int>> _groups = [], _tags = [];
+    private Dictionary<int, string> _names = [];
+    private readonly List<BulkDomainAction> _allowed = [];
+    private readonly List<DomainActionResult> _results = [];
+    private bool NeedsAssignments => _action is BulkDomainAction.AddGroups or BulkDomainAction.RemoveGroups or BulkDomainAction.AddTags or BulkDomainAction.RemoveTags;
+    private bool CanRun => _loaded && _error is null && DomainIds.Count > 0 && _action is not null && _allowed.Contains(_action.Value)
+        && (!NeedsAssignments || _assignmentIds.Count > 0) && (_action != BulkDomainAction.Remove || _confirmation == "REMOVE")
+        && (_action != BulkDomainAction.SetTarget || _targetChosen);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = (await Authentication.GetAuthenticationStateAsync()).User;
+            if (!ClientPortalGate.IsPortalUser(user) && (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsView))).Succeeded)
+                foreach (var action in Enum.GetValues<BulkDomainAction>())
+                    if ((await Authorization.AuthorizeAsync(user, BulkDomainActionService.RequiredPermission(action).ToString())).Succeeded)
+                        _allowed.Add(action);
+            if (_allowed.Count == 0)
+            {
+                _error = "You no longer have permission for bulk domain actions.";
+                _loaded = true;
+                return;
+            }
+            var scope = PortalData.ScopedGroupIds(user);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _names = await db.Domains.Where(domain => DomainIds.Contains(domain.Id) && (scope.Count == 0 || domain.Groups.Any(group => scope.Contains(group.Id))))
+                .ToDictionaryAsync(domain => domain.Id, domain => domain.Name);
+            _groups = await db.Groups.Where(group => scope.Count == 0 || scope.Contains(group.Id)).OrderBy(group => group.Name)
+                .Select(group => new SelectOption<int>(group.Id, group.Name)).ToListAsync();
+            _tags = await db.Tags.OrderBy(tag => tag.Name).Select(tag => new SelectOption<int>(tag.Id, tag.Name)).ToListAsync();
+            _loaded = true;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Loading bulk domain actions failed");
+            _error = "Could not load bulk actions. Close and try again.";
+            _loaded = true;
+        }
+    }
+
+    private string NameOf(int id) => _names.GetValueOrDefault(id) ?? "Unavailable domain";
+    private void ChangeAction(BulkDomainAction? value) { _action = value; _assignmentIds = []; _confirmation = ""; }
+    private async Task ChooseTargetAsync()
+    {
+        var dialog = await Dialogs.ShowAsync<DmarcTargetDialog>("Choose bulk DMARC target",
+            new DialogParameters<DmarcTargetDialog>
+            {
+                { choice => choice.Heading, "Choose bulk DMARC target" },
+                { choice => choice.Current, _target },
+                { choice => choice.ScopeDescription, $"Applies to {DomainIds.Distinct().Count()} selected domains when you confirm the bulk action. Inherit clears each domain's override." }
+            }, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (await dialog.Result is { Canceled: false, Data: DmarcTargetDialog.DmarcTargetDialogResult result })
+        {
+            _target = result.Target;
+            _targetChosen = true;
+        }
+    }
+    private async Task RunAsync()
+    {
+        if (!CanRun || _running || _started) return;
+        _running = _started = true;
+        var request = new BulkDomainActionRequest(_action!.Value, _assignmentIds.ToArray(), _target);
+        try
+        {
+            foreach (var id in DomainIds.Distinct().ToArray())
+            {
+                _stop.Token.ThrowIfCancellationRequested();
+                var user = (await Authentication.GetAuthenticationStateAsync()).User;
+                _results.Add(await Actions.ExecuteAsync(id, request, user, await Actor.GetAsync(), _stop.Token));
+                if (!_disposed) StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+            _error = "Stopped. An in-progress action may have completed; refresh before retrying.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Bulk domain actions stopped");
+            _error = "Bulk actions stopped unexpectedly. Review the current state before retrying; completed domains are not rolled back.";
+        }
+        finally
+        {
+            _running = false;
+            if (_disposed) _stop.Dispose();
+        }
+    }
+    private void Close() => MudDialog.Close(DialogResult.Ok(_started));
+    public void Dispose() { _disposed = true; _stop.Cancel(); if (!_running) _stop.Dispose(); }
+
+    private static string ActionLabel(BulkDomainAction action) => action switch
+    {
+        BulkDomainAction.Remove => "Remove domains",
+        BulkDomainAction.AddGroups => "Add group membership",
+        BulkDomainAction.RemoveGroups => "Remove group membership",
+        BulkDomainAction.AddTags => "Add tags",
+        BulkDomainAction.RemoveTags => "Remove tags",
+        BulkDomainAction.RecheckProviders => "Recheck DNS providers",
+        BulkDomainAction.CheckDns => "Run DNS/health checks",
+        BulkDomainAction.SetTarget => "Set DMARC target",
+        _ => throw new ArgumentOutOfRangeException(nameof(action))
+    };
+}

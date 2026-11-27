@@ -43,6 +43,8 @@ public partial class DomainWorkspace : IAsyncDisposable
     private bool _focusAddDomain;
     private bool _showAddDomain;
     private bool _canBulkDns;
+    private bool _canBulkActions;
+    private bool _canSelectDomains;
     private bool _checkingProviders, _canCheckProviders;
     private int _providersChecked, _providerCheckTotal;
     private readonly List<DnsProviderCheckOutcome> _providerCheckResults = [];
@@ -198,7 +200,11 @@ public partial class DomainWorkspace : IAsyncDisposable
             _canReorder = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsReorder))).Succeeded;
             _canBulkDns = !ClientPortalGate.IsPortalUser(user) && (canEdit || (await Authorization.AuthorizeAsync(user, nameof(Permission.MtaStsManage))).Succeeded);
             _canCheckProviders = !ClientPortalGate.IsPortalUser(user) && canEdit;
-            if (!_canBulkDns) _selectedDnsDomains.Clear();
+            _canBulkActions = !ClientPortalGate.IsPortalUser(user) &&
+                (canEdit || (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsDelete))).Succeeded ||
+                 (await Authorization.AuthorizeAsync(user, nameof(Permission.BaselinesManage))).Succeeded);
+            _canSelectDomains = _canBulkDns || _canBulkActions;
+            if (!_canSelectDomains) _selectedDnsDomains.Clear();
             _psaLists = lists;
             _companyOptions = domains.SelectMany(domain => domain.PsaCompanyLinks).Select(link => link.Psa).Concat(lists.Select(list => list.Psa)).Distinct().ToDictionary(
                 psa => psa, psa => domains.SelectMany(domain => domain.PsaCompanyLinks).Where(link => link.Psa == psa).Select(link => new PsaCompany(link.CompanyId, link.CompanyName))
@@ -270,7 +276,7 @@ public partial class DomainWorkspace : IAsyncDisposable
 
     private void SelectDnsDomain(int id, bool selected)
     {
-        if (!_canBulkDns || !_rows.Any(row => row.Id == id)) return;
+        if (!_canSelectDomains || _checkingProviders || !_rows.Any(row => row.Id == id)) return;
         if (selected) _selectedDnsDomains.Add(id);
         else _selectedDnsDomains.Remove(id);
     }
@@ -278,6 +284,17 @@ public partial class DomainWorkspace : IAsyncDisposable
     private Task ReviewSelectedDnsAsync() => Dialogs.ShowAsync<DnsPushSelectionDialog>("Review DNS push",
         new DialogParameters<DnsPushSelectionDialog> { { dialog => dialog.DomainIds, _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).ToArray() } },
         new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+
+    private async Task OpenBulkActionsAsync()
+    {
+        var ids = _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).Distinct().ToArray();
+        if (!_canBulkActions || ids.Length == 0) return;
+        var dialog = await Dialogs.ShowAsync<BulkDomainActionDialog>("Bulk domain actions",
+            new DialogParameters<BulkDomainActionDialog> { { choice => choice.DomainIds, ids } },
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, BackdropClick = false, CloseOnEscapeKey = false });
+        await dialog.Result;
+        await LoadAsync();
+    }
 
     private async Task RecheckSelectedProvidersAsync()
     {
@@ -405,13 +422,24 @@ public partial class DomainWorkspace : IAsyncDisposable
 
     private async Task DeleteAsync(int id)
     {
-        var domain = _domainsById[id];
-        var dialog = await Dialogs.ShowAsync<ConfirmDeleteDomainDialog>("Remove domain", new DialogParameters<ConfirmDeleteDomainDialog>
+        try
         {
-            { choice => choice.DomainName, domain.Name }, { choice => choice.ReportCount, _reportCounts.GetValueOrDefault(id) }
-        });
-        if (await dialog.Result is { Canceled: false })
-            await MutateAsync(id, Permission.DomainsDelete, async db => await DomainManagementService.RemoveDomainAsync(db, await Actor.GetAsync(), id));
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (!await MayWriteAsync(db, Permission.DomainsDelete, id)) return;
+            var domain = await db.Domains.SingleAsync(domain => domain.Id == id);
+            var count = await db.Reports.CountAsync(report => report.DomainId == id) + await db.TlsrptReports.CountAsync(report => report.DomainId == id);
+            var dialog = await Dialogs.ShowAsync<ConfirmDeleteDomainDialog>("Remove domain", new DialogParameters<ConfirmDeleteDomainDialog>
+            {
+                { choice => choice.DomainName, domain.Name }, { choice => choice.ReportCount, count }
+            });
+            if (await dialog.Result is { Canceled: false })
+                await MutateAsync(id, Permission.DomainsDelete, async context => await DomainManagementService.RemoveDomainAsync(context, await Actor.GetAsync(), id));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Npgsql.NpgsqlException)
+        {
+            Logger.LogWarning(exception, "Preparing removal for domain {DomainId} failed", id);
+            Snackbar.Add("Could not prepare removal. Refresh before trying again.", Severity.Error);
+        }
     }
 
     private async Task DropAsync(int target)

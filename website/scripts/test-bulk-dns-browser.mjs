@@ -7,7 +7,7 @@ const page = await browser.newPage({viewport: {width: 1440, height: 1000}});
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 const ready = () => page.waitForFunction(() => !!JSON.parse(history.state?.userState ?? '{}').domainListEntry);
-const select = name => page.getByRole('checkbox', {name: `Select ${name} for DNS review`, exact: true}).first().check();
+const select = name => page.getByRole('checkbox', {name: `Select ${name}`, exact: true}).first().check();
 const review = async provider => {
   await page.getByRole('button', {name: 'Review selected DNS', exact: true}).click();
   await page.getByRole('dialog').getByRole('button', {name: `Review ${provider}`, exact: true}).click();
@@ -29,10 +29,10 @@ try {
   await select('aurora-retail.example');
   await select('shop.aurora-retail.example');
   await page.getByRole('button', {name: 'By group', exact: true}).click();
-  await page.getByText('2 selected for DNS review', {exact: true}).waitFor();
+  await page.getByText('2 selected domains', {exact: true}).waitFor();
   await page.getByRole('button', {name: 'All domains', exact: true}).click();
   await page.getByLabel('Domain search', {exact: true}).fill('shop.aurora');
-  await page.getByText('1 selected for DNS review', {exact: true}).waitFor();
+  await page.getByText('1 selected domains', {exact: true}).waitFor();
   await page.getByRole('button', {name: 'Clear filters', exact: true}).click();
   assert.equal(await page.getByLabel('Domain search', {exact: true}).inputValue(), 'shop.aurora');
   await page.getByLabel('Domain search', {exact: true}).fill('');
@@ -92,7 +92,7 @@ try {
   await page.goto(`${base}/domains`);
   await ready();
   assert.equal(await page.getByRole('button', {name: 'Review selected DNS', exact: true}).count(), 0);
-  assert.equal(await page.getByRole('checkbox', {name: /^Select .* for DNS review$/}).count(), 0);
+  assert.equal(await page.getByRole('checkbox', {name: /^Select .+\.example$/}).count(), 0);
   assert.equal(await page.getByRole('button', {name: 'Recheck selected providers', exact: true}).count(), 0);
   await page.goto(firstBatch);
   await page.getByText('That DNS batch is unavailable or belongs to another person.', {exact: false}).waitFor();
