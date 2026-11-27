@@ -26,6 +26,10 @@ try {
   assert(await table.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'Normal Domains table must fit a 1366px laptop');
   assert(await page.getByRole('img', {name: /^DMARC:/}).count() > 0);
   await page.getByRole('switch', {name: 'Show management columns', exact: true}).check();
+  const monitored = page.getByRole('switch', {name: 'Monitor aurora-retail.example', exact: true});
+  assert(await monitored.isChecked());
+  assert(await monitored.evaluate(node => node.closest('.mud-switch').querySelector('.mud-switch-base').classList.contains('mud-primary-text')),
+    'The enabled monitored switch must use the primary colour');
   await page.getByRole('button', {name: 'Manage aurora-retail.example', exact: true}).click();
   await page.getByLabel('Tags for aurora-retail.example', {exact: true}).waitFor();
   assert(await table.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'Expanded management must not widen the laptop table');
