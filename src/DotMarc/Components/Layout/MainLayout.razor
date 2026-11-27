@@ -102,7 +102,7 @@
             </Authorized>
         </AuthorizeView>
     </MudAppBar>
-    <MudMainContent>
+    <MudMainContent data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()">
         <MudContainer MaxWidth="MaxWidth.Large" Class="my-4">
             @Body
         </MudContainer>

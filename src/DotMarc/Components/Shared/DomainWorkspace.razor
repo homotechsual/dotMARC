@@ -177,7 +177,7 @@ else
             <MudTd DataLabel="Last report"><MudTooltip Text="@(row.LastReportReceivedUtc?.ToString("g") ?? "never")">@(row.LastReportReceivedUtc?.ToString("d") ?? "never")</MudTooltip></MudTd>
             <MudTd DataLabel="Monitored">
                 <AuthorizeView Policy="DomainsEdit" Context="edit">
-                    <Authorized><MudSwitch T="bool" Value="row.IsMonitored" ValueChanged="@(value => SetMonitoredAsync(row.Id, value))" aria-label="@($"Monitor {row.Name}")" /></Authorized>
+                    <Authorized><MudSwitch T="bool" Value="row.IsMonitored" ValueChanged="@(value => SetMonitoredAsync(row.Id, value))" Color="Color.Primary" aria-label="@($"Monitor {row.Name}")" /></Authorized>
                     <NotAuthorized>@(row.IsMonitored ? "Yes" : "No")</NotAuthorized>
                 </AuthorizeView>
             </MudTd>

@@ -71,17 +71,15 @@ async function signedInPage(user, dark) {
   // The app remembers the theme in localStorage, so set it before anything loads.
   await context.addInitScript((isDark) => localStorage.setItem('dotmarc-dark-mode', isDark ? 'true' : 'false'), dark);
   const page = await context.newPage();
-  await page.goto(`${baseUrl}/demo`);
+  await page.goto(`${baseUrl}/demo`, {waitUntil: 'domcontentloaded'});
   await page.getByRole('button', {name: `Continue as Demo ${user}`}).click();
   await page.waitForURL('**/dashboard');
   return {context, page};
 }
 
 async function settle(page) {
-  // Blazor Server renders in two steps (prerender, then the live circuit), and the charts animate in, so wait for
-  // the network to go quiet and any spinner to leave before taking the picture.
-  await page.waitForLoadState('networkidle');
-  await page.locator('.mud-progress-circular, .mud-progress-linear').first().waitFor({state: 'detached', timeout: 15000}).catch(() => {});
+  await page.waitForFunction(() => document.querySelector('.mud-main-content')?.dataset.interactive === 'true');
+  await page.locator('.mud-progress-circular, .mud-progress-linear').first().waitFor({state: 'detached', timeout: 15000});
   await page.waitForTimeout(1500);
 }
 
@@ -96,7 +94,7 @@ try {
 
       const {context, page} = await signedInPage(user, dark);
       for (const shot of wanted) {
-        const response = await page.goto(`${baseUrl}${shot.path}`);
+        const response = await page.goto(`${baseUrl}${shot.path}`, {waitUntil: 'domcontentloaded'});
         if (!response || !response.ok()) {
           throw new Error(`${shot.path} answered ${response?.status() ?? 'nothing'}. Is the demo running at ${baseUrl}?`);
         }
