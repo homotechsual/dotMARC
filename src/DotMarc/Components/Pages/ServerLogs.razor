@@ -54,12 +54,12 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">
                 Showing @entries.Count (newest first@(entries.Count == MaxShown ? $", limited to the latest {MaxShown}" : "")).
             </MudText>
-            <MudTable T="LogEntry" Items="entries" Dense="true" Hover="true" Breakpoint="Breakpoint.Lg" Class="responsive-detail-table">
+            <MudTable T="LogEntry" Items="entries" Dense="true" Hover="true" Breakpoint="Breakpoint.Md" Class="responsive-detail-table compact-detail-table">
                 <HeaderContent>
                     <MudTh>Time (UTC)</MudTh>
                     <MudTh>Level</MudTh>
                     <MudTh>Source</MudTh>
-                    <MudTh>Message</MudTh>
+                    <MudTh Style="width:50%;">Message</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Time (UTC)">@context.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>

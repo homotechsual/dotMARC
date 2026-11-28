@@ -28,7 +28,7 @@
 }
 else
 {
-    <MudTable Items="_alerts" Hover="true" T="AlertEvent" CustomHeader="true" Filter="AlertMatchesFilters" Class="responsive-detail-table" Breakpoint="Breakpoint.Lg">
+    <MudTable Items="_alerts" Hover="true" Dense="true" T="AlertEvent" CustomHeader="true" Filter="AlertMatchesFilters" Class="responsive-detail-table compact-detail-table" Breakpoint="Breakpoint.Md">
         <ToolBarContent>
             <ListToolbar Label="Alert controls" SearchLabel="Search alert domains" @bind-Search="_domainFilter" @bind-Expanded="_showFilters"
                          FilterCount="@FilterCount" ClearFilters="ClearFilters">
@@ -49,19 +49,19 @@ else
             </ListToolbar>
         </ToolBarContent>
         <HeaderContent>
-            <tr>
-                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domain" SortBy="new Func<AlertEvent, object>(e => e.DomainName)">Domain</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Type" SortBy="new Func<AlertEvent, object>(e => e.AlertType)">Type</MudTableSortLabel></MudTh>
+            <tr class="mud-table-row">
+                <MudTh Style="width:15%;"><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Domain" SortBy="new Func<AlertEvent, object>(e => e.DomainName)">Domain</MudTableSortLabel></MudTh>
+                <MudTh Style="width:10%;"><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Type" SortBy="new Func<AlertEvent, object>(e => e.AlertType)">Type</MudTableSortLabel></MudTh>
                 @if (_showRule)
                 {
-                    <MudTh>Rule</MudTh>
+                    <MudTh Style="width:9%;">Rule</MudTh>
                 }
-                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Severity" SortBy="new Func<AlertEvent, object>(e => e.Severity)">Severity</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Created" SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Resolved" SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
-                <MudTh>Message</MudTh>
-                <MudTh>Tickets</MudTh>
-                <MudTh></MudTh>
+                <MudTh Style="width:9%;"><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Severity" SortBy="new Func<AlertEvent, object>(e => e.Severity)">Severity</MudTableSortLabel></MudTh>
+                <MudTh Style="width:10%;"><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Created" SortBy="new Func<AlertEvent, object>(e => e.CreatedUtc)">Created</MudTableSortLabel></MudTh>
+                <MudTh Style="width:9%;"><MudTableSortLabel SortDirectionChanged="RefreshSort" SortLabel="Resolved" SortBy="new Func<AlertEvent, object>(e => e.IsResolved ? e.ResolvedUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MaxValue)">Resolved</MudTableSortLabel></MudTh>
+                <MudTh Style="width:25%;">Message</MudTh>
+                <MudTh Style="width:5%;">Tickets</MudTh>
+                <MudTh Style="width:8%;"></MudTh>
             </tr>
         </HeaderContent>
         <RowTemplate>
@@ -90,7 +90,7 @@ else
                     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@notification</MudText>
                 }
             </MudTd>
-            <MudTd DataLabel="Tickets">
+            <MudTd DataLabel="Tickets" Class="@(!_tickets[context.Id].Any() ? "empty-detail-cell" : null)">
                 @foreach (var ticket in _tickets[context.Id].OrderBy(ticket => ticket.Psa))
                 {
                     var label = $"{ticket.Psa.DisplayName()} #{ticket.TicketId}";
@@ -107,7 +107,7 @@ else
                     }
                 }
             </MudTd>
-            <MudTd DataLabel="Actions">
+            <MudTd DataLabel="Actions" Class="@(context.IsResolved || !AlertAcknowledgement.IsAcknowledgeable(context.AlertType) ? "empty-detail-cell" : null)">
                 @if (!context.IsResolved && AlertAcknowledgement.IsAcknowledgeable(context.AlertType))
                 {
                     <AuthorizeView Policy="AlertsManage" Context="authorization">
