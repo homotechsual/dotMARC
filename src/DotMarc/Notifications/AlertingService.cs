@@ -117,8 +117,7 @@ public sealed class AlertingService : IAlertingService
             {
                 foreach (var rule in missedRules)
                 {
-                    var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-rule.Int(AlertRuleParameterKeys.MissingDays));
-                    if (domain.LastReportReceivedUtc is { } lastReport && lastReport >= cutoffUtc)
+                    if (!MissingReportCheck.IsOverdue(domain, rule.Int(AlertRuleParameterKeys.MissingDays), DateTimeOffset.UtcNow))
                     {
                         if (openAlerts.Has(domain.Name, AlertTypes.MissedReport, rule.RuleId))
                         {
@@ -130,7 +129,7 @@ public sealed class AlertingService : IAlertingService
                         var message = domain.LastReportReceivedUtc is { } receivedUtc
                             ? $"The monitored domain '{domain.Name}' has not received a DMARC report since {receivedUtc:O}."
                             : $"The monitored domain '{domain.Name}' has not received a DMARC report yet.";
-                        await EnsureAlertAsync(db, settings, rule, domain.Name, "Missing expected DMARC report", message, cancellationToken).ConfigureAwait(false);
+                        await EnsureAlertAsync(db, settings, rule, domain.Name, "No DMARC aggregate reports received", message, cancellationToken).ConfigureAwait(false);
                     }
                 }
             }

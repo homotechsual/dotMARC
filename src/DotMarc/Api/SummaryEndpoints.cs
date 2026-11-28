@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using DotMarc.Portal;
 using DotMarc.Reporting;
 using DotMarc.Security;
@@ -23,7 +24,8 @@ public static class SummaryEndpoints
     {
         var scope = ApiScope.From(user);
         await using var context = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var domains = await scope.Domains(context.Domains.AsNoTracking()).ToListAsync(cancellationToken);
+        var domains = await scope.Domains(context.Domains.AsNoTracking()).Include(domain => domain.Groups).Include(domain => domain.Tags).AsSplitQuery().ToListAsync(cancellationToken);
+        var rules = await AlertRuleSet.LoadAsync(context, cancellationToken);
         var ids = domains.Select(domain => domain.Id).ToList();
         var cutoffUtc = DomainStatistics.GetWindowCutoffUtc(timeProvider.GetUtcNow());
         var passRates = await DomainReadEndpoints.PassRatesAsync(context, ids, cutoffUtc, cancellationToken);
@@ -41,7 +43,7 @@ public static class SummaryEndpoints
             .Include(record => record.OverrideReasons).Include(record => record.AuthDetails).AsSplitQuery().ToListAsync(cancellationToken);
         var openAlerts = await PortalData.OpenAlertsAsync(context, domains.Select(domain => domain.Name).ToList(), cancellationToken);
 
-        var statuses = domains.Select(domain => DashboardSummary.StatusOf(domain, passRates.TryGetValue(domain.Id, out var rate) ? rate : null)).ToList();
+        var statuses = domains.Select(domain => DashboardSummary.StatusOf(domain, passRates.TryGetValue(domain.Id, out var rate) ? rate : null, rules, timeProvider.GetUtcNow())).ToList();
         var healths = domains.Select(domain => PortalStatus.For(domain, domain.LastReportReceivedUtc is not null, openAlerts[domain.Name].ToList()).Health).ToList();
         var breakdown = DomainStatistics.GetReasonBreakdown(actedOn);
         var mayCountParseFailures = !scope.IsScoped && user.HasClaim(UserAccessClaimsTransformation.PermissionClaimType, nameof(Permission.DomainsEdit));

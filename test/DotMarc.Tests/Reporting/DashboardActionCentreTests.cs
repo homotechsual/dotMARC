@@ -125,7 +125,7 @@ public sealed class DashboardActionCentreTests
         var unknown = new Domain { Id = 1, Name = "aaa.example" };
         var review = Healthy(2);
         var missing = Healthy(3);
-        missing.LastReportReceivedUtc = Now.AddDays(-3);
+        missing.LastReportReceivedUtc = Now.AddDays(-4);
         var result = DashboardActionCentre.Build([unknown, review, missing], new Dictionary<int, int> { [2] = 4 }, new(), Now);
         Assert.Equal([3, 2, 1], result.Attention.Select(row => row.Domain.Id));
         Assert.Equal(4, result.SenderReviews);

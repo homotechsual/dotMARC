@@ -7,7 +7,7 @@ public sealed class AlertRuleParameterDefinitionTests
 {
     public static TheoryData<string, string, string, int?, int?> IntegerParameters => new()
     {
-        { AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays, "2", 1, 90 },
+        { AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays, "3", 1, 90 },
         { AlertTypes.SuspiciousRejectActivity, AlertRuleParameterKeys.MinimumMessages, "10", 1, 1000000 },
         { AlertTypes.SuspiciousRejectActivity, AlertRuleParameterKeys.NonBenignPercent, "50", 1, 100 },
         { AlertTypes.NewUnreviewedSender, AlertRuleParameterKeys.NewDays, "7", 1, 30 },
@@ -94,8 +94,8 @@ public sealed class AlertRuleParameterDefinitionTests
     [Fact]
     public void DefaultOf_ReturnsTheDefault_AndThrowsForAnUnknownPair()
     {
-        Assert.Equal("2", AlertRuleKinds.DefaultOf(AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays));
-        Assert.Equal(2, AlertRuleKinds.DefaultInt(AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays));
+        Assert.Equal("3", AlertRuleKinds.DefaultOf(AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays));
+        Assert.Equal(3, AlertRuleKinds.DefaultInt(AlertTypes.MissedReport, AlertRuleParameterKeys.MissingDays));
         Assert.Throws<ArgumentException>(() => AlertRuleKinds.DefaultOf(AlertTypes.MissedReport, "nope"));
         Assert.Throws<ArgumentException>(() => AlertRuleKinds.DefaultOf("NoSuchKind", AlertRuleParameterKeys.MissingDays));
     }

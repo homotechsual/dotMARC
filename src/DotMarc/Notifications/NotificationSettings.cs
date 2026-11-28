@@ -21,7 +21,7 @@ public sealed class NotificationSettings
     // Retired: the thresholds, modes and switches from here down to UnauthorisedDeliveredMinVolume are no longer read by alerting.
     // They live on the alert rules now (see AlertRule). The columns stay for one release so a downgrade still finds the values; a
     // new default rule is created from them once (AlertRuleSeeder), and nothing else uses them.
-    public int MissingReportThresholdDays { get; set; } = 2;
+    public int MissingReportThresholdDays { get; set; } = 3;
     /// <summary>The IANA time zone the quiet hours on rules are read in. An id dotMARC does not know behaves as UTC.</summary>
     public string TimeZoneId { get; set; } = "UTC";
 

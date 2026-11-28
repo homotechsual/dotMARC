@@ -97,6 +97,7 @@ public class DashboardSummaryTests
     public void Build_MarksMonitoredDomainMissing_WhenNoReportEverReceived()
     {
         var domain = DomainWith("contoso.io", isMonitored: true, lastReportReceivedUtc: null);
+        domain.FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-4);
 
         var (summary, rows) = DashboardSummary.Build([domain], parseFailureCount: 0);
 
@@ -107,9 +108,9 @@ public class DashboardSummaryTests
     }
 
     [Fact]
-    public void Build_MarksMonitoredDomainMissing_WhenLastReportOlderThanTwoDays()
+    public void Build_MarksMonitoredDomainMissing_WhenLastReportOlderThanThreeDays()
     {
-        var domain = DomainWith("contoso.io", isMonitored: true, DateTimeOffset.UtcNow.AddDays(-3));
+        var domain = DomainWith("contoso.io", isMonitored: true, DateTimeOffset.UtcNow.AddDays(-4));
 
         var (_, rows) = DashboardSummary.Build([domain], parseFailureCount: 0);
 

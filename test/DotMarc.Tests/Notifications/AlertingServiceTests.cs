@@ -118,6 +118,26 @@ public sealed class AlertingServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CheckPinnedDomainsAsync_WaitsForFirstReportGrace_AndHonoursConfiguredThreshold()
+    {
+        await SeedSettingsAsync(missingReportThresholdDays: 3);
+        await SeedMonitoredDomainAsync("late.example", DateTimeOffset.UtcNow.AddDays(-2.5));
+        await SeedMonitoredDomainAsync("overdue.example", DateTimeOffset.UtcNow.AddDays(-4));
+        await SeedMonitoredDomainAsync("new.example", null);
+        await using (var context = CreateContext())
+        {
+            var domain = await context.Domains.SingleAsync(domain => domain.Name == "new.example");
+            domain.FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-1);
+            await context.SaveChangesAsync();
+        }
+        var service = new AlertingService(new FakeDbContextFactory(_connectionString), new FakeAlertWebhookClient(), CreateNoOpPsaTicketService(), NullLogger<AlertingService>.Instance);
+        await service.CheckPinnedDomainsAsync();
+        await using var verify = CreateContext();
+        var alert = Assert.Single(await verify.AlertEvents.Where(alert => alert.AlertType == AlertTypes.MissedReport).ToListAsync());
+        Assert.Equal("overdue.example", alert.DomainName);
+    }
+
+    [Fact]
     public async Task CheckPinnedDomainsAsync_CreatesOneMissedReportAlert_PerDomainWithinCooldown()
     {
         await SeedSettingsAsync();

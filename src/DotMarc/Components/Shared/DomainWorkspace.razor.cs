@@ -83,6 +83,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     private Dictionary<int, int> _senderReviews = [];
     private DateTimeOffset _snapshotUtc;
     private DnsRecordSettings _settings = new();
+    private AlertRuleSet _alertRules = AlertRuleSet.Defaults();
     private int _parseFailures;
     private IReadOnlyList<PsaCompanyList> _psaLists = [];
     private Dictionary<PsaKind, List<SelectOption<string>>> _companyOptions = [];
@@ -188,6 +189,7 @@ public partial class DomainWorkspace : IAsyncDisposable
             var ids = domains.Select(domain => domain.Id).ToList();
             var counts = await db.Reports.Where(report => ids.Contains(report.DomainId)).GroupBy(report => report.DomainId).ToDictionaryAsync(group => group.Key, group => group.Count());
             var settings = await DnsRecordSettingsService.GetAsync(db);
+            var alertRules = await AlertRuleSet.LoadAsync(db, CancellationToken.None);
             var parseFailures = (await Authorization.AuthorizeAsync(user, "DomainsWrite")).Succeeded ? await db.ParseFailures.CountAsync() : 0;
             var canEdit = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsEdit))).Succeeded;
             var senderReviews = new Dictionary<int, int>();
@@ -212,6 +214,7 @@ public partial class DomainWorkspace : IAsyncDisposable
             if (_disposed || version != _loadVersion) return;
             _scope = scope; _groups = groups; _tags = tags; _domains = domains;
             _senderReviews = senderReviews; _snapshotUtc = snapshotUtc;
+            _alertRules = alertRules;
             _domainsById = domains.ToDictionary(domain => domain.Id); _reportCounts = counts; _settings = settings; _parseFailures = parseFailures;
             _canReorder = (await Authorization.AuthorizeAsync(user, nameof(Permission.DomainsReorder))).Succeeded;
             _canBulkDns = !ClientPortalGate.IsPortalUser(user) && (canEdit || (await Authorization.AuthorizeAsync(user, nameof(Permission.MtaStsManage))).Succeeded);
@@ -256,7 +259,7 @@ public partial class DomainWorkspace : IAsyncDisposable
     private List<int> VisibleGroups(Domain domain) => domain.Groups.Where(group => _groups.Any(visible => visible.Id == group.Id)).Select(group => group.Id).ToList();
     private void Rebuild()
     {
-        (_, _allRows) = DashboardSummary.Build(_domains, _parseFailures, _settings);
+        (_, _allRows) = DashboardSummary.Build(_domains, _parseFailures, _settings, _alertRules, _snapshotUtc);
         var matched = _allRows.Where(row =>
         {
             var domain = _domainsById[row.Id];
@@ -271,7 +274,7 @@ public partial class DomainWorkspace : IAsyncDisposable
         _rows = _state.Order(matched, row => CountOf(row)).ToList();
         var ids = _rows.Select(row => row.Id).ToHashSet();
         if (!Inventory || _state.Queue is not null)
-            _actionCentre = DashboardActionCentre.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _senderReviews, _settings, _snapshotUtc);
+            _actionCentre = DashboardActionCentre.Build(_domains.Where(domain => ids.Contains(domain.Id)).ToList(), _senderReviews, _settings, _snapshotUtc, _alertRules);
         if (Inventory && _state.Queue is not null && _actionCentre is { } centre)
         {
             var queueIds = (_state.Queue == "attention"

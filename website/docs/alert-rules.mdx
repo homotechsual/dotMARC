@@ -36,6 +36,12 @@ The page shows how many domains each rule reaches, and warns when a rule is hidd
 
 ## Default rules
 
+The **Missing DMARC report** factory default is **3 days**, configurable from 1 to 90 under **Days without a report**. Receivers usually send aggregate reports daily, but delays and quiet days are normal. For domains that have never received a report, the interval starts when the domain was added, giving it time to receive its first report. The dashboard and summary API use the same scoped rules and intervals as alerting.
+
+For intermittent senders, consider 7 days. Exclude low-volume alias domains (individually or using an alias tag/group) from missing-report rules unless you specifically want to monitor their report cadence. Null-SPF parked domains are automatically exempt. Tags alone do not change report expectations.
+
+Existing saved rules keep their thresholds on upgrade, including an intentional 2-day threshold. To adopt the new factory default, edit the rule to **3**, or use **Reset to default values** (which also resets its other settings and scope). Missing reports indicate a gap in received evidence, not proof of a DMARC failure.
+
 A default rule can be switched off, edited and moved, but not deleted. **Reset to default values** in its dialog restores its name, severity, settings and scope. If a rule's scope names a group, tag or domain that has since been deleted, the page says so and offers **Clean up**, which removes those entries. A scope limited to something that is gone applies to nothing.
 
 ## Tickets

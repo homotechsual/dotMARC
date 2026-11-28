@@ -43,9 +43,10 @@ public sealed record DashboardActionCentre(
     public int UncheckedDomains => Attention.Count(row => row.Problems.Any(problem => problem.NeedsChecking));
 
     public static DashboardActionCentre Build(
-        IReadOnlyList<Domain> domains, IReadOnlyDictionary<int, int> senderReviews, DnsRecordSettings settings, DateTimeOffset now)
+        IReadOnlyList<Domain> domains, IReadOnlyDictionary<int, int> senderReviews, DnsRecordSettings settings, DateTimeOffset now, AlertRuleSet? rules = null)
     {
         now = now.ToUniversalTime();
+        rules ??= AlertRuleSet.Defaults();
         var cutoff = DomainStatistics.GetWindowCutoffUtc(now);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
         var firstDay = today.AddDays(-6);
@@ -59,11 +60,13 @@ public sealed record DashboardActionCentre(
         foreach (var domain in domains)
         {
             var problems = Problems(domain, settings);
-            var reportMissing = ExpectsReports(domain) && (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < now.AddDays(-2));
+            var reportMissing = MissingReportCheck.IsOverdue(domain, rules, now);
             if (reportMissing)
             {
                 missing++;
-                problems.Add(new("No expected report in the last two days", "Investigate reports", "overview"));
+                var since = domain.LastReportReceivedUtc ?? domain.FirstSeenUtc;
+                var elapsedDays = (int)(now - since).TotalDays;
+                problems.Add(new($"No DMARC aggregate reports received for {elapsedDays} days", "Investigate reports", "overview"));
             }
             var reviews = senderReviews.GetValueOrDefault(domain.Id);
             if (problems.Count > 0 || reviews > 0)

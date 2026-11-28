@@ -1875,7 +1875,7 @@ namespace DotMarc.Migrations
                             DmarcPolicyWeakenedEnabled = true,
                             Enabled = true,
                             GenericWebhookEnabled = false,
-                            MissingReportThresholdDays = 2,
+                            MissingReportThresholdDays = 3,
                             MonitorIntervalSeconds = 300,
                             MtaStsAlertMode = "WhenItBreaks",
                             MxAlertMode = "WhenItBreaks",
