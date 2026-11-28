@@ -28,7 +28,7 @@
 }
 else
 {
-    <MudTable Items="_alerts" Hover="true" T="AlertEvent" CustomHeader="true" Filter="AlertMatchesFilters">
+    <MudTable Items="_alerts" Hover="true" T="AlertEvent" CustomHeader="true" Filter="AlertMatchesFilters" Class="responsive-detail-table" Breakpoint="Breakpoint.Lg">
         <ToolBarContent>
             <ListToolbar Label="Alert controls" SearchLabel="Search alert domains" @bind-Search="_domainFilter" @bind-Expanded="_showFilters"
                          FilterCount="@FilterCount" ClearFilters="ClearFilters">
@@ -75,15 +75,15 @@ else
                     @context.DomainName
                 }
             </MudTd>
-            <MudTd>@context.AlertType</MudTd>
+            <MudTd DataLabel="Type">@context.AlertType</MudTd>
             @if (_showRule)
             {
-                <MudTd>@RuleNameOf(context)</MudTd>
+                <MudTd DataLabel="Rule">@RuleNameOf(context)</MudTd>
             }
-            <MudTd><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
-            <MudTd>@FormatCreated(context)</MudTd>
-            <MudTd>@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
-            <MudTd>
+            <MudTd DataLabel="Severity"><MudChip T="string" Color="@GetSeverityColor(context.Severity)" Size="Size.Small">@context.Severity</MudChip></MudTd>
+            <MudTd DataLabel="Created">@FormatCreated(context)</MudTd>
+            <MudTd DataLabel="Resolved">@(context.IsResolved ? context.ResolvedUtc?.ToLocalTime().ToString("g") ?? "—" : "Open")</MudTd>
+            <MudTd DataLabel="Message">
                 @context.Message
                 @if (AlertRulePresentation.DescribeNotification(context, RuleOf(context), _zone) is { } notification)
                 {
@@ -107,7 +107,7 @@ else
                     }
                 }
             </MudTd>
-            <MudTd>
+            <MudTd DataLabel="Actions">
                 @if (!context.IsResolved && AlertAcknowledgement.IsAcknowledgeable(context.AlertType))
                 {
                     <AuthorizeView Policy="AlertsManage" Context="authorization">

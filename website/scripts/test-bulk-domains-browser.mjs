@@ -63,7 +63,8 @@ try {
   await ready();
   await page.getByLabel('Domain search', {exact: true}).fill(prefix);
   await page.waitForFunction(() => document.querySelectorAll('a[data-domain-link]').length === 2);
-  await page.getByRole('button', {name: 'Select matching domains', exact: true}).click();
+  await page.getByRole('button', {name: 'Select domains', exact: true}).click();
+  await page.getByRole('menuitem', {name: 'Select visible (2)', exact: true}).click();
   await page.getByText('2 selected domains', {exact: true}).waitFor();
 
   await openBulk('Add group membership');

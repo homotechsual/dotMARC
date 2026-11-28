@@ -209,6 +209,17 @@ html:has(.dev-build-banner) .mud-main-content {
 .domain-inventory .mud-table-cell { padding: 8px; }
 .domain-inventory .mud-input-control { min-width: 0; }
 .domain-inventory .mud-switch { margin: 0; }
+.responsive-detail-table table { table-layout: fixed; width: 100%; }
+.responsive-detail-table .mud-table-cell, .responsive-detail-table td, .responsive-detail-table th { padding: 8px; overflow-wrap: anywhere; vertical-align: top; }
+.responsive-detail-table .mud-chip { max-width: 100%; height: auto; min-height: 24px; }
+.responsive-detail-table .mud-chip-content, .responsive-detail-table .mud-button-label { white-space: normal; overflow-wrap: anywhere; }
+.responsive-detail-table .mud-button { max-width: 100%; }
+.responsive-detail-table pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 1279.98px) {
+    .responsive-detail-table .mud-table-cell { display: block; text-align: left !important; }
+    .responsive-detail-table .mud-table-cell::before { display: block; margin-bottom: .35rem; }
+    .responsive-detail-table .audit-change-details { display: block; width: 100%; }
+}
 .domain-status-icon { display: inline-flex; align-items: center; }
 .domain-management-details { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 1rem 0.75rem; }
 .domain-management-details > div { flex: 1 1 15rem; min-width: 0; }

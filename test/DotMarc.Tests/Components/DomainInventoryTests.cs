@@ -73,6 +73,29 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
         return client;
     }
 
+    [Fact]
+    public async Task ServerLogsRenderCompleteLongValuesWithResponsiveLabels()
+    {
+        var store = new InMemoryLogStore(true);
+        var message = "Message " + new string('x', 500);
+        var exception = "Exception " + new string('y', 500);
+        store.Add(DateTimeOffset.UtcNow, LogLevel.Warning, "Long.Category." + new string('z', 200), message, exception);
+        await using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<InMemoryLogStore>();
+            services.AddSingleton(store);
+        }));
+        using var client = factory.CreateClient();
+        await client.PostAsync("/demo/sign-in/admin", null);
+        var html = await client.GetStringAsync("/logs/server");
+        Assert.Contains("responsive-detail-table", html);
+        foreach (var label in new[] { "Time (UTC)", "Level", "Source", "Message" })
+            Assert.Contains($"data-label=\"{label}\"", html);
+        Assert.Contains(message, html);
+        Assert.Contains(exception, html);
+        Assert.DoesNotContain("white-space:nowrap", html);
+    }
+
     private static ClaimsPrincipal BulkUser(IEnumerable<Permission> permissions, IEnumerable<int>? groups = null, bool portal = false)
     {
         var claims = permissions.Select(permission => new Claim(UserAccessClaimsTransformation.PermissionClaimType, permission.ToString())).ToList();

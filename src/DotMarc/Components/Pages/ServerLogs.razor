@@ -54,7 +54,7 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">
                 Showing @entries.Count (newest first@(entries.Count == MaxShown ? $", limited to the latest {MaxShown}" : "")).
             </MudText>
-            <MudTable T="LogEntry" Items="entries" Dense="true" Hover="true" Breakpoint="Breakpoint.None">
+            <MudTable T="LogEntry" Items="entries" Dense="true" Hover="true" Breakpoint="Breakpoint.Lg" Class="responsive-detail-table">
                 <HeaderContent>
                     <MudTh>Time (UTC)</MudTh>
                     <MudTh>Level</MudTh>
@@ -62,10 +62,10 @@
                     <MudTh>Message</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd Style="white-space:nowrap">@context.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
-                    <MudTd><MudChip T="string" Size="Size.Small" Color="LevelColor(context.Level)">@context.Level</MudChip></MudTd>
-                    <MudTd Style="overflow-wrap:anywhere"><MudText Typo="Typo.caption">@context.Category</MudText></MudTd>
-                    <MudTd Style="overflow-wrap:anywhere; white-space:pre-wrap">
+                    <MudTd DataLabel="Time (UTC)">@context.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                    <MudTd DataLabel="Level"><MudChip T="string" Size="Size.Small" Color="LevelColor(context.Level)">@context.Level</MudChip></MudTd>
+                    <MudTd DataLabel="Source"><MudText Typo="Typo.caption">@context.Category</MudText></MudTd>
+                    <MudTd DataLabel="Message" Style="white-space:pre-wrap">
                         @context.Message
                         @if (context.Exception is not null)
                         {
