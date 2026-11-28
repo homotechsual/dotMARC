@@ -28,6 +28,8 @@ Alerts don't re-fire on every check. If an alert of the same type is already ope
 
 ## The Alerts page
 
+On narrower screens, each alert uses a compact labelled grid: metadata sits side by side, while the full message, tickets and actions span the width. Wider screens retain the column headers and table layout. Long values wrap rather than requiring horizontal scrolling.
+
 **Alerts** (`/alerts`) is the event feed, every alert ever raised, most recent first, with its domain, type, the rule that raised it, severity, created/resolved timestamps, and message. It requires the `AlertsView` permission, which is part of the built-in Viewer role by default. The Rule column is shown only to people with no group limit.
 
 Click an alert's domain name to open that domain's detail page. Open and resolved alerts both link to the domain. Alerts for a removed domain or an application-wide issue (such as a PSA connection) have no domain link. The domain page still requires the `DomainsView` permission and access to that domain.

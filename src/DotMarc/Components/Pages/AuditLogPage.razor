@@ -25,7 +25,7 @@
     </AuthorizeView>
 
     <MudTable @ref="_table" T="AuditEntry" ServerData="LoadPageAsync" Hover="true" Dense="true" CustomHeader="true" RowsPerPage="50"
-              OnRowClick="@((TableRowClickEventArgs<AuditEntry> args) => ToggleExpanded(args.Item))" Class="responsive-detail-table" Breakpoint="Breakpoint.Lg">
+              OnRowClick="@((TableRowClickEventArgs<AuditEntry> args) => ToggleExpanded(args.Item))" Class="responsive-detail-table compact-detail-table" Breakpoint="Breakpoint.Md">
         <ToolBarContent>
             <ListToolbar Label="Audit log controls" SearchLabel="Search audit summaries" Search="@_filter.Summary"
                          SearchChanged="@(text => UpdateFilterAsync(_filter with { Summary = text }))"
@@ -53,13 +53,13 @@
             </ListToolbar>
         </ToolBarContent>
         <HeaderContent>
-            <tr>
+            <tr class="mud-table-row">
                 <MudTh>Time (UTC)</MudTh>
                 <MudTh>Kind</MudTh>
                 <MudTh>Who</MudTh>
                 <MudTh>Action</MudTh>
                 <MudTh>Target</MudTh>
-                <MudTh>Summary</MudTh>
+                <MudTh Style="width:40%;">Summary</MudTh>
             </tr>
         </HeaderContent>
         <RowTemplate>

@@ -225,10 +225,21 @@ html:has(.dev-build-banner) .mud-main-content {
 .responsive-detail-table .mud-chip-content, .responsive-detail-table .mud-button-label { white-space: normal; overflow-wrap: anywhere; }
 .responsive-detail-table .mud-button { max-width: 100%; }
 .responsive-detail-table pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 1279.98px) {
-    .responsive-detail-table .mud-table-cell { display: block; text-align: left !important; }
-    .responsive-detail-table .mud-table-cell::before { display: block; margin-bottom: .35rem; }
+.compact-detail-table thead .mud-table-cell { padding: 8px; white-space: nowrap; }
+@media (max-width: 1280px) {
+    .responsive-detail-table tbody .mud-table-cell { display: block; text-align: left !important; }
+    .responsive-detail-table tbody .mud-table-cell::before { display: block; margin-bottom: .35rem; }
     .responsive-detail-table .audit-change-details { display: block; width: 100%; }
+    .compact-detail-table > .mud-table-container > table > tbody > tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 8px 0; border-bottom: 1px solid var(--mud-palette-table-lines); }
+    .compact-detail-table > .mud-table-container > table > tbody > tr > td { border-bottom: 0; padding: 4px 8px; width: auto; min-width: 0; }
+    .compact-detail-table tbody .mud-table-cell::before { font-size: .75rem; line-height: 1.25; margin-bottom: .15rem; color: var(--mud-palette-text-secondary); }
+    .compact-detail-table td[data-label="Message"], .compact-detail-table td[data-label="Summary"],
+    .compact-detail-table td[data-label="Tickets"], .compact-detail-table td[data-label="Actions"],
+    .compact-detail-table .audit-change-details { grid-column: 1 / -1; }
+    .compact-detail-table tbody .empty-detail-cell { display: none; }
+}
+@media (max-width: 599.98px) {
+    .compact-detail-table > .mud-table-container > table > tbody > tr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .domain-status-icon { display: inline-flex; align-items: center; }
 .domain-management-details { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 1rem 0.75rem; }
