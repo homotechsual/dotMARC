@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using DotMarc.Api;
 using DotMarc.Data;
+using DotMarc.Notifications;
 using DotMarc.Portal;
 using DotMarc.Reporting;
 using DotMarc.Tests.Internal;
@@ -20,6 +21,37 @@ public sealed class SummaryEndpointTests : IAsyncLifetime
     public async Task InitializeAsync() => _host = await ApiTestHost.StartAsync(_fixture);
 
     public async Task DisposeAsync() => await _host.DisposeAsync();
+
+    [Fact]
+    public async Task MissingCount_UsesTheDomainsScopedRuleThreshold()
+    {
+        var group = await _host.SeedGroupAsync("cadence-group");
+        await _host.SeedDomainAsync("cadence.example", groupIds: [group]);
+        await using (var context = _host.CreateContext())
+        {
+            var domain = await context.Domains.SingleAsync(domain => domain.Name == "cadence.example");
+            domain.IsMonitored = true;
+            domain.FirstSeenUtc = DateTimeOffset.UtcNow.AddDays(-20);
+            domain.LastReportReceivedUtc = DateTimeOffset.UtcNow.AddDays(-4);
+            context.AlertRules.Add(new AlertRule
+            {
+                Kind = AlertTypes.MissedReport, Name = "Weekly cadence", Enabled = true, Severity = "Warning", StopProcessing = true,
+                Position = -100, ParametersJson = "{\"days\":\"7\"}",
+                Scope = [new() { Target = AlertRuleScopeTarget.Group, TargetId = group }]
+            });
+            await context.SaveChangesAsync();
+        }
+        var (_, secret) = await _host.CreateKeyAsync([Permission.DomainsView], scopedGroupIds: [group]);
+        using var client = _host.ClientFor(secret);
+        Assert.Equal(0, (await client.GetFromJsonAsync<ApiSummary>("/api/v1/summary"))!.MissingCount);
+        await using (var context = _host.CreateContext())
+        {
+            var rule = await context.AlertRules.SingleAsync(rule => rule.Name == "Weekly cadence");
+            rule.ParametersJson = "{\"days\":\"3\"}";
+            await context.SaveChangesAsync();
+        }
+        Assert.Equal(1, (await client.GetFromJsonAsync<ApiSummary>("/api/v1/summary"))!.MissingCount);
+    }
 
     [Fact]
     public async Task TheSummary_MatchesTheDashboard_ForEveryDomainAKeyCanSee()

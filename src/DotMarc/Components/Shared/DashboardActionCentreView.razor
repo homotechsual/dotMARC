@@ -153,7 +153,7 @@
         "action" => "Confirmed problems and sender decisions",
         "checking" => "Unconfirmed checks (not confirmed failures)",
         "senders" => "Outstanding sender decisions from the last 30 days",
-        "missing" => "Missing expected reports (over two days or never received)",
+        "missing" => "No aggregate reports within the applicable alert rule's interval",
         "all" => "Current stored DNS checks, report expectations and 30-day sender decisions",
         _ => string.Join(" or ", Categories.Where(category => SelectedCategories.Contains(category.Key)).Select(category => category.Value))
     };

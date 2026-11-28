@@ -3,6 +3,8 @@ using DotMarc.Data;
 using DotMarc.Notifications;
 using DotMarc.Tests.Internal;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -60,6 +62,27 @@ public sealed class AlertRuleMaterialisationTests : IAsyncLifetime
     {
         await using var context = CreateContext();
         await AlertRuleSeeder.EnsureDefaultPackAsync(context, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task CadenceUpgrade_PreservesSavedAndLegacyRules_AndCustomLegacyThresholds()
+    {
+        await using var context = CreateContext();
+        await context.GetService<IMigrator>().MigrateAsync("20261126115002_AddDnsPushBatchDomainReview");
+        var settings = await context.NotificationSettings.SingleAsync();
+        settings.MissingReportThresholdDays = 7;
+        context.AlertRules.AddRange(
+            new AlertRule { Kind = AlertTypes.MissedReport, DefaultKey = AlertTypes.MissedReport, Name = "Legacy default", Severity = "Warning", Enabled = false, ParametersJson = null },
+            new AlertRule { Kind = AlertTypes.MissedReport, Name = "Explicit two days", Severity = "Warning", Enabled = true, ParametersJson = "{\"days\":\"2\"}" });
+        await context.SaveChangesAsync();
+        await context.Database.MigrateAsync();
+        context.ChangeTracker.Clear();
+        var rules = await context.AlertRules.ToListAsync();
+        Assert.Equal("2", Parameters(rules.Single(rule => rule.Name == "Explicit two days"))[AlertRuleParameterKeys.MissingDays]);
+        var legacy = rules.Single(rule => rule.DefaultKey == AlertTypes.MissedReport);
+        Assert.Equal("7", Parameters(legacy)[AlertRuleParameterKeys.MissingDays]);
+        Assert.False(legacy.Enabled);
+        Assert.Equal(7, (await context.NotificationSettings.SingleAsync()).MissingReportThresholdDays);
     }
 
     [Fact]

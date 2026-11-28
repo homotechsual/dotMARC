@@ -120,8 +120,8 @@ public static class AlertRuleKinds
             AlertTypes.MissedReport =>
             [
                 new(AlertRuleParameterKeys.MissingDays, "Days without a report",
-                    "How many days a monitored domain can go without a DMARC aggregate report before this alert. Most receivers report daily, so 2 allows for one late day.",
-                    AlertRuleParameterType.Integer, "2", Min: 1, Max: 90)
+                    "How many days a monitored domain can go without a DMARC aggregate report before this alert. The same interval gives newly added domains time to receive their first report. Receivers usually report daily; 3 allows for delays. Consider 7 for intermittent traffic, or exclude low-volume aliases from this rule.",
+                    AlertRuleParameterType.Integer, "3", Min: 1, Max: 90)
             ],
             AlertTypes.SuspiciousRejectActivity =>
             [

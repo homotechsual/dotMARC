@@ -13,18 +13,19 @@ namespace DotMarc.Reporting;
 public sealed record DashboardSummary(int DomainCount, double OverallPassRate, int WarningCount, int MissingCount, int ParseFailureCount, int SourceCount, ReasonBreakdown ReasonBreakdown)
 {
     /// <summary>The dashboard's per-domain status: Missing when a monitored domain that sends mail has had no report for
-    /// two days, Warning when its pass rate is under 95%, otherwise OK. Shared with the API's summary.</summary>
-    public static string StatusOf(Domain domain, double? passRate)
+    /// the applicable rule's interval, Warning when its pass rate is under 95%, otherwise OK. Shared with the API's summary.</summary>
+    public static string StatusOf(Domain domain, double? passRate, AlertRuleSet? rules = null, DateTimeOffset? now = null)
     {
-        var isNullRouted = domain.SpfCheckStatus == SpfCheckStatus.NullSpf;
-        var missingReport = domain.IsMonitored && !isNullRouted && (domain.LastReportReceivedUtc is null || domain.LastReportReceivedUtc < DateTimeOffset.UtcNow.AddDays(-2));
+        var missingReport = MissingReportCheck.IsOverdue(domain, rules ?? AlertRuleSet.Defaults(), now ?? DateTimeOffset.UtcNow);
         return missingReport ? "Missing" : passRate is null or >= 0.95 ? "OK" : "Warning";
     }
 
     /// <summary>Needs each domain's Groups loaded when <paramref name="settings"/> is given, to work out its DMARC target outcome;
     /// without settings every row has no target.</summary>
-    public static (DashboardSummary Summary, List<DashboardDomainRow> Rows) Build(IReadOnlyList<Domain> domains, int parseFailureCount, DnsRecordSettings? settings = null)
+    public static (DashboardSummary Summary, List<DashboardDomainRow> Rows) Build(IReadOnlyList<Domain> domains, int parseFailureCount, DnsRecordSettings? settings = null, AlertRuleSet? rules = null, DateTimeOffset? now = null)
     {
+        rules ??= AlertRuleSet.Defaults();
+        now ??= DateTimeOffset.UtcNow;
         var rows = domains
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
@@ -32,7 +33,7 @@ public sealed record DashboardSummary(int DomainCount, double OverallPassRate, i
             {
                 var passRate = DomainStatistics.GetPassRate(d.Reports);
 
-                var status = StatusOf(d, passRate);
+                var status = StatusOf(d, passRate, rules, now);
                 var color = status switch { "Missing" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
                 var targetOutcome = settings is null ? DmarcTargetOutcome.NoTarget : DmarcTargetCheck.Outcome(d, DmarcTargetResolver.Resolve(d, settings));
 
