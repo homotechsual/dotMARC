@@ -25,7 +25,7 @@
     </AuthorizeView>
 
     <MudTable @ref="_table" T="AuditEntry" ServerData="LoadPageAsync" Hover="true" Dense="true" CustomHeader="true" RowsPerPage="50"
-              OnRowClick="@((TableRowClickEventArgs<AuditEntry> args) => ToggleExpanded(args.Item))">
+              OnRowClick="@((TableRowClickEventArgs<AuditEntry> args) => ToggleExpanded(args.Item))" Class="responsive-detail-table" Breakpoint="Breakpoint.Lg">
         <ToolBarContent>
             <ListToolbar Label="Audit log controls" SearchLabel="Search audit summaries" Search="@_filter.Summary"
                          SearchChanged="@(text => UpdateFilterAsync(_filter with { Summary = text }))"
@@ -63,12 +63,12 @@
             </tr>
         </HeaderContent>
         <RowTemplate>
-            <MudTd Style="white-space:nowrap">@context.OccurredUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
-            <MudTd><MudChip T="string" Size="Size.Small" Color="@KindColor(context.Kind)">@KindLabel(context.Kind)</MudChip></MudTd>
-            <MudTd>@context.ActorName</MudTd>
-            <MudTd><MudText Typo="Typo.caption">@context.Action</MudText></MudTd>
-            <MudTd>@context.TargetName</MudTd>
-            <MudTd Style="@($"cursor:{(context.Changes.Count > 0 ? "pointer" : "default")}")">
+            <MudTd DataLabel="Time (UTC)">@context.OccurredUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+            <MudTd DataLabel="Kind"><MudChip T="string" Size="Size.Small" Color="@KindColor(context.Kind)">@KindLabel(context.Kind)</MudChip></MudTd>
+            <MudTd DataLabel="Who">@context.ActorName</MudTd>
+            <MudTd DataLabel="Action"><MudText Typo="Typo.caption">@context.Action</MudText></MudTd>
+            <MudTd DataLabel="Target">@context.TargetName</MudTd>
+            <MudTd DataLabel="Summary" Style="@($"cursor:{(context.Changes.Count > 0 ? "pointer" : "default")}")">
                 @context.Summary
                 @if (context.Changes.Count > 0)
                 {
@@ -80,7 +80,7 @@
             @if (_expandedEntryId == context.Id && context.Changes.Count > 0)
             {
                 <MudTr>
-                    <td colspan="6" class="px-6 pb-4">
+                    <td colspan="6" class="audit-change-details px-3 pb-4">
                         <MudSimpleTable Dense="true" Elevation="0">
                             <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
                             <tbody>

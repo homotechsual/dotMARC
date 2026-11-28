@@ -63,8 +63,22 @@ else
         {
             <div class="domain-list-toolbar domain-dns-toolbar mb-3">
                 <MudText Typo="Typo.body2" role="status">@_selectedDnsDomains.Count selected for DNS review</MudText>
-                <MudButton OnClick="@(() => _selectedDnsDomains.UnionWith(_rows.Select(row => row.Id)))" Disabled="@(_checkingProviders || !RendererInfo.IsInteractive || _rows.Count == 0)">Select matching domains</MudButton>
-                <MudButton OnClick="@(() => _selectedDnsDomains.Clear())" Disabled="@(_checkingProviders || _selectedDnsDomains.Count == 0)">Clear selection</MudButton>
+                @if (_state.ActiveFilters.Count == 0)
+                {
+                    <MudButton OnClick="SelectAllDomains" Disabled="@(_checkingProviders || !RendererInfo.IsInteractive || _allRows.Count == 0)">Select all</MudButton>
+                }
+                else
+                {
+                    <MudMenu Label="Select domains" Disabled="@(_checkingProviders || !RendererInfo.IsInteractive)" EndIcon="@Icons.Material.Filled.ArrowDropDown">
+                        <MudMenuItem OnClick="SelectVisibleDomains" Disabled="@(_rows.Count == 0)">Select visible (@_rows.Count)</MudMenuItem>
+                        <MudMenuItem OnClick="SelectAllDomains" Disabled="@(_allRows.Count == 0)">Select all (@_allRows.Count accessible)</MudMenuItem>
+                    </MudMenu>
+                }
+                @if (SelectedHiddenCount > 0)
+                {
+                    <MudText Typo="Typo.caption" role="status">@SelectedHiddenCount selected domains hidden by filters; actions include them.</MudText>
+                }
+                <MudButton OnClick="ClearDomainSelection" Disabled="@(_checkingProviders || _selectedDnsDomains.Count == 0)">Clear selection</MudButton>
                 @if (_canCheckProviders)
                 {
                     <MudButton OnClick="RecheckSelectedProvidersAsync" StartIcon="@Icons.Material.Filled.Refresh"

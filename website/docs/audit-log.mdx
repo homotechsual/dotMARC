@@ -6,6 +6,8 @@ description: What dotMARC's audit log records, who can see it, how to filter and
 
 The audit log answers "who changed this?", "who has been signing in?" and "who looked at what?". Open it from **Manage > Logs > Audit**.
 
+Long values wrap within the table instead of requiring sideways scrolling. On narrower screens, entries stack into labelled rows; expanding an entry still shows its complete before/after details.
+
 ## What it records
 
 * **Changes.** Domains, groups and tags added, changed or removed; roles and access grants; alert, HaloPSA and DNS provider settings; ticket rules; DNS records pushed to your provider, including a push that failed partway and may have left the zone partly changed; running the HaloPSA integration test; and exporting the log itself. Each entry says who did it, when, what it was about, and the old and new value of every field that changed.

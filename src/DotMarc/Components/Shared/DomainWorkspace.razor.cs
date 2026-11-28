@@ -48,6 +48,24 @@ public partial class DomainWorkspace : IAsyncDisposable
     private readonly List<DnsProviderCheckOutcome> _providerCheckResults = [];
     private readonly CancellationTokenSource _providerChecksStop = new();
     private readonly HashSet<int> _selectedDnsDomains = [];
+    private bool _includeHiddenSelection;
+    private int SelectedHiddenCount => _selectedDnsDomains.Count(id => !_rows.Any(row => row.Id == id));
+    private int[] SelectedDomainIds => _allRows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).Distinct().ToArray();
+    private void ClearDomainSelection() { _selectedDnsDomains.Clear(); _includeHiddenSelection = false; }
+    private void SelectAllDomains()
+    {
+        if (!_canBulkDns || _checkingProviders) return;
+        _includeHiddenSelection = true;
+        _selectedDnsDomains.Clear();
+        _selectedDnsDomains.UnionWith(_allRows.Select(row => row.Id));
+    }
+    private void SelectVisibleDomains()
+    {
+        if (!_canBulkDns || _checkingProviders) return;
+        _includeHiddenSelection = false;
+        _selectedDnsDomains.Clear();
+        _selectedDnsDomains.UnionWith(_rows.Select(row => row.Id));
+    }
     private readonly HashSet<int> _expandedManagement = [];
     private void ToggleManagement(int id)
     {
@@ -262,7 +280,8 @@ public partial class DomainWorkspace : IAsyncDisposable
             _rows = _rows.Where(row => queueIds.Contains(row.Id)).ToList();
             ids = _rows.Select(row => row.Id).ToHashSet();
         }
-        var removed = _selectedDnsDomains.RemoveWhere(id => !ids.Contains(id));
+        var selectableIds = _includeHiddenSelection ? _allRows.Select(row => row.Id).ToHashSet() : ids;
+        var removed = _selectedDnsDomains.RemoveWhere(id => !selectableIds.Contains(id));
         if (removed > 0) Snackbar.Add($"{removed} selected domains were removed because they are hidden or no longer accessible.", Severity.Info);
         _grouped = DashboardGrouping.Group(_rows, _domains.ToDictionary(domain => domain.Id, domain => (IReadOnlyList<int>)VisibleGroups(domain)),
             _groups.Where(group => _state.GroupId is null || group.Id == _state.GroupId).Select(group => (group.Id, group.Name)).ToList());
@@ -271,18 +290,19 @@ public partial class DomainWorkspace : IAsyncDisposable
     private void SelectDnsDomain(int id, bool selected)
     {
         if (!_canBulkDns || !_rows.Any(row => row.Id == id)) return;
+        if (_selectedDnsDomains.Count == 0) _includeHiddenSelection = false;
         if (selected) _selectedDnsDomains.Add(id);
         else _selectedDnsDomains.Remove(id);
     }
 
     private Task ReviewSelectedDnsAsync() => Dialogs.ShowAsync<DnsPushSelectionDialog>("Review DNS push",
-        new DialogParameters<DnsPushSelectionDialog> { { dialog => dialog.DomainIds, _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).ToArray() } },
+        new DialogParameters<DnsPushSelectionDialog> { { dialog => dialog.DomainIds, SelectedDomainIds } },
         new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
 
     private async Task RecheckSelectedProvidersAsync()
     {
         if (_checkingProviders) return;
-        var ids = _rows.Where(row => _selectedDnsDomains.Contains(row.Id)).Select(row => row.Id).Distinct().ToArray();
+        var ids = SelectedDomainIds;
         _checkingProviders = true;
         _providersChecked = 0;
         _providerCheckTotal = ids.Length;

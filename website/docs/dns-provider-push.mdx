@@ -25,7 +25,7 @@ All three providers are independently optional and configured the same way regar
 
 ## Bulk DNS from Domains {/* #bulk-dns-from-inventory */}
 
-On **Domains**, select domains using their **Select for DNS** checkboxes, or choose **Select matching domains**. Selection is shared between All domains and By group, including domains listed in several groups. Sorting keeps the selection; filtering or losing access removes hidden IDs with a notification. Dashboard has no bulk selection.
+On **Domains**, select individual domains or choose **Select all**. With a search or filter, **Select domains** offers **Select visible** (all matching rows) and **Select all** (every accessible domain, including hidden rows). Each choice replaces the selection. Selection is shared between All domains and By group, without duplicates. Sorting keeps the selection. Filtering prunes individual/visible selections, but explicit **Select all** retains hidden domains, with a toolbar warning that actions include them. Deleted or inaccessible domains are always removed. Dashboard has no bulk selection.
 
 The selection toolbar stays below the app bar while scrolling. **Recheck selected providers** runs read-only provider/zone detection immediately for domain editors, saves each result and refreshes Domains before DNS review. It reports successes, failures and checks not attempted. No provider sign-in or DNS write is involved. New domains added through the shared form or Import also attempt provider detection immediately after creation, rather than waiting behind the mailbox and other health checks in the scheduled polling cycle.
 
