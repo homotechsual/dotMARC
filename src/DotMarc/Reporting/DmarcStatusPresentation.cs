@@ -1,4 +1,5 @@
 using DotMarc.Data;
+using DotMarc.Baselines;
 using MudBlazor;
 
 namespace DotMarc.Reporting;
@@ -8,6 +9,15 @@ namespace DotMarc.Reporting;
 /// status panel - following the same shared-presentation-logic precedent as DomainStatistics.</summary>
 public static class DmarcStatusPresentation
 {
+    public static Color GetColor(DmarcCheckStatus status, DmarcAuthorizationCheckStatus authorizationStatus, DmarcTargetOutcome target)
+    {
+        var color = GetColor(status, authorizationStatus);
+        return color != Color.Error && target == DmarcTargetOutcome.Below ? Color.Warning : color;
+    }
+
+    public static string GetLabel(DmarcCheckStatus status, DmarcAuthorizationCheckStatus authorizationStatus, DmarcTargetOutcome target) =>
+        $"{GetLabel(status, authorizationStatus)}{(target == DmarcTargetOutcome.Below ? "; below target" : target == DmarcTargetOutcome.NeedsChecking ? "; target needs checking" : "")}";
+
     public static Color GetColor(DmarcCheckStatus status) => status switch
     {
         DmarcCheckStatus.Ok or DmarcCheckStatus.MissingAuthorizationRecord => Color.Success,

@@ -188,7 +188,7 @@ else
                 </AuthorizeView>
             </MudTd>
             <MudTd DataLabel="Target"><DomainStatusIcon Label="@($"DMARC target: {TargetLabel(row.TargetOutcome)}")" Color="@(row.TargetOutcome == Baselines.DmarcTargetOutcome.Meets ? Color.Success : row.TargetOutcome == Baselines.DmarcTargetOutcome.Below ? Color.Warning : Color.Default)" /></MudTd>
-            <MudTd DataLabel="DMARC"><DomainStatusIcon Color="@DmarcStatusPresentation.GetColor(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)" Label="@($"DMARC: {DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)}")" /></MudTd>
+            <MudTd DataLabel="DMARC"><DomainStatusIcon Color="@DmarcStatusPresentation.GetColor(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus, row.TargetOutcome)" Label="@($"DMARC: {DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus, row.TargetOutcome)}")" /></MudTd>
             <MudTd DataLabel="MTA-STS"><DomainStatusIcon Color="@MtaStsStatusPresentation.GetColor(row.MtaStsStatus)" Label="@($"MTA-STS: {MtaStsStatusPresentation.GetLabel(row.MtaStsStatus)}")" /></MudTd>
             <MudTd DataLabel="DKIM"><DomainStatusIcon Color="@DkimStatusPresentation.GetColor(row.DkimCheckStatus)" Label="@($"DKIM: {DkimStatusPresentation.GetLabel(row.DkimCheckStatus)}")" /></MudTd>
         </RowTemplate>

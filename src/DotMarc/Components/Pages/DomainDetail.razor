@@ -180,7 +180,7 @@ else
 
                 <DomainHealthCheckRow Title="DMARC record"
                                       StatusColor="@DmarcStatusPresentation.GetColor(_domain.DmarcCheckStatus)"
-                                      StatusLabel="@DmarcStatusPresentation.GetLabel(_domain.DmarcCheckStatus)"
+                                      StatusLabel="@(_domain.DmarcCheckStatus == DmarcCheckStatus.Ok ? "Valid record" : DmarcStatusPresentation.GetLabel(_domain.DmarcCheckStatus))"
                                       CheckedUtc="_domain.DmarcCheckedUtc"
                                       Detail="@_domain.DmarcCheckDetail">
                     <ActionContent>
@@ -212,6 +212,22 @@ else
                         </AuthorizeView>
                     </ActionContent>
                 </DomainHealthCheckRow>
+
+                <DomainHealthCheckRow Title="DMARC target compliance"
+                                      StatusColor="@(_targetOutcome == DmarcTargetOutcome.Below ? Color.Warning : _targetOutcome == DmarcTargetOutcome.Meets ? Color.Success : Color.Default)"
+                                      StatusLabel="@TargetOutcomeLabel" CheckedUtc="_domain.DmarcCheckedUtc">
+                    <ActionContent>
+                        @if (_effectiveTarget is { } target)
+                        {
+                            <MudText Typo="Typo.body2">Target: @DmarcTargetText.Policy(target), @DmarcTargetText.Source(target). Observed p=@(_domain.DmarcPolicy?.ToString().ToLowerInvariant() ?? "unknown"), sp=@(_domain.DmarcSubdomainPolicy?.ToString().ToLowerInvariant() ?? "unknown").</MudText>
+                            @foreach (var reason in _targetReasons)
+                            {
+                                <MudText Typo="Typo.body2" Class="d-block">@reason</MudText>
+                            }
+                        }
+                    </ActionContent>
+                </DomainHealthCheckRow>
+                <DomainObservedRecords Domain="_domain" ReportingMailbox="@GraphOptions.Value.MailboxAddress" />
 
                 @if (_recordProblems.Count > 0 || _suggestedRecord is not null)
                 {

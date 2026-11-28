@@ -323,6 +323,11 @@ builder.Services.AddHttpClient<DotMarc.Dns.ITxtRecordLookup, DotMarc.Dns.TxtReco
     client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
 });
 builder.Services.AddTransient<DotMarc.Dns.SpfLookupCounter>();
+builder.Services.AddHttpClient<DotMarc.Dns.IObservedDnsRecordLookup, DotMarc.Dns.TxtRecordLookup>(client =>
+{
+    client.BaseAddress = new Uri("https://cloudflare-dns.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
+});
 
 builder.Services.AddHttpClient<DotMarc.MtaSts.IMtaStsCnameLookup, DotMarc.MtaSts.MtaStsCnameLookup>(client =>
 {
