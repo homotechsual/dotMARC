@@ -73,6 +73,14 @@ A group's target also **replaces** the system target for its domains, even when 
 
 ### Meeting a target
 
+Record validity and target compliance are separate. A valid `p=none` record can still be **Below target** when the effective target is `p=reject`. Overview shows both **Valid record** and **DMARC target compliance**, including observed policy, effective target, its source and the reasons for a gap. The Domains DMARC icon also uses warning emphasis for below-target records; its tooltip retains the record/reporting status alongside the target result.
+
+Changing a target re-evaluates existing saved DNS observations when you open or refresh Domains, Dashboard or Overview; a new DNS poll is not required just to compare policies. Unchecked domains need checking rather than counting as compliant. Group/domain overrides still take precedence over the system default, including weaker overrides. Dashboard gap counts apply to monitored domains.
+
+Overview's **Current DNS records (observed, not suggested)** section shows DMARC values retained by the last health check. **Load current records** performs read-only public-resolver lookups for DMARC, the primary mailbox's external reporting authorization, apex TXT/SPF, MX, configured DKIM selectors, TLS reporting, MTA-STS DNS and nameservers. It shows record names, types and full values, or explicit lookup errors/absence. CNAME targets and MX priorities (including null MX) are retained. No configured DKIM selectors does not prove all keys are absent.
+
+The lookup time is shown separately from saved health-check timestamps. Resolver caches can lag changes, and loading records does not update those saved statuses or publish DNS. MTA-STS serving-policy details remain in the MTA-STS tab. Suggested records remain proposals, not claims about what DNS currently publishes.
+
 dotMARC judges records against [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), which replaced RFC 7489 in May 2026. Where RFC 7489 receivers still in service would behave differently, dotMARC takes the cautious reading. A domain meets its target when its last DMARC check found all of these:
 
 * A valid record: exactly one DMARC record, `v=DMARC1` first, no repeated tag, a valid `p`, and a valid `sp` and `np` when present. See [record problems](./dmarc-and-mta-sts.mdx#record-problems).

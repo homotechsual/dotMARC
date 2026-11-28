@@ -74,6 +74,46 @@ public sealed class DomainInventoryTests(PostgresContainerFixture fixture) : IAs
     }
 
     [Fact]
+    public async Task SystemTargetChangeImmediatelyFlagsValidRecordsAndKeepsOverridesAndValidityDistinct()
+    {
+        using var client = await SignInAsync("admin");
+        await using var db = await _factory.Services.GetRequiredService<IDbContextFactory<DotMarcDbContext>>().CreateDbContextAsync();
+        var domain = new Domain
+        {
+            Name = "target-change.example", IsMonitored = true, DmarcCheckStatus = DmarcCheckStatus.Ok,
+            DmarcCheckedUtc = DateTimeOffset.UtcNow, DmarcPolicy = DmarcPolicyLevel.None,
+            DmarcSubdomainPolicy = DmarcPolicyLevel.None, DmarcRecords = ["v=DMARC1; p=none"],
+            DmarcAuthorizationCheckStatus = DmarcAuthorizationCheckStatus.Ok, SpfCheckStatus = SpfCheckStatus.Ok
+        };
+        db.Domains.Add(domain);
+        await db.SaveChangesAsync();
+        var actor = DotMarc.Audit.AuditActor.ForSystem("Target regression");
+        await DotMarc.Baselines.DmarcTargetService.SetSystemAsync(db, actor, new(DmarcPolicyLevel.None, null));
+        var list = await client.GetStringAsync("/domains?group=all&search=target-change.example");
+        Assert.Contains("DMARC target: Meets target", list);
+        Assert.DoesNotContain("DMARC: OK; below target", list);
+        await DotMarc.Baselines.DmarcTargetService.SetSystemAsync(db, actor, new(DmarcPolicyLevel.Reject, null));
+        list = await client.GetStringAsync("/domains?group=all&search=target-change.example");
+        Assert.Contains("DMARC: OK; below target", list);
+        var dashboard = await client.GetStringAsync("/dashboard?group=all&search=target-change.example");
+        Assert.Contains("Below DMARC target", dashboard);
+        var detail = await client.GetStringAsync("/domains/target-change.example");
+        Assert.Contains("Valid record", detail);
+        Assert.Contains("DMARC target compliance", detail);
+        Assert.Contains("Below target", detail);
+        Assert.Contains("p is none, target is reject", detail);
+        Assert.Contains("v=DMARC1; p=none", detail);
+        Assert.Contains("Current DNS records (observed, not suggested)", detail);
+        Assert.Equal(DmarcCheckStatus.Ok, domain.DmarcCheckStatus);
+        await DotMarc.Baselines.DmarcTargetService.SetDomainAsync(db, actor, domain.Id, new(DmarcPolicyLevel.None, null));
+        detail = await client.GetStringAsync("/domains/target-change.example");
+        Assert.Contains("Meets target", detail);
+        Assert.DoesNotContain("p is none, target is reject", detail);
+        Assert.Equal(Color.Warning, DmarcStatusPresentation.GetColor(DmarcCheckStatus.Ok, DmarcAuthorizationCheckStatus.Ok, DotMarc.Baselines.DmarcTargetOutcome.Below));
+        Assert.Equal(Color.Error, DmarcStatusPresentation.GetColor(DmarcCheckStatus.Misconfigured, DmarcAuthorizationCheckStatus.Ok, DotMarc.Baselines.DmarcTargetOutcome.Below));
+    }
+
+    [Fact]
     public async Task ServerLogsRenderCompleteLongValuesWithResponsiveLabels()
     {
         var store = new InMemoryLogStore(true);

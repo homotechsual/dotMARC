@@ -196,7 +196,7 @@ else
                 </AuthorizeView>
             </MudTd>
             <MudTd DataLabel="Target"><DomainStatusIcon Label="@($"DMARC target: {TargetLabel(row.TargetOutcome)}")" Color="@(row.TargetOutcome == Baselines.DmarcTargetOutcome.Meets ? Color.Success : row.TargetOutcome == Baselines.DmarcTargetOutcome.Below ? Color.Warning : Color.Default)" /></MudTd>
-            <MudTd DataLabel="DMARC"><DomainStatusIcon Color="@DmarcStatusPresentation.GetColor(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)" Label="@($"DMARC: {DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus)}")" /></MudTd>
+            <MudTd DataLabel="DMARC"><DomainStatusIcon Color="@DmarcStatusPresentation.GetColor(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus, row.TargetOutcome)" Label="@($"DMARC: {DmarcStatusPresentation.GetLabel(row.DmarcCheckStatus, row.DmarcAuthorizationCheckStatus, row.TargetOutcome)}")" /></MudTd>
             <MudTd DataLabel="MTA-STS"><DomainStatusIcon Color="@MtaStsStatusPresentation.GetColor(row.MtaStsStatus)" Label="@($"MTA-STS: {MtaStsStatusPresentation.GetLabel(row.MtaStsStatus)}")" /></MudTd>
             <MudTd DataLabel="DKIM"><DomainStatusIcon Color="@DkimStatusPresentation.GetColor(row.DkimCheckStatus)" Label="@($"DKIM: {DkimStatusPresentation.GetLabel(row.DkimCheckStatus)}")" /></MudTd>
         </RowTemplate>
@@ -204,7 +204,7 @@ else
             @if (_management && _expandedManagement.Contains(row.Id))
             {
                 var domain = _domainsById[row.Id];
-                <MudTr><MudTd colspan="@(Columns.Length + 1 + (_canBulkDns ? 1 : 0))">
+                <MudTr><MudTd colspan="@(Columns.Length + 1 + (_canSelectDomains ? 1 : 0))">
                 <div class="domain-management-details" aria-label="@($"Management for {row.Name}")">
                 <div>
                     <AuthorizeView Policy="DomainsEdit" Context="groupEdit">

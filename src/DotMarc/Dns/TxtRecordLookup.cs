@@ -4,7 +4,7 @@ using DotMarc.DnsPush;
 
 namespace DotMarc.Dns;
 
-public sealed class TxtRecordLookup : ITxtRecordLookup
+public sealed class TxtRecordLookup : ITxtRecordLookup, IObservedDnsRecordLookup
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
@@ -26,9 +26,18 @@ public sealed class TxtRecordLookup : ITxtRecordLookup
         return DnsRecordLookupParsing.ParseTxtWithCnameDetection(answers.Select(answer => (answer.Type, answer.Data)));
     }
 
-    private async Task<List<DnsAnswer>> QueryAsync(string name, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ObservedDnsRecord>> GetRecordsAsync(string name, ObservedDnsRecordType type, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type=TXT");
+        if (!Enum.IsDefined(type)) throw new ArgumentOutOfRangeException(nameof(type));
+        var answers = await QueryAsync(name, cancellationToken, type).ConfigureAwait(false);
+        return answers.Where(answer => answer.Type == (int)type || answer.Type == (int)ObservedDnsRecordType.Cname)
+            .Select(answer => new ObservedDnsRecord(answer.Name ?? name, (ObservedDnsRecordType)answer.Type,
+                answer.Type == 16 ? string.Join("", answer.Data.Split("\" \"")).Trim('"') : answer.Data)).ToList();
+    }
+
+    private async Task<List<DnsAnswer>> QueryAsync(string name, CancellationToken cancellationToken, ObservedDnsRecordType type = ObservedDnsRecordType.Txt)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"dns-query?name={Uri.EscapeDataString(name)}&type={type.ToString().ToUpperInvariant()}");
         request.Headers.Accept.ParseAdd("application/dns-json");
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -38,7 +47,7 @@ public sealed class TxtRecordLookup : ITxtRecordLookup
         // 0 is an answer and 3 (NXDOMAIN) is a real "nothing here". Anything else, such as SERVFAIL, means the resolver
         // couldn't find out, which must not be read as "no record".
         if (parsed is null || parsed.Truncated || parsed.Status is not (0 or 3)
-            || parsed.Answer?.Any(answer => answer.Data is null || parsed.Status == 3 && answer.Type == 16) == true)
+            || parsed.Answer?.Any(answer => answer.Data is null || parsed.Status == 3 && answer.Type == (int)type) == true)
         {
             throw new HttpRequestException($"The DNS resolver couldn't look up {name} (status {parsed?.Status}).");
         }
@@ -50,5 +59,6 @@ public sealed class TxtRecordLookup : ITxtRecordLookup
         [property: JsonPropertyName("Status")] int? Status,
         [property: JsonPropertyName("TC")] bool Truncated,
         [property: JsonPropertyName("Answer")] List<DnsAnswer>? Answer);
-    private sealed record DnsAnswer([property: JsonPropertyName("type")] int Type, [property: JsonPropertyName("data")] string Data);
+    private sealed record DnsAnswer([property: JsonPropertyName("type")] int Type, [property: JsonPropertyName("data")] string Data,
+        [property: JsonPropertyName("name")] string? Name);
 }

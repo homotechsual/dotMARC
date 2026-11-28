@@ -1,0 +1,117 @@
+@using DotMarc.Data
+@using DotMarc.Dns
+@implements IDisposable
+@inject IObservedDnsRecordLookup Lookup
+@inject ILogger<DomainObservedRecords> Logger
+
+<details class="my-3 domain-observed-records">
+    <summary>Current DNS records (observed, not suggested)</summary>
+    <MudText Typo="Typo.body2" Class="my-2">The DMARC values below are from the last saved health check. Load current records to query the public DNS resolver for DMARC, authorization, SPF/apex TXT, MX, configured DKIM selectors, TLS reporting, MTA-STS and nameservers. Resolver caches may lag recent DNS changes. This does not change DNS or update the saved health statuses.</MudText>
+    <MudText Typo="Typo.subtitle2">DMARC at last saved check</MudText>
+    @if (Domain.DmarcRecords.Count == 0)
+    {
+        <MudText Typo="Typo.body2">No stored record values. Load current records to distinguish absence from an older check that did not retain the record.</MudText>
+    }
+    @foreach (var value in Domain.DmarcRecords)
+    {
+        <pre class="dns-record-value">@value</pre>
+    }
+    <MudButton OnClick="LoadAsync" Disabled="@(_loading || !RendererInfo.IsInteractive)" Variant="Variant.Outlined" Class="my-2">Load current records</MudButton>
+    @if (Domain.DkimSelectors.Count == 0)
+    {
+        <MudText Typo="Typo.caption">No DKIM selectors configured; this does not prove no DKIM keys exist.</MudText>
+    }
+    @if (_loading) { <MudProgressLinear Indeterminate="true" /> }
+    @if (_startedUtc is { } started)
+    {
+        <MudText Typo="Typo.caption" Class="d-block">Lookup started: @started.ToString("u")</MudText>
+        <MudTable T="RecordObservation" Items="_observations" Dense="true" Class="responsive-detail-table" Breakpoint="Breakpoint.Lg">
+            <HeaderContent><MudTh>Check / name</MudTh><MudTh>Observed records</MudTh></HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Check / name">@context.Label<br /><code>@context.Name</code></MudTd>
+                <MudTd DataLabel="Observed records">
+                    @if (context.Error is not null)
+                    {
+                        <MudText Color="Color.Error">@context.Error</MudText>
+                    }
+                    else if (context.Records.Count == 0)
+                    {
+                        <MudText>No @context.Type.ToString().ToUpperInvariant() records returned by the resolver.</MudText>
+                    }
+                    @foreach (var record in context.Records)
+                    {
+                        <MudText Typo="Typo.caption">@record.Name · @record.Type.ToString().ToUpperInvariant()</MudText>
+                        <pre class="dns-record-value">@record.Value</pre>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</details>
+
+@code {
+    [Parameter, EditorRequired] public Domain Domain { get; set; } = null!;
+    [Parameter] public string? ReportingMailbox { get; set; }
+    private readonly CancellationTokenSource _stop = new();
+    private readonly List<RecordObservation> _observations = [];
+    private bool _loading, _disposed;
+    private DateTimeOffset? _startedUtc;
+    private int _domainId;
+    protected override void OnParametersSet()
+    {
+        if (_domainId == Domain.Id) return;
+        _domainId = Domain.Id;
+        _observations.Clear();
+        _startedUtc = null;
+    }
+    private async Task LoadAsync()
+    {
+        if (_loading) return;
+        _loading = true;
+        _observations.Clear();
+        _startedUtc = DateTimeOffset.UtcNow;
+        var id = Domain.Id;
+        var name = Domain.Name;
+        var requests = new List<(string Label, string Name, ObservedDnsRecordType Type)>
+        {
+            ("DMARC", $"_dmarc.{name}", ObservedDnsRecordType.Txt),
+            ("SPF / apex TXT", name, ObservedDnsRecordType.Txt),
+            ("MX", name, ObservedDnsRecordType.Mx),
+            ("TLS reporting", $"_smtp._tls.{name}", ObservedDnsRecordType.Txt),
+            ("MTA-STS policy ID", $"_mta-sts.{name}", ObservedDnsRecordType.Txt),
+            ("MTA-STS hosting", $"mta-sts.{name}", ObservedDnsRecordType.Cname),
+            ("Nameservers", name, ObservedDnsRecordType.Ns)
+        };
+        var mailboxDomain = ReportingMailbox?.Split('@').LastOrDefault();
+        if (!string.IsNullOrWhiteSpace(mailboxDomain) && ReportingMailbox!.Contains('@') && !string.Equals(mailboxDomain, name, StringComparison.OrdinalIgnoreCase))
+            requests.Add(("DMARC authorization", $"{name}._report._dmarc.{mailboxDomain}", ObservedDnsRecordType.Txt));
+        requests.AddRange(Domain.DkimSelectors.Distinct(StringComparer.OrdinalIgnoreCase).Select(selector =>
+            ("DKIM", $"{selector}._domainkey.{name}", ObservedDnsRecordType.Txt)));
+        try
+        {
+            foreach (var request in requests)
+            {
+                _stop.Token.ThrowIfCancellationRequested();
+                try
+                {
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+                    timeout.CancelAfter(TimeSpan.FromSeconds(15));
+                    var records = await Lookup.GetRecordsAsync(request.Name, request.Type, timeout.Token);
+                    if (id != _domainId) break;
+                    _observations.Add(new(request.Label, request.Name, request.Type, records, null));
+                }
+                catch (Exception exception) when (!_stop.IsCancellationRequested && exception is HttpRequestException or System.Text.Json.JsonException or OperationCanceledException)
+                {
+                    Logger.LogWarning(exception, "Observed DNS lookup failed for {RecordName}", request.Name);
+                    if (id != _domainId) break;
+                    _observations.Add(new(request.Label, request.Name, request.Type, [], "Lookup failed or timed out; record presence is unknown. Retry the lookup."));
+                }
+                if (!_disposed) StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+        finally { _loading = false; if (_disposed) _stop.Dispose(); }
+    }
+    public void Dispose() { _disposed = true; _stop.Cancel(); if (!_loading) _stop.Dispose(); }
+    private sealed record RecordObservation(string Label, string Name, ObservedDnsRecordType Type, IReadOnlyList<ObservedDnsRecord> Records, string? Error);
+}

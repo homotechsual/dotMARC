@@ -12,6 +12,29 @@ public sealed class TxtRecordLookupTests
         return (new TxtRecordLookup(new HttpClient(handler) { BaseAddress = new Uri("https://cloudflare-dns.com/") }), handler);
     }
 
+    [Fact]
+    public async Task ObservedRecordsKeepMxPreferenceNullMxCnameAndRecordNames()
+    {
+        var (lookup, handler) = Create();
+        handler.ResponseBody = """{"Status":0,"Answer":[{"name":"example.","type":15,"data":"0 ."},{"name":"example.","type":15,"data":"10 mail.example."}]}""";
+        var records = await lookup.GetRecordsAsync("example", ObservedDnsRecordType.Mx, CancellationToken.None);
+        Assert.Equal(["0 .", "10 mail.example."], records.Select(record => record.Value));
+        Assert.All(records, record => Assert.Equal("example.", record.Name));
+        Assert.Contains("type=MX", handler.Requests[0].RequestUri!.Query);
+        handler.ResponseBody = """{"Status":0,"Answer":[{"name":"selector._domainkey.example.","type":5,"data":"key.platform.example."},{"name":"key.platform.example.","type":16,"data":"\"v=DKIM1; \" \"p=abc\""}]}""";
+        records = await lookup.GetRecordsAsync("selector._domainkey.example", ObservedDnsRecordType.Txt, CancellationToken.None);
+        Assert.Equal(ObservedDnsRecordType.Cname, records[0].Type);
+        Assert.Equal("key.platform.example.", records[1].Name);
+        Assert.Equal("v=DKIM1; p=abc", records[1].Value);
+        handler.ResponseBody = """{"Status":2}""";
+        await Assert.ThrowsAsync<HttpRequestException>(() => lookup.GetRecordsAsync("example", ObservedDnsRecordType.Mx, CancellationToken.None));
+        handler.ResponseBody = """{"Status":3,"Answer":[{"type":15,"data":"0 ."}]}""";
+        await Assert.ThrowsAsync<HttpRequestException>(() => lookup.GetRecordsAsync("example", ObservedDnsRecordType.Mx, CancellationToken.None));
+        handler.ResponseBody = """{"Status":3}""";
+        Assert.Empty(await lookup.GetRecordsAsync("example", ObservedDnsRecordType.Mx, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => lookup.GetRecordsAsync("example", (ObservedDnsRecordType)999, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData("""{}""")]
     [InlineData("""{"Status":0,"TC":true}""")]

@@ -209,6 +209,16 @@ html:has(.dev-build-banner) .mud-main-content {
 .domain-inventory .mud-table-cell { padding: 8px; }
 .domain-inventory .mud-input-control { min-width: 0; }
 .domain-inventory .mud-switch { margin: 0; }
+.dns-record-value { white-space: pre-wrap; overflow-wrap: anywhere; margin-block: .5rem; }
+.domain-observed-records summary { cursor: pointer; }
+.dotmarc-health-row { display: grid; grid-template-columns: 220px 160px 180px minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--mud-palette-lines-default); }
+.dotmarc-health-row > * { min-width: 0; overflow-wrap: anywhere; }
+.dotmarc-health-row .mud-chip { max-width: 100%; height: auto; min-height: 24px; justify-self: start; }
+.dotmarc-health-row .mud-chip-content, .dotmarc-health-row .mud-button-label { white-space: normal; overflow-wrap: anywhere; }
+.dotmarc-health-row .mud-button { max-width: 100%; }
+@media (max-width: 1279.98px) {
+    .dotmarc-health-row { grid-template-columns: minmax(0, 1fr); }
+}
 .responsive-detail-table table { table-layout: fixed; width: 100%; }
 .responsive-detail-table .mud-table-cell, .responsive-detail-table td, .responsive-detail-table th { padding: 8px; overflow-wrap: anywhere; vertical-align: top; }
 .responsive-detail-table .mud-chip { max-width: 100%; height: auto; min-height: 24px; }
